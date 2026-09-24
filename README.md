@@ -42,13 +42,15 @@ pnpm test
 
 Claude Code reports session state through hooks. `hook.exe` is tiny: it forwards each hook payload to the local data core and always exits with code 0 within about 0.3 s, even when the core isn't running. It never blocks or slows down Claude.
 
-Copy it somewhere stable first, so rebuilds don't lock the file while hooks are running:
+Copy it somewhere stable first, so rebuilds don't lock the file while hooks are running. Use your home directory, not `AppData`: Windows virtualizes `AppData` for apps installed as MSIX packages (such as the Claude desktop app and its built-in terminal), so a hook started by Claude could see different files there than the widget does.
 
 ```powershell
-mkdir $env:LOCALAPPDATA\agent-pets -Force
-copy target\release\hook.exe $env:LOCALAPPDATA\agent-pets\hook.exe
-target\release\pets-cli.exe install-hooks $env:LOCALAPPDATA\agent-pets\hook.exe
+mkdir $HOME\.agent-pets -Force
+copy target\release\hook.exe $HOME\.agent-pets\hook.exe
+target\release\pets-cli.exe install-hooks $HOME\.agent-pets\hook.exe
 ```
+
+Claude Code reads hooks when a session starts, so restart running sessions after installing or moving the hooks.
 
 `install-hooks` merges nine entries into `~/.claude/settings.json` and keeps a backup as `settings.json.agent-pets.bak`. To remove only the Agent Pets entries:
 
@@ -117,7 +119,7 @@ Claude transcripts + ~/.claude/sessions registry ──┘
 - **`hook.exe`** is the Claude Code hook client.
 - **`pets-cli`** runs everything as a terminal app, with record and replay.
 - **`app/`** is the Tauri app. Rust embeds the stage window in the taskbar (`SetParent` into `Shell_TrayWnd`), measures the free space with UI Automation, follows DPI and Explorer restarts, reads the mouse natively and shows the tooltip window. The TypeScript side draws the pets on a Canvas at 30 fps and pauses while the taskbar is hidden or a fullscreen app runs. The renderer is a 1:1 port of the prototype, checked call-by-call against it in tests.
-- **Privacy:** everything stays on your machine. The ingest server listens only on `127.0.0.1` and requires a random token. From transcripts only titles, task progress and token counters are kept, never message content.
+- **Privacy:** everything stays on your machine. The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. From transcripts only titles, task progress and token counters are kept, never message content.
 
 ## Project layout
 

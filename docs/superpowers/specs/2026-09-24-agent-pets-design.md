@@ -92,7 +92,7 @@ Router ──tasks.json (watch)────┘                         │
 
 | Moduł | Odpowiedzialność |
 |---|---|
-| `ingest` | Serwer HTTP na `127.0.0.1` (losowy port) z tokenem. Zapisuje `%APPDATA%\agent-pets\endpoint.json` z portem i tokenem. Przyjmuje `POST /v1/events`. |
+| `ingest` | Serwer HTTP na `127.0.0.1` (losowy port) z tokenem. Zapisuje `~\.agent-pets\endpoint.json` z portem i tokenem (katalog domowy, bo Windows wirtualizuje `AppData` dla procesów z pakietów MSIX, np. aplikacji Claude). Przyjmuje `POST /v1/events`. |
 | `hook` (osobny binarny `hook.exe`) | Wywoływany przez hooki Claude Code. Czyta JSON ze stdin, wysyła go do `ingest` z limitem 300 ms i zawsze kończy się kodem 0. Gdy widżet nie działa, porzuca zdarzenie. |
 | `adapters::claude` | Normalizuje zdarzenia hooków. Czyta końcówkę transkryptu (lista zadań, tokeny, tytuł). |
 | `adapters::codex` | Obserwuje `~/.codex/sessions/**/rollout-*.jsonl` i czyta dopisywane linie. |

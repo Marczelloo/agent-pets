@@ -8,8 +8,11 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
+    /// `~/.agent-pets/endpoint.json`. Nie `%APPDATA%`: Windows wirtualizuje AppData dla procesów z pakietów
+    /// MSIX (aplikacja Claude, jej terminal i uruchamiane przez nią hooki), więc proces w pakiecie i proces
+    /// poza nim widziałyby dwa różne pliki. Katalog domowy nie jest wirtualizowany (tak jak `~/.claude`).
     pub fn default_path() -> PathBuf {
-        dirs::config_dir().unwrap_or_else(std::env::temp_dir).join("agent-pets").join("endpoint.json")
+        dirs::home_dir().unwrap_or_else(std::env::temp_dir).join(".agent-pets").join("endpoint.json")
     }
 
     pub fn new_token() -> String {
@@ -19,7 +22,7 @@ impl Endpoint {
         b.iter().map(|x| format!("{x:02x}")).collect()
     }
 
-    /// Zapis atomowy: plik tymczasowy obok, potem rename. %APPDATA% ma domyślnie uprawnienia tylko dla użytkownika.
+    /// Zapis atomowy: plik tymczasowy obok, potem rename. Katalog domowy ma domyślnie uprawnienia tylko dla użytkownika.
     pub fn write(&self, path: &Path) -> std::io::Result<()> {
         if let Some(dir) = path.parent() { std::fs::create_dir_all(dir)?; }
         let tmp = path.with_extension("json.tmp");
@@ -36,6 +39,15 @@ impl Endpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_path_lives_in_the_home_directory_not_appdata() {
+        // AppData jest wirtualizowane dla procesów z pakietów MSIX (np. aplikacja Claude i jej terminal):
+        // hook.exe uruchomiony przez Claude widziałby inny endpoint.json niż widżet uruchomiony poza nim.
+        let p = Endpoint::default_path();
+        assert_eq!(p, dirs::home_dir().unwrap().join(".agent-pets").join("endpoint.json"));
+        assert!(!p.to_string_lossy().to_lowercase().contains("appdata"));
+    }
     #[test]
     fn roundtrip_and_token_shape() {
         let dir = tempfile::tempdir().unwrap();
