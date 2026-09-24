@@ -1,4 +1,5 @@
 mod core;
+mod jump;
 mod shell;
 mod tooltip;
 mod tray;
@@ -19,6 +20,17 @@ fn stage_hello(app: tauri::AppHandle, shell: tauri::State<shell::Shell>, tip: ta
 #[tauri::command]
 fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_width(width); }
 
+/// „Przejdź” do sesji. Rejestr Claude'a czytamy teraz, bo `hostSessionId` sesji desktopowej nie ma w migawce.
+#[tauri::command]
+fn jump(session_id: String, state: tauri::State<core::Shared>) -> jump::JumpResult {
+    let snap = state.lock().unwrap().clone();
+    let Some(s) = snap.sessions.iter().find(|s| s.id == session_id) else {
+        return jump::JumpResult { method: "none".into(), detail: "Sesja już nie istnieje".into() };
+    };
+    let reg = std::env::var_os("USERPROFILE").and_then(|h| jump::registry::find(std::path::Path::new(&h), &session_id));
+    jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -32,7 +44,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            snapshot, stage_hello, stage_set_width,
+            snapshot, stage_hello, stage_set_width, jump,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide
         ])
         .build(tauri::generate_context!())
