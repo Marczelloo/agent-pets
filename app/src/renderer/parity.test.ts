@@ -33,3 +33,41 @@ describe('port silnika = prototyp v6', () => {
     });
   }
 });
+
+import { drawPet, pen } from './index';
+import { recorder } from './testing';
+
+pen.font = 'x';
+
+function drawTrace(api: {
+  make: () => any; step: (c: any, dt: number, t: number) => void;
+  draw: (x: CanvasRenderingContext2D, c: any, X: number, Y: number, u: number, t: number) => void;
+  sketch: (v: boolean) => void; boil: (v: number) => void;
+}, sketch: boolean, u: number): string[] {
+  rng.reset(7);
+  api.sketch(sketch);
+  const c = api.make();
+  const rec = recorder();
+  let T = 0;
+  for (let f = 1; f <= 240; f++) {
+    T += 1 / 60;
+    api.boil(Math.floor(T * 8));
+    api.step(c, 1 / 60, T);
+    if (f % 40 === 0) { rec.log.push(`--- klatka ${f}`); api.draw(rec.ctx, c, 100, 150, u, T); }
+  }
+  return rec.log;
+}
+
+describe('port rysowania = prototyp v6', () => {
+  for (const skin of SKIN_IDS) for (const scene of PROTO_SCENES) for (const sketch of [true, false]) for (const u of [1, 0.3]) {
+    it(`${skin} / ${scene} / ${sketch ? 'rysowany' : 'czysty'} / u=${u}`, () => {
+      const a = drawTrace({ make: () => proto.mkC(skin, scene), step: proto.stepC, draw: proto.drawC,
+        sketch: proto.setSK, boil: proto.setBoil }, sketch, u);
+      const b = drawTrace({ make: () => createPet(skin, scene), step: stepPet, draw: drawPet,
+        sketch: v => { pen.sketch = v; }, boil: v => { pen.boil = v; } }, sketch, u);
+      expect(b.length).toBe(a.length);
+      const i = b.findIndex((v, k) => v !== a[k]);
+      expect(i === -1 ? null : { at: i, proto: a[i], port: b[i], before: a.slice(Math.max(0, i - 3), i) }).toBeNull();
+    });
+  }
+});
