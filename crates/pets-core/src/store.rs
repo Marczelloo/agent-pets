@@ -172,11 +172,13 @@ impl Store {
                 set(s, State::Ended, None, now);
                 self.ended_at.insert(id.clone(), now);
             } else {
+                // progi „bez zdarzeń” liczymy od późniejszego z: wejścia w stan, ostatniej aktywności
+                let calm = now - s.state_since.max(s.last_activity);
                 match s.state {
-                    State::Done if now - s.state_since >= t.done_to_idle_ms => set(s, State::Idle, None, now),
+                    State::Done if calm >= t.done_to_idle_ms => set(s, State::Idle, None, now),
                     State::Thinking | State::Working | State::Compacting if quiet >= t.stale_to_idle_ms =>
                         set(s, State::Idle, None, now),
-                    State::Idle if now - s.state_since >= t.idle_to_sleep_ms => set(s, State::Sleep, None, now),
+                    State::Idle if calm >= t.idle_to_sleep_ms => set(s, State::Sleep, None, now),
                     _ => {}
                 }
             }
@@ -241,6 +243,25 @@ mod tests {
         assert_eq!(st(&s).0, State::Idle);
         s.tick(720_000, &alive);
         assert_eq!(st(&s).0, State::Sleep);
+    }
+
+    #[test]
+    fn idle_and_done_timeouts_count_from_last_activity() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::SessionStart, 0));
+        s.apply(&ev(Kind::Meta, 590_000));
+        s.tick(700_000, &alive);
+        assert_eq!(st(&s).0, State::Idle, "aktywność 110 s temu to jeszcze nie sen");
+        s.tick(1_190_000, &alive);
+        assert_eq!(st(&s).0, State::Sleep);
+
+        let mut d = Store::new(Timing::default());
+        d.apply(&ev(Kind::TurnEnd, 0));
+        d.apply(&ev(Kind::Meta, 100_000));
+        d.tick(150_000, &alive);
+        assert_eq!(st(&d).0, State::Done, "2 min liczone od ostatniego zdarzenia");
+        d.tick(220_000, &alive);
+        assert_eq!(st(&d).0, State::Idle);
     }
 
     #[test]

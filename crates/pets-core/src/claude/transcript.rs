@@ -2,8 +2,11 @@ use crate::claude::progress_from_tool_use;
 use crate::model::*;
 use crate::time::rfc3339_ms;
 
+/// Okno kontekstu z nazwy modelu. Dokładna wartość przychodzi ze statusline (faza 3);
+/// modele Claude 5 i warianty `[1m]` mają 1M (S3), starsze 200k.
 pub fn context_max(model: &str) -> u64 {
-    if model.contains("[1m]") { 1_000_000 } else { 200_000 }
+    let gen5 = ["claude-opus-5", "claude-sonnet-5", "claude-fable-5"].iter().any(|p| model.starts_with(p));
+    if model.contains("[1m]") || gen5 { 1_000_000 } else { 200_000 }
 }
 
 #[derive(Default)]
@@ -83,7 +86,9 @@ impl TranscriptParser {
                         let n = |k: &str| u.get(k).and_then(|v| v.as_u64()).unwrap_or(0);
                         let used = n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens");
                         let model = m.get("model").and_then(|v| v.as_str()).unwrap_or("");
-                        self.acc.context = Some(Context { used, max: context_max(model) });
+                        // użycie większe niż zakładane okno znaczy, że okno jest większe (1M)
+                        let max = context_max(model).max(if used > 200_000 { 1_000_000 } else { 0 }).max(used);
+                        self.acc.context = Some(Context { used, max });
                         self.dirty = true;
                     }
                     for c in m.get("content").and_then(|v| v.as_array()).into_iter().flatten() {
@@ -169,8 +174,20 @@ mod tests {
 
     #[test]
     fn million_context_models() {
-        assert_eq!(context_max("claude-opus-5[1m]"), 1_000_000);
-        assert_eq!(context_max("claude-sonnet-5"), 200_000);
+        // S3: statusline pokazał context_window_size = 1 000 000 dla claude-sonnet-5 bez [1m]
+        assert_eq!(context_max("claude-opus-4-1[1m]"), 1_000_000);
+        assert_eq!(context_max("claude-sonnet-5"), 1_000_000);
+        assert_eq!(context_max("claude-opus-5"), 1_000_000);
+        assert_eq!(context_max("claude-haiku-4-5-20251001"), 200_000);
+    }
+
+    #[test]
+    fn usage_above_assumed_window_never_exceeds_100_percent() {
+        let mut p = TranscriptParser::new();
+        let e = p.parse_line(&line(serde_json::json!({"type": "assistant", "sessionId": "s", "timestamp": TS,
+            "message": {"model": "claude-haiku-4-5", "content": [], "usage": {"input_tokens": 300_000}}})));
+        let c = e[0].data.context.unwrap();
+        assert!(c.used <= c.max, "{c:?}");
     }
 
     #[test]
