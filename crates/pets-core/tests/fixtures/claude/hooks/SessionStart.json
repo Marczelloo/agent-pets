@@ -1,0 +1,9 @@
+{
+  "session_id": "3746a003-5ba1-42b3-a085-009646ebcf00",
+  "transcript_path": "C:\\work\\project",
+  "cwd": "C:\\work\\project",
+  "scratchpad_dir": "C:\\work\\project",
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "model": "claude-opus-5"
+}

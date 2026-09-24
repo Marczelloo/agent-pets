@@ -1,0 +1,24 @@
+{
+  "session_id": "66f16caa-8fda-4cf3-80be-b0619fa20b4e",
+  "transcript_path": "C:\\work\\project",
+  "cwd": "C:\\work\\project",
+  "scratchpad_dir": "C:\\work\\project",
+  "prompt_id": "fd333023-9e12-41d7-8601-2fd4f2f4ecdd",
+  "permission_mode": "bypassPermissions",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "<redacted>",
+  "background_tasks": [
+    {
+      "id": "brv6kpgj7",
+      "type": "shell",
+      "status": "running",
+      "description": "<redacted>",
+      "command": "<redacted>"
+    }
+  ],
+  "session_crons": []
+}

@@ -1111,7 +1111,8 @@ git commit -m "feat(core): incremental tail reader and RFC3339 parsing"
   - `claude::HookEnvelope { ts: i64, ppid: Option<u32>, payload: serde_json::Value }` (Serialize/Deserialize). `hook.exe` wysyła go w treści `POST /v1/events/claude`.
   - `claude::hook::to_events(env: &HookEnvelope) -> Vec<Event>`;
   - `claude::hook::transcript_path(env: &HookEnvelope) -> Option<std::path::PathBuf>`;
-  - `claude::progress_from_tool_use(name: &str, input: &serde_json::Value) -> Option<Progress>`, używane też w tasku 8. Jeśli S3 wskazał inne narzędzie niż `TodoWrite`, dopisz jego gałąź.
+  - `claude::progress_from_tool_use(name: &str, input: &serde_json::Value) -> Option<Progress>` (`TodoWrite`, starsze wersje), używane też w tasku 8;
+  - `claude::hook::TaskTracker::default()` i `tracker.observe(env: &HookEnvelope) -> Option<Event>`: postęp z `TaskCreate`/`TaskUpdate` w Claude Code 2.1+ (wynik S3/S5, `docs/spikes/S5-formats.md`).
 
 **Mapowanie** (`payload.hook_event_name`):
 
@@ -1119,9 +1120,9 @@ git commit -m "feat(core): incremental tail reader and RFC3339 parsing"
 |---|---|
 | `SessionStart` | `SessionStart` |
 | `UserPromptSubmit` | `Prompt` |
-| `PreToolUse` | `ToolStart(from_claude(tool_name))`, z wyjątkami: `TodoWrite` → `Meta` z postępem; `AskUserQuestion` → `NeedsInput` |
-| `PostToolUse` | `ToolEnd`, z wyjątkiem `TodoWrite` → nic |
-| `Notification` | `NeedsInput` |
+| `PreToolUse` | `ToolStart(from_claude(tool_name))`, z wyjątkami: `TodoWrite` → `Meta` z postępem; `AskUserQuestion` → `NeedsInput`; `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet` → nic |
+| `PostToolUse` | `ToolEnd`, z wyjątkiem `TodoWrite` i narzędzi `Task*` → nic (ich postęp obsługuje `TaskTracker`) |
+| `Notification` | `NeedsInput`, z wyjątkiem `notification_type == "idle_prompt"` → nic |
 | `Stop` | `TurnEnd` |
 | `PreCompact` | `Compact` |
 | `SessionEnd` | `SessionEnd` |
@@ -1218,6 +1219,41 @@ mod tests {
     }
 
     #[test]
+    fn idle_prompt_notification_is_ignored_permission_is_not() {
+        let n = |t: &str| to_events(&env(json!({"hook_event_name": "Notification", "session_id": "s", "notification_type": t})));
+        assert!(n("idle_prompt").is_empty());
+        assert_eq!(n("permission_prompt")[0].kind, Kind::NeedsInput);
+    }
+
+    #[test]
+    fn task_list_tools_do_not_animate() {
+        for ev in ["PreToolUse", "PostToolUse"] {
+            for t in ["TaskCreate", "TaskUpdate", "TaskList", "TaskGet"] {
+                assert!(to_events(&env(json!({"hook_event_name": ev, "session_id": "s", "tool_name": t}))).is_empty(), "{ev} {t}");
+            }
+        }
+    }
+
+    #[test]
+    fn task_tracker_counts_created_completed_and_deleted() {
+        let mut tr = TaskTracker::default();
+        let create = |id: &str| env(json!({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "TaskCreate",
+            "tool_input": {"subject": "x"}, "tool_response": {"task": {"id": id, "subject": "x"}}}));
+        let update = |id: &str, st: &str| env(json!({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "TaskUpdate",
+            "tool_input": {"taskId": id, "status": st}}));
+        tr.observe(&create("1"));
+        let e = tr.observe(&create("2")).unwrap();
+        assert_eq!((e.kind, e.data.progress), (Kind::Meta, Some(Progress { done: 0, total: 2 })));
+        let e = tr.observe(&update("1", "completed")).unwrap();
+        assert_eq!(e.data.progress, Some(Progress { done: 1, total: 2 }));
+        let e = tr.observe(&update("2", "deleted")).unwrap();
+        assert_eq!(e.data.progress, Some(Progress { done: 1, total: 1 }));
+        assert!(tr.observe(&env(json!({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "TaskUpdate",
+            "tool_input": {"taskId": "1", "subject": "tylko zmiana nazwy"}}))).is_none());
+        assert!(tr.observe(&env(json!({"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "TaskCreate"}))).is_none());
+    }
+
+    #[test]
     fn missing_session_id_yields_nothing() {
         assert!(to_events(&env(json!({"hook_event_name": "Stop"}))).is_empty());
     }
@@ -1264,9 +1300,13 @@ pub fn to_events(env: &HookEnvelope) -> Vec<Event> {
     e.data.cwd = p.get("cwd").and_then(|v| v.as_str()).map(String::from);
     e.data.pid = env.ppid;
 
+    let task_tool = matches!(tool_name, "TaskCreate" | "TaskUpdate" | "TaskList" | "TaskGet");
     match name {
         "SessionStart" => e.kind = Kind::SessionStart,
         "UserPromptSubmit" => e.kind = Kind::Prompt,
+        "PreToolUse" if task_tool => return vec![],
+        "PostToolUse" if task_tool => return vec![],
+        "Notification" if p.get("notification_type").and_then(|v| v.as_str()) == Some("idle_prompt") => return vec![],
         "PreToolUse" => {
             if let Some(pr) = progress_from_tool_use(tool_name, tool_input) {
                 e.kind = Kind::Meta;
@@ -1290,6 +1330,49 @@ pub fn to_events(env: &HookEnvelope) -> Vec<Event> {
     }
     vec![e]
 }
+
+/// Postęp z narzędzi listy zadań Claude Code 2.1+ (TaskCreate/TaskUpdate), śledzony per sesja.
+#[derive(Default)]
+pub struct TaskTracker {
+    sessions: std::collections::HashMap<String, std::collections::BTreeMap<String, bool>>,
+}
+
+fn id_str(v: Option<&serde_json::Value>) -> Option<String> {
+    match v? {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+impl TaskTracker {
+    pub fn observe(&mut self, env: &HookEnvelope) -> Option<Event> {
+        let p = &env.payload;
+        if p.get("hook_event_name").and_then(|v| v.as_str()) != Some("PostToolUse") { return None; }
+        let sid = p.get("session_id")?.as_str()?;
+        let tasks = self.sessions.entry(sid.to_string()).or_default();
+        match p.get("tool_name").and_then(|v| v.as_str())? {
+            "TaskCreate" => {
+                let id = id_str(p.pointer("/tool_response/task/id"))?;
+                tasks.insert(id, false);
+            }
+            "TaskUpdate" => {
+                let id = id_str(p.pointer("/tool_input/taskId"))?;
+                match p.pointer("/tool_input/status").and_then(|v| v.as_str())? {
+                    "completed" => { tasks.insert(id, true); }
+                    "pending" | "in_progress" => { tasks.insert(id, false); }
+                    "deleted" => { tasks.remove(&id); }
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        }
+        let done = tasks.values().filter(|d| **d).count() as u32;
+        let mut e = Event::new(Source::Claude, sid, Kind::Meta, env.ts);
+        e.data.progress = Some(Progress { done, total: tasks.len() as u32 });
+        Some(e)
+    }
+}
 ```
 
 - [ ] **Krok 4: Uruchom testy.** Uruchom `cargo test -p pets-core`. Oczekiwany wynik: wszystkie testy przechodzą.
@@ -1304,8 +1387,10 @@ pub fn to_events(env: &HookEnvelope) -> Vec<Event> {
         for f in rd.flatten() {
             let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(f.path()).unwrap()).unwrap();
             let name = v.get("hook_event_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let tool = v.get("tool_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let idle = v.get("notification_type").and_then(|x| x.as_str()) == Some("idle_prompt");
             let ev = to_events(&env(v));
-            if name != "SubagentStop" && name != "PostToolUse" {
+            if name != "SubagentStop" && name != "PostToolUse" && !tool.starts_with("Task") && !idle {
                 assert!(!ev.is_empty(), "brak zdarzenia dla {:?}", f.path());
             }
         }
@@ -2805,7 +2890,7 @@ Uruchom `cargo test -p pets-cli`. Oczekiwany wynik: test przechodzi.
 mod render;
 
 use anyhow::Context as _;
-use pets_core::claude::{self, HookEnvelope};
+use pets_core::claude::{self, hook::TaskTracker, HookEnvelope};
 use pets_core::endpoint::Endpoint;
 use pets_core::ingest::{Incoming, Ingest};
 use pets_core::model::Event;
@@ -2830,12 +2915,13 @@ fn apply(store: &mut Store, rec: &mut Option<File>, e: Event) -> bool {
     !store.apply(&e).is_empty()
 }
 
-fn on_hook(store: &mut Store, sources: &mut Sources, rec: &mut Option<File>, env: HookEnvelope) -> bool {
+fn on_hook(store: &mut Store, sources: &mut Sources, tasks: &mut TaskTracker, rec: &mut Option<File>, env: HookEnvelope) -> bool {
     let mut changed = false;
     if let Some(tp) = claude::hook::transcript_path(&env) {
         if sources.track(&tp, true) { for e in sources.poll(&tp) { changed |= apply(store, rec, e); } }
     }
     for e in claude::hook::to_events(&env) { changed |= apply(store, rec, e); }
+    if let Some(e) = tasks.observe(&env) { changed |= apply(store, rec, e); }
     changed
 }
 
@@ -2846,6 +2932,7 @@ fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
     let mut rec = record.map(File::create).transpose()?;
     let mut store = Store::new(Timing::default());
     let mut sources = Sources::new();
+    let mut tasks = TaskTracker::default();
     let home = dirs::home_dir().context("brak katalogu domowego")?;
     let roots = [home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
     for r in &roots {
@@ -2859,7 +2946,7 @@ fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
     loop {
         let mut changed = false;
         while let Ok(Incoming::ClaudeHook(env)) = rx.try_recv() {
-            changed |= on_hook(&mut store, &mut sources, &mut rec, env);
+            changed |= on_hook(&mut store, &mut sources, &mut tasks, &mut rec, env);
         }
         while let Ok(p) = prx.try_recv() {
             for e in sources.poll(&p) { changed |= apply(&mut store, &mut rec, e); }

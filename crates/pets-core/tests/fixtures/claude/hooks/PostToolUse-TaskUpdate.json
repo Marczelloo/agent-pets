@@ -1,0 +1,27 @@
+{
+  "session_id": "a507f4ba-c13b-443b-9992-073fb0399b88",
+  "transcript_path": "C:\\work\\project",
+  "cwd": "C:\\work\\project",
+  "scratchpad_dir": "C:\\work\\project",
+  "prompt_id": "66122689-4f32-4dae-a315-e00da57993f7",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "TaskUpdate",
+  "tool_input": {
+    "taskId": "1",
+    "status": "completed"
+  },
+  "tool_response": {
+    "success": true,
+    "taskId": "1",
+    "updatedFields": [
+      "status"
+    ],
+    "statusChange": {
+      "from": "pending",
+      "to": "completed"
+    }
+  },
+  "tool_use_id": "toolu_01R6dDhKRJ4c8KgnhjR5GMkr",
+  "duration_ms": 2
+}

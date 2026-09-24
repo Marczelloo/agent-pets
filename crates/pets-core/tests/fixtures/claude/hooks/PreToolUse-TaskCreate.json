@@ -1,0 +1,15 @@
+{
+  "session_id": "a507f4ba-c13b-443b-9992-073fb0399b88",
+  "transcript_path": "C:\\work\\project",
+  "cwd": "C:\\work\\project",
+  "scratchpad_dir": "C:\\work\\project",
+  "prompt_id": "66122689-4f32-4dae-a315-e00da57993f7",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "TaskCreate",
+  "tool_input": {
+    "subject": "<redacted>",
+    "description": "<redacted>"
+  },
+  "tool_use_id": "toolu_01QNGve1Wqp4cadp4FQSkavW"
+}
