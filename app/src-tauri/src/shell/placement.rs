@@ -29,6 +29,9 @@ pub struct Placement {
 }
 
 pub const GAP_CSS: f64 = 8.0;
+/// Gdy UI Automation nie powie, gdzie kończą się ikony (brak UIA, zmiana paska w nowym Windows),
+/// scena zostaje mała przy zasobniku (do 2 zwierzaków), zamiast ryzykować zasłonięcie ikon.
+pub const FALLBACK_MAX_CSS: f64 = 200.0;
 
 /// Scena stoi przy zasobniku i ma szerokość treści (`want_css`), ale nigdy nie wchodzi na ikony aplikacji.
 /// `None`, gdy pomiar jest chwilowo niewiarygodny (w trakcie zmiany skali pasek ma wysokość 0).
@@ -36,7 +39,8 @@ pub fn place(m: &Metrics, want_css: f64) -> Option<Placement> {
     if m.tray.height() <= 0 || m.scale <= 0.0 { return None; }
     let gap = (GAP_CSS * m.scale).round() as i32;
     let right = m.notify_left.filter(|l| *l > m.tray.left && *l <= m.tray.right).unwrap_or(m.tray.right) - gap;
-    let left = m.icons_right.filter(|r| *r >= m.tray.left).map(|r| r + gap).unwrap_or(m.tray.left);
+    let left = m.icons_right.filter(|r| *r >= m.tray.left).map(|r| r + gap)
+        .unwrap_or_else(|| (right - (FALLBACK_MAX_CSS * m.scale).round() as i32).max(m.tray.left));
     let free = (right - left).max(0);
     let w = ((want_css.max(0.0) * m.scale).round() as i32).min(free);
     Some(Placement {
@@ -85,8 +89,13 @@ mod tests {
     }
 
     #[test]
-    fn without_uia_uses_the_whole_taskbar() {
-        assert_eq!(place(&m(None, 1.0), 400.0).unwrap().max_css, 2283.0);
+    fn without_uia_stays_small_instead_of_risking_the_app_icons() {
+        let p = place(&m(None, 1.0), 400.0).unwrap();
+        assert_eq!(p.max_css, FALLBACK_MAX_CSS);
+        assert_eq!(p.w, FALLBACK_MAX_CSS as i32);
+        let p15 = place(&m(None, 1.5), 400.0).unwrap();
+        assert_eq!(p15.max_css, FALLBACK_MAX_CSS);
+        assert_eq!(p15.w, (FALLBACK_MAX_CSS * 1.5) as i32);
     }
 
     #[test]

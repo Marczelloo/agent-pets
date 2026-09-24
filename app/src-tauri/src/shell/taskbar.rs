@@ -1,5 +1,7 @@
 //! Pasek zadań Windows 11: uchwyty, pomiary (Win32 + UI Automation), osadzenie okna sceny.
+use super::memo::KeyedCache;
 use super::placement::{Metrics, Placement, Rect};
+use std::cell::RefCell;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
@@ -35,7 +37,7 @@ pub fn fullscreen_app() -> bool {
 }
 
 /// Elementy paska Win11 są w XAML i nie mają własnych HWND, więc koniec ikon mierzy UI Automation.
-pub struct Uia { auto: IUIAutomation, walker: IUIAutomationTreeWalker }
+pub struct Uia { auto: IUIAutomation, walker: IUIAutomationTreeWalker, frame: RefCell<KeyedCache<isize, IUIAutomationElement>> }
 
 impl Uia {
     pub fn new() -> windows::core::Result<Uia> {
@@ -43,7 +45,7 @@ impl Uia {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let auto: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)?;
             let walker = auto.ControlViewWalker()?;
-            Ok(Uia { auto, walker })
+            Ok(Uia { auto, walker, frame: RefCell::new(KeyedCache::new()) })
         }
     }
 
@@ -60,8 +62,10 @@ impl Uia {
 
     /// Prawa krawędź ostatniego dziecka `TaskbarFrame` (Start, wyszukiwanie, przyciski aplikacji).
     pub fn icons_right(&self, tray: HWND) -> Option<i32> {
-        let root = unsafe { self.auto.ElementFromHandle(tray) }.ok()?;
-        let frame = self.find(&root, "TaskbarFrame", 0)?;
+        let frame = self.frame.borrow_mut().get(tray.0 as isize, || {
+            let root = unsafe { self.auto.ElementFromHandle(tray) }.ok()?;
+            self.find(&root, "TaskbarFrame", 0)
+        })?;
         let mut right: Option<i32> = None;
         let mut c = unsafe { self.walker.GetFirstChildElement(&frame) }.ok();
         while let Some(ch) = c {
@@ -70,6 +74,8 @@ impl Uia {
             }
             c = unsafe { self.walker.GetNextSiblingElement(&ch) }.ok();
         }
+        // element nieaktualny (np. przebudowany pasek): następnym razem szukamy od nowa
+        if right.is_none() { self.frame.borrow_mut().invalidate(); }
         right
     }
 }

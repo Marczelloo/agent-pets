@@ -11,7 +11,10 @@ fn snapshot(state: tauri::State<core::Shared>) -> core::Snapshot {
 }
 
 #[tauri::command]
-fn stage_hello(shell: tauri::State<shell::Shell>) { shell.hello(); }
+fn stage_hello(app: tauri::AppHandle, shell: tauri::State<shell::Shell>, tip: tauri::State<tooltip::Tooltip>) {
+    tip.hide(&app);
+    shell.hello();
+}
 
 #[tauri::command]
 fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_width(width); }

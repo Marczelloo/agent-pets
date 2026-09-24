@@ -11,6 +11,31 @@ pub struct Tooltip { inner: Mutex<Anchor> }
 #[derive(Default, Clone, Copy)]
 struct Anchor { seq: u64, x: i32, top: i32, scale: f64, open: bool }
 
+impl Tooltip {
+    /// Nowa treść zakotwiczona w `x` (px ekranu) nad `top`; zwraca numer, na który musi odpowiedzieć okno.
+    fn open(&self, x: i32, top: i32, scale: f64) -> u64 {
+        let mut a = self.inner.lock().unwrap();
+        let seq = a.seq + 1;
+        *a = Anchor { seq, x, top, scale, open: true };
+        seq
+    }
+
+    /// Kotwica dla rozmiaru zmierzonego przez okno; `None` dla starej treści albo schowanego tooltipa.
+    fn accept_size(&self, seq: u64) -> Option<Anchor> {
+        let a = *self.inner.lock().unwrap();
+        (a.open && a.seq == seq).then_some(a)
+    }
+
+    fn close(&self) { self.inner.lock().unwrap().open = false; }
+
+    /// Chowa tooltip, np. gdy strona sceny została załadowana od nowa (restart Explorera):
+    /// nowa strona nie wie o tooltipie starej i sama by go nie schowała.
+    pub fn hide(&self, app: &AppHandle) {
+        self.close();
+        if let Some(win) = app.get_webview_window("tooltip") { let _ = win.hide(); }
+    }
+}
+
 #[derive(Serialize, Clone)]
 struct ContentMsg { seq: u64, content: serde_json::Value }
 
@@ -26,19 +51,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 #[tauri::command]
 pub fn tooltip_show(app: AppHandle, tip: State<Tooltip>, shell: State<Shell>, anchor_x: f64, content: serde_json::Value) {
     let Some((left, top, scale)) = shell.stage_origin() else { return };
-    let seq = {
-        let mut a = tip.inner.lock().unwrap();
-        let seq = a.seq + 1;
-        *a = Anchor { seq, x: left + (anchor_x * scale).round() as i32, top, scale, open: true };
-        seq
-    };
+    let seq = tip.open(left + (anchor_x * scale).round() as i32, top, scale);
     let _ = app.emit_to("tooltip", "tooltip://content", ContentMsg { seq, content });
 }
 
 #[tauri::command]
 pub fn tooltip_size(app: AppHandle, tip: State<Tooltip>, seq: u64, w: f64, h: f64) {
-    let a = *tip.inner.lock().unwrap();
-    if !a.open || a.seq != seq { return; } // spóźniona odpowiedź na starą treść albo tooltip już schowany
+    let Some(a) = tip.accept_size(seq) else { return }; // spóźniona odpowiedź na starą treść albo tooltip już schowany
     let Some(win) = app.get_webview_window("tooltip") else { return };
     let (pw, ph) = ((w * a.scale).round() as i32, (h * a.scale).round() as i32);
     let (sw, _) = shell::screen_size();
@@ -50,7 +69,27 @@ pub fn tooltip_size(app: AppHandle, tip: State<Tooltip>, seq: u64, w: f64, h: f6
 }
 
 #[tauri::command]
-pub fn tooltip_hide(app: AppHandle, tip: State<Tooltip>) {
-    tip.inner.lock().unwrap().open = false;
-    if let Some(win) = app.get_webview_window("tooltip") { let _ = win.hide(); }
+pub fn tooltip_hide(app: AppHandle, tip: State<Tooltip>) { tip.hide(&app); }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn close_drops_the_pending_size_of_an_open_tooltip() {
+        let t = Tooltip::default();
+        let seq = t.open(100, 1392, 1.0);
+        assert!(t.accept_size(seq).is_some());
+        t.close();
+        assert!(t.accept_size(seq).is_none());
+    }
+
+    #[test]
+    fn only_the_latest_content_is_sized() {
+        let t = Tooltip::default();
+        let old = t.open(100, 1392, 1.0);
+        let new = t.open(200, 1392, 1.0);
+        assert!(t.accept_size(old).is_none());
+        assert_eq!(t.accept_size(new).map(|a| a.x), Some(200));
+    }
 }

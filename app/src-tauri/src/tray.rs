@@ -12,3 +12,8 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     b.build(app)?;
     Ok(())
 }
+
+/// Zmienia podpowiedź ikony (np. na opis awarii rdzenia danych).
+pub fn set_status(app: &AppHandle, text: &str) {
+    if let Some(t) = app.tray_by_id("main") { let _ = t.set_tooltip(Some(text)); }
+}

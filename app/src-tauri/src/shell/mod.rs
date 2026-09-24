@@ -1,4 +1,5 @@
 //! Okno sceny w pasku zadań: osadzenie, pętla układu, odtwarzanie po restarcie Explorera, widoczność.
+pub mod memo;
 pub mod placement;
 pub mod pointer;
 mod taskbar;
@@ -62,7 +63,7 @@ fn recreate(app: &AppHandle, n: u32) -> Option<isize> {
 
 fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>) {
     let uia = taskbar::Uia::new().ok();
-    if uia.is_none() { eprintln!("agent-pets: UI Automation niedostępne, scena zajmie cały pasek"); }
+    if uia.is_none() { eprintln!("agent-pets: UI Automation niedostępne, scena zostanie mała przy zasobniku"); }
     let (mut want, mut last_tray, mut floating, mut n) = (0.0f64, 0isize, false, 1u32);
     let mut last_layout: Option<Layout> = None;
     let mut last_visible: Option<bool> = None;

@@ -49,8 +49,21 @@ pub fn spawn(app: AppHandle, shared: Shared, mode: Mode) {
             Mode::Live => live(&publish),
             Mode::Replay { path, speed } => replay(&path, speed, &publish),
         };
-        if let Err(e) = result { eprintln!("agent-pets: rdzeń danych zatrzymany: {e:#}"); }
+        if let Err(e) = result {
+            eprintln!("agent-pets: rdzeń danych zatrzymany: {e:#}");
+            // wydanie nie ma konsoli: bez tego użytkownik widziałby tylko pusty pasek
+            crate::tray::set_status(&app, &failure_text(&e));
+        }
     });
+}
+
+/// Podpowiedź ikony w trayu przy awarii rdzenia; Windows ucina ją do 127 znaków.
+pub fn failure_text(e: &anyhow::Error) -> String {
+    const HEAD: &str = "Agent Pets: rdzeń danych nie działa (";
+    let room = 127 - HEAD.chars().count() - 1;
+    let msg = format!("{e:#}");
+    let msg = if msg.chars().count() > room { format!("{}…", msg.chars().take(room - 1).collect::<String>()) } else { msg };
+    format!("{HEAD}{msg})")
 }
 
 fn live(publish: &dyn Fn(&Store, i64)) -> anyhow::Result<()> {
@@ -103,6 +116,15 @@ mod tests {
         assert_eq!(s["started_at"], 1_000);
         assert!(s["context"].is_null());
         assert!(v["limits"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn failure_text_names_the_problem_and_fits_the_tray_tooltip() {
+        let short = failure_text(&anyhow::anyhow!("brak katalogu domowego"));
+        assert_eq!(short, "Agent Pets: rdzeń danych nie działa (brak katalogu domowego)");
+        let long = failure_text(&anyhow::anyhow!("{}", "ż".repeat(300)));
+        assert!(long.chars().count() <= 127, "{}", long.chars().count());
+        assert!(long.ends_with("…)"));
     }
 
     #[test]
