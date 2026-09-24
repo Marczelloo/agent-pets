@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Agent Pets – prototyp v6</title>
+<style>
+:root{--stg:#F0EEE6;--tb:#F3F3F3;--tbl:#DEDEDE;--txt:#3D3D3A;--mut:#8C887E}
+@media (prefers-color-scheme: dark){:root{--stg:#30302E;--tb:#1C1C1C;--tbl:#333333;--txt:#E8E6DE;--mut:#8C887E}}
+body{font-family:system-ui,sans-serif;background:var(--tb);color:var(--txt);max-width:720px;margin:24px auto;padding:0 16px}
+button{font:inherit;font-size:13px;padding:4px 10px;border:1px solid var(--tbl);border-radius:8px;background:transparent;color:var(--txt);cursor:pointer}
+button.on{border-color:#D97757;color:#D97757}
+</style>
+</head>
+<body>
+<div id="btns" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px"><span style="font-size:13px;color:var(--mut)">Pracuje:</span><span id="tools" style="display:flex;flex-wrap:wrap;gap:6px"></span></div>
+<canvas id="cv" style="display:block;width:100%;height:330px;background:var(--stg);border-radius:12px"></canvas>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 14px">
+<span id="sty" style="display:flex;gap:6px"></span>
+<label id="lbl" style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:13px;color:var(--mut)"><input type="checkbox" id="slow"> Zwolnij 4×</label>
+</div>
+<canvas id="tb" style="display:block;width:100%;height:48px;background:var(--tb);border-top:1px solid var(--tbl)"></canvas>
+<script src="pets.js"></script>
+</body>
+</html>
