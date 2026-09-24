@@ -1,4 +1,5 @@
 pub mod hook;
+pub mod registry;
 pub mod transcript;
 
 use serde::{Deserialize, Serialize};

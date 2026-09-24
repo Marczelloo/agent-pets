@@ -5,7 +5,7 @@ use pets_core::claude::{self, hook::TaskTracker, HookEnvelope};
 use pets_core::endpoint::Endpoint;
 use pets_core::ingest::{Incoming, Ingest};
 use pets_core::model::Event;
-use pets_core::rehydrate::recent_files;
+use pets_core::rehydrate::{keep_for_rehydration, recent_files};
 use pets_core::store::{Store, Timing};
 use pets_core::watch::{watch, Sources};
 use pets_core::{hooks_install, pid, time};
@@ -46,10 +46,14 @@ fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
     let mut tasks = TaskTracker::default();
     let home = dirs::home_dir().context("brak katalogu domowego")?;
     let roots = [home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
-    for r in &roots {
-        for f in recent_files(r, Duration::from_secs(1800)) {
-            if sources.track(&f, true) { for e in sources.poll(&f) { apply(&mut store, &mut rec, e); } }
-        }
+    // Odtworzenie stanu: żywe sesje Claude'a z rejestru, potem ich transkrypty i rollouty Codexa.
+    let live: Vec<_> = claude::registry::read_registry(&home.join(".claude").join("sessions"))
+        .into_iter().filter(|s| pid::is_alive(s.pid)).collect();
+    for s in &live { apply(&mut store, &mut rec, s.to_event()); }
+    let live_ids = live.iter().map(|s| s.session_id.clone()).collect();
+    let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
+    for f in keep_for_rehydration(&recent, &live_ids) {
+        if sources.track(&f, true) { for e in sources.poll(&f) { apply(&mut store, &mut rec, e); } }
     }
     let (ptx, prx) = channel();
     let _watcher = watch(&roots, ptx)?;
@@ -76,15 +80,17 @@ fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
 fn replay(path: &Path, speed: f64) -> anyhow::Result<()> {
     let events: Vec<Event> = std::io::BufReader::new(File::open(path)?).lines()
         .map_while(Result::ok).filter_map(|l| serde_json::from_str(&l).ok()).collect();
-    let Some(t0) = events.first().map(|e| e.ts) else { println!("pusty plik"); return Ok(()) };
-    let start = std::time::Instant::now();
+    let Some(mut clock) = events.first().map(|e| e.ts) else { println!("pusty plik"); return Ok(()) };
     let mut store = Store::new(Timing::default());
     for e in events {
-        let due = Duration::from_millis(((e.ts - t0).max(0) as f64 / speed) as u64);
-        if let Some(wait) = due.checked_sub(start.elapsed()) { std::thread::sleep(wait); }
+        // Nagrania mieszają zdarzenia na żywo ze starszymi z transkryptów: zegar idzie tylko do przodu,
+        // a pojedyncza przerwa trwa najwyżej 250 ms, żeby długie ciche okresy nie blokowały odtwarzania.
+        let gap = (e.ts - clock).max(0);
+        std::thread::sleep(Duration::from_millis(((gap as f64 / speed) as u64).min(250)));
+        clock = clock.max(e.ts);
         store.apply(&e);
-        store.tick(e.ts, &|_| true);
-        print!("\x1b[2J\x1b[H{}", render::render(&store, e.ts));
+        store.tick(clock, &|_| true);
+        print!("\x1b[2J\x1b[H{}", render::render(&store, clock));
         let _ = std::io::stdout().flush();
     }
     Ok(())

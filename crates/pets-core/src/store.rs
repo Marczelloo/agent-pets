@@ -125,6 +125,8 @@ impl Store {
             Kind::Meta => match (s.state, s.context) {
                 (State::Thinking, Some(c)) if c.max > 0 && c.used as f64 / c.max as f64 > 0.9 =>
                     Some((State::Compacting, None)),
+                // rosnący transkrypt to aktywność: budzi śpiącą sesję
+                (State::Sleep, _) => Some((State::Idle, None)),
                 _ => None,
             },
             Kind::SessionEnd | Kind::Limits => None,
@@ -262,6 +264,16 @@ mod tests {
         assert_eq!(st(&d).0, State::Done, "2 min liczone od ostatniego zdarzenia");
         d.tick(220_000, &alive);
         assert_eq!(st(&d).0, State::Idle);
+    }
+
+    #[test]
+    fn transcript_activity_wakes_sleeping_session() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::SessionStart, 0));
+        s.tick(700_000, &alive);
+        assert_eq!(st(&s).0, State::Sleep);
+        s.apply(&ev(Kind::Meta, 800_000));
+        assert_eq!(st(&s).0, State::Idle);
     }
 
     #[test]
