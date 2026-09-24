@@ -306,6 +306,42 @@ git commit -m "feat(core): Claude statusline parser and ingest route (account li
 
 ---
 
+### Task 1b: Limity Claude'a z aplikacji desktopowej (dopisane przed wykonaniem)
+
+Użytkownik zapytał, czy da się pobrać limity bez CLI, skoro aplikacja Claude je zna. Ustalenia z `app.asar` (Claude 2.7032):
+- Aplikacja co 15 min (co 5 min po otwarciu jej tray) pobiera `claude.ai/api/organizations/<org>/usage` przez własną sesję przeglądarki. Pełna odpowiedź, razem z `resets_at`, żyje tylko w pamięci.
+- Na dysk trafia `plan-usage-history.json` w katalogu danych aplikacji: `{"version":2,"samples":[{"t":<ms>,"org":"<uuid>","u":{"fh":<5h %>,"sd":<tydzień %>}}]}`, czyli procenty bez czasu resetu, z historią 30 dni.
+- Instalacja MSIX trzyma go w `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`, zwykła w `%APPDATA%\Claude\`.
+
+Czytamy ten plik lokalnie i tylko do odczytu. Nie ma ruchu sieciowego ani ciasteczek, nie używamy danych logowania. Czasu resetu nie zgadujemy z historii, bo przerwy, gdy aplikacja jest zamknięta, czynią to niewiarygodnym. Dokładny reset daje przelotka statusline (task 2), gdy działa jakaś sesja CLI.
+
+**Files:**
+- Create: `crates/pets-core/src/claude/desktop_usage.rs`
+- Modify: `crates/pets-core/src/claude/mod.rs`, `store.rs` (reset zachowany przy limicie bez resetu), `runtime.rs` (`RuntimeConfig.claude_usage_files`, odpytywanie co 60 s)
+
+**Interfaces:**
+- Produces:
+  - `claude::desktop_usage::{FILE, MAX_AGE_MS, candidate_files(local_appdata: &Path, appdata: &Path) -> Vec<PathBuf>, latest(bytes: &[u8], now: i64) -> Option<Event>, Poller}`;
+  - `Poller::new(files: Vec<PathBuf>)`, `Poller::poll(&mut self, now: i64) -> Option<Event>` (sprawdza co `POLL_MS = 60_000`, czyta tylko przy zmianie mtime);
+  - `RuntimeConfig.claude_usage_files: Vec<PathBuf>` (w `from_env` z `candidate_files`).
+- Zdarzenie: `Source::Claude`, `session_id = "claude-desktop-usage"`, `Kind::Limits`, `ts = t` próbki, limity `FiveHour` (`fh`) i `Weekly` (`sd`) z `resets_at: None`.
+
+**Zasady:**
+- Nieznana wersja, pusta lista, uszkodzony JSON, brak `fh` i `sd`: `None` (brak danych, nigdy 0%).
+- Próbka starsza niż `MAX_AGE_MS = 30 min` (aplikacja zamknięta): `None`.
+- Kilka plików (MSIX i zwykła instalacja): wygrywa najnowszy mtime.
+- `Store::merge_limits`: limit bez `resets_at` zachowuje dotychczasowy `resets_at`, jeśli ten jest jeszcze w przyszłości względem `ts` zdarzenia (to wciąż to samo okno limitu). Gdy minął, zostaje `None`.
+
+**Testy (TDD):**
+- `desktop_usage`: najnowsza próbka z dwóch; mapowanie `fh`/`sd`; próbka nieaktualna → `None`; `version: 1`, śmieci, pusta lista → `None`; próbka tylko z `sd` → jeden limit; `candidate_files` znajduje katalog `Claude_*` w `Packages` i `%APPDATA%\Claude`.
+- `Poller`: pierwsze `poll` czyta; drugie przed upływem 60 s nie czyta; po zmianie pliku i 60 s czyta znowu; bez zmiany mtime nie zgłasza ponownie.
+- `store`: `resets_at` zachowany dla przyszłego resetu i wyzerowany dla minionego.
+- `runtime`: plik w katalogu tymczasowym → po `step(now)` `store().limits()` zawiera Claude 5h z procentem z pliku.
+
+**Commit:** `feat(core): Claude account limits from the desktop app's local usage history`
+
+---
+
 ### Task 2: Przelotka statusline w `hook.exe` oraz jej instalacja
 
 **Files:**
