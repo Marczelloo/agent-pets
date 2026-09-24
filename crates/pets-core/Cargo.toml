@@ -10,6 +10,7 @@ anyhow.workspace = true
 tiny_http = "0.12"
 rand = "0.8"
 dirs = "5"
+notify = "6"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp"] }
