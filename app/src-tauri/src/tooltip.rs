@@ -32,7 +32,7 @@ impl Tooltip {
     /// nowa strona nie wie o tooltipie starej i sama by go nie schowała.
     pub fn hide(&self, app: &AppHandle) {
         self.close();
-        if let Some(win) = app.get_webview_window("tooltip") { let _ = win.hide(); }
+        if let Some(win) = app.get_webview_window("tooltip") { shell::hide(&win); }
     }
 }
 

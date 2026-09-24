@@ -116,9 +116,31 @@ pub fn apply_floating(stage: HWND, m: &Metrics, p: Option<Placement>) {
     }
 }
 
+pub fn hide(h: HWND) { unsafe { let _ = ShowWindow(h, SW_HIDE); } }
+
 pub fn show_no_activate(h: HWND) {
     unsafe {
         let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
         let _ = SetWindowPos(h, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hide_undoes_show_no_activate() {
+        // Regresja: tooltip pokazany przez Win32 nie znikał, bo chowaliśmy go przez Tauri (`hide()`),
+        // które nie wiedziało o pokazaniu i nic nie robiło.
+        unsafe {
+            let h = CreateWindowExW(WS_EX_TOOLWINDOW, w!("STATIC"), w!("agent-pets-test"), WS_POPUP,
+                0, 0, 50, 20, None, None, None, None).unwrap();
+            show_no_activate(h);
+            assert!(IsWindowVisible(h).as_bool());
+            hide(h);
+            assert!(!IsWindowVisible(h).as_bool());
+            let _ = DestroyWindow(h);
+        }
     }
 }
