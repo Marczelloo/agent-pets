@@ -126,3 +126,7 @@ tools/              fixture anonymizer and its test
 4. **Phase 3:** panel with sessions and limits, "jump to session", Windows notifications, Claude rate limits via statusline
 5. **Phase 4:** Agent Router task state file
 6. **Phase 5:** installer, settings, autostart, power-saving mode
+
+## License
+
+[MIT](LICENSE)
