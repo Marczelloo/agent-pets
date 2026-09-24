@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/pets-core", "crates/pets-hook", "crates/pets-cli"]
+exclude = ["spikes"]
 
 [workspace.package]
 edition = "2021"
