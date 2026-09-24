@@ -2,7 +2,7 @@
 
 Animated pets that live in the Windows 11 taskbar and show what your coding agents are doing: **Claude Code**, **OpenAI Codex** and **Agent Router** tasks. Each session gets its own pet. The pet codes at a desk, types commands into a terminal, reads files, catches web pages with a butterfly net, waves when it needs you, dances when it's done, and naps when idle. Progress, context usage and rate limits show up next to it.
 
-> **Status: early development.** The data core and the taskbar stage with live pets work. The panel, "jump to session" and notifications come next. What you can run today is listed in [What works now](#what-works-now).
+> **Status: early development.** The data core, the taskbar stage with live pets, the panel, "jump to session" and notifications work. Installer and settings come next. What you can run today is listed in [What works now](#what-works-now).
 
 Design documents (spec, plan, spike reports) are written in Polish.
 
@@ -11,12 +11,15 @@ Design documents (spec, plan, spike reports) are written in Polish.
 | Piece | State | How to try it |
 |---|---|---|
 | **Taskbar stage** (`app/`): live pets, progress, rate limits, "+N" overflow, tooltip | ✅ | [Run the taskbar pets](#run-the-taskbar-pets) |
+| **Panel**: all sessions, limits, "Przejdź" (jump to session) | ✅ | click a pet or the tray icon, see [Panel and jump to session](#panel-and-jump-to-session) |
+| **Windows notifications**: waiting for you, long turn done, limit over 90% | ✅ | [Notifications](#notifications) |
+| Claude rate limits (5h and weekly) | ✅ | from the Claude app, and exact reset times via [statusline pass-through](#claude-rate-limits) |
 | **Data core** (`pets-core`, `pets-cli`, `hook.exe`) | ✅ Done | `pets-cli run`: live table of all agent sessions |
 | Claude Code sessions (CLI and desktop) | ✅ | states from hooks; title, context and progress from transcripts |
 | Codex sessions (desktop, CLI, Agent Router) | ✅ | states, tools, context and 5h/weekly limits from rollout files |
 | Record and replay of session events | ✅ | `pets-cli run --record`, `pets-cli replay` |
 | **Visual prototype** of the pets (animations, props, sketch style) | ✅ Prototype | open `prototype/index.html` in a browser |
-| Panel, "jump to session", notifications, Claude rate limits | ⏳ Next phases | see [Roadmap](#roadmap) |
+| Installer, settings, autostart | ⏳ Next phases | see [Roadmap](#roadmap) |
 
 ## Requirements
 
@@ -93,10 +96,51 @@ pnpm dev                                                               # browser
 ```
 
 - The pets sit in the taskbar next to the tray and take only the free space after your app icons. When space runs out, the oldest pets collapse into a "+N" badge; a pet that waits for you or hit an error always stays visible.
-- Hover a pet, the rate-limit bars or the "+N" badge for details.
-- Quit from the tray icon: **Zakończ Agent Pets**.
+- Hover a pet, the rate-limit bars or the "+N" badge for details. Click to open the panel.
+- Quit from the tray icon's right-click menu: **Zakończ Agent Pets**.
 - The app and `pets-cli run` cannot run at the same time (both own the hook endpoint).
 - `pnpm tauri build` produces `target\release\agent-pets.exe`.
+
+### Panel and jump to session
+
+Click a pet (the panel opens on its session), the "+N" badge, the limit bars or the tray icon. The panel lists every session, including the ones folded into "+N", with sessions waiting for you or failing on top, and shows 5h and weekly limits for Claude and Codex. It hides when you click elsewhere or press Esc.
+
+**Przejdź** takes you to the session. It tries these steps in order and stops at the first one that works:
+
+1. a deep link: the session in the Claude app (`claude://code/continue`) or the thread in the Codex app (`codex://threads/…`);
+2. the window the session runs in (for example its Windows Terminal tab's window);
+3. a new terminal in the session's folder with `claude --resume <id>` or `codex resume <id>`;
+4. the resume command copied to the clipboard; the panel says so.
+
+Session ids reach URLs and process arguments only when they contain nothing but letters, digits, `-` and `_`.
+
+`pnpm dev` also serves a browser preview of the panel with demo data at http://localhost:1420/panel.html.
+
+### Notifications
+
+Windows toasts, signed "Agent Pets", with a **Przejdź** button:
+
+| When | Condition |
+|---|---|
+| Waiting for you | a session waits for you for more than 15 s and its window is not in front |
+| Done | a turn that took more than 2 minutes finished |
+| Limit | a 5h or weekly limit passed 90%, once per limit window |
+
+Nothing already going on when the app starts is reported. To turn toasts off, use Windows Settings → System → Notifications → Agent Pets (settings inside the app come in phase 5).
+
+### Claude rate limits
+
+Codex limits come from its session files. For Claude there are two sources, both local:
+
+- **The Claude app.** It saves your plan usage every 5 to 15 minutes in `plan-usage-history.json` in its data folder. Agent Pets reads the latest sample (5h and weekly percent) while the Claude app runs. The file has no reset times.
+- **Statusline pass-through** (optional). Claude Code in the terminal passes the exact limits with reset times to its statusline command. `hook.exe --agent-pets-statusline` forwards them to the widget and prints exactly what your previous statusline printed (nothing, if you had none). Only CLI sessions run the statusline, the Claude app does not.
+
+```powershell
+target\release\pets-cli.exe install-statusline $HOME\.agent-pets\hook.exe   # previous statusLine saved in ~/.agent-pets/statusline-original.json
+target\release\pets-cli.exe uninstall-statusline                           # restores it
+```
+
+Your previous statusline command runs through `cmd`. A command that only works in Git Bash will print nothing while the pass-through is installed.
 
 ### See the prototype
 
@@ -116,7 +160,7 @@ Claude transcripts + ~/.claude/sessions registry ──┘
   - the Claude hook, transcript and registry adapters;
   - the Codex rollout parser;
   - an incremental file tailer, a file watcher, the local ingest server and the hooks installer.
-- **`hook.exe`** is the Claude Code hook client.
+- **`hook.exe`** is the Claude Code hook client and, with `--agent-pets-statusline`, the statusline pass-through.
 - **`pets-cli`** runs everything as a terminal app, with record and replay.
 - **`app/`** is the Tauri app. Rust embeds the stage window in the taskbar (`SetParent` into `Shell_TrayWnd`), measures the free space with UI Automation, follows DPI and Explorer restarts, reads the mouse natively and shows the tooltip window. The TypeScript side draws the pets on a Canvas at 30 fps and pauses while the taskbar is hidden or a fullscreen app runs. The renderer is a 1:1 port of the prototype, checked call-by-call against it in tests.
 - **Privacy:** everything stays on your machine. The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. From transcripts only titles, task progress and token counters are kept, never message content.
@@ -126,8 +170,8 @@ Claude transcripts + ~/.claude/sessions registry ──┘
 ```
 crates/pets-core    core library (model, state machine, adapters, ingest, watcher)
 crates/pets-hook    hook.exe
-crates/pets-cli     pets-cli (run / replay / install-hooks / uninstall-hooks)
-app/                Tauri app: taskbar stage, renderer, skins, tooltip
+crates/pets-cli     pets-cli (run / replay / install-hooks / uninstall-hooks / install-statusline / uninstall-statusline)
+app/                Tauri app: taskbar stage, renderer, skins, tooltip, panel (React), jump, notifications
 prototype/          visual prototype of the pets (Canvas 2D)
 spikes/             throwaway feasibility spikes (taskbar embed, statusline dump)
 docs/               spec, plans, spike reports, verification checklists (Polish)
@@ -139,7 +183,7 @@ tools/              fixture anonymizer and its test, CPU measurement
 1. ~~Phase 0: feasibility spikes~~ (taskbar embed, performance, Claude limits, jump to session, data formats)
 2. ~~Phase 1: data core~~
 3. ~~Phase 2: taskbar stage in Tauri with the live pets, tooltip, overflow~~
-4. **Phase 3:** panel with sessions and limits, "jump to session", Windows notifications, Claude rate limits via statusline
+4. ~~Phase 3: panel with sessions and limits, "jump to session", Windows notifications, Claude rate limits~~
 5. **Phase 4:** Agent Router task state file
 6. **Phase 5:** installer, settings, autostart, power-saving mode
 
