@@ -24,7 +24,7 @@ fn forwards_hook_payload_silently() {
     let out = run_hook(&p, r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
     assert!(out.status.success());
     assert!(out.stdout.is_empty() && out.stderr.is_empty());
-    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
     assert_eq!(env.payload["session_id"], "abc");
     assert!(env.ts > 0);
     ing.stop();

@@ -1,5 +1,6 @@
 pub mod hook;
 pub mod registry;
+pub mod statusline;
 pub mod transcript;
 
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,13 @@ use crate::model::Progress;
 pub struct HookEnvelope {
     pub ts: i64,
     pub ppid: Option<u32>,
+    pub payload: serde_json::Value,
+}
+
+/// Dane statusline Claude Code (CLI) przesłane przez `hook.exe --agent-pets-statusline`.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StatuslineEnvelope {
+    pub ts: i64,
     pub payload: serde_json::Value,
 }
 

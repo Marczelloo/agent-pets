@@ -2,11 +2,12 @@ use std::io::Read;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use crate::claude::HookEnvelope;
+use crate::claude::{HookEnvelope, StatuslineEnvelope};
 use crate::endpoint::Endpoint;
 
 pub enum Incoming {
     ClaudeHook(HookEnvelope),
+    ClaudeStatusline(StatuslineEnvelope),
 }
 
 pub struct Ingest {
@@ -42,15 +43,25 @@ impl Ingest {
 }
 
 fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>) -> u16 {
-    if *req.method() != tiny_http::Method::Post || req.url() != "/v1/events/claude" { return 404; }
+    if *req.method() != tiny_http::Method::Post { return 404; }
+    let statusline = match req.url() {
+        "/v1/events/claude" => false,
+        "/v1/events/claude-statusline" => true,
+        _ => return 404,
+    };
     let auth = req.headers().iter().find(|h| h.field.equiv("Authorization")).map(|h| h.value.as_str().to_string());
     if auth.as_deref() != Some(expected) { return 401; }
     if req.body_length().map(|l| l as u64 > MAX_BODY).unwrap_or(false) { return 413; }
     let mut body = Vec::new();
     if req.as_reader().take(MAX_BODY + 1).read_to_end(&mut body).is_err() { return 400; }
     if body.len() as u64 > MAX_BODY { return 413; }
-    match serde_json::from_slice::<HookEnvelope>(&body) {
-        Ok(env) => { let _ = tx.send(Incoming::ClaudeHook(env)); 204 }
+    let msg = if statusline {
+        serde_json::from_slice::<StatuslineEnvelope>(&body).map(Incoming::ClaudeStatusline)
+    } else {
+        serde_json::from_slice::<HookEnvelope>(&body).map(Incoming::ClaudeHook)
+    };
+    match msg {
+        Ok(m) => { let _ = tx.send(m); 204 }
         Err(_) => 400,
     }
 }
@@ -81,10 +92,26 @@ mod tests {
         assert_eq!(post(port, "/v1/events/claude", "secret", body), 204);
         match rx.recv_timeout(Duration::from_secs(2)).unwrap() {
             Incoming::ClaudeHook(h) => assert_eq!(h.ppid, Some(5)),
+            _ => panic!("zła trasa"),
         }
         assert_eq!(post(port, "/v1/events/claude", "wrong", body), 401);
         assert_eq!(post(port, "/nope", "secret", body), 404);
         assert_eq!(post(port, "/v1/events/claude", "secret", "{bad"), 400);
+        ing.stop();
+    }
+
+    #[test]
+    fn accepts_statusline_on_its_own_route() {
+        let (tx, rx) = channel();
+        let ing = Ingest::start("secret".into(), tx).unwrap();
+        let port = ing.endpoint().port;
+        let body = r#"{"ts":1,"payload":{"session_id":"s"}}"#;
+        assert_eq!(post(port, "/v1/events/claude-statusline", "secret", body), 204);
+        match rx.recv_timeout(Duration::from_secs(2)).unwrap() {
+            Incoming::ClaudeStatusline(s) => assert_eq!(s.payload["session_id"], "s"),
+            _ => panic!("zła trasa"),
+        }
+        assert_eq!(post(port, "/v1/events/claude-statusline", "wrong", body), 401);
         ing.stop();
     }
 }

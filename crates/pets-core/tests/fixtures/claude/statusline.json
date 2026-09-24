@@ -1,0 +1,19 @@
+{
+  "session_id": "3746a003-5ba1-42b3-a085-009646ebcf00",
+  "transcript_path": "C:\\work\\project\\t.jsonl",
+  "cwd": "C:\\work\\project",
+  "session_name": "Widżet w pasku",
+  "model": { "id": "claude-opus-5-5", "display_name": "Opus 5.5" },
+  "workspace": { "current_dir": "C:\\work\\project", "project_dir": "C:\\work\\project" },
+  "version": "2.1.270",
+  "cost": { "total_cost_usd": 0.5, "total_duration_ms": 1000 },
+  "context_window": {
+    "total_input_tokens": 1000, "total_output_tokens": 500, "context_window_size": 1000000,
+    "current_usage": { "input_tokens": 1, "output_tokens": 2, "cache_creation_input_tokens": 3, "cache_read_input_tokens": 4 },
+    "used_percentage": 12.5, "remaining_percentage": 87.5
+  },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 34.0, "resets_at": 1790290000 },
+    "seven_day": { "used_percentage": 61.5, "resets_at": 1790700000 }
+  }
+}

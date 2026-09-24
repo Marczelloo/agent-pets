@@ -70,7 +70,12 @@ impl Runtime {
     /// Przetwarza zaległe zdarzenia i przesuwa zegar. Zwraca `true`, gdy stan się zmienił.
     pub fn step(&mut self, now: i64) -> bool {
         let mut changed = false;
-        while let Ok(Incoming::ClaudeHook(env)) = self.hooks.try_recv() { changed |= self.on_hook(env); }
+        while let Ok(msg) = self.hooks.try_recv() {
+            changed |= match msg {
+                Incoming::ClaudeHook(env) => self.on_hook(env),
+                Incoming::ClaudeStatusline(s) => claude::statusline::to_events(&s).into_iter().fold(false, |c, e| self.apply(e) | c),
+            };
+        }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
         for p in paths { changed |= self.poll_file(&p); }
         changed |= !self.store.tick(now, &pid::is_alive).is_empty();
