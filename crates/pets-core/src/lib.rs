@@ -6,6 +6,8 @@ pub mod ingest;
 pub mod model;
 pub mod pid;
 pub mod rehydrate;
+pub mod replay;
+pub mod runtime;
 pub mod store;
 pub mod tail;
 pub mod time;

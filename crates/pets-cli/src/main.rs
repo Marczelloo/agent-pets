@@ -1,18 +1,14 @@
 mod render;
 
 use anyhow::Context as _;
-use pets_core::claude::{self, hook::TaskTracker, HookEnvelope};
-use pets_core::endpoint::Endpoint;
-use pets_core::ingest::{Incoming, Ingest};
-use pets_core::model::Event;
-use pets_core::rehydrate::{keep_for_rehydration, recent_files};
+use pets_core::hooks_install;
+use pets_core::replay::Replay;
+use pets_core::runtime::{Runtime, RuntimeConfig};
 use pets_core::store::{Store, Timing};
-use pets_core::watch::{watch, Sources};
-use pets_core::{hooks_install, pid, time};
+use pets_core::time;
 use std::fs::File;
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::channel;
 use std::time::Duration;
 
 const USAGE: &str = "użycie: pets-cli run [--record plik.jsonl] | replay plik.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks";
@@ -21,55 +17,15 @@ fn claude_settings() -> anyhow::Result<PathBuf> {
     Ok(dirs::home_dir().context("brak katalogu domowego")?.join(".claude").join("settings.json"))
 }
 
-fn apply(store: &mut Store, rec: &mut Option<File>, e: Event) -> bool {
-    if let Some(f) = rec { let _ = writeln!(f, "{}", serde_json::to_string(&e).unwrap_or_default()); }
-    !store.apply(&e).is_empty()
-}
-
-fn on_hook(store: &mut Store, sources: &mut Sources, tasks: &mut TaskTracker, rec: &mut Option<File>, env: HookEnvelope) -> bool {
-    let mut changed = false;
-    if let Some(tp) = claude::hook::transcript_path(&env) {
-        if sources.track(&tp, true) { for e in sources.poll(&tp) { changed |= apply(store, rec, e); } }
-    }
-    for e in claude::hook::to_events(&env) { changed |= apply(store, rec, e); }
-    if let Some(e) = tasks.observe(&env) { changed |= apply(store, rec, e); }
-    changed
-}
-
 fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
-    let (tx, rx) = channel();
-    let ingest = Ingest::start(Endpoint::new_token(), tx)?;
-    ingest.endpoint().write(&Endpoint::default_path()).context("zapis endpoint.json")?;
-    let mut rec = record.map(File::create).transpose()?;
-    let mut store = Store::new(Timing::default());
-    let mut sources = Sources::new();
-    let mut tasks = TaskTracker::default();
-    let home = dirs::home_dir().context("brak katalogu domowego")?;
-    let roots = [home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
-    // Odtworzenie stanu: żywe sesje Claude'a z rejestru, potem ich transkrypty i rollouty Codexa.
-    let live: Vec<_> = claude::registry::read_registry(&home.join(".claude").join("sessions"))
-        .into_iter().filter(|s| pid::is_alive(s.pid)).collect();
-    for s in &live { apply(&mut store, &mut rec, s.to_event()); }
-    let live_ids = live.iter().map(|s| s.session_id.clone()).collect();
-    let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
-    for f in keep_for_rehydration(&recent, &live_ids) {
-        if sources.track(&f, true) { for e in sources.poll(&f) { apply(&mut store, &mut rec, e); } }
-    }
-    let (ptx, prx) = channel();
-    let _watcher = watch(&roots, ptx)?;
+    let mut cfg = RuntimeConfig::from_env()?;
+    cfg.record = record.map(File::create).transpose()?;
+    let mut rt = Runtime::start(cfg)?;
     let mut last_draw = 0i64;
     loop {
-        let mut changed = false;
-        while let Ok(Incoming::ClaudeHook(env)) = rx.try_recv() {
-            changed |= on_hook(&mut store, &mut sources, &mut tasks, &mut rec, env);
-        }
-        while let Ok(p) = prx.try_recv() {
-            for e in sources.poll(&p) { changed |= apply(&mut store, &mut rec, e); }
-        }
         let now = time::now_ms();
-        changed |= !store.tick(now, &pid::is_alive).is_empty();
-        if changed || now - last_draw >= 1000 {
-            print!("\x1b[2J\x1b[H{}", render::render(&store, now));
+        if rt.step(now) || now - last_draw >= 1000 {
+            print!("\x1b[2J\x1b[H{}", render::render(rt.store(), now));
             let _ = std::io::stdout().flush();
             last_draw = now;
         }
@@ -78,18 +34,12 @@ fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
 }
 
 fn replay(path: &Path, speed: f64) -> anyhow::Result<()> {
-    let events: Vec<Event> = std::io::BufReader::new(File::open(path)?).lines()
-        .map_while(Result::ok).filter_map(|l| serde_json::from_str(&l).ok()).collect();
-    let Some(mut clock) = events.first().map(|e| e.ts) else { println!("pusty plik"); return Ok(()) };
+    let mut rp = Replay::load(path, speed)?;
+    if rp.is_empty() { println!("pusty plik"); return Ok(()); }
     let mut store = Store::new(Timing::default());
-    for e in events {
-        // Nagrania mieszają zdarzenia na żywo ze starszymi z transkryptów: zegar idzie tylko do przodu,
-        // a pojedyncza przerwa trwa najwyżej 250 ms, żeby długie ciche okresy nie blokowały odtwarzania.
-        let gap = (e.ts - clock).max(0);
-        std::thread::sleep(Duration::from_millis(((gap as f64 / speed) as u64).min(250)));
-        clock = clock.max(e.ts);
-        store.apply(&e);
-        store.tick(clock, &|_| true);
+    while let Some(d) = rp.next_delay_ms() {
+        std::thread::sleep(Duration::from_millis(d));
+        let Some(clock) = rp.apply_next(&mut store) else { break };
         print!("\x1b[2J\x1b[H{}", render::render(&store, clock));
         let _ = std::io::stdout().flush();
     }
