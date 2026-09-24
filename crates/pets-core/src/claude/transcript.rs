@@ -135,7 +135,7 @@ mod tests {
             "message": {"model": "claude-opus-5", "content": [], "usage": {"input_tokens": 2,
             "cache_creation_input_tokens": 100, "cache_read_input_tokens": 900, "output_tokens": 5}}})));
         assert_eq!(e[0].data.title.as_deref(), Some("Widżet"));
-        assert_eq!(e[0].data.context, Some(Context { used: 1002, max: 200_000 }));
+        assert_eq!(e[0].data.context, Some(Context { used: 1002, max: 1_000_000 }));
         p.parse_line(&line(serde_json::json!({"type": "custom-title", "customTitle": "Agent Pets", "sessionId": "s"})));
         p.parse_line(&line(serde_json::json!({"type": "ai-title", "aiTitle": "Gorszy", "sessionId": "s"})));
         let e = p.parse_line(&line(serde_json::json!({"type": "user", "sessionId": "s", "timestamp": TS,
