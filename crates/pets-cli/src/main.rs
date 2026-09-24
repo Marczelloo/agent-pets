@@ -1,7 +1,7 @@
 mod render;
 
 use anyhow::Context as _;
-use pets_core::hooks_install;
+use pets_core::{hooks_install, statusline_install};
 use pets_core::replay::Replay;
 use pets_core::runtime::{Runtime, RuntimeConfig};
 use pets_core::store::{Store, Timing};
@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const USAGE: &str = "użycie: pets-cli run [--record plik.jsonl] | replay plik.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks";
+const USAGE: &str = "użycie: pets-cli run [--record plik.jsonl] | replay plik.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | install-statusline [hook.exe] | uninstall-statusline";
 
 fn claude_settings() -> anyhow::Result<PathBuf> {
     Ok(dirs::home_dir().context("brak katalogu domowego")?.join(".claude").join("settings.json"))
@@ -69,6 +69,22 @@ fn main() -> anyhow::Result<()> {
         Some("uninstall-hooks") => {
             hooks_install::uninstall_file(&claude_settings()?)?;
             println!("Usunięto hooki Agent Pets z {}", claude_settings()?.display());
+            Ok(())
+        }
+        Some("install-statusline") => {
+            let exe = match args.get(1) {
+                Some(p) => PathBuf::from(p),
+                None => std::env::current_exe()?.with_file_name("hook.exe"),
+            };
+            anyhow::ensure!(exe.exists(), "nie ma pliku {}", exe.display());
+            statusline_install::install_file(&claude_settings()?, &exe.to_string_lossy())?;
+            println!("Zainstalowano przelotkę statusline ({}) w {}; poprzedni statusLine zapisano w {}",
+                exe.display(), claude_settings()?.display(), statusline_install::original_path().display());
+            Ok(())
+        }
+        Some("uninstall-statusline") => {
+            statusline_install::uninstall_file(&claude_settings()?)?;
+            println!("Przywrócono poprzedni statusLine w {}", claude_settings()?.display());
             Ok(())
         }
         _ => { eprintln!("{USAGE}"); Ok(()) }

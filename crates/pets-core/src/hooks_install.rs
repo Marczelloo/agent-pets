@@ -40,7 +40,7 @@ pub fn install(settings: &mut Value, hook_exe: &str) {
 }
 
 /// Zmiana pliku z kopią `<nazwa>.agent-pets.bak` i zapisem atomowym. Zepsuty JSON kończy się błędem bez zapisu.
-fn edit_file(path: &Path, f: impl FnOnce(&mut Value)) -> std::io::Result<()> {
+pub(crate) fn edit_file(path: &Path, f: impl FnOnce(&mut Value)) -> std::io::Result<()> {
     let mut v: Value = match std::fs::read_to_string(path) {
         Ok(s) => {
             let v = serde_json::from_str(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
