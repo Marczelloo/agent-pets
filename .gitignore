@@ -1,0 +1,3 @@
+/target
+spikes/*/node_modules
+spikes/*/src-tauri/target
