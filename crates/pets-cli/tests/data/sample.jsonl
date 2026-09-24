@@ -1,0 +1,4 @@
+{"source":"claude","session_id":"s1","kind":"session_start","tool":null,"ts":0,"data":{"title":"Demo","cwd":"C:\\demo","origin":"cli","progress":null,"context":null,"limits":[],"pid":null,"app":"terminal"}}
+{"source":"claude","session_id":"s1","kind":"prompt","tool":null,"ts":1000,"data":{}}
+{"source":"claude","session_id":"s1","kind":"tool_start","tool":"edit","ts":2500,"data":{"progress":{"done":1,"total":3}}}
+{"source":"claude","session_id":"s1","kind":"turn_end","tool":null,"ts":6000,"data":{}}

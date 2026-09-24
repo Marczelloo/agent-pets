@@ -1,0 +1,11 @@
+[package]
+name = "pets-cli"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+pets-core = { path = "../pets-core" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+dirs = "5"
