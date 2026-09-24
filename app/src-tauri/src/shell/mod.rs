@@ -51,6 +51,12 @@ impl Shell {
 
 pub fn screen_size() -> (i32, i32) { let r = taskbar::screen_rect(); (r.right, r.bottom) }
 
+/// Prostokąt paska zadań, ekran i skala DPI paska (do ustawienia panelu nad paskiem).
+pub fn taskbar_geometry() -> Option<(placement::Rect, placement::Rect, f64)> {
+    let t = taskbar::tray()?;
+    Some((taskbar::rect_of(t)?, taskbar::screen_rect(), taskbar::scale_of(t)))
+}
+
 pub fn show_no_activate(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::show_no_activate(h); } }
 
 /// Chowa okno pokazane przez `show_no_activate`. Musi iść przez Win32: Tauri nie wie o pokazaniu

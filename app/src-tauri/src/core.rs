@@ -6,6 +6,7 @@ use pets_core::store::{Store, Timing};
 use pets_core::time::now_ms;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
@@ -38,11 +39,13 @@ impl Mode {
     }
 }
 
-pub fn spawn(app: AppHandle, shared: Shared, mode: Mode) {
+/// `snaps`: każda publikowana migawka trafia też do tego kanału (powiadomienia).
+pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Snapshot>>) {
     std::thread::spawn(move || {
         let publish = |store: &Store, now: i64| {
             let s = snapshot_of(store, now);
             *shared.lock().unwrap() = s.clone();
+            if let Some(tx) = &snaps { let _ = tx.send(s.clone()); }
             let _ = app.emit("pets://snapshot", s);
         };
         let result = match mode {

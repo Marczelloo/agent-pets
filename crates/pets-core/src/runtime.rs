@@ -64,6 +64,7 @@ impl Runtime {
         let live_ids = live.iter().map(|s| s.session_id.clone()).collect();
         let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
         for f in keep_for_rehydration(&recent, &live_ids) { rt.poll_file(&f); }
+        if let Some(e) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
         let (ftx, files) = channel();
         rt._watcher = Some(watch(&roots, ftx)?);
         rt.files = Some(files);
@@ -135,8 +136,8 @@ mod tests {
         std::fs::create_dir_all(h.path().join("Claude")).unwrap();
         std::fs::write(h.path().join("Claude").join(claude::desktop_usage::FILE),
             serde_json::json!({"version": 2, "samples": [{"t": now, "org": "o", "u": {"fh": 42, "sd": 7}}]}).to_string()).unwrap();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
-        assert!(rt.step(now));
+        // już w pierwszej migawce po starcie: inaczej reguły powiadomień uznałyby zastany limit za nowy
+        let rt = Runtime::start(cfg(&h)).unwrap();
         let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
         assert_eq!(five.map(|l| l.used_pct), Some(42.0));
     }
