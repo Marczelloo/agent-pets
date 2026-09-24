@@ -1,5 +1,6 @@
 //! Okno sceny w pasku zadań: osadzenie, pętla układu, odtwarzanie po restarcie Explorera, widoczność.
 pub mod placement;
+pub mod pointer;
 mod taskbar;
 
 use serde::Serialize;
@@ -32,6 +33,7 @@ impl Shell {
         let (tx, rx) = channel();
         let (a, s) = (app.clone(), stage.clone());
         std::thread::spawn(move || run(a, rx, s));
+        pointer::spawn(app.clone(), stage.clone());
         Ok(Shell { tx, stage })
     }
 

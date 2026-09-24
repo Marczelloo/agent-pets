@@ -3,6 +3,7 @@ import type { PointerMsg, Snapshot, StageLayout } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawProgress, limitBars } from './hud';
 import { layout, type LayoutOut } from './layout';
+import { Hover } from './hover';
 import { Roster } from './roster';
 
 const FPS = 30;
@@ -17,13 +18,18 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let out: LayoutOut = layout({ sessions: [], hasLimits: false, maxWidth: 0 });
   let visible = true, running = false, T = 0, last = performance.now(), sentWidth = -1;
   const roster = new Roster();
-  const handle: StageHandle = { hover: () => {} };
+  let clockOffset = 0;
+  const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
+  const handle: StageHandle = { hover: p => hover.pointer(p) };
+  setInterval(() => hover.refresh(), 1000);
 
   const relayout = () => {
     out = layout({ sessions: snap.sessions, hasLimits: limitBars(snap.limits).length > 0, maxWidth: lay.max_css });
     roster.sync(snap.sessions, T);
     if (out.width !== sentWidth) { sentWidth = out.width; bridge.setWidth(out.width); }
+    hover.refresh(true);
   };
+  const take = (s: Snapshot) => { snap = s; clockOffset = s.now - Date.now(); relayout(); };
 
   function fit() {
     const d = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
@@ -64,10 +70,10 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     setTimeout(frame, 0);
   }
 
-  bridge.onSnapshot(s => { snap = s; relayout(); });
+  bridge.onSnapshot(take);
   bridge.onLayout(l => { lay = l; relayout(); });
-  bridge.onVisibility(v => { visible = v; kick(); });
+  bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
-  void bridge.start().then(s => { if (s) { snap = s; relayout(); } kick(); });
+  void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;
 }

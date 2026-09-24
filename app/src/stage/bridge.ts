@@ -59,8 +59,10 @@ export function fakeBridge(canvas: HTMLCanvasElement, tip: HTMLElement,
     setWidth: w => { canvas.style.width = `${w}px`; },
     showTooltip: (x, content) => {
       opts.render(tip, content);
+      tip.style.left = '0px'; // pełna szerokość przed pomiarem; jak w Rust, tooltip nie wychodzi poza ekran
       const box = canvas.getBoundingClientRect();
-      tip.style.left = `${Math.max(4, box.left + x - tip.offsetWidth / 2)}px`;
+      const left = box.left + x - tip.offsetWidth / 2;
+      tip.style.left = `${Math.max(4, Math.min(left, innerWidth - tip.offsetWidth - 4))}px`;
       tip.style.top = `${box.top - tip.offsetHeight - 6}px`;
     },
     hideTooltip: () => { tip.hidden = true; },

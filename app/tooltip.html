@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>agent-pets-tooltip</title>
+<style>
+:root{--tip:#F9F9F9;--tipb:rgba(0,0,0,.12);--txt:#1F1F1F;--mut:#6B6A63}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--tip:#2C2C2C;--tipb:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298}}
+:root[data-theme="dark"]{--tip:#2C2C2C;--tipb:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298}
+html,body{margin:0;padding:0;background:transparent;overflow:hidden}
+body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+#tip{display:inline-block;box-sizing:border-box;max-width:264px;background:var(--tip);color:var(--txt);border:1px solid var(--tipb);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.4}
+#tip .title{font-weight:600;font-size:13px;overflow-wrap:anywhere}
+#tip .sub{color:var(--mut);margin-bottom:4px}
+</style>
+</head>
+<body>
+<div id="tip" hidden></div>
+<script type="module" src="/src/tooltip/main.ts"></script>
+</body>
+</html>

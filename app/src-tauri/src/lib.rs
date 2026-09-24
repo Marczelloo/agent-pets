@@ -1,5 +1,6 @@
 mod core;
 mod shell;
+mod tooltip;
 mod tray;
 
 use tauri::{Manager, RunEvent};
@@ -21,11 +22,16 @@ pub fn run() {
             let shared: core::Shared = Default::default();
             app.manage(shared.clone());
             app.manage(shell::Shell::start(app.handle())?);
+            app.manage(tooltip::Tooltip::default());
+            tooltip::build(app.handle())?;
             tray::build(app.handle())?;
             core::spawn(app.handle().clone(), shared, core::Mode::from_env());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, stage_hello, stage_set_width])
+        .invoke_handler(tauri::generate_handler![
+            snapshot, stage_hello, stage_set_width,
+            tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide
+        ])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")
         .run(|_app, event| {
