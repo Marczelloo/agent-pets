@@ -1,26 +1,31 @@
 mod core;
+mod shell;
+mod tray;
 
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, RunEvent};
 
 #[tauri::command]
 fn snapshot(state: tauri::State<core::Shared>) -> core::Snapshot {
     state.lock().unwrap().clone()
 }
 
+#[tauri::command]
+fn stage_hello(shell: tauri::State<shell::Shell>) { shell.hello(); }
+
+#[tauri::command]
+fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_width(width); }
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let shared: core::Shared = Default::default();
             app.manage(shared.clone());
-            // Tymczasowe pływające okno sceny; osadzenie w pasku przychodzi w tasku 7.
-            WebviewWindowBuilder::new(app, "stage0", WebviewUrl::App("index.html".into()))
-                .title("agent-pets-stage").inner_size(400.0, 48.0).decorations(false)
-                .transparent(true).always_on_top(true).skip_taskbar(true).resizable(false).shadow(false)
-                .build()?;
+            app.manage(shell::Shell::start(app.handle())?);
+            tray::build(app.handle())?;
             core::spawn(app.handle().clone(), shared, core::Mode::from_env());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot])
+        .invoke_handler(tauri::generate_handler![snapshot, stage_hello, stage_set_width])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")
         .run(|_app, event| {
