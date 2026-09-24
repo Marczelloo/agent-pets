@@ -1,3 +1,4 @@
+pub mod desktop_usage;
 pub mod hook;
 pub mod registry;
 pub mod statusline;

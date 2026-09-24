@@ -85,10 +85,14 @@ impl Store {
 
     pub fn limits(&self) -> &[Limit] { &self.limits }
 
-    fn merge_limits(&mut self, new: &[Limit]) {
+    /// Limit bez czasu resetu (np. z aplikacji Claude) zachowuje znany reset, dopóki ten nie minął: to wciąż to samo okno.
+    fn merge_limits(&mut self, new: &[Limit], ts: i64) {
         for l in new {
             match self.limits.iter_mut().find(|x| x.agent == l.agent && x.window == l.window) {
-                Some(x) => *x = *l,
+                Some(x) => {
+                    let kept = x.resets_at.filter(|r| l.resets_at.is_none() && *r > ts);
+                    *x = Limit { resets_at: l.resets_at.or(kept), ..*l };
+                }
                 None => self.limits.push(*l),
             }
         }
@@ -97,7 +101,7 @@ impl Store {
     pub fn apply(&mut self, e: &Event) -> Vec<Change> {
         let mut out = Vec::new();
         if !e.data.limits.is_empty() {
-            self.merge_limits(&e.data.limits);
+            self.merge_limits(&e.data.limits, e.ts);
             out.push(Change::Limits(self.limits.clone()));
         }
         if e.kind == Kind::Limits { return out; }
@@ -358,5 +362,17 @@ mod tests {
         assert_eq!(s.limits(), &[lim(20.0)]);
         assert!(matches!(ch.as_slice(), [Change::Limits(_)]));
         assert!(s.session("c1").is_none(), "samo zdarzenie limitów nie tworzy sesji");
+    }
+
+    #[test]
+    fn limit_without_reset_keeps_a_future_reset_of_the_same_window() {
+        let mut s = Store::new(Timing::default());
+        let lim = |p: f32, r: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: p, resets_at: r };
+        let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Claude, "x", Kind::Limits, ts); e.data.limits = vec![l]; e };
+        s.apply(&at(1_000, lim(30.0, Some(10_000))));
+        s.apply(&at(2_000, lim(40.0, None)));
+        assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "to samo okno: reset ze statusline zostaje");
+        s.apply(&at(20_000, lim(5.0, None)));
+        assert_eq!(s.limits(), &[lim(5.0, None)], "reset minął: nie wiemy, kiedy następny");
     }
 }

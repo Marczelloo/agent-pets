@@ -19,6 +19,8 @@ pub struct RuntimeConfig {
     pub endpoint_path: PathBuf,
     /// Opcjonalny zapis znormalizowanych zdarzeń (JSONL), jak `pets-cli run --record`.
     pub record: Option<File>,
+    /// Pliki `plan-usage-history.json` aplikacji Claude (limity konta bez CLI).
+    pub claude_usage_files: Vec<PathBuf>,
 }
 
 impl RuntimeConfig {
@@ -27,6 +29,8 @@ impl RuntimeConfig {
             home: dirs::home_dir().context("brak katalogu domowego")?,
             endpoint_path: Endpoint::default_path(),
             record: None,
+            claude_usage_files: claude::desktop_usage::candidate_files(
+                &dirs::data_local_dir().unwrap_or_default(), &dirs::config_dir().unwrap_or_default()),
         })
     }
 }
@@ -38,6 +42,7 @@ pub struct Runtime {
     record: Option<File>,
     hooks: Receiver<Incoming>,
     files: Option<Receiver<PathBuf>>,
+    usage: claude::desktop_usage::Poller,
     _ingest: Ingest,
     _watcher: Option<notify::RecommendedWatcher>,
 }
@@ -49,7 +54,7 @@ impl Runtime {
         ingest.endpoint().write(&cfg.endpoint_path).context("zapis endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
-            record: cfg.record, hooks, files: None, _ingest: ingest, _watcher: None,
+            record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files), _ingest: ingest, _watcher: None,
         };
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
         // Odtworzenie stanu: żywe sesje Claude'a z rejestru, potem ich transkrypty i rollouty Codexa.
@@ -78,6 +83,7 @@ impl Runtime {
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
         for p in paths { changed |= self.poll_file(&p); }
+        if let Some(e) = self.usage.poll(now) { changed |= self.apply(e); }
         changed |= !self.store.tick(now, &pid::is_alive).is_empty();
         changed
     }
@@ -118,7 +124,21 @@ mod tests {
     }
 
     fn cfg(h: &tempfile::TempDir) -> RuntimeConfig {
-        RuntimeConfig { home: h.path().into(), endpoint_path: h.path().join("endpoint.json"), record: None }
+        RuntimeConfig { home: h.path().into(), endpoint_path: h.path().join("endpoint.json"), record: None,
+            claude_usage_files: vec![h.path().join("Claude").join(claude::desktop_usage::FILE)] }
+    }
+
+    #[test]
+    fn claude_desktop_usage_file_reaches_limits() {
+        let h = home();
+        let now = crate::time::now_ms();
+        std::fs::create_dir_all(h.path().join("Claude")).unwrap();
+        std::fs::write(h.path().join("Claude").join(claude::desktop_usage::FILE),
+            serde_json::json!({"version": 2, "samples": [{"t": now, "org": "o", "u": {"fh": 42, "sd": 7}}]}).to_string()).unwrap();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        assert!(rt.step(now));
+        let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
+        assert_eq!(five.map(|l| l.used_pct), Some(42.0));
     }
 
     #[test]
