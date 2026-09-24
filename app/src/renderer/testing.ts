@@ -58,8 +58,13 @@ export function loadPrototype(rng: () => number): ProtoApi {
     performance: { now: () => 0 },
     __rng: rng,
   };
+  const prototypeSource = readFileSync(PROTO, 'utf8');
+  const hipMutation = 'Object.assign(sw?{armL:1.1}:HIP,';
+  if (!prototypeSource.includes(hipMutation)) throw new Error('Prototype v6 HIP mutation patch target not found');
+  // Fix the HIP mutation bug in prototype v6 before evaluating it.
+  const patchedSource = prototypeSource.replace(hipMutation, 'Object.assign({},sw?{armL:1.1}:HIP,');
   // Każdy kontekst `vm` ma własny obiekt Math, więc podmiana nie wycieka do testów.
-  const src = 'Math.random=__rng;' + readFileSync(PROTO, 'utf8') +
+  const src = 'Math.random=__rng;' + patchedSource +
     ';globalThis.__p={S,mkC,stepC,drawC,setSK:v=>{SK=v},setBoil:v=>{BOIL=v}};';
   vm.runInNewContext(src, sandbox);
   return sandbox.__p as ProtoApi;
