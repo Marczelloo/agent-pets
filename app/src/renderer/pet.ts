@@ -3,10 +3,10 @@ import { K, DEF, SPR } from "./pose";
 import { SCENES } from "./scenes";
 import { rng } from "./rng";
 import { SKINS, type SkinId } from "../skins";
-export interface Pet { type: SkinId; p: Record<string, { x: number; v: number }>; parts: any[]; [key: string]: any }
+export interface Pet { type: SkinId; p: Record<string, { x: number; v: number }>; parts: any[]; /** mnożnik przezroczystości całego zwierzaka (pojawianie się, pożegnanie) */ alpha?: number; [key: string]: any }
 export function createPet(type: SkinId,st: string): Pet{const c: Pet={type,p:{},parts:[],spawn:0,blink:0,nb:1+rng()*2,aa:0,av:0,hp:rng(),f:20,hand:[[-30,-30],[30,-30]],aHand:[[-30,-30],[30,-30]],kph:0,prop:null,hold:null,boltAng:0,pageSeed:0};K.forEach((k: any)=>c.p[k]={x:0,v:0});setScene(c,st,true);return c;}
 export function startAct(c: any,a: any){c.act=a;c.aT=0;c.pend=null;if(a[3])a[3](c);}
-export function setScene(c: any,st: any,inst: any){c.st=st;c.seqI=0;const s=SCENES[st];startAct(c,s.seq?s.seq[0]:s.acts[0]);if(inst){const tg=targets(c,0);c.prop=tg._prop||null;c.hold=tg._hold||null;tg.propA=c.prop?1:0;tg.holdA=c.hold?1:0;K.forEach((k: any)=>{c.p[k].x=tg[k];c.p[k].v=0;});c.tg=tg;}}
+export function setScene(c: any,st: any,inst?: any){c.st=st;c.seqI=0;const s=SCENES[st];startAct(c,s.seq?s.seq[0]:s.acts[0]);if(inst){const tg=targets(c,0);c.prop=tg._prop||null;c.hold=tg._hold||null;tg.propA=c.prop?1:0;tg.holdA=c.hold?1:0;K.forEach((k: any)=>{c.p[k].x=tg[k];c.p[k].v=0;});c.tg=tg;}}
 export function nextAct(c: any){const s=SCENES[c.st];if(c.act[4])c.act[4](c);c.p.th.x-=TAU*Math.round(c.p.th.x/TAU);
 if(s.seq&&c.seqI<s.seq.length-1){c.seqI++;startAct(c,s.seq[c.seqI]);return;}
 if(s.seq&&c.seqI===s.seq.length-1){c.seqI++;startAct(c,s.acts[0]);return;}

@@ -59,5 +59,13 @@ done:{base:{happy:1,look:-.3},seq:[
 acts:[['siedzi zadowolony',4,()=>({sit:1,swing:1,happy:.8})],['znów tańczy',2.4,dance]]},
 error:{base:{sit:1,dizzy:1,grey:1,wobW:1},acts:[['kręci mu się w głowie',3.5,()=>({})],['otrząsa się',1.4,()=>({wobW:0,shake:1,dizzy:.6})]]},
 idle:{base:{sit:1,th:.1},acts:[['siedzi i macha nogami',3,()=>({swing:1})],['rozgląda się',3.5,(a: any)=>({th:.7*Math.sin(a*1.8),look:-.3*Math.sin(a*1.3)})],['ziewa',2,(a: any)=>({armL:2.6,armR:2.6,sleep:a<1.6?.85:0})]]},
-sleep:{base:{loaf:1,sleep:1,dim:1,th:.3,_prop:'pillow',armL:.15,armR:.15},acts:[['śpi na poduszce',5,()=>({})],['przewraca się na bok',3,()=>({th:-.9})]]}};
+sleep:{base:{loaf:1,sleep:1,dim:1,th:.3,_prop:'pillow',armL:.15,armR:.15},acts:[['śpi na poduszce',5,()=>({})],['przewraca się na bok',3,()=>({th:-.9})]]},
+// Nowe w fazie 2 (spec 7.5): kompaktowanie kontekstu i pożegnanie przy końcu sesji.
+compact:{base:{th:.2,look:.3,squint:.5},acts:[
+['ściska kontekst',2.4,(a: any,_c: any,t: any)=>{const p=.5+.5*Math.sin(a*TAU/1.2);return {ikL:1,ikR:1,hxL:-44+22*p,hyL:-40+2*Math.sin(t*14),hxR:44-22*p,hyR:-40+2*Math.sin(t*14+1),lean:.25*p,squint:.4+.5*p,tilt:.03*Math.sin(t*9)};}],
+['ociera czoło',1.5,(a: any)=>({ikL:1,hxL:-26+34*ease(cl(a/1.1)),hyL:-64,ikR:1,hxR:30,hyR:-34,look:.1,ex:.2}),(c: any)=>pend(c,.5,()=>c.parts.push({k:'drop',x:-30,y:-62,vx:-25,vy:-20,g:160,life:0,max:.8}))]]},
+bye:{base:{},seq:[
+['macha na pożegnanie',.7,()=>({th:0,look:0,happy:.8,armR:2.3,oscR:.55,_f:11})],
+['odchodzi',.9,(a: any)=>({th:PI/2,lx:40*ease(cl(a/.9)),walkW:1,look:-.2})]],
+acts:[['odszedł',5,()=>({th:PI/2,lx:40})]]}};
 export function burst(c: any){for(let i=0;i<9;i++){const a=-PI*(i/8);c.parts.push({t:'✦',x:0,y:-72,vx:Math.cos(a)*90,vy:Math.sin(a)*90,g:60,life:0,max:1,s:13,col:'clay',tw:1});}}
