@@ -1,3 +1,6 @@
 /target
 spikes/*/node_modules
 spikes/*/src-tauri/target
+app/node_modules
+app/dist
+app/src-tauri/gen

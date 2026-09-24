@@ -1,0 +1,24 @@
+[package]
+name = "agent-pets"
+edition.workspace = true
+version.workspace = true
+
+[lib]
+name = "agent_pets_lib"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+pets-core = { path = "../../crates/pets-core" }
+tauri = { version = "2.11", features = ["tray-icon"] }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+  "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Accessibility", "Win32_System_Com",
+  "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell",
+] }

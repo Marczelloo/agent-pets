@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/pets-core", "crates/pets-hook", "crates/pets-cli"]
+members = ["crates/pets-core", "crates/pets-hook", "crates/pets-cli", "app/src-tauri"]
 exclude = ["spikes"]
 
 [workspace.package]

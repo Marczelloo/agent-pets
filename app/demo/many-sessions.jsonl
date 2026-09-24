@@ -1,0 +1,23 @@
+{"source":"claude","session_id":"d1","kind":"session_start","ts":1000000,"data":{"title":"Refaktor parsera rolloutów","cwd":"C:\\work\\parser","origin":"cli"}}
+{"source":"claude","session_id":"d1","kind":"prompt","ts":1000700,"data":{"context":{"used":84000,"max":200000}}}
+{"source":"claude","session_id":"d1","kind":"tool_start","tool":"edit","ts":1001400,"data":{"progress":{"done":2,"total":5}}}
+{"source":"codex","session_id":"d2","kind":"session_start","ts":1002100,"data":{"title":"Migracja testów na vitest","cwd":"C:\\work\\tests","origin":"desktop"}}
+{"source":"codex","session_id":"d2","kind":"prompt","ts":1002800,"data":{}}
+{"source":"codex","session_id":"d2","kind":"tool_start","tool":"bash","ts":1003500,"data":{}}
+{"source":"claude","session_id":"d3","kind":"session_start","ts":1004200,"data":{"title":"Research: UI Automation w pasku","cwd":"C:\\work\\uia","origin":"desktop"}}
+{"source":"claude","session_id":"d3","kind":"prompt","ts":1004900,"data":{}}
+{"source":"claude","session_id":"d3","kind":"tool_start","tool":"web","ts":1005600,"data":{}}
+{"source":"codex","session_id":"d4","kind":"session_start","ts":1006300,"data":{"title":"Zadanie routera: lint","cwd":"C:\\work\\lint","origin":"router"}}
+{"source":"codex","session_id":"d4","kind":"prompt","ts":1007000,"data":{}}
+{"source":"codex","session_id":"d4","kind":"tool_start","tool":"mcp","ts":1007700,"data":{"progress":{"done":1,"total":3}}}
+{"source":"claude","session_id":"d5","kind":"session_start","ts":1008400,"data":{"title":"Poprawka hooków","cwd":"C:\\work\\hooks","origin":"cli"}}
+{"source":"claude","session_id":"d5","kind":"prompt","ts":1009100,"data":{}}
+{"source":"claude","session_id":"d5","kind":"needs_input","ts":1009800,"data":{}}
+{"source":"codex","session_id":"d6","kind":"session_start","ts":1010500,"data":{"title":"Build release","cwd":"C:\\work\\build","origin":"cli"}}
+{"source":"codex","session_id":"d6","kind":"prompt","ts":1011200,"data":{}}
+{"source":"codex","session_id":"d6","kind":"error","ts":1011900,"data":{}}
+{"source":"claude","session_id":"d7","kind":"session_start","ts":1012600,"data":{"title":"Dokumentacja README","cwd":"C:\\work\\docs","origin":"cli"}}
+{"source":"claude","session_id":"d7","kind":"prompt","ts":1013300,"data":{}}
+{"source":"claude","session_id":"d7","kind":"tool_start","tool":"read","ts":1014000,"data":{}}
+{"source":"claude","session_id":"d7","kind":"turn_end","ts":1014700,"data":{}}
+{"source":"codex","session_id":"limits","kind":"limits","ts":1015000,"data":{"limits":[{"agent":"codex","window":"five_hour","used_pct":12.0,"resets_at":1019000000},{"agent":"codex","window":"weekly","used_pct":91.0,"resets_at":1400000000},{"agent":"claude","window":"five_hour","used_pct":34.0,"resets_at":1016000000},{"agent":"claude","window":"weekly","used_pct":61.0,"resets_at":1300000000}]}}
