@@ -1,6 +1,7 @@
 pub mod claude;
 pub mod codex;
 pub mod endpoint;
+pub mod hooks_install;
 pub mod ingest;
 pub mod model;
 pub mod pid;
