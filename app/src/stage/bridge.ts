@@ -13,6 +13,8 @@ export interface Bridge {
   setWidth(css: number): void;
   showTooltip(anchorX: number, content: TooltipContent): void;
   hideTooltip(): void;
+  /** Otwiera panel (albo zamyka otwarty); `focus` podświetla sesję. */
+  openPanel(focus?: string): void;
 }
 
 export function tauriBridge(): Bridge {
@@ -31,6 +33,7 @@ export function tauriBridge(): Bridge {
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
     showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },
     hideTooltip: () => { void invoke('tooltip_hide'); },
+    openPanel: focus => { void invoke('panel_open', { focus: focus ?? null }); },
   };
 }
 
@@ -66,5 +69,6 @@ export function fakeBridge(canvas: HTMLCanvasElement, tip: HTMLElement,
       tip.style.top = `${box.top - tip.offsetHeight - 6}px`;
     },
     hideTooltip: () => { tip.hidden = true; },
+    openPanel: focus => { console.info('panel_open', focus ?? null); },
   };
 }

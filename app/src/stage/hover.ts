@@ -1,7 +1,7 @@
 import { badgeTooltip, limitsTooltip, petTooltip } from '../tooltip/text';
 import type { PointerMsg, Session, Snapshot, TooltipContent } from '../types';
 import type { Bridge } from './bridge';
-import { hitTest } from './hit';
+import { clickAction, hitTest } from './hit';
 import type { LayoutOut } from './layout';
 
 interface View { out: LayoutOut; snap: Snapshot; height: number; nowMs: number }
@@ -18,6 +18,11 @@ export class Hover {
   pointer(p: PointerMsg): void {
     if (p.kind === 'leave') { this.clear(); return; }
     if (p.kind === 'move') { this.x = p.x; this.y = p.y; this.refresh(); }
+    if (p.kind === 'click') {
+      const { out, height } = this.view();
+      const a = clickAction(hitTest(out, p.x, p.y, height));
+      if (a) { this.clear(); this.bridge.openPanel(a.focus ?? undefined); }
+    }
   }
 
   refresh(force = false): void {

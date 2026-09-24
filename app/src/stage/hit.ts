@@ -14,3 +14,9 @@ export function hitTest(out: LayoutOut, x: number, y: number, height: number): T
   }
   return null;
 }
+
+/** Klik w scenę otwiera panel: na sesji klikniętego zwierzaka albo ogólnie dla „+N” i limitów. */
+export function clickAction(t: Target): { focus: string | null } | null {
+  if (!t) return null;
+  return { focus: t.kind === 'pet' ? t.id : null };
+}

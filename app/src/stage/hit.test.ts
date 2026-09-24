@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hitTest } from './hit';
+import { clickAction, hitTest } from './hit';
 import { LEFT_REACH, SLOT, type LayoutOut } from './layout';
 
 const out: LayoutOut = { width: 250, pets: [{ id: 'a', x: 50 }, { id: 'b', x: 124 }], hidden: 1, hiddenIds: ['z'],
@@ -19,5 +19,14 @@ describe('hitTest', () => {
     expect(hitTest(out, -1, 24, 48)).toBeNull();
     expect(hitTest(out, 251, 24, 48)).toBeNull();
     expect(hitTest(out, 100, 49, 48)).toBeNull();
+  });
+});
+
+describe('clickAction', () => {
+  it('opens the panel on the clicked pet, or plain for the badge and the limits', () => {
+    expect(clickAction({ kind: 'pet', id: 'a', x: 50 })).toEqual({ focus: 'a' });
+    expect(clickAction({ kind: 'badge', x: 14 })).toEqual({ focus: null });
+    expect(clickAction({ kind: 'limits', x: 235 })).toEqual({ focus: null });
+    expect(clickAction(null)).toBeNull();
   });
 });
