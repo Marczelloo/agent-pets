@@ -1,5 +1,6 @@
 mod core;
 mod jump;
+mod notify;
 mod shell;
 mod tooltip;
 mod tray;
