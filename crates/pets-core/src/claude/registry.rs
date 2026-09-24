@@ -59,7 +59,7 @@ mod tests {
     fn reads_live_sessions_and_skips_junk() {
         let dir = tempfile::tempdir().unwrap();
         write(dir.path(), "100.json", r#"{"pid":100,"sessionId":"a","cwd":"C:\\p","startedAt":5,"entrypoint":"claude-desktop","name":"Widżet","nameSource":"user","status":"busy"}"#);
-        write(dir.path(), "200.json", r#"{"pid":200,"sessionId":"b","cwd":"C:\\q","startedAt":6,"entrypoint":"cli","name":"moskw-cd","nameSource":"derived","status":"idle"}"#);
+        write(dir.path(), "200.json", r#"{"pid":200,"sessionId":"b","cwd":"C:\\q","startedAt":6,"entrypoint":"cli","name":"user-cd","nameSource":"derived","status":"idle"}"#);
         write(dir.path(), "300.abc.key", "x");
         write(dir.path(), "400.json", "{zepsuty");
         let mut v = read_registry(dir.path());

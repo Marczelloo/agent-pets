@@ -7,9 +7,9 @@ import tempfile
 
 sample = {
     "type": "x",
-    "changes": {r"C:\Users\moskw\a.txt": {"kind": "add"}},
-    "cwd": r"C:\Users\moskw\p",
-    "note": r"see C:\Users\moskw\x and /c/Users/moskw/y",
+    "changes": {r"C:\Users\jkowalski\a.txt": {"kind": "add"}},
+    "cwd": r"C:\Users\jkowalski\p",
+    "note": r"see C:\Users\jkowalski\x and /c/Users/jkowalski/y",
     "tool_name": "Write",
     "prompt": "tajny prompt",
 }
@@ -20,7 +20,7 @@ out = subprocess.run([sys.executable, os.path.join(here, "anonymize.py"), f.name
                      capture_output=True, text=True, encoding="utf-8").stdout
 os.unlink(f.name)
 print(out)
-assert "moskw" not in out, "wyciek nazwy użytkownika"
+assert "jkowalski" not in out, "wyciek nazwy użytkownika"
 assert "tajny" not in out, "wyciek treści promptu"
 assert '"tool_name": "Write"' in out
 print("OK")
