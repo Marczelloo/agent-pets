@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>Scena Agent Pets</title>
+<style>
+:root{--bg:#F3F3F3;--tb:#EDEDED;--txt:#3D3D3A;--mut:#8C887E;--line:#DEDEDE;--tip:#F9F9F9;--tipb:rgba(0,0,0,.1)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#202020;--tb:#1C1C1C;--txt:#E8E6DE;--mut:#8C887E;--line:#333;--tip:#2C2C2C;--tipb:rgba(255,255,255,.08)}}
+:root[data-theme="dark"]{--bg:#202020;--tb:#1C1C1C;--txt:#E8E6DE;--mut:#8C887E;--line:#333;--tip:#2C2C2C;--tipb:rgba(255,255,255,.08)}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+.controls{display:flex;flex-wrap:wrap;gap:16px;padding:16px;font-size:13px;color:var(--mut)}
+.controls label{display:flex;align-items:center;gap:8px}
+.spacer{flex:1}
+.taskbar{position:relative;height:48px;background:var(--tb);border-top:1px solid var(--line);display:flex;justify-content:flex-end;padding-right:8px;overflow:hidden}
+canvas{display:block;height:48px;width:0}
+.tip{position:fixed;background:var(--tip);border:1px solid var(--tipb);border-radius:8px;padding:8px 10px;font-size:12px;max-width:264px;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.tip .title{font-weight:600;font-size:13px;margin-bottom:2px}.tip .sub{color:var(--mut);margin-bottom:4px}
+</style>
+</head>
+<body>
+<div class="controls">
+  <label>Sesje <input type="range" id="count" min="0" max="9" value="7"><output id="countOut">7</output></label>
+  <label>Wolne miejsce <input type="range" id="width" min="0" max="700" value="480"><output id="widthOut">480</output> px</label>
+</div>
+<div class="spacer"></div>
+<div class="tip" id="tip" hidden></div>
+<div class="taskbar"><canvas id="stage"></canvas></div>
+<script type="module" src="/src/dev.ts"></script>
+</body>
+</html>
