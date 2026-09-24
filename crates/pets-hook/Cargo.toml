@@ -1,0 +1,16 @@
+[package]
+name = "pets-hook"
+edition.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "hook"
+path = "src/main.rs"
+
+[dependencies]
+pets-core = { path = "../pets-core" }
+serde_json.workspace = true
+ureq = { version = "2", default-features = false, features = ["json"] }
+
+[dev-dependencies]
+tempfile = "3"

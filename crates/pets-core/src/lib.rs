@@ -3,6 +3,7 @@ pub mod codex;
 pub mod endpoint;
 pub mod ingest;
 pub mod model;
+pub mod pid;
 pub mod store;
 pub mod tail;
 pub mod time;
