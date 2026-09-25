@@ -41,7 +41,7 @@ describe('motion', () => {
     expect(peak(MOTIONS.anime)).not.toBeCloseTo(peak(MOTIONS.calm), 3);
   });
   it('saving and reduced motion switch the costly effects off', () => {
-    expect(effective(MOTIONS.anime, { saving: true, reduced: false })).toMatchObject({ trails: false, speedLines: false, impacts: true, emotes: true });
-    expect(effective(MOTIONS.anime, { saving: false, reduced: true })).toMatchObject({ trails: false, speedLines: false, impacts: false });
+    expect(effective(MOTIONS.anime, { saving: true, reduced: false })).toMatchObject({ speedLines: false, impacts: true, emotes: true });
+    expect(effective(MOTIONS.anime, { saving: false, reduced: true })).toMatchObject({ speedLines: false, impacts: false });
   });
 });

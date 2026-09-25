@@ -46,11 +46,10 @@ describe('każda scena i skórka: bez NaN i wyjątków', () => {
 });
 
 describe('każdy styl × ruch × skórka × scena przez PetPainter: bez NaN, stan płótna przywrócony', () => {
-  const surface = (w: number, h: number) => ({ canvas: { width: w, height: h } as HTMLCanvasElement, ctx: recorder().ctx });
   for (const style of STYLE_IDS) for (const motion of ['calm', 'anime'] as const) {
     it(`${style} / ${motion}`, () => {
       for (const skin of ['clawd', 'kodek'] as const) for (const scene of Object.keys(SCENES)) {
-        const p = new PetPainter(createPet(skin, scene), surface);
+        const p = new PetPainter(createPet(skin, scene));
         const rec = recorder();
         for (let f = 0; f < 40; f++) p.frame(rec.ctx, { dt: f % 2 ? 0.05 : 1 / 30, t0: 1 + f / 30, X: 60, Y: 40, u: 0.3, look: { style, motion },
           animate: true, saving: f > 20, reduced: false, dpr: 1 });

@@ -4,6 +4,8 @@ import type { StyleId } from '../types';
 /** Styl rysowania: dane i flagi czytane przez `pen.ts` i `draw/body.ts`; geometria i animacja są wspólne. */
 export interface StyleDef {
   id: StyleId;
+  /** sposób rysowania: wektorowy (body.ts), naklejka przodem, piksele na siatce */
+  model: 'vector' | 'sticker' | 'pixel';
   /** kontur: najmniejsza grubość w px CSS i mnożnik dzisiejszej grubości 2,4·u */
   line: { minPx: number; scale: number };
   /** kolor konturu zwierzaka i rekwizytów; `accent` to kolor agenta */
@@ -21,6 +23,4 @@ export interface StyleDef {
   shape?: { radius?: Partial<Record<SkinId, number>>; flatSide?: boolean };
   face?: { smile?: boolean; blush?: boolean; eyes?: 'accent' };
   extras?: { ears?: boolean; phones?: boolean };
-  /** Pixel-art: rozmiar „piksela” = max(minPx, perU·u) px CSS */
-  pixel?: { perU: number; minPx: number };
 }

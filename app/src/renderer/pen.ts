@@ -4,7 +4,9 @@ import { clean } from "../styles/clean";
 import type { StyleDef } from "../styles/types";
 import { darken, lighten } from "./color";
 /** Stan rysowania jednej klatki; `drawPet` ustawia styl, kolor konturu i akcent przy każdym wywołaniu. */
-export const pen = { boil: 0, sid: 0, font: "sans-serif", st: clean as StyleDef, ol: OL as string, accent: '#D97757', fx: false, squash: 1 };
+export const pen = { boil: 0, sid: 0, font: "sans-serif", st: clean as StyleDef, ol: OL as string, accent: '#D97757', fx: false, squash: 1,
+  /** piksele urządzenia na piksel CSS (model pikselowy wyrównuje siatkę); ustawia PetPainter */
+  dpr: 1 };
 export function rrP(X: any,Y: any,W: any,H: any,R: any){if(W<0){X+=W;W=-W;}W=Math.max(W,.01);H=Math.max(H,.01);R=Math.max(0,Math.min(R,W/2,H/2));const p: number[][]=[],n=5;[[X+W-R,Y+R,-PI/2],[X+W-R,Y+H-R,0],[X+R,Y+H-R,PI/2],[X+R,Y+R,PI]].forEach(([cx,cy,a0])=>{for(let i=0;i<=n;i++){const a=a0+PI/2*i/n;p.push([cx+Math.cos(a)*R,cy+Math.sin(a)*R]);}});return p;}
 export function elP(cx: any,cy: any,rx: any,ry: any,rot?: any){const p=[],cr=Math.cos(rot||0),sr=Math.sin(rot||0);for(let i=0;i<18;i++){const a=TAU*i/18,ex=Math.cos(a)*rx,ey=Math.sin(a)*ry;p.push([cx+ex*cr-ey*sr,cy+ex*sr+ey*cr]);}return p;}
 export function path(x: any,p: any,j: any,seed: any){x.beginPath();p.forEach((q: any,i: any)=>{const dx=j?(hr(seed+i*1.7)-.5)*j:0,dy=j?(hr(seed+i*2.3+50)-.5)*j:0;i?x.lineTo(q[0]+dx,q[1]+dy):x.moveTo(q[0]+dx,q[1]+dy);});x.closePath();}

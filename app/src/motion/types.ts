@@ -9,7 +9,6 @@ export interface MotionDef {
   spring: { k: number; d: number };
   /** mnożnik squash & stretch przy skokach */
   squash: number;
-  trails: boolean;
   speedLines: boolean;
   impacts: boolean;
   emotes: boolean;

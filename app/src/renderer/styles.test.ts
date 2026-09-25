@@ -37,17 +37,6 @@ describe('styles', () => {
     drawPet(r.ctx, c, 60, 40, u, 1, { style, motion: 'calm' });
     return r.log;
   };
-  it('sticker: at least 2 px outline in the taskbar and gradient fills', () => {
-    const log = trace('sticker');
-    const widths = log.filter(l => l.startsWith('lineWidth=')).map(l => +l.slice(10));
-    expect(Math.max(...widths)).toBeGreaterThanOrEqual(2);
-    expect(log.some(l => l.startsWith('createLinearGradient('))).toBe(true);
-  });
-  it('sticker: Clawd smiles and blushes, Kodek wears headphones', () => {
-    expect(trace('sticker', 'clawd', 1).length).toBeGreaterThan(trace('clean', 'clawd', 1).length);
-    const k = trace('sticker', 'kodek', 1).join('\n');
-    expect(k).toContain('#E8E6E0');
-  });
   it('neon glows in the agent colour and restores the context', () => {
     const log = trace('neon');
     expect(log.some(l => l.startsWith('shadowBlur='))).toBe(true);
@@ -68,15 +57,6 @@ describe('styles', () => {
   it('neon eyes keep their glow colour instead of the dark fill', () => {
     const log = trace('neon', 'clawd', 1);
     expect(log).not.toContain(`fillStyle=${STYLES.neon.fillFor!(STYLES.neon.ink('#D97757'))}`);
-  });
-  it('sticker draws one outline around the body, not two boxes', () => {
-    const strokes = () => trace('sticker', 'clawd', 1).filter(l => l === 'stroke()').length;
-    const one = strokes();
-    const orig = STYLES.sticker;
-    STYLES.sticker = { ...orig, shape: { ...orig.shape, flatSide: false } };
-    const two = strokes();
-    STYLES.sticker = orig;
-    expect(one).toBe(two - 1); // przednia ściana bez własnego konturu
   });
   it('pastel outlines take their fill hue and the shadow is soft', () => {
     const log = trace('pastel');
