@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createPet, pen, setRng } from './index';
 import { PetPainter, type SurfaceFactory } from './painter';
 import { recorder, seeded } from './testing';
+import { STYLE_IDS } from '../look';
 
 setRng(seeded(4).next);
 pen.font = 'x';
@@ -64,5 +65,14 @@ describe('PetPainter', () => {
       p.frame(r.ctx, { ...frame, t0: 1 + f / 30, saving: true, look: { style: 'clean', motion: 'anime' } });
       expect(r.log.some(l => l.startsWith('drawImage('))).toBe(false);
     }
+  });
+  it('every pair of styles draws differently at taskbar scale', () => {
+    const logs = STYLE_IDS.map(style => {
+      const r = recorder();
+      setRng(seeded(4).next);
+      new PetPainter(createPet('clawd', 'edit'), fake).frame(r.ctx, { ...frame, look: { style, motion: 'calm' } });
+      return r.log.join('\n');
+    });
+    for (let i = 0; i < logs.length; i++) for (let j = i + 1; j < logs.length; j++) expect(logs[i], `${STYLE_IDS[i]} vs ${STYLE_IDS[j]}`).not.toBe(logs[j]);
   });
 });
