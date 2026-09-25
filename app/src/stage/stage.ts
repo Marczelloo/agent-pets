@@ -77,7 +77,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   bridge.onLayout(l => { lay = l; relayout(); });
   bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
-  bridge.onSettings(s => { pen.sketch = s.pets.skin === 'sketch'; maxPets = s.pets.max_visible; relayout(); });
+  bridge.onSettings(s => { pen.sketch = s.pets.style === 'sketch'; maxPets = s.pets.max_visible; relayout(); });
   bridge.onPower(saving => { budget = frameBudget(saving); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;

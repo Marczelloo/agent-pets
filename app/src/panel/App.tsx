@@ -86,7 +86,7 @@ export default function App() {
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
       listen<boolean>('panel://visible', e => setShown(e.payload)),
-      listen<Settings>('pets://settings', e => { pen.sketch = e.payload.pets.skin === 'sketch'; }),
+      listen<Settings>('pets://settings', e => { pen.sketch = e.payload.pets.style === 'sketch'; }),
       listen<boolean>('pets://power', e => setPetFps(frameBudget(e.payload).fps)),
       listen<string>('panel://focus', e => {
         setStatus(null);
@@ -97,7 +97,7 @@ export default function App() {
       }),
     ];
     void invoke<Snapshot>('snapshot').then(s => take.current(s));
-    void invoke<SettingsView>('settings_get').then(v => { pen.sketch = v.settings.pets.skin === 'sketch'; });
+    void invoke<SettingsView>('settings_get').then(v => { pen.sketch = v.settings.pets.style === 'sketch'; });
     void invoke<boolean>('power_get').then(saving => setPetFps(frameBudget(saving).fps));
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };

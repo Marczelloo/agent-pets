@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PetCanvas } from '../panel/PetCanvas';
+import { STYLE_IDS, STYLE_LABEL } from '../look';
 import { pen } from '../renderer';
 import type { AppRow, Session, Settings } from '../types';
 import { APP_HINT, APP_LABEL, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
@@ -35,7 +36,7 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
   const cur = WIZARD_STEPS[step];
   const set = (patch: Partial<Settings>) => setDraft(d => ({ ...d, ...patch }));
 
-  useEffect(() => { pen.sketch = draft.pets.skin === 'sketch'; }, [draft.pets.skin]);
+  useEffect(() => { pen.sketch = draft.pets.style === 'sketch'; }, [draft.pets.style]);
 
   if (result) {
     return (
@@ -95,14 +96,14 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
 
       {cur === 'look' && <section className="card look">
         <div className="skins" role="radiogroup" aria-label="Skórka">
-          {(['sketch', 'clean'] as const).map(k => (
-            <label key={k} className={`skin${draft.pets.skin === k ? ' on' : ''}`}>
-              <input type="radio" name="skin" checked={draft.pets.skin === k} onChange={() => set({ pets: { ...draft.pets, skin: k } })} />
-              {k === 'sketch' ? 'Szkicowa' : 'Czysta'}
+          {STYLE_IDS.map(k => (
+            <label key={k} className={`skin${draft.pets.style === k ? ' on' : ''}`}>
+              <input type="radio" name="skin" checked={draft.pets.style === k} onChange={() => set({ pets: { ...draft.pets, style: k } })} />
+              {STYLE_LABEL[k]}
             </label>
           ))}
         </div>
-        <div className="preview" key={draft.pets.skin}>
+        <div className="preview" key={draft.pets.style}>
           <PetCanvas session={preview('claude')} />
           <PetCanvas session={preview('codex')} />
         </div>

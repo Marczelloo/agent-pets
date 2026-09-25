@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { AppId, AppRow, Diagnostics, Settings } from '../types';
+import { STYLE_IDS, STYLE_LABEL } from '../look';
+import type { AppId, AppRow, Diagnostics, Settings, StyleId } from '../types';
 import { APP_HINT, APP_LABEL, clampMaxVisible, reportText } from './model';
 import { Toggle } from './Toggle';
 
@@ -55,9 +56,8 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         {tab === 'pets' && <section className="card">
           <div className="row">
             <span className="text"><span className="label">Skórka</span></span>
-            <select aria-label="Skórka" value={s.pets.skin} onChange={e => set({ pets: { ...s.pets, skin: e.target.value as Settings['pets']['skin'] } })}>
-              <option value="sketch">Szkicowa</option>
-              <option value="clean">Czysta</option>
+            <select aria-label="Skórka" value={s.pets.style} onChange={e => set({ pets: { ...s.pets, style: e.target.value as StyleId } })}>
+              {STYLE_IDS.map(id => <option key={id} value={id}>{STYLE_LABEL[id]}</option>)}
             </select>
           </div>
           <div className="row">

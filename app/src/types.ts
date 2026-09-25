@@ -39,6 +39,10 @@ export type PointerMsg =
 export interface TooltipContent { title: string; subtitle: string; lines: string[] }
 
 export type AppId = 'claude_code' | 'codex' | 'agent_router';
+export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
+export type MotionId = 'calm' | 'anime';
+export interface Look { style: StyleId; motion: MotionId }
+export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number }
 export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean }
 export interface Settings {
   version: number;
@@ -46,7 +50,7 @@ export interface Settings {
   claude_statusline: boolean;
   claude_plan_usage: boolean;
   notifications: { needs_you: boolean; done: boolean; limits: boolean };
-  pets: { skin: 'sketch' | 'clean'; max_visible: number };
+  pets: Pets;
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;
   [extra: string]: unknown;
