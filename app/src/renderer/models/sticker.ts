@@ -12,8 +12,8 @@ import { rig } from './rig';
 
 /** Kształty naklejki w jednostkach u (wzorzec: app-icon.png). */
 export const STICKER = {
-  clawd: { w: 104, h: 62, r: 20, ears: { w: 14, h: 22, y: .42 }, legs: [-.3, -.1, .1, .3], legW: 11, legH: 12, arm: 26, mitt: 7 },
-  kodek: { w: 92, h: 70, r: 30, screen: { m: 10, top: 12, bottom: 16, r: 16 }, phones: { rx: 8, ry: 13 }, antenna: 16, legs: [-.22, .22], legW: 16, legH: 12, arm: 24, mitt: 6.5 },
+  clawd: { w: 100, h: 76, r: 18, ears: { w: 14, h: 22, y: .5 }, legs: [-.3, -.1, .1, .3], legW: 11, legH: 12, arm: 17, mitt: 7 },
+  kodek: { w: 94, h: 76, r: 32, screen: { m: 8, top: 10, bottom: 12, r: 18 }, phones: { rx: 8, ry: 14 }, antenna: 16, legs: [-.22, .22], legW: 16, legH: 12, arm: 16, mitt: 6.5 },
 } as const;
 
 const EYE = '#1E1410', TEAL = '#5DCAA5', SCREEN = '#2C2C2A', PHONE = '#C9C7C1', PHONE_IN = '#A5A298', BLUSH = '#F0997B';
@@ -92,7 +92,7 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
 
 /** Refleks u góry bryły (jak na ikonie). */
 function highlight(x: CanvasRenderingContext2D, W: number, top: number, u: number) {
-  x.save(); x.globalAlpha *= .45;
+  x.save(); x.globalAlpha *= .3;
   shp(x, rrP(-W * .34, top + 5 * u, W * .68, 5 * u, 2.5 * u), '#FFFFFF', u, { noStroke: 1, raw: 1 });
   x.restore();
 }
@@ -102,8 +102,8 @@ type Eyes = { open: number; blink: number; sleep: number; happy: number; dizzy: 
 function clawdEye(x: CanvasRenderingContext2D, ex: number, ey: number, u: number, e: Eyes, GA: number) {
   x.save(); x.fillStyle = EYE; x.strokeStyle = EYE; x.lineWidth = Math.max(1.2, 2.4 * u);
   if (e.open > .02) {
-    shp(x, elP(ex, ey, 4.2 * u, Math.max(.4, 6.5 * u * e.open)), EYE, u, { noStroke: 1, raw: 1 });
-    x.fillStyle = '#FFFFFF'; x.beginPath(); x.arc(ex + 1.4 * u, ey - 2.4 * u * e.open, 1.6 * u * e.open, 0, TAU); x.fill();
+    shp(x, elP(ex, ey, 5 * u, Math.max(.4, 7.8 * u * e.open)), EYE, u, { noStroke: 1, raw: 1 });
+    x.fillStyle = '#FFFFFF'; x.beginPath(); x.arc(ex + 1.6 * u, ey - 2.8 * u * e.open, 1.9 * u * e.open, 0, TAU); x.fill();
   }
   lids(x, ex, ey, u, e, GA);
   x.restore();
@@ -111,7 +111,7 @@ function clawdEye(x: CanvasRenderingContext2D, ex: number, ey: number, u: number
 
 function kodekEye(x: CanvasRenderingContext2D, ex: number, ey: number, u: number, e: Eyes, GA: number) {
   x.save(); x.fillStyle = TEAL; x.strokeStyle = TEAL; x.lineWidth = Math.max(1.2, 2.6 * u);
-  if (e.open > .02) shp(x, rrP(ex - 3 * u, ey - 5 * u * e.open, 6 * u, Math.max(.5, 10 * u * e.open), 3 * u), TEAL, u, { noStroke: 1, raw: 1 });
+  if (e.open > .02) shp(x, rrP(ex - 3.5 * u, ey - 6 * u * e.open, 7 * u, Math.max(.5, 12 * u * e.open), 3.5 * u), TEAL, u, { noStroke: 1, raw: 1 });
   lids(x, ex, ey, u, e, GA);
   x.restore();
 }
