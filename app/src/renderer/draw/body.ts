@@ -1,5 +1,5 @@
 import { PI, TAU, cl, lerpC } from "../math";
-import { OL, PAPER, SPIN, COL } from "../palette";
+import { PAPER, SPIN, COL } from "../palette";
 import { pen, rrP, elP, path, shp, lines, hose, mitt } from "../pen";
 import { drawProp, drawPillow, drawMug } from "./props";
 import { drawItems, drawWebPage } from "./items";
@@ -7,7 +7,11 @@ import { pagePos } from "../scenes";
 import { morph } from "../fold";
 import { SKINS } from "../../skins";
 import type { Pet } from "../pet";
-export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number){pen.sid=0;
+import { ACCENT, STYLES } from "../../styles";
+import { DEFAULT_LOOK } from "../../look";
+import type { Look } from "../../types";
+export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
+const lk=look??DEFAULT_LOOK,st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=ACCENT[c.type];pen.ol=st.ink(pen.accent);
 const P=c.p,tg=c.tg||{},sk=SKINS[c.type],pal=sk.pal;
 const gr=cl(P.grey.x),cm=lerpC(pal.m,pal.g,gr),cs=lerpC(pal.s,pal.gs,gr),cb=lerpC(pal.b,pal.gs,gr);
 const wob=cl(P.wobW.x),shk=cl(P.shake.x),th=P.th.x+.4*Math.cos(t*4)*wob+.35*Math.sin(t*28)*shk,co=Math.cos(th),si=Math.sin(th);
@@ -17,13 +21,13 @@ const hw=cl(P.hopW.x);h*=hw;sq*=hw;
 const wb=Math.abs(Math.sin(t*10))*walk,br=Math.sin(t*(2.3-loaf))*.02*(1+cl(P.sleep.x)*1.5),tb=Math.abs(Math.sin(t*20))*.008*cl(P.typeW.x);
 const pil=c.prop==='pillow'?cl(P.propA.x)*loaf:0;
 const hopY=(h*24+wb*2.5+pil*4)*u;
-const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=17*u,bot=-12*u*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(1,2.4*u);
+const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=17*u,bot=-12*u*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(st.line.minPx,2.4*u*st.line.scale);
 const hW=(W*Math.abs(co)+Dp*Math.abs(si))/2,XX=X+P.lx.x*u;
 const sc=1+.1*lean,rot=Math.sin(t*4)*.1*wob+Math.sin(t*1.4)*.035*cl(P.think.x)+loaf*.06+pil*.08+P.tilt.x,scx=sc*(1-(sq+br)*.6),scy=sc*(1+sq+br+tb),oy=-hopY+lean*4*u,cr=Math.cos(rot),sr=Math.sin(rot);
 const toW=(lx: any,ly: any)=>{const a=lx*scx,b=ly*scy;return [a*cr-b*sr,a*sr+b*cr+oy];};
 const GA=(1-.22*cl(P.dim.x))*(c.alpha??1);
-const bodyT=()=>{x.save();x.translate(XX,Y+oy);x.rotate(rot);x.scale(scx,scy);x.globalAlpha=GA;x.lineWidth=lw;x.lineJoin='round';x.lineCap='round';x.strokeStyle=OL;};
-const worldT=()=>{x.save();x.translate(XX,Y);x.globalAlpha=GA;x.lineWidth=lw;x.lineJoin='round';x.lineCap='round';x.strokeStyle=OL;};
+const bodyT=()=>{x.save();x.translate(XX,Y+oy);x.rotate(rot);x.scale(scx,scy);x.globalAlpha=GA;x.lineWidth=lw;x.lineJoin='round';x.lineCap='round';x.strokeStyle=pen.ol;};
+const worldT=()=>{x.save();x.translate(XX,Y);x.globalAlpha=GA;x.lineWidth=lw;x.lineJoin='round';x.lineCap='round';x.strokeStyle=pen.ol;};
 const pj=(lx: any,lz: any)=>[lx*co+lz*si,-lx*si+lz*co];
 x.save();x.fillStyle='rgba(0,0,0,0.16)';x.beginPath();x.ellipse(XX,Y,hW*1.1*(1-h*.3),Math.max(2,7*u)*(1-h*.3),0,0,TAU);x.fill();x.restore();
 worldT();drawPillow(x,c,u,lw);x.restore();
@@ -65,7 +69,7 @@ if(hp>.02){x.globalAlpha=GA*ea*hp;x.beginPath();x.arc(ex,ey+5*u,5.5*u,1.15*PI,1.
 if(dz>.02){x.globalAlpha=GA*ea*dz;const k=5*u;x.beginPath();x.moveTo(ex-k,ey-k);x.lineTo(ex+k,ey+k);x.moveTo(ex+k,ey-k);x.lineTo(ex-k,ey+k);x.stroke();}
 if(hp>.02&&sk.blush){x.globalAlpha=GA*ea*hp*.6;x.fillStyle='#F0997B';x.beginPath();x.ellipse(ex+s*6*u*co,ey+14*u,6*u*co,3.5*u,0,0,TAU);x.fill();}
 x.restore();});}
-x.globalAlpha=GA;x.strokeStyle=OL;x.lineWidth=lw;
+x.globalAlpha=GA;x.strokeStyle=pen.ol;x.lineWidth=lw;
 if(sit>.05&&loaf<.5){legs.filter((g: any)=>!sk.frontLegsOnlySitting||g.z>=-.5*u).forEach((g: any)=>{const sw=Math.sin(t*6+g.i*2)*2.5*u*cl(P.swing.x);x.save();x.globalAlpha=GA*sit;shp(x,elP(g.x+si*6*u,-3*u+sw,7*u,5*u),cm,u);x.restore();});}
 x.restore();
 worldT();drawProp(x,c,u,t,lw);
@@ -81,7 +85,7 @@ x.restore();
 worldT();
 if(c.hold==='net'&&tg._page!=null){const a=tg._page;if(a<1.33){const pp=pagePos(a);drawWebPage(x,pp[0]*u,pp[1]*u,1,u,lw,.15*Math.sin(a*3));}
 if(a>1.2&&a<1.6){const k=(a-1.2)/.4,Rr=arms[1],ph=P.pole.x;x.globalAlpha=GA*(1-k)*.8;x.strokeStyle='#B4B2A9';x.lineWidth=Math.max(1,2*u);for(let i=0;i<2;i++){x.beginPath();x.arc(Rr.hx,Rr.hy,(64+i*10)*u,ph-PI/2+.25,ph-PI/2+1.1);x.stroke();}}}
-c.parts.forEach((q: any)=>{const k=q.life/q.max,px=q.x*u,py=q.y*u;x.save();x.globalAlpha=(1-k)*(q.tw?(.6+.4*Math.sin(q.life*14)):1);x.lineWidth=Math.max(1,2*u);x.strokeStyle=OL;x.lineJoin='round';
+c.parts.forEach((q: any)=>{const k=q.life/q.max,px=q.x*u,py=q.y*u;x.save();x.globalAlpha=(1-k)*(q.tw?(.6+.4*Math.sin(q.life*14)):1);x.lineWidth=Math.max(1,2*u);x.strokeStyle=pen.ol;x.lineJoin='round';
 if(q.k==='imp'){x.strokeStyle='#D97757';x.beginPath();[-.8,0,.8].forEach((a: any)=>{const r1=(4+k*8)*u,r2=r1+5*u;x.moveTo(px+Math.cos(a)*r1,py+Math.sin(a)*r1);x.lineTo(px+Math.cos(a)*r2,py+Math.sin(a)*r2);});x.stroke();}
 else if(q.k==='plane'){x.globalAlpha=k>.8?(1-k)*5:1;x.translate(px,py);x.rotate(Math.atan2(q.vy,q.vx)*.6);shp(x,morph(1,u),PAPER,u);}
 else if(q.k==='page'){x.translate(px,py);x.rotate(-.5+Math.sin(q.life*5)*.6);x.scale(Math.cos(q.life*7),1);shp(x,rrP(-13*u,-11*u,26*u,22*u,1.5*u),PAPER,u);lines(x,-9*u,-5*u,16*u,3,5*u,'#B4B2A9',u,3);}

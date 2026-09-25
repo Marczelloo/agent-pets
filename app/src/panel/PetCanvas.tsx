@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPet, drawPet, pen, setScene, stepPet, type Pet } from '../renderer';
 import { sceneFor, skinFor } from '../stage/sceneFor';
-import type { Session } from '../types';
+import type { Look, Session } from '../types';
 
 const W = 96, H = 72;
 let fps = 30;
@@ -11,8 +11,10 @@ export function setPetFps(n: number): void { fps = n; }
 const U = 0.3 * H / 48, X = 36, Y = H - 10;
 
 /** Ten sam zwierzak co w pasku, większy. Rysuje tylko w przeglądarce (efekt nie działa przy renderze na serwerze). */
-export function PetCanvas({ session }: { session: Session }) {
+export function PetCanvas({ session, look }: { session: Session; look: Look }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const lookRef = useRef(look);
+  lookRef.current = look;
   const pet = useRef<Pet | null>(null);
   const scene = sceneFor(session);
 
@@ -40,7 +42,7 @@ export function PetCanvas({ session }: { session: Session }) {
       x.clearRect(0, 0, W, H);
       pen.boil = Math.floor(T * 8);
       stepPet(pet.current!, acc, T);
-      drawPet(x, pet.current!, X, Y, U, T);
+      drawPet(x, pet.current!, X, Y, U, T, lookRef.current);
       acc = 0;
     };
     raf = requestAnimationFrame(frame);

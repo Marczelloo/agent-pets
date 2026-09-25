@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { PetCanvas } from '../panel/PetCanvas';
 import { STYLE_IDS, STYLE_LABEL } from '../look';
-import { pen } from '../renderer';
 import type { AppRow, Session, Settings } from '../types';
 import { APP_HINT, APP_LABEL, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
 import { Toggle } from './Toggle';
@@ -36,7 +35,6 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
   const cur = WIZARD_STEPS[step];
   const set = (patch: Partial<Settings>) => setDraft(d => ({ ...d, ...patch }));
 
-  useEffect(() => { pen.sketch = draft.pets.style === 'sketch'; }, [draft.pets.style]);
 
   if (result) {
     return (
@@ -104,8 +102,8 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
           ))}
         </div>
         <div className="preview" key={draft.pets.style}>
-          <PetCanvas session={preview('claude')} />
-          <PetCanvas session={preview('codex')} />
+          <PetCanvas session={preview('claude')} look={{ style: draft.pets.style, motion: draft.pets.motion }} />
+          <PetCanvas session={preview('codex')} look={{ style: draft.pets.style, motion: draft.pets.motion }} />
         </div>
       </section>}
 

@@ -1,5 +1,6 @@
 import { drawPet, pen, stepPet } from '../renderer';
-import type { PointerMsg, Snapshot, StageLayout } from '../types';
+import { appFor, defaultPets, lookFor } from '../look';
+import type { Pets, PointerMsg, Snapshot, StageLayout } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
 import { layout, type LayoutOut } from './layout';
@@ -20,6 +21,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   const roster = new Roster();
   let clockOffset = 0;
   let maxPets: number | undefined;
+  let pets: Pets = defaultPets();
   let budget = frameBudget(false);
   const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
   const handle: StageHandle = { hover: p => hover.pointer(p) };
@@ -57,7 +59,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       const tt = T + e.phase;
       if (budget.animate(e.session.state)) stepPet(e.pet, dt, tt);
       e.pet.alpha = roster.alpha(e, T);
-      drawPet(x, e.pet, p.x, Y, u, tt);
+      drawPet(x, e.pet, p.x, Y, u, tt, lookFor(pets, appFor(e.session)));
       drawProgress(x, p.x, h - 4, e.session, T);
       if (e.session.origin === 'router') drawRouterBadge(x, p.x, 8);
     }
@@ -77,7 +79,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   bridge.onLayout(l => { lay = l; relayout(); });
   bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
-  bridge.onSettings(s => { pen.sketch = s.pets.style === 'sketch'; maxPets = s.pets.max_visible; relayout(); });
+  bridge.onSettings(s => { pets = s.pets; maxPets = s.pets.max_visible; relayout(); });
   bridge.onPower(saving => { budget = frameBudget(saving); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;

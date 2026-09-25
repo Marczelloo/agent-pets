@@ -1,0 +1,26 @@
+import type { SkinId } from '../skins';
+import type { StyleId } from '../types';
+
+/** Styl rysowania: dane i flagi czytane przez `pen.ts` i `draw/body.ts`; geometria i animacja są wspólne. */
+export interface StyleDef {
+  id: StyleId;
+  /** kontur: najmniejsza grubość w px CSS i mnożnik dzisiejszej grubości 2,4·u */
+  line: { minPx: number; scale: number };
+  /** kolor konturu zwierzaka i rekwizytów; `accent` to kolor agenta */
+  ink: (accent: string) => string;
+  /** kolor konturu jednego kształtu liczony z jego wypełnienia (Pastel) */
+  strokeFor?: (fill: string) => string;
+  /** zmiana wypełnienia każdego kształtu (Neon, Tusz, Pastel) */
+  fillFor?: (fill: string) => string;
+  fill: 'flat' | 'gradient';
+  glow?: boolean;
+  brush?: boolean;
+  softShadow?: boolean;
+  /** Szkic: drganie konturu, przesunięcie wypełnienia i odstęp kreskowania, minima w px CSS */
+  sketch?: { jitterPx: number; offsetPx: number; hatchGapPx: number };
+  shape?: { radius?: Partial<Record<SkinId, number>>; flatSide?: boolean };
+  face?: { smile?: boolean; blush?: boolean; eyes?: 'accent' };
+  extras?: { ears?: boolean; phones?: boolean };
+  /** Pixel-art: rozmiar „piksela” = max(minPx, perU·u) px CSS */
+  pixel?: { perU: number; minPx: number };
+}

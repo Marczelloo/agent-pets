@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, petTooltip } from '../tooltip/text';
-import type { RouterTask, Settings, SettingsView, Snapshot } from '../types';
+import type { Pets, RouterTask, Settings, SettingsView, Snapshot } from '../types';
 import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
 import { PetCanvas, setPetFps } from './PetCanvas';
 import { frameBudget } from '../stage/power';
-import { pen } from '../renderer';
+import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
@@ -18,13 +18,15 @@ interface ViewProps {
   /** ukryty panel nie rysuje zwierzaków (WebView2 animuje także w ukrytym oknie) */
   animate?: boolean;
   onSettings?: () => void;
+  /** wygląd zwierzaków z ustawień (styl, ruch, nadpisania) */
+  pets?: Pets;
 }
 
 const plural = (n: number) =>
   n === 1 ? 'sesja' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'sesje' : 'sesji';
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets() }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   return (
     <div className="panel">
@@ -49,7 +51,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
         {sessions.length === 0 && <p className="empty">Brak aktywnych sesji</p>}
         {sessions.map(s => (
           <article key={s.id} id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
-            {animate ? <PetCanvas session={s} /> : <div className="pet" />}
+            {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} /> : <div className="pet" />}
             <div className="info">
               <div className="title">{petTooltip(s, nowMs).title}</div>
               <div className="sub">{sessionSubtitle(s)}</div>
@@ -73,6 +75,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
 
 export default function App() {
   const [snap, setSnap] = useState<Snapshot>({ sessions: [], limits: [], now: 0 });
+  const [pets, setPets] = useState<Pets>(defaultPets);
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -86,7 +89,7 @@ export default function App() {
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
       listen<boolean>('panel://visible', e => setShown(e.payload)),
-      listen<Settings>('pets://settings', e => { pen.sketch = e.payload.pets.style === 'sketch'; }),
+      listen<Settings>('pets://settings', e => setPets(e.payload.pets)),
       listen<boolean>('pets://power', e => setPetFps(frameBudget(e.payload).fps)),
       listen<string>('panel://focus', e => {
         setStatus(null);
@@ -97,7 +100,7 @@ export default function App() {
       }),
     ];
     void invoke<Snapshot>('snapshot').then(s => take.current(s));
-    void invoke<SettingsView>('settings_get').then(v => { pen.sketch = v.settings.pets.style === 'sketch'; });
+    void invoke<SettingsView>('settings_get').then(v => setPets(v.settings.pets));
     void invoke<boolean>('power_get').then(saving => setPetFps(frameBudget(saving).fps));
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };
@@ -111,6 +114,6 @@ export default function App() {
     setStatus(r.method === 'clipboard' || r.method === 'none' ? r.detail : null);
   };
 
-  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown}
+  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} pets={pets}
     onSettings={() => void invoke('settings_open')} />;
 }
