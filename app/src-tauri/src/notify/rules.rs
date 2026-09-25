@@ -28,6 +28,8 @@ const LONG_TURN_MS: i64 = 120_000;
 const LIMIT_PCT: f32 = 90.0;
 /// Poniżej tego zużycia okno limitu uznajemy za nowe (dla limitów bez czasu resetu i przeciw wahaniom wokół 90%).
 const LIMIT_REARM_PCT: f32 = 80.0;
+/// Czas resetu tego samego okna drga między odczytami; nowe okno to reset przesunięty o więcej niż to.
+const RESET_JITTER_MS: i64 = 60_000;
 
 fn name(s: &Session) -> String {
     if !s.title.is_empty() { return s.title.chars().take(60).collect(); }
@@ -77,9 +79,12 @@ impl Rules {
             let key = format!("{:?}:{:?}", l.agent, l.window);
             if l.used_pct < LIMIT_REARM_PCT { self.limits.remove(&key); continue; }
             if l.used_pct <= LIMIT_PCT { continue; }
-            let new_window = match self.limits.get(&key) {
-                None => true,
-                Some(r) => l.resets_at.is_some() && *r != l.resets_at,
+            let new_window = match (self.limits.get(&key), l.resets_at) {
+                (None, _) => true,
+                (Some(Some(known)), Some(r)) => (r - known).abs() > RESET_JITTER_MS,
+                // pierwszy odczyt z czasem resetu po odczycie bez niego (aplikacja Claude → statusline): to samo okno
+                (Some(None), Some(r)) => { self.limits.insert(key.clone(), Some(r)); false }
+                (Some(_), None) => false,
             };
             if !new_window { continue; }
             self.limits.insert(key, l.resets_at);
@@ -141,10 +146,12 @@ mod tests {
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         let l = |pct: f32, reset: i64| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: Some(reset) };
-        assert!(r.observe(&snap(vec![], vec![l(80.0, 1)]), 1, &|_| false).is_empty());
-        assert_eq!(r.observe(&snap(vec![], vec![l(91.0, 1)]), 2, &|_| false).len(), 1);
-        assert!(r.observe(&snap(vec![], vec![l(95.0, 1)]), 3, &|_| false).is_empty());
-        assert_eq!(r.observe(&snap(vec![], vec![l(92.0, 2)]), 4, &|_| false).len(), 1, "nowe okno po resecie");
+        const R1: i64 = 18_000_000;
+        const R2: i64 = 36_000_000;
+        assert!(r.observe(&snap(vec![], vec![l(80.0, R1)]), 1, &|_| false).is_empty());
+        assert_eq!(r.observe(&snap(vec![], vec![l(91.0, R1)]), 2, &|_| false).len(), 1);
+        assert!(r.observe(&snap(vec![], vec![l(95.0, R1)]), 3, &|_| false).is_empty());
+        assert_eq!(r.observe(&snap(vec![], vec![l(92.0, R2)]), 4, &|_| false).len(), 1, "nowe okno po resecie");
     }
 
     #[test]
@@ -158,6 +165,18 @@ mod tests {
         assert!(r.observe(&snap(vec![], vec![l(92.0)]), 3, &|_| false).is_empty(), "wahanie wokół 90% to wciąż to samo okno");
         assert!(r.observe(&snap(vec![], vec![l(3.0)]), 4, &|_| false).is_empty());
         assert_eq!(r.observe(&snap(vec![], vec![l(93.0)]), 5, &|_| false).len(), 1, "po resecie znowu");
+    }
+
+    #[test]
+    fn learning_the_reset_time_of_the_same_window_does_not_toast_again() {
+        // aplikacja Claude zgłasza 91% bez resetu, chwilę później statusline 92% z resetem: to wciąż to samo okno
+        let mut r = Rules::new(ALL);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let l = |pct: f32, reset: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: reset };
+        assert_eq!(r.observe(&snap(vec![], vec![l(91.0, None)]), 1, &|_| false).len(), 1);
+        assert!(r.observe(&snap(vec![], vec![l(92.0, Some(18_000_000))]), 2, &|_| false).is_empty());
+        assert!(r.observe(&snap(vec![], vec![l(93.0, Some(18_030_000))]), 3, &|_| false).is_empty(), "reset drga o sekundy");
+        assert_eq!(r.observe(&snap(vec![], vec![l(95.0, Some(36_000_000))]), 4, &|_| false).len(), 1, "następne okno");
     }
 
     #[test]
