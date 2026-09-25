@@ -27,6 +27,8 @@ pub struct Store {
     pending: BTreeMap<String, (State, Option<Tool>)>,
     ended_at: BTreeMap<String, i64>,
     limits: Vec<Limit>,
+    /// czas odczytu każdego limitu (równoległe do `limits`): starszy odczyt nie nadpisuje nowszego
+    limits_ts: Vec<i64>,
 }
 
 fn new_session(e: &Event) -> Session {
@@ -72,7 +74,7 @@ fn set(s: &mut Session, st: State, tool: Option<Tool>, now: i64) {
 impl Store {
     pub fn new(timing: Timing) -> Self {
         Store { timing, sessions: BTreeMap::new(), pending: BTreeMap::new(),
-                ended_at: BTreeMap::new(), limits: Vec::new() }
+                ended_at: BTreeMap::new(), limits: Vec::new(), limits_ts: Vec::new() }
     }
 
     pub fn session(&self, id: &str) -> Option<&Session> { self.sessions.get(id) }
@@ -87,20 +89,31 @@ impl Store {
 
     /// Zdejmuje limity agenta bez czasu resetu (nieaktualne dane z aplikacji Claude). Zwraca, czy coś zdjęto.
     pub fn drop_limits_without_reset(&mut self, agent: Agent) -> bool {
+        self.retain_limits(|l| l.agent != agent || l.resets_at.is_some())
+    }
+
+    /// Zostawia limity spełniające `keep` (razem z ich czasami odczytu). Zwraca, czy coś usunięto.
+    fn retain_limits(&mut self, keep: impl Fn(&Limit) -> bool) -> bool {
         let before = self.limits.len();
-        self.limits.retain(|l| l.agent != agent || l.resets_at.is_some());
+        let (limits, ts): (Vec<Limit>, Vec<i64>) = self.limits.iter().copied().zip(self.limits_ts.iter().copied())
+            .filter(|(l, _)| keep(l)).unzip();
+        self.limits = limits;
+        self.limits_ts = ts;
         self.limits.len() != before
     }
 
     /// Limit bez czasu resetu (np. z aplikacji Claude) zachowuje znany reset, dopóki ten nie minął: to wciąż to samo okno.
     fn merge_limits(&mut self, new: &[Limit], ts: i64) {
         for l in new {
-            match self.limits.iter_mut().find(|x| x.agent == l.agent && x.window == l.window) {
-                Some(x) => {
+            match self.limits.iter().position(|x| x.agent == l.agent && x.window == l.window) {
+                Some(i) if self.limits_ts[i] > ts => {}
+                Some(i) => {
+                    let x = &mut self.limits[i];
                     let kept = x.resets_at.filter(|r| l.resets_at.is_none() && *r > ts);
                     *x = Limit { resets_at: l.resets_at.or(kept), ..*l };
+                    self.limits_ts[i] = ts;
                 }
-                None => self.limits.push(*l),
+                None => { self.limits.push(*l); self.limits_ts.push(ts); }
             }
         }
     }
@@ -165,6 +178,10 @@ impl Store {
     pub fn tick(&mut self, now: i64, alive: &dyn Fn(u32) -> bool) -> Vec<Change> {
         let t = self.timing;
         let mut out = Vec::new();
+        // po resecie stare zużycie nic nie znaczy: „brak danych” aż do nowego odczytu
+        if self.retain_limits(|l| l.resets_at.map(|r| r > now).unwrap_or(true)) {
+            out.push(Change::Limits(self.limits.clone()));
+        }
         let mut removed = Vec::new();
         for (id, s) in self.sessions.iter_mut() {
             if s.state == State::Ended {
@@ -369,6 +386,28 @@ mod tests {
         assert_eq!(s.limits(), &[lim(20.0)]);
         assert!(matches!(ch.as_slice(), [Change::Limits(_)]));
         assert!(s.session("c1").is_none(), "samo zdarzenie limitów nie tworzy sesji");
+    }
+
+    #[test]
+    fn an_older_reading_never_overrides_a_newer_one() {
+        // Aplikacja Codex dotyka starych wątków: ich rollouty z sierpniowym limitem czytamy po wrześniowym.
+        let mut s = Store::new(Timing::default());
+        let week = |p: f32, r: i64| Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: p, resets_at: Some(r) };
+        let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Codex, "c", Kind::Limits, ts); e.data.limits = vec![l]; e };
+        s.apply(&at(2_000_000, week(18.0, 9_000_000)));
+        s.apply(&at(1_000_000, week(61.0, 1_500_000)));
+        assert_eq!(s.limits(), &[week(18.0, 9_000_000)]);
+    }
+
+    #[test]
+    fn a_limit_whose_reset_passed_is_no_longer_shown() {
+        let mut s = Store::new(Timing::default());
+        let mut e = Event::new(Source::Codex, "c", Kind::Limits, 0);
+        e.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 61.0, resets_at: Some(5_000) }];
+        s.apply(&e);
+        assert!(s.tick(4_000, &|_| true).is_empty());
+        assert!(matches!(s.tick(5_000, &|_| true).as_slice(), [Change::Limits(l)] if l.is_empty()));
+        assert!(s.limits().is_empty(), "po resecie stare zużycie nic nie znaczy: brak danych");
     }
 
     #[test]
