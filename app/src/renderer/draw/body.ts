@@ -1,10 +1,8 @@
 import { PI, TAU, cl, lerpC } from "../math";
-import { PAPER, SPIN, COL } from "../palette";
-import { pen, rrP, elP, path, shp, lines, hose, mitt } from "../pen";
+import { pen, rrP, elP, path, shp, hose, mitt } from "../pen";
 import { drawProp, drawPillow, drawMug } from "./props";
-import { drawItems, drawWebPage } from "./items";
-import { pagePos } from "../scenes";
-import { morph } from "../fold";
+import { drawItems } from "./items";
+import { drawHeadFx, drawWorldFx } from "./overlay";
 import { SKINS } from "../../skins";
 import type { Pet } from "../pet";
 import { ACCENT, STYLES } from "../../styles";
@@ -87,18 +85,8 @@ if(!netBack)drawItems(x,c,arms,u,t,lw);if(tg._mug){const R_=arms[1];drawMug(x,R_
 arms.forEach((a: any)=>{if(a.fr>0){x.globalAlpha=GA*a.fr;mitt(x,a,mr*(a.s>0&&tg._big?1.3+.2*lean:1),cm,u);x.globalAlpha=GA;}});
 x.restore();
 bodyT();
-const bs=Math.max(0,P.bubble.x);if(bs>.02){x.save();x.translate(-hW*.62,top-20*u);x.scale(bs,bs);shp(x,[[5*u,8*u],[10*u,18*u],[-2*u,9*u]],'#D97757',u);shp(x,rrP(-12*u,-13*u,24*u,24*u,7*u),'#D97757',u);x.fillStyle='#FFFFFF';x.font=`500 ${Math.max(8,17*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.fillText('!',0,0);x.restore();}
-const tk=cl(P.think.x);if(tk>.02){x.save();x.globalAlpha=GA*tk;const an=t*2.2;x.translate(Math.cos(an)*30*u,top-22*u+Math.sin(an)*6*u);x.rotate(t*1.5);x.fillStyle='#D97757';x.font=`${Math.max(9,22*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.fillText(SPIN[Math.floor(t*8)%SPIN.length],0,0);x.restore();}
-if(dz>.02){x.save();x.globalAlpha=GA*dz;x.fillStyle='#EF9F27';x.font=`${Math.max(8,14*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';for(let i=0;i<3;i++){const an=t*3+i*2.09;x.fillText('✶',Math.cos(an)*34*u,top-8*u+Math.sin(an)*6*u);}x.restore();}
+drawHeadFx(x,c,u,t,top,hW,GA);
 x.restore();
 worldT();
-if(c.hold==='net'&&tg._page!=null){const a=tg._page;if(a<1.33){const pp=pagePos(a);drawWebPage(x,pp[0]*u,pp[1]*u,1,u,lw,.15*Math.sin(a*3));}
-if(a>1.2&&a<1.6){const k=(a-1.2)/.4,Rr=arms[1],ph=P.pole.x;x.globalAlpha=GA*(1-k)*.8;x.strokeStyle='#B4B2A9';x.lineWidth=Math.max(1,2*u);for(let i=0;i<2;i++){x.beginPath();x.arc(Rr.hx,Rr.hy,(64+i*10)*u,ph-PI/2+.25,ph-PI/2+1.1);x.stroke();}}}
-c.parts.forEach((q: any)=>{const k=q.life/q.max,px=q.x*u,py=q.y*u;x.save();x.globalAlpha=(1-k)*(q.tw?(.6+.4*Math.sin(q.life*14)):1);x.lineWidth=Math.max(1,2*u);x.strokeStyle=pen.ol;x.lineJoin='round';
-if(q.k==='imp'){x.strokeStyle='#D97757';x.beginPath();[-.8,0,.8].forEach((a: any)=>{const r1=(4+k*8)*u,r2=r1+5*u;x.moveTo(px+Math.cos(a)*r1,py+Math.sin(a)*r1);x.lineTo(px+Math.cos(a)*r2,py+Math.sin(a)*r2);});x.stroke();}
-else if(q.k==='plane'){x.globalAlpha=k>.8?(1-k)*5:1;x.translate(px,py);x.rotate(Math.atan2(q.vy,q.vx)*.6);shp(x,morph(1,u),PAPER,u);}
-else if(q.k==='page'){x.translate(px,py);x.rotate(-.5+Math.sin(q.life*5)*.6);x.scale(Math.cos(q.life*7),1);shp(x,rrP(-13*u,-11*u,26*u,22*u,1.5*u),PAPER,u);lines(x,-9*u,-5*u,16*u,3,5*u,'#B4B2A9',u,3);}
-else if(q.k==='drop'){x.fillStyle='#85B7EB';x.beginPath();x.moveTo(px,py-4*u);x.quadraticCurveTo(px+3.5*u,py+1*u,px,py+2.5*u);x.quadraticCurveTo(px-3.5*u,py+1*u,px,py-4*u);x.fill();x.lineWidth=Math.max(.6,1*u);x.stroke();}
-else{x.fillStyle=COL[q.col]||COL.clay;x.font=`${Math.max(8,q.s*u*(q.grow?1+k:1))}px ${pen.font}`;x.textAlign='center';x.fillText(q.t,px,py);}
-x.restore();});
+drawWorldFx(x,c,arms,u,lw,GA);
 x.restore();}
