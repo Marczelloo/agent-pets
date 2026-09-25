@@ -6,6 +6,8 @@ import type { AppId, AppRow, Diagnostics, Settings, SettingsView as View } from 
 import { defaultSettings } from './model';
 import { SettingsView, type Tab } from './SettingsView';
 import { Wizard } from './Wizard';
+import { setLoopSaving } from './look/loop';
+import { setPreviewSaving } from './look/PetsCanvas';
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 
@@ -44,7 +46,10 @@ function Root() {
     void reload();
     if (!inTauri) return;
     const un = listen<Settings>('pets://settings', e => setView(v => (v ? { ...v, settings: e.payload } : v)));
-    return () => { void un.then(f => f()); };
+    const power = (s: boolean) => { setLoopSaving(s); setPreviewSaving(s); };
+    const unPower = listen<boolean>('pets://power', e => power(e.payload));
+    void invoke<boolean>('power_get').then(power);
+    return () => { void un.then(f => f()); void unPower.then(f => f()); };
   }, [reload]);
 
   useEffect(() => { if (tab === 'diag' && inTauri) void invoke<Diagnostics>('diagnostics').then(setDiag); }, [tab]);

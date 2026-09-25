@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { STYLE_IDS, STYLE_LABEL } from '../look';
-import type { AppId, AppRow, Diagnostics, Settings, StyleId } from '../types';
+import type { AppId, AppRow, Diagnostics, Settings } from '../types';
+import { LookTab } from './look/LookTab';
 import { APP_HINT, APP_LABEL, clampMaxVisible, reportText } from './model';
 import { Toggle } from './Toggle';
 
-export type Tab = 'apps' | 'pets' | 'notify' | 'limits' | 'general' | 'diag';
+export type Tab = 'apps' | 'look' | 'notify' | 'limits' | 'general' | 'diag';
 const TABS: [Tab, string][] = [
-  ['apps', 'Aplikacje'], ['pets', 'Zwierzaki'], ['notify', 'Powiadomienia'], ['limits', 'Limity'], ['general', 'Ogólne'], ['diag', 'Diagnostyka'],
+  ['apps', 'Aplikacje'], ['look', 'Wygląd'], ['notify', 'Powiadomienia'], ['limits', 'Limity'], ['general', 'Ogólne'], ['diag', 'Diagnostyka'],
 ];
 
 interface Props {
@@ -53,13 +53,8 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
           ))}
         </section>}
 
-        {tab === 'pets' && <section className="card">
-          <div className="row">
-            <span className="text"><span className="label">Skórka</span></span>
-            <select aria-label="Skórka" value={s.pets.style} onChange={e => set({ pets: { ...s.pets, style: e.target.value as StyleId } })}>
-              {STYLE_IDS.map(id => <option key={id} value={id}>{STYLE_LABEL[id]}</option>)}
-            </select>
-          </div>
+        {tab === 'look' && <LookTab pets={s.pets} onChange={p => set({ pets: p })} />}
+        {tab === 'look' && <section className="card">
           <div className="row">
             <span className="text"><span className="label">Najwięcej zwierzaków w pasku</span>
               <span className="desc">Reszta trafia do „+N”; czekające na Ciebie zawsze są widoczne</span></span>

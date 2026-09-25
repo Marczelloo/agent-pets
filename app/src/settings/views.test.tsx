@@ -30,6 +30,19 @@ describe('Wizard', () => {
 });
 
 describe('SettingsView', () => {
+  it('look tab: seven style cards, the chosen one checked, motion switch and per-agent overrides', () => {
+    const s = defaultSettings();
+    const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    for (const name of ['Naklejka', 'Szkic', 'Czysty', 'Pixel-art', 'Neon', 'Tusz', 'Pastel']) expect(html).toContain(name);
+    expect(html).toMatch(/<button[^>]*aria-checked="true"[^>]*look-card[^>]*><canvas[^>]*><\/canvas><span>Naklejka<\/span>/);
+    expect(html).toContain('Spokojny');
+    expect(html).toContain('Anime');
+    expect(html).toContain('Osobno dla agentów');
+    expect(html).toContain('Jak domyślny');
+    expect(html).toContain('Tak wygląda w pasku');
+    expect(html).toContain('Najwięcej zwierzaków w pasku');
+  });
   it('lists the apps with their integration state', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);

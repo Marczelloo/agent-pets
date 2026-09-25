@@ -72,6 +72,21 @@ input.switch:disabled{cursor:default}
 .skin input{margin:0 8px 0 0}
 .preview{display:flex;gap:16px;margin-top:12px}
 .pet{display:block;width:96px;height:72px}
+.look-top{padding:4px 16px 16px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:12px 0}
+.gallery.compact{grid-template-columns:repeat(4,1fr);gap:6px;margin:0}
+.look-card{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:8px}
+.look-card.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.look-card span{font-size:12px}
+.segmented,.chips{display:flex;gap:4px;flex-wrap:wrap}
+.segmented button,.chips button{padding:4px 12px}
+.segmented button.on,.chips button.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.chips{margin-top:4px}
+.strip-label{margin:4px 0 6px;font-size:12px}
+canvas.taskbar{display:block;border-radius:6px;background:#1C1C1C}
+details.overrides{margin:12px 0}
+details.overrides summary{cursor:pointer;padding:12px 0;font-weight:600}
+details.overrides .pair{display:flex;gap:6px}
 </style>
 </head>
 <body>
