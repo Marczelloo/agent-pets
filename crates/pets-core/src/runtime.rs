@@ -21,6 +21,8 @@ pub struct RuntimeConfig {
     pub record: Option<File>,
     /// Pliki `plan-usage-history.json` aplikacji Claude (limity konta bez CLI).
     pub claude_usage_files: Vec<PathBuf>,
+    /// Publiczny plik stanu zadań Agent Routera (`~/.agent-router/status.json`).
+    pub router_status: Option<PathBuf>,
 }
 
 impl RuntimeConfig {
@@ -31,6 +33,7 @@ impl RuntimeConfig {
             record: None,
             claude_usage_files: claude::desktop_usage::candidate_files(
                 &dirs::data_local_dir().unwrap_or_default(), &dirs::config_dir().unwrap_or_default()),
+            router_status: dirs::home_dir().map(|h| h.join(".agent-router").join(crate::router::FILE)),
         })
     }
 }
@@ -43,6 +46,7 @@ pub struct Runtime {
     hooks: Receiver<Incoming>,
     files: Option<Receiver<PathBuf>>,
     usage: claude::desktop_usage::Poller,
+    router: Option<crate::router::Poller>,
     _ingest: Ingest,
     _watcher: Option<notify::RecommendedWatcher>,
 }
@@ -54,7 +58,8 @@ impl Runtime {
         ingest.endpoint().write(&cfg.endpoint_path).context("zapis endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
-            record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files), _ingest: ingest, _watcher: None,
+            record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
+            router: cfg.router_status.map(crate::router::Poller::new), _ingest: ingest, _watcher: None,
         };
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
         // Odtworzenie stanu: żywe sesje Claude'a z rejestru, potem ich transkrypty i rollouty Codexa.
@@ -65,6 +70,7 @@ impl Runtime {
         let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
         for f in keep_for_rehydration(&recent, &live_ids) { rt.poll_file(&f); }
         if let Some(claude::desktop_usage::Usage::Limits(e)) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
+        rt.poll_router(crate::time::now_ms());
         // jeden takt przed pierwszą migawką: stare wątki z niedawno dotkniętych plików znikają, zanim się pokażą
         rt.store.tick(crate::time::now_ms(), &pid::is_alive);
         let (ftx, files) = channel();
@@ -89,6 +95,7 @@ impl Runtime {
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
         for p in paths { changed |= self.poll_file(&p); }
+        changed |= self.poll_router(now);
         match self.usage.poll(now) {
             Some(claude::desktop_usage::Usage::Limits(e)) => changed |= self.apply(e),
             Some(claude::desktop_usage::Usage::Stale) => changed |= self.store.drop_limits_without_reset(crate::model::Agent::Claude),
@@ -96,6 +103,11 @@ impl Runtime {
         }
         changed |= !self.store.tick(now, &pid::is_alive).is_empty();
         changed
+    }
+
+    fn poll_router(&mut self, now: i64) -> bool {
+        let events = self.router.as_mut().map(|p| p.poll(now)).unwrap_or_default();
+        events.into_iter().fold(false, |c, e| self.apply(e) | c)
     }
 
     fn apply(&mut self, e: Event) -> bool {
@@ -135,7 +147,8 @@ mod tests {
 
     fn cfg(h: &tempfile::TempDir) -> RuntimeConfig {
         RuntimeConfig { home: h.path().into(), endpoint_path: h.path().join("endpoint.json"), record: None,
-            claude_usage_files: vec![h.path().join("Claude").join(claude::desktop_usage::FILE)] }
+            claude_usage_files: vec![h.path().join("Claude").join(claude::desktop_usage::FILE)],
+            router_status: Some(h.path().join(".agent-router").join(crate::router::FILE)) }
     }
 
     #[test]
@@ -172,6 +185,37 @@ mod tests {
         std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-test.jsonl"), fresh(fixture)).unwrap();
         let rt = Runtime::start(cfg(&h)).unwrap();
         assert!(rt.store().sessions().iter().any(|s| s.agent == Agent::Codex && s.origin == Origin::Router));
+    }
+
+    fn router_status(h: &tempfile::TempDir, thread: &str, status: &str, updated: i64) {
+        let dir = h.path().join(".agent-router");
+        std::fs::create_dir_all(&dir).unwrap();
+        let t = crate::time::rfc3339(updated);
+        std::fs::write(dir.join(crate::router::FILE), serde_json::json!({"version": 1, "updatedAt": t, "stallSeconds": 180,
+            "tasks": [{"taskId": "t1", "threadId": thread, "title": "Policz pliki", "status": status,
+                       "workingDirectory": "C:/work", "updatedAt": t, "lastActivityAt": t, "blocked": false}]}).to_string()).unwrap();
+    }
+
+    #[test]
+    fn router_task_joins_its_codex_pet_at_startup() {
+        let h = home();
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/codex/router-task.jsonl");
+        std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-test.jsonl"), fresh(fixture)).unwrap();
+        let thread = "01a04e96-7474-79a1-a173-8c3cc2919eeb";
+        router_status(&h, thread, "running", crate::time::now_ms());
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        let s = rt.store().session(thread).expect("jedna sesja na wątek");
+        assert_eq!((s.origin, s.title.as_str()), (Origin::Router, "Policz pliki"));
+        assert_eq!(s.router_task.as_ref().map(|r| r.task_id.as_str()), Some("t1"));
+        assert_eq!(rt.store().sessions().len(), 1, "bez drugiego zwierzaka dla tego samego zadania");
+    }
+
+    #[test]
+    fn an_old_failed_router_task_does_not_appear_at_startup() {
+        let h = home();
+        router_status(&h, "stary-watek", "failed", crate::time::now_ms() - 2 * 3_600_000);
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        assert!(rt.store().sessions().is_empty());
     }
 
     #[test]
