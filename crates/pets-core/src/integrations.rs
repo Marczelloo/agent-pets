@@ -95,6 +95,14 @@ pub fn disable(id: AppId, home: &Path) -> Result<String, String> {
     Ok("Hooki usunięte z ustawień Claude Code (kopia: settings.json.agent-pets.bak).".into())
 }
 
+/// Czy trzeba ponownie włączyć Claude Code: hooki zniknęły (np. aktualizacja przez „odinstaluj, potem zainstaluj”)
+/// albo `hook.exe` w `~/.agent-pets` różni się od tego z instalacji.
+pub fn claude_needs_repair(home: &Path, hook_src: Option<&Path>) -> bool {
+    if !status(AppId::ClaudeCode, home).installed { return true; }
+    let Some(src) = hook_src.and_then(|p| std::fs::read(p).ok()) else { return false };
+    std::fs::read(installed_hook(home)).ok().as_deref() != Some(src.as_slice())
+}
+
 /// Odinstalowanie: wyłącza wszystkie integracje i usuwa pliki widżetu; `settings.json` zostaje, chyba że `remove_data`.
 pub fn uninstall_all(home: &Path, remove_data: bool) -> Vec<String> {
     let mut steps: Vec<String> = AppId::ALL.iter().map(|id| match disable(*id, home) {
@@ -161,6 +169,20 @@ mod tests {
         let h = home();
         assert!(enable(AppId::ClaudeCode, h.path(), None).is_err());
         assert!(!claude_settings(h.path()).exists());
+    }
+
+    #[test]
+    fn claude_needs_repair_when_hooks_vanished_or_the_hook_is_outdated() {
+        // aktualizacja przez „odinstaluj, potem zainstaluj” zdejmuje hooki starym deinstalatorem
+        let h = home();
+        std::fs::create_dir_all(h.path().join(".claude")).unwrap();
+        let src = hook_src(h.path());
+        assert!(claude_needs_repair(h.path(), Some(&src)), "brak hooków");
+        enable(AppId::ClaudeCode, h.path(), Some(&src)).unwrap();
+        assert!(!claude_needs_repair(h.path(), Some(&src)));
+        assert!(!claude_needs_repair(h.path(), None), "bez zasobu nie ma z czym porównać");
+        std::fs::write(&src, b"hook-binary-v2").unwrap();
+        assert!(claude_needs_repair(h.path(), Some(&src)), "nowszy hook.exe w instalacji");
     }
 
     #[test]

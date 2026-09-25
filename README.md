@@ -54,13 +54,16 @@ Change anything later in **Settings**: right-click the tray icon, or the ⚙ but
 
 ```powershell
 git clone https://github.com/Marczelloo/agent-pets.git
-cd agent-pets
+cd agent-pets\app
+pnpm install
+pnpm build:hook      # builds hook.exe into src-tauri/resources; the app bundles it and needs it to compile
+pnpm test
+cd ..
 cargo build --release --workspace
 cargo test --workspace
-cd app
-pnpm install
-pnpm test
 ```
+
+`pnpm tauri build` (in `app/`) produces the installer in `target\release\bundle\nsis\`.
 
 #### Connect Claude Code (hooks) without the wizard
 

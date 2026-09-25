@@ -26,6 +26,9 @@ jobs:
           cache-dependency-path: app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: app
+      # zasób paczki resources/hook.exe musi istnieć, zanim cokolwiek skompiluje aplikację
+      - run: pnpm build:hook
+        working-directory: app
       - run: cargo test --workspace
       - run: pnpm test
         working-directory: app
@@ -34,7 +37,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: app
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', github.run_number) }}
           releaseName: Agent Pets ${{ github.ref_name }}
           releaseBody: |
             Instalator Windows (x64): pobierz plik `*-setup.exe` poniżej.

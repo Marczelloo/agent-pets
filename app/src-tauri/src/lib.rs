@@ -50,10 +50,21 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     if old.power_saving != new.power_saving { system::refresh_power(app); }
 }
 
-/// Wpis autostartu zgodny z ustawieniem. Build deweloperski nie rejestruje się (wskazywałby `target\debug`).
-fn sync_autostart(on: bool) {
+/// Wpis autostartu zgodny z ustawieniem (porównanie z rejestrem, nie z poprzednimi ustawieniami).
+/// Build deweloperski nie rejestruje się (wskazywałby `target\debug`).
+pub fn sync_autostart(on: bool) {
     if cfg!(debug_assertions) { return; }
-    let _ = system::set_autostart(on);
+    if let Some(v) = system::autostart_action(on, system::autostart_at(system::RUN_KEY)) { let _ = system::set_autostart(v); }
+}
+
+/// Przy starcie: włączony Claude Code bez hooków albo ze starym `hook.exe` (aktualizacja) dostaje je ponownie.
+fn repair_integrations(app: &tauri::AppHandle) {
+    let st = app.state::<settings::SettingsState>();
+    if !st.get().apps.claude_code { return; }
+    let src = settings::pick_hook(&settings::hook_candidates(app));
+    if pets_core::integrations::claude_needs_repair(&st.home, src.as_deref()) {
+        let _ = pets_core::integrations::enable(pets_core::integrations::AppId::ClaudeCode, &st.home, src.as_deref());
+    }
 }
 
 /// `agent-pets.exe --uninstall-integrations [--remove-data]` (deinstalator NSIS): sprząta i kończy bez okien.
@@ -89,7 +100,10 @@ pub fn run() {
             core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), apps_rx);
             app.manage(system::Power::default());
             system::watch_power(app.handle().clone());
-            if !first_run { sync_autostart(app.state::<settings::SettingsState>().get().autostart); }
+            if !first_run {
+                sync_autostart(app.state::<settings::SettingsState>().get().autostart);
+                repair_integrations(app.handle());
+            }
             if first_run { settings::open(app.handle()); }
             Ok(())
         })

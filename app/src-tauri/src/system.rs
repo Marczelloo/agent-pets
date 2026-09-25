@@ -38,6 +38,10 @@ pub fn autostart_at(key: &str) -> bool {
     }
 }
 
+/// Co zrobić z wpisem autostartu: porównujemy z rejestrem, nie z poprzednimi ustawieniami
+/// (kreator zapisuje domyślne `true`, a wpisu jeszcze nie ma).
+pub fn autostart_action(desired: bool, registered: bool) -> Option<bool> { (desired != registered).then_some(desired) }
+
 pub fn set_autostart(on: bool) -> std::io::Result<()> {
     let exe = std::env::current_exe()?;
     set_autostart_at(RUN_KEY, &exe.to_string_lossy(), on)
@@ -99,6 +103,14 @@ mod tests {
             assert!(!decide_power_saving(Never, bat, saver));
             assert_eq!(decide_power_saving(Auto, bat, saver), bat || saver, "{bat} {saver}");
         }
+    }
+
+    #[test]
+    fn autostart_is_written_only_when_the_registry_disagrees() {
+        assert_eq!(autostart_action(true, false), Some(true));
+        assert_eq!(autostart_action(false, true), Some(false));
+        assert_eq!(autostart_action(true, true), None);
+        assert_eq!(autostart_action(false, false), None);
     }
 
     #[test]

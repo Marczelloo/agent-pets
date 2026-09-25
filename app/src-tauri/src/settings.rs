@@ -66,7 +66,7 @@ fn set_app(s: &mut Settings, id: AppId, on: bool) {
 /// Pierwszy istniejący kandydat na `hook.exe`: zasoby instalacji, katalog programu, build release obok debug.
 pub fn pick_hook(candidates: &[PathBuf]) -> Option<PathBuf> { candidates.iter().find(|p| p.is_file()).cloned() }
 
-fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
+pub fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Ok(r) = app.path().resource_dir() { out.push(r.join("resources").join("hook.exe")); out.push(r.join("hook.exe")); }
     if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
@@ -88,13 +88,19 @@ fn store(app: &AppHandle, new: Settings) -> Result<(), String> {
     Ok(())
 }
 
+/// Ustawienia z okna, bez listy aplikacji (tę zmieniają tylko integracje, żeby nie cofnąć instalacji hooków).
+pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings { Settings { apps: current.apps, ..incoming } }
+
 #[tauri::command]
 pub fn settings_get(state: tauri::State<SettingsState>) -> SettingsView {
     SettingsView { settings: state.get(), first_run: *state.first_run.lock().unwrap(), load_error: state.load_error.lock().unwrap().clone() }
 }
 
 #[tauri::command]
-pub fn settings_set(app: AppHandle, settings: Settings) -> Result<(), String> { store(&app, settings) }
+pub fn settings_set(app: AppHandle, settings: Settings) -> Result<(), String> {
+    let merged = merge_user_settings(&app.state::<SettingsState>().get(), settings);
+    store(&app, merged)
+}
 
 #[tauri::command]
 pub fn integrations_list(state: tauri::State<SettingsState>) -> Vec<AppRow> {
@@ -131,10 +137,12 @@ pub fn wizard_finish(app: AppHandle, settings: Settings) -> Vec<String> {
             Err(e) => { set_app(&mut s, id, false); out.push(e); }
         }
     }
+    let autostart = s.autostart;
     match store(&app, s) {
         Ok(()) => { *app.state::<SettingsState>().first_run.lock().unwrap() = false; }
         Err(e) => out.push(e),
     }
+    crate::sync_autostart(autostart);
     out
 }
 
@@ -164,8 +172,13 @@ pub fn open(app: &AppHandle) {
         let _ = w.set_focus();
         return;
     }
-    let _ = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
-        .title("Agent Pets: ustawienia").inner_size(760.0, 560.0).min_inner_size(620.0, 460.0).center().build();
+    // Budowanie okna w synchronicznej komendzie albo w obsłudze zdarzenia (tray, druga instancja) zakleszcza się
+    // na Windows (dokumentacja WebviewWindowBuilder), więc budujemy je w osobnym wątku.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+            .title("Agent Pets: ustawienia").inner_size(760.0, 560.0).min_inner_size(620.0, 460.0).center().build();
+    });
 }
 
 #[tauri::command]
@@ -174,6 +187,18 @@ pub fn settings_open(app: AppHandle) { crate::panel::hide(&app); open(&app); }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_from_the_window_never_change_the_apps() {
+        // aplikacje zmienia tylko integration_set / wizard_finish; UI mogło mieć nieaktualną listę
+        let mut current = Settings::default();
+        current.apps.claude_code = false;
+        let mut incoming = Settings::default();
+        incoming.autostart = false;
+        let merged = merge_user_settings(&current, incoming);
+        assert!(!merged.apps.claude_code);
+        assert!(!merged.autostart);
+    }
 
     #[test]
     fn hook_comes_from_the_first_place_that_has_it() {
