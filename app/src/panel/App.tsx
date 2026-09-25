@@ -16,19 +16,21 @@ interface ViewProps {
   snap: Snapshot; nowMs: number; status: string | null; focusId: string | null; onJump: (id: string) => void;
   /** ukryty panel nie rysuje zwierzaków (WebView2 animuje także w ukrytym oknie) */
   animate?: boolean;
+  onSettings?: () => void;
 }
 
 const plural = (n: number) =>
   n === 1 ? 'sesja' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'sesje' : 'sesji';
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   return (
     <div className="panel">
       <header>
         <h1>Agent Pets</h1>
         <span className="count">{sessions.length} {plural(sessions.length)}</span>
+        {onSettings && <button type="button" className="gear" aria-label="Ustawienia" title="Ustawienia" onClick={onSettings}>⚙</button>}
       </header>
       <section className="limits" aria-label="Limity">
         {limitRows(snap.limits, nowMs).map(r => (
@@ -104,5 +106,6 @@ export default function App() {
     setStatus(r.method === 'clipboard' || r.method === 'none' ? r.detail : null);
   };
 
-  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} />;
+  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown}
+    onSettings={() => void invoke('settings_open')} />;
 }

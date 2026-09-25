@@ -4,14 +4,78 @@
 <meta charset="utf-8" />
 <title>Agent Pets: ustawienia</title>
 <style>
-:root{--bg:#F3F3F3;--txt:#1F1F1F;--mut:#5F5E5A}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#202020;--txt:#F3F3F3;--mut:#A5A298}}
-:root[data-theme="dark"]{--bg:#202020;--txt:#F3F3F3;--mut:#A5A298}
+:root{
+  --bg:#F3F3F3;--card:#FBFBFB;--line:rgba(0,0,0,.08);--txt:#1F1F1F;--mut:#5F5E5A;--nav:rgba(0,0,0,.05);
+  --btn:#FFFFFF;--btnh:#F6F6F6;--btnb:rgba(0,0,0,.12);--accent:#D97757;--accentTxt:#FFFFFF;--track:#8A8886;--notice:rgba(217,119,87,.12);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--txt:#F3F3F3;--mut:#A5A298;--nav:rgba(255,255,255,.06);
+  --btn:#373737;--btnh:#3D3D3D;--btnb:rgba(255,255,255,.08);--track:#9A9A9A;--notice:rgba(217,119,87,.18)}}
+:root[data-theme="dark"]{
+  --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--txt:#F3F3F3;--mut:#A5A298;--nav:rgba(255,255,255,.06);
+  --btn:#373737;--btnh:#3D3D3D;--btnb:rgba(255,255,255,.08);--track:#9A9A9A;--notice:rgba(217,119,87,.18)}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:14px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
 #root{height:100%}
+h1,h2{font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;font-weight:600;margin:0}
+code{font-family:"Cascadia Code",Consolas,monospace;font-size:12px}
+button,select,input[type=number]{font:inherit;font-size:13px;color:var(--txt);background:var(--btn);border:1px solid var(--btnb);border-radius:4px;padding:5px 12px}
+button{cursor:pointer}
+button:hover:not(:disabled){background:var(--btnh)}
+button:disabled{opacity:.5;cursor:default}
+button.accent{background:var(--accent);color:var(--accentTxt);border-color:transparent}
+button.accent:hover:not(:disabled){background:var(--accent);filter:brightness(1.08)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--txt);outline-offset:1px}
+input[type=number]{width:64px}
+
+/* okno ustawień */
+.settings{display:grid;grid-template-columns:200px 1fr;height:100%}
+.settings nav{padding:16px 8px;display:flex;flex-direction:column;gap:2px}
+.settings nav h1{font-size:15px;padding:4px 12px 14px}
+.settings nav button{text-align:left;border:0;background:transparent;padding:8px 12px;border-radius:4px}
+.settings nav button:hover{background:var(--nav)}
+.settings nav button.on{background:var(--nav);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+.settings main{padding:20px 24px;overflow:auto}
+.settings main h2{font-size:20px;margin-bottom:14px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 16px;display:flex;flex-direction:column}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}
+.card > .row:last-child,.card > div:last-child > .row{border-bottom:0}
+.row.off{opacity:.55}
+.text{display:flex;flex-direction:column;min-width:0}
+.label{font-weight:600}
+.desc{color:var(--mut);font-size:12px;overflow-wrap:anywhere}
+p.desc{margin:10px 0}
+.fix{margin:0 0 12px;font-size:12px;color:var(--mut)}
+.notice{background:var(--notice);border-radius:6px;padding:8px 12px;margin:0 0 12px}
+.report{white-space:pre-wrap;font-family:"Cascadia Code",Consolas,monospace;font-size:12px;margin:12px 0}
+.card > button{align-self:flex-start;margin:4px 0 14px}
+
+/* przełącznik Windows 11 z pola wyboru */
+input.switch{appearance:none;flex:none;width:40px;height:20px;border-radius:10px;border:1px solid var(--track);background:transparent;position:relative;cursor:pointer;margin:0}
+input.switch::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--track);transition:left .15s}
+input.switch:checked{background:var(--accent);border-color:var(--accent)}
+input.switch:checked::after{left:23px;background:var(--accentTxt)}
+input.switch:disabled{cursor:default}
+
+/* kreator */
+.wizard{max-width:600px;margin:0 auto;padding:28px 24px;display:flex;flex-direction:column;gap:16px;min-height:calc(100% - 56px)}
+.wizard h1{font-size:22px}
+.steps{display:flex;gap:6px;margin:0}
+.steps span{width:28px;height:4px;border-radius:2px;background:var(--line)}
+.steps span.on{background:var(--accent)}
+.wizard footer{display:flex;justify-content:space-between;margin-top:auto}
+.result{margin:0;padding-left:18px}
+.look{padding:16px}
+.skins{display:flex;gap:8px}
+.skin{border:1px solid var(--btnb);border-radius:6px;padding:8px 14px;cursor:pointer}
+.skin.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.skin input{margin:0 8px 0 0}
+.preview{display:flex;gap:16px;margin-top:12px}
+.pet{display:block;width:96px;height:72px}
 </style>
 </head>
 <body>
-<div id="root"><p style="padding:24px;color:var(--mut)">Ustawienia są w budowie.</p></div>
+<div id="root"></div>
+<script type="module" src="/src/settings/main.tsx"></script>
 </body>
 </html>

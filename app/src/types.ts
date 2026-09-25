@@ -37,3 +37,34 @@ export type PointerMsg =
   | { kind: 'click'; x: number; y: number }
   | { kind: 'context'; x: number; y: number };
 export interface TooltipContent { title: string; subtitle: string; lines: string[] }
+
+export type AppId = 'claude_code' | 'codex' | 'agent_router';
+export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean }
+export interface Settings {
+  version: number;
+  apps: AppsSettings;
+  claude_statusline: boolean;
+  claude_plan_usage: boolean;
+  notifications: { needs_you: boolean; done: boolean; limits: boolean };
+  pets: { skin: 'sketch' | 'clean'; max_visible: number };
+  power_saving: 'auto' | 'always' | 'never';
+  autostart: boolean;
+  [extra: string]: unknown;
+}
+export interface SettingsView { settings: Settings; first_run: boolean; load_error: string | null }
+export interface AppRow {
+  id: AppId;
+  detected: { found: boolean; path: string | null; note: string | null };
+  status: { installed: boolean; detail: string };
+  enabled: boolean;
+}
+export interface Diagnostics {
+  version: string;
+  endpoint_port: number | null;
+  settings_path: string;
+  settings_error: string | null;
+  hook_exe: string | null;
+  autostart_registered: boolean;
+  last_seen: Record<string, number>;
+  apps: [AppId, boolean, string][];
+}
