@@ -24,7 +24,9 @@ impl Target {
             cwd: if s.cwd.is_empty() { s.jump.cwd.clone() } else { s.cwd.clone() },
             pid: s.jump.pid.or(reg.map(|r| r.pid)),
             host_session_id: reg.and_then(|r| r.host_session_id.clone()),
-            desktop: s.jump.app == Some(App::ClaudeDesktop) || reg.map(|r| r.entrypoint == "claude-desktop").unwrap_or(false),
+            // sesja żyje w aplikacji agenta (Claude albo Codex): tylko wtedy deep link ma dokąd prowadzić
+            desktop: matches!(s.jump.app, Some(App::ClaudeDesktop | App::CodexApp))
+                || reg.map(|r| r.entrypoint == "claude-desktop").unwrap_or(false),
         }
     }
 }
@@ -78,7 +80,11 @@ pub fn plan(t: &Target) -> Vec<Step> {
             }
             if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); }
         }
-        Agent::Codex => out.push(Step::DeepLink(format!("codex://threads/{}", t.session_id))),
+        Agent::Codex => {
+            // `ShellExecute` na zarejestrowanym `codex://` zawsze „się udaje”, więc link tylko dla sesji z aplikacji Codex
+            if t.desktop { out.push(Step::DeepLink(format!("codex://threads/{}", t.session_id))); }
+            if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); }
+        }
     }
     if !t.cwd.is_empty() && Path::new(&t.cwd).is_dir() {
         let (program, args) = resume(t);
@@ -115,9 +121,17 @@ mod tests {
 
     #[test]
     fn codex_opens_the_thread_in_the_app() {
-        let p = plan(&t(Agent::Codex, false));
+        let p = plan(&t(Agent::Codex, true));
         assert_eq!(p[0], Step::DeepLink("codex://threads/3746a003-5ba1".into()));
-        assert!(matches!(&p[1], Step::OpenTerminal { program, args, .. } if program == "codex" && args == &vec!["resume".to_string(), "3746a003-5ba1".into()]));
+        assert!(matches!(&p[2], Step::OpenTerminal { program, args, .. } if program == "codex" && args == &vec!["resume".to_string(), "3746a003-5ba1".into()]));
+    }
+
+    #[test]
+    fn codex_cli_focuses_its_terminal_instead_of_opening_the_app() {
+        // `ShellExecute` na zarejestrowanym `codex://` zawsze „się udaje”, więc sesja z terminala nigdy by do niego nie wróciła.
+        let p = plan(&t(Agent::Codex, false));
+        assert_eq!(p[0], Step::FocusProcess(42));
+        assert!(p.iter().all(|s| !matches!(s, Step::DeepLink(_))));
     }
 
     #[test]

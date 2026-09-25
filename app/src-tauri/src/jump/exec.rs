@@ -36,13 +36,47 @@ fn window_of(pid: u32) -> Option<HWND> {
 
 /// Okno sesji: sam proces albo najbliższy przodek z oknem (claude.exe ← pwsh ← WindowsTerminal).
 pub fn session_window(pid: u32) -> Option<HWND> {
+    owner_pid(pid, pets_core::pid::process_entry, |p| window_of(p).is_some()).and_then(window_of)
+}
+
+/// Najbliższy proces z oknem, idąc w górę drzewa od `pid`. `entry(p)` zwraca (rodzic, plik exe procesu `p`).
+pub(crate) fn owner_pid(pid: u32, entry: impl Fn(u32) -> Option<(u32, String)>, has_window: impl Fn(u32) -> bool) -> Option<u32> {
+    // Procesy powłoki systemu: ich okna (Eksplorator, pulpit) nie są oknem sesji, więc tu wspinaczka się kończy.
+    const STOP: [&str; 6] = ["explorer.exe", "sihost.exe", "svchost.exe", "services.exe", "wininit.exe", "winlogon.exe"];
     let mut p = pid;
     for _ in 0..6 {
-        if let Some(h) = window_of(p) { return Some(h); }
-        p = pets_core::pid::process_entry(p)?.0;
-        if p == 0 { return None; }
+        let (parent, exe) = entry(p)?;
+        if STOP.contains(&exe.to_ascii_lowercase().as_str()) { return None; }
+        if has_window(p) { return Some(p); }
+        if parent == 0 { return None; }
+        p = parent;
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::owner_pid;
+
+    fn tree(p: u32) -> Option<(u32, String)> {
+        let (parent, exe) = match p {
+            10 => (20, "claude.exe"), 20 => (30, "pwsh.exe"), 30 => (1, "WindowsTerminal.exe"),
+            11 => (21, "claude.exe"), 21 => (31, "pwsh.exe"), 31 => (1, "explorer.exe"),
+            _ => return None,
+        };
+        Some((parent, exe.to_string()))
+    }
+
+    #[test]
+    fn climbs_to_the_terminal_window() {
+        assert_eq!(owner_pid(10, tree, |p| p == 30), Some(30));
+    }
+
+    #[test]
+    fn never_settles_on_the_shell_or_the_desktop() {
+        // powłoka uruchomiona z Eksploratora: rodzicem jest explorer.exe, którego okno to nie okno sesji
+        assert_eq!(owner_pid(11, tree, |p| p == 31), None);
+    }
 }
 
 fn focus(pid: u32) -> bool {
