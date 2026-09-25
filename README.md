@@ -23,6 +23,7 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
 - **One pet per session.** Clawd for Claude Code, Kodek for Codex. Their pose follows the session: thinking, editing, running commands, reading, searching, browsing, delegating to subagents, waiting for you, done, error, idle, asleep.
 - **Everything at a glance.** Task progress under each pet, 5-hour and weekly limits for Claude and Codex next to them, a "+N" badge when the taskbar runs out of room. Pets that wait for you never get hidden.
 - **Panel and "Przejdź" (Go).** Click a pet for all your sessions and limits with reset times; one click takes you back to the session: the Claude or Codex app, its terminal window, or a new terminal that resumes it.
+- **Seven looks and two ways to move.** Sticker (like the app icon), Sketch, Clean, Pixel art, Neon, Ink and Pastel, all readable at taskbar size, plus an Anime motion mode: snappier, springier, with swoosh trails, speed lines, impact bursts and manga emotes. Pick one look for everyone or a different one per agent, from a live gallery in Settings.
 - **Windows notifications** when an agent waits for you, finishes a long turn, or passes 90% of a limit.
 - **Agent Router tasks** get the task's title, a router badge and live health (active, quiet, stalled, blocked).
 - **Private by default.** Everything is read from local files and hooks. The only optional network call, fetching your Claude plan limits from Anthropic, is off until you allow it.
@@ -59,7 +60,7 @@ The app's interface is in Polish for now. Design documents (spec, plans, spike r
    - which apps get pets. It shows the ones it found: Claude Code (`~/.claude`), Codex (`~/.codex`), Agent Router (`~/.agent-router`). For Claude Code it installs hooks in `~/.claude/settings.json` and keeps a backup;
    - whether to fetch Claude plan limits from Anthropic (off by default, see [Claude rate limits](#claude-rate-limits));
    - notifications and starting with Windows;
-   - the look: sketchy or clean.
+   - the look: one of seven styles and calm or anime motion, from a live gallery.
 4. Restart open Claude Code sessions so they pick up the hooks.
 
 Change anything later in **Settings**: right-click the tray icon, or the ⚙ button in the panel. Running Agent Pets again from the Start menu opens Settings too.
