@@ -44,6 +44,8 @@ fn limit_toast(l: &Limit) -> Toast {
 }
 
 impl Rules {
+    pub fn set_settings(&mut self, settings: Settings) { self.settings = settings; }
+
     pub fn new(settings: Settings) -> Rules {
         Rules { settings, primed: false, sent: HashSet::new(), limits: HashMap::new() }
     }
@@ -177,6 +179,16 @@ mod tests {
         assert!(r.observe(&snap(vec![], vec![l(92.0, Some(18_000_000))]), 2, &|_| false).is_empty());
         assert!(r.observe(&snap(vec![], vec![l(93.0, Some(18_030_000))]), 3, &|_| false).is_empty(), "reset drga o sekundy");
         assert_eq!(r.observe(&snap(vec![], vec![l(95.0, Some(36_000_000))]), 4, &|_| false).len(), 1, "następne okno");
+    }
+
+    #[test]
+    fn settings_changed_later_take_effect() {
+        let mut r = Rules::new(ALL);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        r.set_settings(Settings { needs_you: false, done: true, limits: true });
+        assert!(r.observe(&snap(vec![sess("a", State::NeedsYou, 0, None)], vec![]), 60_000, &|_| false).is_empty());
+        r.set_settings(ALL);
+        assert_eq!(r.observe(&snap(vec![sess("b", State::NeedsYou, 0, None)], vec![]), 60_000, &|_| false).len(), 1);
     }
 
     #[test]

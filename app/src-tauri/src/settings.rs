@@ -41,6 +41,8 @@ pub struct Diagnostics {
     pub settings_path: String,
     pub settings_error: Option<String>,
     pub hook_exe: Option<String>,
+    /// czy wpis autostartu naprawdę jest w rejestrze
+    pub autostart_registered: bool,
     pub last_seen: BTreeMap<String, i64>,
     pub apps: Vec<(AppId, bool, String)>,
 }
@@ -149,6 +151,7 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
         settings_error,
         hook_exe: Some(integrations::installed_hook(&st.home)).filter(|p| p.is_file()).map(|p| p.to_string_lossy().into_owned()),
         last_seen,
+        autostart_registered: crate::system::autostart_at(crate::system::RUN_KEY),
         apps: AppId::ALL.iter().map(|id| (*id, app_on(&s, *id), integrations::status(*id, &st.home).detail)).collect(),
     }
 }

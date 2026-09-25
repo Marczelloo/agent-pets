@@ -39,11 +39,17 @@ fn current_token(now: i64) -> Option<String> {
     credentials().and_then(|p| std::fs::read(p).ok()).and_then(|b| account_usage::token(&b, now))
 }
 
-/// Wątek: od razu, potem co 5 min (po odmowie z powodu limitu zapytań co 15 min). Bez tokenu nic nie wysyła.
-/// Zwraca, czy w chwili startu jest ważny token (czy warto czekać na pierwszą odpowiedź).
-pub fn spawn(tx: Sender<Event>) -> bool {
-    let has_token = current_token(pets_core::time::now_ms()).is_some();
+/// Wątek: od razu, potem co 5 min (po odmowie z powodu limitu zapytań co 15 min). Bez tokenu nic nie wysyła,
+/// a bez zgody użytkownika (`allowed`, ustawienie `claude_plan_usage`) nawet nie czyta tokenu.
+/// Zwraca, czy w chwili startu jest zgoda i ważny token (czy warto czekać na pierwszą odpowiedź).
+pub fn spawn(tx: Sender<Event>, allowed: impl Fn() -> bool + Send + 'static) -> bool {
+    let has_token = allowed() && current_token(pets_core::time::now_ms()).is_some();
     std::thread::spawn(move || loop {
+        if !allowed() {
+            // zgoda może przyjść w każdej chwili z ustawień
+            std::thread::sleep(Duration::from_secs(5));
+            continue;
+        }
         let now = pets_core::time::now_ms();
         let token = current_token(now);
         let wait = match token.map(|t| fetch(account_usage::URL, &t, now)) {

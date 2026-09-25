@@ -49,9 +49,57 @@ pub fn remove_aumid() {
     unsafe { let _ = RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(key)); }
 }
 
+/// Czy włączyć tryb oszczędny: `auto` na baterii albo przy oszczędzaniu energii Windows.
+pub fn decide_power_saving(mode: pets_core::settings::PowerSaving, on_battery: bool, saver_on: bool) -> bool {
+    use pets_core::settings::PowerSaving::*;
+    match mode { Always => true, Never => false, Auto => on_battery || saver_on }
+}
+
+/// (na baterii, oszczędzanie energii Windows włączone).
+pub fn power_status() -> (bool, bool) {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut s = SYSTEM_POWER_STATUS::default();
+    if unsafe { GetSystemPowerStatus(&mut s) }.is_err() { return (false, false); }
+    (s.ACLineStatus == 0, s.SystemStatusFlag == 1)
+}
+
+#[derive(Default)]
+pub struct Power(pub std::sync::atomic::AtomicBool);
+
+/// Liczy tryb oszczędny i rozsyła `pets://power { saving }`, gdy się zmienia.
+pub fn refresh_power(app: &tauri::AppHandle) {
+    use tauri::{Emitter, Manager};
+    let mode = app.state::<crate::settings::SettingsState>().get().power_saving;
+    let (bat, saver) = power_status();
+    let saving = decide_power_saving(mode, bat, saver);
+    let prev = app.state::<Power>().0.swap(saving, std::sync::atomic::Ordering::Relaxed);
+    if prev != saving { let _ = app.emit("pets://power", saving); }
+}
+
+/// Stan zasilania co 30 s.
+pub fn watch_power(app: tauri::AppHandle) {
+    std::thread::spawn(move || loop {
+        refresh_power(&app);
+        std::thread::sleep(std::time::Duration::from_secs(30));
+    });
+}
+
+#[tauri::command]
+pub fn power_get(state: tauri::State<Power>) -> bool { state.0.load(std::sync::atomic::Ordering::Relaxed) }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn power_saving_follows_the_mode_and_the_power_source() {
+        use pets_core::settings::PowerSaving::*;
+        for (bat, saver) in [(false, false), (true, false), (false, true), (true, true)] {
+            assert!(decide_power_saving(Always, bat, saver));
+            assert!(!decide_power_saving(Never, bat, saver));
+            assert_eq!(decide_power_saving(Auto, bat, saver), bat || saver, "{bat} {saver}");
+        }
+    }
 
     #[test]
     fn autostart_entry_can_be_set_and_removed() {

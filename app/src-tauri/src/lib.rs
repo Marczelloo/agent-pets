@@ -43,8 +43,18 @@ pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
     jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())))
 }
 
-/// Skutki zmiany ustawień (rdzeń, powiadomienia, autostart). Wypełnia task 5.
-pub fn apply_effects(_app: &tauri::AppHandle, _old: &pets_core::settings::Settings, _new: &pets_core::settings::Settings) {}
+/// Skutki zmiany ustawień. Powiadomienia i zgoda na limity Anthropic są czytane na bieżąco w swoich wątkach.
+pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings, new: &pets_core::settings::Settings) {
+    if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(new.apps); }
+    if old.autostart != new.autostart { sync_autostart(new.autostart); }
+    if old.power_saving != new.power_saving { system::refresh_power(app); }
+}
+
+/// Wpis autostartu zgodny z ustawieniem. Build deweloperski nie rejestruje się (wskazywałby `target\debug`).
+fn sync_autostart(on: bool) {
+    if cfg!(debug_assertions) { return; }
+    let _ = system::set_autostart(on);
+}
 
 /// `agent-pets.exe --uninstall-integrations [--remove-data]` (deinstalator NSIS): sprząta i kończy bez okien.
 pub fn uninstall_cli(args: &[String]) -> Option<i32> {
@@ -74,7 +84,12 @@ pub fn run() {
             panel::build(app.handle())?;
             tray::build(app.handle())?;
             let snaps = notify::start(app.handle().clone());
-            core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps));
+            let (apps_tx, apps_rx) = std::sync::mpsc::channel();
+            app.manage(core::Control(std::sync::Mutex::new(apps_tx)));
+            core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), apps_rx);
+            app.manage(system::Power::default());
+            system::watch_power(app.handle().clone());
+            if !first_run { sync_autostart(app.state::<settings::SettingsState>().get().autostart); }
             if first_run { settings::open(app.handle()); }
             Ok(())
         })
@@ -82,7 +97,7 @@ pub fn run() {
             snapshot, stage_hello, stage_set_width, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
-            settings::wizard_finish, settings::diagnostics, settings::settings_open
+            settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get
         ])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")

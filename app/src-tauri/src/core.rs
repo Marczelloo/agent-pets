@@ -40,7 +40,11 @@ impl Mode {
 }
 
 /// `snaps`: każda publikowana migawka trafia też do tego kanału (powiadomienia).
-pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Snapshot>>) {
+/// Kanał zmian listy aplikacji z ustawień do rdzenia.
+pub struct Control(pub std::sync::Mutex<Sender<pets_core::settings::Apps>>);
+
+pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Snapshot>>,
+             apps: std::sync::mpsc::Receiver<pets_core::settings::Apps>) {
     std::thread::spawn(move || {
         let publish = |store: &Store, now: i64| {
             let s = snapshot_of(store, now);
@@ -49,7 +53,7 @@ pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Sn
             let _ = app.emit("pets://snapshot", s);
         };
         let result = match mode {
-            Mode::Live => live(&publish),
+            Mode::Live => live(&app, apps, &publish),
             Mode::Replay { path, speed } => replay(&path, speed, &publish),
         };
         if let Err(e) = result {
@@ -69,11 +73,16 @@ pub fn failure_text(e: &anyhow::Error) -> String {
     format!("{HEAD}{msg})")
 }
 
-fn live(publish: &dyn Fn(&Store, i64)) -> anyhow::Result<()> {
-    let mut rt = Runtime::start(RuntimeConfig::from_env()?)?;
-    // limity konta Claude z serwera Anthropic (dokładne czasy resetu, bez sesji CLI)
+fn live(app: &AppHandle, apps: std::sync::mpsc::Receiver<pets_core::settings::Apps>, publish: &dyn Fn(&Store, i64))
+    -> anyhow::Result<()> {
+    use tauri::Manager;
+    let mut cfg = RuntimeConfig::from_env()?;
+    cfg.apps = app.state::<crate::settings::SettingsState>().get().apps;
+    let mut rt = Runtime::start(cfg)?;
+    // limity konta Claude z serwera Anthropic (dokładne czasy resetu, bez sesji CLI), tylko za zgodą
     let (usage_tx, usage) = std::sync::mpsc::channel();
-    let has_token = crate::usage::spawn(usage_tx);
+    let a = app.clone();
+    let has_token = crate::usage::spawn(usage_tx, move || a.state::<crate::settings::SettingsState>().get().claude_plan_usage);
     // Pierwsza migawka czeka chwilę na limity z serwera: reguły powiadomień uznają wtedy zastany limit
     // powyżej 90% za stan sprzed startu, a nie za nowy.
     if has_token {
@@ -82,9 +91,15 @@ fn live(publish: &dyn Fn(&Store, i64)) -> anyhow::Result<()> {
     publish(rt.store(), now_ms());
     loop {
         let now = now_ms();
-        let mut changed = rt.step(now);
+        let mut changed = false;
+        for a in apps.try_iter() { changed |= rt.set_apps(a); }
+        changed |= rt.step(now);
         for e in usage.try_iter() { changed |= rt.apply_external(e); }
-        if changed { publish(rt.store(), now); }
+        if changed {
+            publish(rt.store(), now);
+            *app.state::<crate::settings::LastSeen>().0.lock().unwrap() =
+                rt.last_seen().into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        }
         std::thread::sleep(Duration::from_millis(250));
     }
 }
