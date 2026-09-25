@@ -17,6 +17,8 @@ pub fn js_tool_calls(src: &str) -> Vec<String> {
 }
 
 const ASK: [&str; 3] = ["request_user_input", "request_user_input_async", "request_permissions"];
+/// Pytanie, które nie blokuje narzędzia: wraca od razu, a odpowiedź przychodzi jako nowa tura.
+const ASYNC_ASK: &str = "request_user_input_async";
 
 /// Okno limitu rozpoznajemy po `window_minutes`; `primary`/`secondary` nie mają stałego znaczenia.
 fn limits_from(rl: &Value) -> Vec<Limit> {
@@ -39,6 +41,8 @@ pub struct RolloutParser {
     skip: bool,
     router: bool,
     titled: bool,
+    /// Po `request_user_input_async` tura kończy się bez odpowiedzi; czekamy na następną turę (odpowiedź użytkownika).
+    waiting: bool,
 }
 
 impl RolloutParser {
@@ -100,6 +104,14 @@ impl RolloutParser {
             return vec![];
         }
         if self.sid.is_none() { return vec![]; }
+        if self.waiting {
+            match (ty, pt) {
+                ("event_msg", "task_started") => self.waiting = false,
+                // kontekst i limity nadal się liczą; stan zostaje „czeka na Ciebie”
+                ("event_msg", "token_count") => {}
+                _ => return vec![],
+            }
+        }
 
         match (ty, pt) {
             ("event_msg", "task_started") => self.one(ts, Kind::Prompt),
@@ -131,7 +143,10 @@ impl RolloutParser {
                 Some("apply_patch") => self.tool_start(Tool::Edit, ts),
                 Some("exec") => {
                     let calls = js_tool_calls(ps("input").unwrap_or(""));
-                    if calls.iter().any(|c| ASK.contains(&c.as_str())) { return self.one(ts, Kind::NeedsInput); }
+                    if calls.iter().any(|c| ASK.contains(&c.as_str())) {
+                        self.waiting = calls.iter().any(|c| c == ASYNC_ASK);
+                        return self.one(ts, Kind::NeedsInput);
+                    }
                     match calls.iter().find_map(|c| from_codex(c)) {
                         Some(t) => self.tool_start(t, ts),
                         None => vec![],
@@ -142,7 +157,10 @@ impl RolloutParser {
             ("response_item", "function_call") => {
                 let name = ps("name").unwrap_or("");
                 let ns = ps("namespace").unwrap_or("");
-                if ASK.contains(&name) { return self.one(ts, Kind::NeedsInput); }
+                if ASK.contains(&name) {
+                    self.waiting = name == ASYNC_ASK;
+                    return self.one(ts, Kind::NeedsInput);
+                }
                 if name == "update_plan" {
                     let args: Value = serde_json::from_str(ps("arguments").unwrap_or("{}")).unwrap_or(Value::Null);
                     let Some(plan) = args.get("plan").and_then(|v| v.as_array()) else { return vec![] };
@@ -252,6 +270,20 @@ mod tests {
             "arguments": "{\"plan\":[{\"step\":\"a\",\"status\":\"completed\"},{\"step\":\"b\",\"status\":\"in_progress\"}]}"}));
         assert_eq!((e[0].kind, e[0].data.progress), (Kind::Meta, Some(Progress { done: 1, total: 2 })));
         assert!(fc(&mut p, json!({"type": "function_call", "name": "sleep", "namespace": "clock", "arguments": "{}"})).is_empty());
+    }
+
+    #[test]
+    fn async_question_keeps_waiting_until_the_user_answers() {
+        // `request_user_input_async` wraca od razu z „accepted”, a tura się kończy; odpowiedź przychodzi jako nowa tura.
+        let mut p = RolloutParser::new();
+        started(&mut p);
+        let kinds = |e: Vec<Event>| e.into_iter().map(|e| e.kind).collect::<Vec<_>>();
+        let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "request_user_input_async", "arguments": "{}"})));
+        assert_eq!(kinds(e), vec![Kind::NeedsInput]);
+        assert!(p.parse_line(&l("response_item", json!({"type": "function_call_output", "output": "{\"accepted\":true}"}))).is_empty());
+        assert!(p.parse_line(&l("event_msg", json!({"type": "task_complete"}))).is_empty(), "nadal czeka na odpowiedź");
+        assert_eq!(kinds(p.parse_line(&l("event_msg", json!({"type": "task_started"})))), vec![Kind::Prompt]);
+        assert_eq!(kinds(p.parse_line(&l("event_msg", json!({"type": "task_complete"})))), vec![Kind::TurnEnd]);
     }
 
     #[test]
