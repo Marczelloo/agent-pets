@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, petTooltip } from '../tooltip/text';
-import type { Snapshot } from '../types';
+import type { RouterTask, Settings, SettingsView, Snapshot } from '../types';
 import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
-import { PetCanvas } from './PetCanvas';
+import { PetCanvas, setPetFps } from './PetCanvas';
+import { frameBudget } from '../stage/power';
+import { pen } from '../renderer';
 import { isLive, routerHealth, routerLine } from '../stage/router';
-import type { RouterTask } from '../types';
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
   isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
@@ -85,6 +86,8 @@ export default function App() {
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
       listen<boolean>('panel://visible', e => setShown(e.payload)),
+      listen<Settings>('pets://settings', e => { pen.sketch = e.payload.pets.skin === 'sketch'; }),
+      listen<boolean>('pets://power', e => setPetFps(frameBudget(e.payload).fps)),
       listen<string>('panel://focus', e => {
         setStatus(null);
         setFocusId(e.payload);
@@ -94,6 +97,8 @@ export default function App() {
       }),
     ];
     void invoke<Snapshot>('snapshot').then(s => take.current(s));
+    void invoke<SettingsView>('settings_get').then(v => { pen.sketch = v.settings.pets.skin === 'sketch'; });
+    void invoke<boolean>('power_get').then(saving => setPetFps(frameBudget(saving).fps));
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };
     addEventListener('keydown', esc);

@@ -3,7 +3,10 @@ import { createPet, drawPet, pen, setScene, stepPet, type Pet } from '../rendere
 import { sceneFor, skinFor } from '../stage/sceneFor';
 import type { Session } from '../types';
 
-const W = 96, H = 72, FPS = 30;
+const W = 96, H = 72;
+let fps = 30;
+/** Limit klatek zwierzaków panelu (tryb oszczędny: 10). */
+export function setPetFps(n: number): void { fps = n; }
 // Skala zwierzaka ze sceny w pasku (u = 0,3 przy 48 px), przeniesiona na płótno wysokości 72 px.
 const U = 0.3 * H / 48, X = 36, Y = H - 10;
 
@@ -29,7 +32,7 @@ export function PetCanvas({ session }: { session: Session }) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       acc += dt;
-      if (acc < 1 / FPS) return;
+      if (acc < 1 / fps) return;
       T += acc;
       const d = devicePixelRatio || 1;
       if (c.width !== Math.round(W * d)) { c.width = Math.round(W * d); c.height = Math.round(H * d); }

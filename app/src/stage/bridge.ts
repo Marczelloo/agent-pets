@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { PointerMsg, Snapshot, StageLayout, TooltipContent } from '../types';
+import type { PointerMsg, Settings, SettingsView, Snapshot, StageLayout, TooltipContent } from '../types';
 import { demoLimits, demoSessions } from './demo';
 
 export interface Bridge {
@@ -10,6 +10,10 @@ export interface Bridge {
   onLayout(cb: (l: StageLayout) => void): void;
   onVisibility(cb: (v: boolean) => void): void;
   onPointer(cb: (p: PointerMsg) => void): void;
+  /** Ustawienia (skórka, limit zwierzaków): od razu bieżące, potem każda zmiana. */
+  onSettings(cb: (s: Settings) => void): void;
+  /** Tryb oszczędny: od razu bieżący, potem każda zmiana. */
+  onPower(cb: (saving: boolean) => void): void;
   setWidth(css: number): void;
   showTooltip(anchorX: number, content: TooltipContent): void;
   hideTooltip(): void;
@@ -30,6 +34,8 @@ export function tauriBridge(): Bridge {
     onLayout: cb => on('pets://layout', cb),
     onVisibility: cb => on('pets://visibility', cb),
     onPointer: cb => on('pets://pointer', cb),
+    onSettings: cb => { on('pets://settings', cb); void invoke<SettingsView>('settings_get').then(v => cb(v.settings)); },
+    onPower: cb => { on<boolean>('pets://power', cb); void invoke<boolean>('power_get').then(cb); },
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
     showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },
     hideTooltip: () => { void invoke('tooltip_hide'); },
@@ -59,6 +65,8 @@ export function fakeBridge(canvas: HTMLCanvasElement, tip: HTMLElement,
       canvas.addEventListener('mouseleave', () => cb({ kind: 'leave' }));
       canvas.addEventListener('click', e => cb({ kind: 'click', x: e.offsetX, y: e.offsetY }));
     },
+    onSettings: () => {},
+    onPower: () => {},
     setWidth: w => { canvas.style.width = `${w}px`; },
     showTooltip: (x, content) => {
       opts.render(tip, content);

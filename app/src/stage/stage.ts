@@ -5,8 +5,8 @@ import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from 
 import { layout, type LayoutOut } from './layout';
 import { Hover } from './hover';
 import { Roster } from './roster';
+import { frameBudget } from './power';
 
-const FPS = 30;
 
 export interface StageHandle { hover: (p: PointerMsg) => void }
 
@@ -19,12 +19,14 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let visible = true, running = false, T = 0, last = performance.now(), sentWidth = -1;
   const roster = new Roster();
   let clockOffset = 0;
+  let maxPets: number | undefined;
+  let budget = frameBudget(false);
   const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
   const handle: StageHandle = { hover: p => hover.pointer(p) };
   setInterval(() => hover.refresh(), 1000);
 
   const relayout = () => {
-    out = layout({ sessions: snap.sessions, hasLimits: limitBars(snap.limits).length > 0, maxWidth: lay.max_css });
+    out = layout({ sessions: snap.sessions, hasLimits: limitBars(snap.limits).length > 0, maxWidth: lay.max_css, maxPets });
     roster.sync(snap.sessions, T);
     if (out.width !== sentWidth) { sentWidth = out.width; bridge.setWidth(out.width); }
     hover.refresh(true);
@@ -53,7 +55,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       const e = roster.get(p.id);
       if (!e) continue;
       const tt = T + e.phase;
-      stepPet(e.pet, dt, tt);
+      if (budget.animate(e.session.state)) stepPet(e.pet, dt, tt);
       e.pet.alpha = roster.alpha(e, T);
       drawPet(x, e.pet, p.x, Y, u, tt);
       drawProgress(x, p.x, h - 4, e.session, T);
@@ -61,7 +63,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     }
     if (out.badgeX != null) drawBadge(x, out.badgeX, h, out.hidden, pen.font);
     if (out.limitsX != null) drawLimits(x, out.limitsX, h, limitBars(snap.limits));
-    setTimeout(frame, Math.max(0, 1000 / FPS - (performance.now() - now)));
+    setTimeout(frame, Math.max(0, 1000 / budget.fps - (performance.now() - now)));
   }
 
   function kick() {
@@ -75,6 +77,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   bridge.onLayout(l => { lay = l; relayout(); });
   bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
+  bridge.onSettings(s => { pen.sketch = s.pets.skin === 'sketch'; maxPets = s.pets.max_visible; relayout(); });
+  bridge.onPower(saving => { budget = frameBudget(saving); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;
 }
