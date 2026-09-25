@@ -353,7 +353,7 @@ Gdy wszystko zawiedzie, widżet pokazuje toast i kopiuje komendę wznowienia do 
 ## 9. Ingest i bezpieczeństwo
 
 - Serwer słucha wyłącznie na `127.0.0.1`. Każde żądanie wymaga tokenu z `endpoint.json`, a plik ma uprawnienia tylko dla bieżącego użytkownika.
-- Widżet nie wysyła niczego do sieci.
+- Widżet nie wysyła do sieci niczego poza jednym wyjątkiem, na który użytkownik zgodził się 2026-09-25: co 5 minut pyta `https://api.anthropic.com/api/oauth/usage` o zużycie planu Claude, z tokenem logowania Claude Code z `~/.claude/.credentials.json`. Tak samo robi `/usage` w Claude Code, a daje to dokładne czasy resetu bez sesji CLI. Token jest czytany przy każdym zapytaniu, trafia tylko do `api.anthropic.com` i nigdzie nie jest zapisywany ani logowany.
 - Z transkryptów przechowuje tylko tytuł, listę zadań i liczniki. Treść rozmów nie jest zapisywana.
 - `hook.exe` nie może zablokować ani spowolnić agenta: limit 300 ms, zawsze kod 0, brak wyjścia na stdout.
 
