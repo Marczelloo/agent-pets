@@ -128,6 +128,7 @@ mod tests {
         assert_eq!(s["progress"]["total"], 4);
         assert_eq!(s["started_at"], 1_000);
         assert!(s["context"].is_null());
+        assert!(s["router_task"].is_null());
         assert!(v["limits"].as_array().unwrap().is_empty());
     }
 

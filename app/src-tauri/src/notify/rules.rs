@@ -102,7 +102,7 @@ mod tests {
     fn sess(id: &str, state: State, since: i64, turn: Option<i64>) -> Session {
         Session { id: id.into(), agent: Agent::Claude, origin: Origin::Cli, title: format!("T-{id}"), cwd: String::new(),
             state, tool: None, progress: None, context: None, started_at: 0, last_activity: since, state_since: since,
-            turn_started_at: turn, jump: JumpTarget::default() }
+            turn_started_at: turn, jump: JumpTarget::default(), router_task: None }
     }
     fn snap(sessions: Vec<Session>, limits: Vec<Limit>) -> Snapshot { Snapshot { sessions, limits, now: 0 } }
     const ALL: Settings = Settings { needs_you: true, done: true, limits: true };

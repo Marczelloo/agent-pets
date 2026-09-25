@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-25T12:00:00.000Z",
+  "stallSeconds": 180,
+  "tasks": [
+    { "taskId": "t_run", "threadId": "01a0aaaa-0000-7000-8000-000000000001", "kind": "delegation",
+      "title": "Count Rust files in crates", "status": "running", "model": "gpt-6-luna",
+      "workingDirectory": "C:/work/project", "startedAt": "2026-09-25T11:58:00.000Z",
+      "updatedAt": "2026-09-25T11:59:50.000Z", "lastActivityAt": "2026-09-25T11:59:40.000Z", "blocked": false },
+    { "taskId": "t_fail", "threadId": "01a0aaaa-0000-7000-8000-000000000002", "kind": "delegation",
+      "title": "Refactor the parser", "status": "failed", "model": "gpt-6-sol",
+      "workingDirectory": "C:/work/project", "startedAt": "2026-09-25T11:40:00.000Z",
+      "updatedAt": "2026-09-25T11:50:00.000Z", "lastActivityAt": null, "blocked": false },
+    { "taskId": "t_pending", "threadId": null, "kind": "delegation", "title": "Not started yet",
+      "status": "pending", "model": null, "workingDirectory": "C:/work/project", "startedAt": null,
+      "updatedAt": "2026-09-25T11:59:59.000Z", "lastActivityAt": null, "blocked": false }
+  ]
+}

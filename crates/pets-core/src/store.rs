@@ -60,6 +60,7 @@ fn new_session(e: &Event) -> Session {
         state_since: e.ts,
         turn_started_at: None,
         jump: JumpTarget { session_id: e.session_id.clone(), ..Default::default() },
+        router_task: None,
     }
 }
 
@@ -71,6 +72,7 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(c) = d.context { s.context = Some(c); }
     if let Some(p) = d.pid { s.jump.pid = Some(p); }
     if let Some(a) = d.app { s.jump.app = Some(a); }
+    if let Some(r) = &d.router_task { s.router_task = Some(r.clone()); }
 }
 
 fn set(s: &mut Session, st: State, tool: Option<Tool>, now: i64) {
@@ -439,6 +441,17 @@ mod tests {
         s.apply(&ev(Kind::Prompt, 0));
         s.tick(Timing::default().to_ended_ms, &alive);
         assert_eq!(st(&s).0, State::Ended);
+    }
+
+    #[test]
+    fn router_task_sticks_until_the_next_router_update() {
+        let mut s = Store::new(Timing::default());
+        let rt = RouterTask { task_id: "t1".into(), status: "running".into(), last_activity_at: Some(5), blocked: false, stall_ms: 180_000 };
+        let mut m = ev(Kind::Meta, 10);
+        m.data.router_task = Some(rt.clone());
+        s.apply(&m);
+        s.apply(&ev(Kind::Meta, 20));
+        assert_eq!(s.session("s1").unwrap().router_task, Some(rt));
     }
 
     #[test]

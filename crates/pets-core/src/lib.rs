@@ -6,6 +6,7 @@ pub mod ingest;
 pub mod model;
 pub mod pid;
 pub mod rehydrate;
+pub mod router;
 pub mod replay;
 pub mod runtime;
 pub mod statusline_install;

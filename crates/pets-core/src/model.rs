@@ -51,6 +51,8 @@ pub struct Session {
     pub state_since: i64,
     pub turn_started_at: Option<i64>,
     pub jump: JumpTarget,
+    #[serde(default)]
+    pub router_task: Option<RouterTask>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,6 +90,19 @@ pub struct EventData {
     pub limits: Vec<Limit>,
     pub pid: Option<u32>,
     pub app: Option<App>,
+    pub router_task: Option<RouterTask>,
+}
+
+/// Zadanie Agent Routera powiązane z wątkiem Codexa (`~/.agent-router/status.json`).
+/// „Zdrowie” (aktywne, cisza, utknęło, zablokowane) liczy UI z `last_activity_at` w chwili rysowania.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct RouterTask {
+    pub task_id: String,
+    /// `pending`, `running`, `completed`, `failed`, `interrupted`, `quota_exhausted`
+    pub status: String,
+    pub last_activity_at: Option<i64>,
+    pub blocked: bool,
+    pub stall_ms: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
