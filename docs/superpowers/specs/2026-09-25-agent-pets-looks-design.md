@@ -167,3 +167,15 @@ Krok „Wygląd” dostaje galerię w wersji kompaktowej (mniejsze karty) i prze
 - **Ustawienia (Rust):** migracja `skin` → `style`, domyślne dla nowego pliku, nieznany styl, nieznany ruch, nadpisanie z nieznaną wartością, zapis bez `skin`, zachowanie nieznanych pól.
 - **Ustawienia (TS):** `lookFor` (nadpisanie pole po polu, brak nadpisania, aplikacja routera), widoki galerii i nadpisań (wybór karty zapisuje, „Jak domyślny” usuwa pole).
 - **Ręcznie:** zrzuty 7 stylów × 2 ruchy w pasku i w galerii; test użytkownika na żywo.
+
+## 8. Język angielski
+
+Zatwierdzone w rozmowie 2026-09-25 jako część tej samej gałęzi (wydanie 0.6.0).
+
+- **Ustawienie** `language: "auto" | "pl" | "en"`, domyślnie `auto`: polski, gdy język interfejsu Windows jest polski, w każdym innym przypadku angielski. Nieznana wartość → `auto`.
+- **Wybór:** zakładka Ogólne („Język / Language”) i mały wybór w rogu pierwszego kroku kreatora. Zmiana działa od razu, bez restartu.
+- **UI (TS):** słowniki `app/src/i18n/pl.ts` i `en.ts`; `en` ma typ słownika polskiego, więc brak klucza to błąd kompilacji. Odmiany i formaty czasu to funkcje w słowniku. Zakres: panel, tooltipy, HUD w pasku, ustawienia, kreator, galeria wyglądu, dane pokazowe.
+- **Rust:** `pets_core::i18n` (`Lang`, `resolve`, wykrycie języka Windows przez `GetUserDefaultUILanguage`). Teksty dostają `Lang` jawnie (bez globalnego stanu). Zakres: menu traya, powiadomienia (w tym przycisk), wyniki przejścia do sesji, opisy wykrywania i stanu integracji, wyniki kreatora, status rdzenia w trayu. Błąd wczytania ustawień zwraca rdzeń technicznie (ścieżka i błąd), a UI dokłada przetłumaczony opis.
+- **Instalator NSIS:** angielski i polski, wybór według języka Windows.
+- **Bez zmian:** logi (`eprintln!`), komunikaty testów, `pets-cli` (narzędzie deweloperskie), komentarze w kodzie i dokumenty projektowe (po polsku), nazwy akcji w scenach (wewnętrzne).
+- **Test pilnujący:** skan źródeł UI i aplikacji Tauri nie znajduje literałów z polskimi znakami poza słownikiem polskim, testami, logami i nazwami akcji scen.
