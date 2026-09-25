@@ -9,6 +9,7 @@ pub mod rehydrate;
 pub mod router;
 pub mod replay;
 pub mod runtime;
+pub mod settings;
 pub mod statusline_install;
 pub mod store;
 pub mod tail;
