@@ -31,11 +31,50 @@ pub struct Notifications { pub needs_you: bool, pub done: bool, pub limits: bool
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
-pub struct Pets { pub skin: Skin, pub max_visible: u8 }
+pub struct Pets {
+    /// `skin` to nazwa z wersji 0.5 (tylko `sketch`/`clean`).
+    #[serde(alias = "skin", deserialize_with = "or_default")]
+    pub style: Style,
+    #[serde(deserialize_with = "or_default")]
+    pub motion: Motion,
+    pub overrides: Overrides,
+    pub max_visible: u8,
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum Skin { #[default] Sketch, Clean }
+pub enum Style { Sketch, Clean, #[default] Sticker, Pixel, Neon, Ink, Pastel }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Motion { #[default] Calm, Anime }
+
+/// Wygląd agenta inny niż domyślny; brak pola = „jak domyślny”.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct Overrides {
+    #[serde(skip_serializing_if = "Option::is_none")] pub claude_code: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub codex: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub agent_router: Option<LookOverride>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct LookOverride {
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")] pub style: Option<Style>,
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")] pub motion: Option<Motion>,
+}
+
+/// Wartość z nowszej wersji (nieznany wariant) nie psuje wczytania całego pliku.
+fn or_default<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned + Default>(d: D) -> Result<T, D::Error> {
+    let v = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(v).unwrap_or_default())
+}
+
+fn or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
+    let v = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(v).ok())
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -43,7 +82,9 @@ pub enum PowerSaving { #[default] Auto, Always, Never }
 
 impl Default for Apps { fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true } } }
 impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
-impl Default for Pets { fn default() -> Self { Pets { skin: Skin::Sketch, max_visible: 5 } } }
+impl Default for Pets {
+    fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5 } }
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -101,7 +142,7 @@ mod tests {
         let s = Settings::default();
         assert!(!s.claude_plan_usage && !s.claude_statusline);
         assert!(s.apps.claude_code && s.apps.codex && s.apps.agent_router);
-        assert_eq!((s.pets.skin, s.pets.max_visible, s.power_saving, s.autostart), (Skin::Sketch, 5, PowerSaving::Auto, true));
+        assert_eq!((s.pets.style, s.pets.max_visible, s.power_saving, s.autostart), (Style::Sticker, 5, PowerSaving::Auto, true));
     }
 
     #[test]
@@ -119,7 +160,7 @@ mod tests {
         std::fs::write(&p, r#"{"version":1,"pets":{"skin":"clean"}}"#).unwrap();
         let l = load(&p);
         assert!(!l.first_run && l.error.is_none());
-        assert_eq!((l.settings.pets.skin, l.settings.pets.max_visible), (Skin::Clean, 5));
+        assert_eq!((l.settings.pets.style, l.settings.pets.max_visible), (Style::Clean, 5));
         assert!(l.settings.apps.codex);
     }
 
@@ -157,5 +198,55 @@ mod tests {
         let names: Vec<_> = std::fs::read_dir(d.path().join(".agent-pets")).unwrap().flatten()
             .map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         assert_eq!(names, vec!["settings.json".to_string()]);
+    }
+    #[test]
+    fn new_settings_look_like_the_app_icon() {
+        let p = Settings::default().pets;
+        assert_eq!((p.style, p.motion, p.overrides), (Style::Sticker, Motion::Calm, Overrides::default()));
+    }
+
+    fn load_str(json: &str) -> Loaded {
+        let (_d, p) = tmp();
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, json).unwrap();
+        load(&p)
+    }
+
+    #[test]
+    fn the_old_skin_field_becomes_the_style() {
+        let l = load_str(r#"{"version":1,"pets":{"skin":"sketch","max_visible":4}}"#);
+        assert!(l.error.is_none());
+        assert_eq!((l.settings.pets.style, l.settings.pets.max_visible), (Style::Sketch, 4));
+    }
+
+    #[test]
+    fn unknown_style_and_motion_fall_back_without_losing_the_rest() {
+        let l = load_str(r#"{"version":1,"autostart":false,"pets":{"style":"hologram","motion":"warp","max_visible":3}}"#);
+        assert!(l.error.is_none());
+        assert_eq!((l.settings.pets.style, l.settings.pets.motion, l.settings.pets.max_visible), (Style::Sticker, Motion::Calm, 3));
+        assert!(!l.settings.autostart);
+    }
+
+    #[test]
+    fn an_unknown_override_value_drops_only_that_field() {
+        let l = load_str(r#"{"version":1,"pets":{"overrides":{"codex":{"style":"x","motion":"anime"},"claude_code":{"style":"neon"}}}}"#);
+        assert!(l.error.is_none());
+        let o = l.settings.pets.overrides;
+        assert_eq!(o.codex, Some(LookOverride { style: None, motion: Some(Motion::Anime) }));
+        assert_eq!(o.claude_code, Some(LookOverride { style: Some(Style::Neon), motion: None }));
+        assert_eq!(o.agent_router, None);
+    }
+
+    #[test]
+    fn save_writes_style_never_skin_and_omits_empty_overrides() {
+        let (_d, p) = tmp();
+        let mut s = Settings::default();
+        s.pets.style = Style::Clean;
+        save(&p, &s).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
+        assert_eq!(v["pets"]["style"], "clean");
+        assert_eq!(v["pets"]["motion"], "calm");
+        assert!(v["pets"].get("skin").is_none());
+        assert_eq!(v["pets"]["overrides"], serde_json::json!({}));
     }
 }
