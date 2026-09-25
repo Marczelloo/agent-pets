@@ -21,6 +21,29 @@ describe('PetPainter', () => {
     expect(r.log).toContain('imageSmoothingEnabled=false');
     expect(r.log.find(l => l.startsWith('drawImage('))).toBeDefined();
   });
+  it('pixel art hardens the layer edges (alpha threshold), so pixels stay crisp', () => {
+    const layers: ReturnType<typeof recorder>[] = [];
+    const px = new Uint8ClampedArray([10, 20, 30, 40, 10, 20, 30, 200]);
+    const grab: SurfaceFactory = (w, h) => {
+      const r = recorder();
+      layers.push(r);
+      (r.ctx as unknown as { getImageData: () => unknown }).getImageData = () => ({ data: px });
+      return { canvas: { width: w, height: h } as HTMLCanvasElement, ctx: r.ctx };
+    };
+    new PetPainter(createPet('clawd', 'edit'), grab).frame(recorder().ctx, { ...frame, look: { style: 'pixel', motion: 'calm' } });
+    expect([px[3], px[7]]).toEqual([0, 255]);
+    expect(layers[0].log.some(l => l.startsWith('putImageData('))).toBe(true);
+  });
+  it('typing in anime is fast enough for trails', () => {
+    const p = new PetPainter(createPet('clawd', 'edit'), fake);
+    let ghosts = 0;
+    for (let f = 0; f < 90; f++) {
+      const r = recorder();
+      p.frame(r.ctx, { ...frame, dt: 1 / 60, t0: 1 + f / 60, look: { style: 'clean', motion: 'anime' } });
+      if (f > 30 && r.log.filter(l => l.startsWith('drawImage(')).length > 1) ghosts++;
+    }
+    expect(ghosts).toBeGreaterThan(20);
+  });
   it('trails show earlier frames only while the pet moves fast', () => {
     const p = new PetPainter(createPet('clawd', 'bash'), fake);
     const look = { style: 'clean' as const, motion: 'anime' as const };
