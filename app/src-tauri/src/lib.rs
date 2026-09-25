@@ -26,7 +26,7 @@ fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_wi
 #[tauri::command]
 fn jump(app: tauri::AppHandle, session_id: String) -> jump::JumpResult {
     let r = jump_to(&app, &session_id);
-    if r.method != "clipboard" && r.method != "none" { panel::hide(&app); }
+    if !r.needs_attention() { panel::hide(&app); }
     r
 }
 

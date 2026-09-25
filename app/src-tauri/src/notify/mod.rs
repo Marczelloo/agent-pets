@@ -59,7 +59,11 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
                 if sid.is_some() { toast = toast.add_button("Przejdź", "jump"); }
                 let _ = toast.on_activated(move |action| {
                     match (action.as_deref(), &sid) {
-                        (Some("jump"), Some(id)) => { crate::jump_to(&a, id); }
+                        (Some("jump"), Some(id)) => {
+                            // nic nie może zginąć po cichu: schowek albo porażkę pokazuje panel
+                            let r = crate::jump_to(&a, id);
+                            if r.needs_attention() { crate::panel::open_with_status(&a, Some(id.clone()), r.detail); }
+                        }
                         _ => crate::panel::open(&a, sid.clone()),
                     }
                     Ok(())

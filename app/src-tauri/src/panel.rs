@@ -72,6 +72,12 @@ pub fn open(app: &AppHandle, focus: Option<String>) {
     if let Some(id) = focus { let _ = app.emit_to("panel", "panel://focus", id); }
 }
 
+/// Otwiera panel z komunikatem w pasku statusu (np. wynik „Przejdź” z toastu).
+pub fn open_with_status(app: &AppHandle, focus: Option<String>, status: String) {
+    open(app, focus);
+    let _ = app.emit_to("panel", "panel://status", status);
+}
+
 pub fn hide(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("panel") { let _ = win.hide(); }
     app.state::<Panel>().0.lock().unwrap().hidden();

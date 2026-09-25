@@ -69,6 +69,7 @@ export default function App() {
     let unfocus: ReturnType<typeof setTimeout> | undefined;
     const un = [
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
+      listen<string>('panel://status', e => setStatus(e.payload)),
       listen<string>('panel://focus', e => {
         setStatus(null);
         setFocusId(e.payload);

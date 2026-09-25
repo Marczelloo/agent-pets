@@ -42,6 +42,11 @@ pub enum Step {
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct JumpResult { pub method: String, pub detail: String }
 
+impl JumpResult {
+    /// Schowek albo porażka: użytkownik musi przeczytać `detail`, więc panel zostaje otwarty z komunikatem.
+    pub fn needs_attention(&self) -> bool { self.method == "clipboard" || self.method == "none" }
+}
+
 fn id_char(c: char) -> bool { c.is_ascii_alphanumeric() || c == '_' || c == '-' }
 
 /// `^[A-Za-z0-9_-]{1,128}$`: tylko taki id trafia do URL-a i do argumentów procesu.
@@ -132,6 +137,13 @@ mod tests {
         let p = plan(&t(Agent::Codex, false));
         assert_eq!(p[0], Step::FocusProcess(42));
         assert!(p.iter().all(|s| !matches!(s, Step::DeepLink(_))));
+    }
+
+    #[test]
+    fn clipboard_and_failure_need_the_user_to_read_the_result() {
+        let r = |m: &str| JumpResult { method: m.into(), detail: String::new() };
+        assert!(r("clipboard").needs_attention() && r("none").needs_attention());
+        assert!(!r("deeplink").needs_attention() && !r("focus").needs_attention() && !r("terminal").needs_attention());
     }
 
     #[test]
