@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Cel:** 7 stylów rysowania (Szkic, Czysty, Naklejka, Pixel-art, Neon, Tusz, Pastel) rozróżnialnych w pasku, ruch Spokojny/Anime, nadpisania per agent i galeria z żywym podglądem w ustawieniach i kreatorze.
+**Cel:** (A) 7 stylów rysowania (Szkic, Czysty, Naklejka, Pixel-art, Neon, Tusz, Pastel) rozróżnialnych w pasku, ruch Spokojny/Anime, nadpisania per agent i galeria z żywym podglądem w ustawieniach i kreatorze. (B) interfejs po angielsku i polsku (taski 14–17).
 
 **Architektura:**
 - **Styl** (`app/src/styles/`) to dane i kilka flag czytanych przez `pen.ts` i `draw/body.ts`. `drawPet(..., look)` ustawia `pen.st` na czas wywołania; brak `look` = Czysty/Spokojny, czyli dokładnie dzisiejsze rysowanie (parytet z prototypem v6).
@@ -1502,5 +1502,357 @@ Uwaga: warstwa Pixel-art rysuje na kontekście z fabryki; główny kontekst ma `
 - [ ] **Step 5: Run** `cargo test --workspace` i `pnpm --dir app test` → PASS
 
 - [ ] **Step 6: Commit** `docs: looks verification and README highlights`
+
+---
+
+## Część B: język angielski (spec, sekcja 8)
+
+Kolejność: po taskach 1–13, żeby przetłumaczyć też teksty galerii. Global Constraints obowiązują; dodatkowo:
+- **Lang jawnie w Rust:** teksty dostają `Lang` parametrem albo z pola struktury (bez globalnego stanu, testy równoległe).
+- **Domyślny język w testach TS:** `pl` (moduł startuje z polskim słownikiem), więc istniejące asercje tekstów zostają.
+
+Review Focus dla części B:
+1. **Język zmieniony w trakcie:** tray, panel, pasek i okno ustawień przechodzą na nowy język bez restartu. Test: task 17 (TS) i ręcznie.
+2. **Windows po angielsku, brak pliku ustawień (pierwsze uruchomienie):** kreator od razu po angielsku. Test: task 14 (`resolve(Auto, …)`) i task 16 (`resolveLang`).
+3. **Brakujące tłumaczenie:** błąd kompilacji TS (`en: Dict`), a skan źródeł wyłapuje zapomniane polskie literały. Test: task 16.
+
+### Task 14: Rdzeń: ustawienie języka, `i18n`, teksty integracji
+
+**Files:**
+- Create: `crates/pets-core/src/i18n.rs`
+- Modify: `crates/pets-core/src/lib.rs`, `crates/pets-core/src/settings.rs`, `crates/pets-core/src/integrations.rs`, `crates/pets-core/Cargo.toml` (cecha `Win32_Globalization` w `windows`, jeśli rdzeń ma już `windows`; inaczej wykrycie w aplikacji, patrz niżej)
+
+**Interfaces:**
+- Produces:
+  - `enum Language { Auto, Pl, En }` (serde `snake_case`, domyślnie `Auto`, tolerancyjnie przez `or_default`), pole `Settings.language`;
+  - `pets_core::i18n::{Lang, resolve(setting: Language, system_polish: bool) -> Lang, tr(l: Lang, pl: &'static str, en: &'static str) -> &'static str}`;
+  - `integrations::{detect, status, enable, disable, uninstall_all}` dostają `lang: Lang` jako ostatni parametr;
+  - `settings::load` zwraca w `error` tekst techniczny `"{path}: {e}"` (bez polskiego opisu).
+
+- [ ] **Step 1: Testy**
+
+```rust
+// i18n.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Language;
+    #[test]
+    fn auto_follows_windows_and_explicit_choice_wins() {
+        assert_eq!(resolve(Language::Auto, true), Lang::Pl);
+        assert_eq!(resolve(Language::Auto, false), Lang::En);
+        assert_eq!(resolve(Language::Pl, false), Lang::Pl);
+        assert_eq!(resolve(Language::En, true), Lang::En);
+        assert_eq!(tr(Lang::En, "Tak", "Yes"), "Yes");
+    }
+}
+```
+
+```rust
+// settings.rs, tests
+    #[test]
+    fn language_defaults_to_auto_and_unknown_values_fall_back() {
+        assert_eq!(Settings::default().language, Language::Auto);
+        assert_eq!(load_str(r#"{"version":1,"language":"en"}"#).settings.language, Language::En);
+        assert_eq!(load_str(r#"{"version":1,"language":"klingon"}"#).settings.language, Language::Auto);
+    }
+```
+
+```rust
+// integrations.rs, tests
+    #[test]
+    fn texts_follow_the_language() {
+        let h = tempfile::tempdir().unwrap();
+        assert!(detect(AppId::Codex, h.path(), Lang::En).note.unwrap().starts_with("~/.codex not found"));
+        assert_eq!(status(AppId::Codex, h.path(), Lang::En).detail, "Nothing to install");
+        assert_eq!(status(AppId::ClaudeCode, h.path(), Lang::Pl).detail, "Hooki: brak");
+    }
+```
+
+Istniejące testy `integrations` i `settings` dostają `Lang::Pl` w wywołaniach (asercje polskich tekstów zostają); test uszkodzonego pliku sprawdza, że `error` zawiera ścieżkę.
+
+- [ ] **Step 2: Run** `cargo test -p pets-core` → FAIL (brak `i18n`, `Language`)
+
+- [ ] **Step 3: Implementacja**
+
+```rust
+//! Język tekstów pokazywanych użytkownikowi (tray, powiadomienia, opisy integracji). Logi zostają po polsku.
+use crate::settings::Language;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Lang { Pl, En }
+
+/// `Auto`: polski tylko przy polskim interfejsie Windows; każdy inny → angielski.
+pub fn resolve(setting: Language, system_polish: bool) -> Lang {
+    match setting { Language::Pl => Lang::Pl, Language::En => Lang::En, Language::Auto => if system_polish { Lang::Pl } else { Lang::En } }
+}
+
+pub fn tr(l: Lang, pl: &'static str, en: &'static str) -> &'static str { match l { Lang::Pl => pl, Lang::En => en } }
+
+/// Język interfejsu Windows (LANG_POLISH = 0x15 w młodszych bitach LANGID).
+#[cfg(windows)]
+pub fn system_polish() -> bool {
+    // SAFETY: funkcja bez argumentów, tylko odczyt ustawienia użytkownika.
+    let id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
+    id & 0x3ff == 0x15
+}
+#[cfg(not(windows))]
+pub fn system_polish() -> bool { std::env::var("LANG").map(|v| v.starts_with("pl")).unwrap_or(false) }
+```
+
+(Jeśli `pets-core` nie zależy od `windows`, `system_polish` trafia do `app/src-tauri/src/system.rs`, a rdzeń ma tylko `resolve`/`tr`.)
+
+Teksty w `integrations.rs` przez `tr(lang, …)` / `match lang` dla `format!`:
+
+| PL (dziś) | EN |
+|---|---|
+| Nie znaleziono ~/.claude. Uruchom Claude Code raz, potem włącz tutaj. | ~/.claude not found. Run Claude Code once, then turn it on here. |
+| Nie znaleziono ~/.codex. Uruchom Codex raz, potem włącz tutaj. | ~/.codex not found. Run Codex once, then turn it on here. |
+| Nie znaleziono ~/.agent-router (serwer MCP Agent Router). | ~/.agent-router not found (Agent Router MCP server). |
+| {path} jest uszkodzony ({e}) | {path} is damaged ({e}) |
+| Nic do instalowania | Nothing to install |
+| Hooki: zainstalowane / brak / niekompletne ({n}/9) | Hooks: installed / missing / incomplete ({n}/9) |
+| Nie mogę odczytać / zapisać {path}: {e} | Cannot read / write {path}: {e} |
+| Brak hook.exe w instalacji Agent Pets; zainstaluj aplikację ponownie. | hook.exe is missing from the Agent Pets install; reinstall the app. |
+| Nie udało się zapisać hooków w {path}: {e} | Could not write the hooks to {path}: {e} |
+| Nic do usunięcia | Nothing to remove |
+| Hooki usunięte z ustawień Claude Code (kopia: settings.json.agent-pets.bak). | Hooks removed from Claude Code settings (backup: settings.json.agent-pets.bak). |
+| {id}: błąd: {e} / Usunięto {path} | {id}: error: {e} / Removed {path} |
+
+Zawartość `enable` dla Claude Code (komunikat o instalacji hooków) tłumaczy się tak samo.
+
+- [ ] **Step 4: Run** `cargo test --workspace` → PASS po poprawieniu wywołań w aplikacji (task 15 podaje `lang`; w tym tasku aplikacja przekazuje `Lang::Pl` tymczasowo, żeby się kompilowała)
+
+- [ ] **Step 5: Commit** `feat(core): language setting and translatable integration texts`
+
+### Task 15: Aplikacja (Rust): tray, powiadomienia, przejście, kreator
+
+**Files:**
+- Modify: `app/src-tauri/src/{settings.rs,tray.rs,notify/rules.rs,notify/mod.rs,jump/exec.rs,lib.rs,core.rs}`
+
+**Interfaces:**
+- Consumes: `Lang`, `resolve`, `tr`, `system_polish` (task 14).
+- Produces: `settings::lang(&SettingsState) -> Lang` (bieżący język z ustawień i Windows); `SettingsView` ma pole `lang: Lang` (TS: `lang: 'pl' | 'en'`); `rules::Rules::set_lang(Lang)`; `jump::exec::run(steps, lang)`; `tray::relabel(app, lang)`; `core::failure_text(e, lang)`.
+
+- [ ] **Step 1: Testy**
+
+```rust
+// notify/rules.rs
+    #[test]
+    fn toasts_speak_english_when_asked() {
+        let mut r = Rules::new(ALL);
+        r.set_lang(Lang::En);
+        // ten sam scenariusz co test „done” po polsku (sesja b, 3 min)
+        /* … przygotowanie jak w istniejącym teście done … */
+        assert_eq!(t[0].title, "Agent finished");
+        assert_eq!(t[0].body, "T-b finished (3 min)");
+    }
+```
+
+(Scenariusz skopiowany z istniejącego testu, który sprawdza `"T-b skończył (3 min)"`.)
+
+```rust
+// jump/exec.rs
+    #[test]
+    fn failure_text_is_translated() {
+        assert_eq!(run(&[], Lang::En).detail, "Could not jump to the session");
+    }
+// core.rs
+    #[test]
+    fn failure_text_in_english() {
+        assert_eq!(failure_text(&anyhow::anyhow!("no home"), Lang::En), "Agent Pets: data core stopped (no home)");
+    }
+```
+
+- [ ] **Step 2: Run** `cargo test -p agent-pets` (nazwa pakietu aplikacji z `Cargo.toml`) → FAIL
+
+- [ ] **Step 3: Implementacja**
+
+Teksty:
+
+| Miejsce | PL | EN |
+|---|---|---|
+| tray | Ustawienia / Zakończ Agent Pets | Settings / Quit Agent Pets |
+| toast needs | Agent czeka na Ciebie / {name} czeka na Ciebie | Agent needs you / {name} is waiting for you |
+| toast done | Agent skończył / {name} skończył ({m} min) | Agent finished / {name} finished ({m} min) |
+| toast limit | {who}: limit {win} / Zużyto {p}% limitu {win} | {who}: {win} limit / {p}% of the {win} limit used |
+| okno limitu | 5h / tydzień | 5h / weekly |
+| przycisk toastu | Przejdź | Open |
+| jump | Otworzono sesję w aplikacji / Przełączono na okno sesji / Skopiowano komendę: {t} / Wznów ręcznie: {t} / Nie udało się przejść do sesji / Sesja już nie istnieje | Opened the session in the app / Switched to the session window / Copied the command: {t} / Resume manually: {t} / Could not jump to the session / The session no longer exists |
+| status rdzenia | Agent Pets: rdzeń danych nie działa ({e}) | Agent Pets: data core stopped ({e}) |
+| zapis ustawień | Nie udało się zapisać {path}: {e} | Could not save {path}: {e} |
+
+- `settings.rs`: `lang(st)` = `resolve(current.language, system_polish())`; `settings_get` wypełnia `lang`; `settings_set` po zapisie, gdy zmienił się język: `tray::relabel(&app, lang)` i `notify` dostaje język razem z ustawieniami (istniejące `set_settings` w `notify/mod.rs` woła też `rules.set_lang`); `integrations_list`, `integration_set`, `wizard_finish`, `diagnostics` przekazują `lang`.
+- `tray.rs`: `MenuItem` trzymane w stanie (`TrayItems { settings, quit }`), `relabel` woła `set_text`; `build` przyjmuje `lang`.
+- `lib.rs`: „Sesja już nie istnieje” przez `tr`; `repair_integrations` i `uninstall_cli` z `Lang` z ustawień (odinstalowanie: `resolve(load(..).settings.language, system_polish())`).
+
+- [ ] **Step 4: Run** `cargo test --workspace` → PASS
+
+- [ ] **Step 5: Commit** `feat(app): tray, notifications, jump results and wizard messages in English or Polish`
+
+### Task 16: UI: słowniki i przeniesienie tekstów
+
+**Files:**
+- Create: `app/src/i18n/index.ts`, `app/src/i18n/pl.ts`, `app/src/i18n/en.ts`, `app/src/i18n/i18n.test.ts`
+- Modify: wszystkie pliki z tekstami dla użytkownika: `tooltip/text.ts`, `panel/{App.tsx,main.tsx,model.ts}`, `stage/{router.ts,demo.ts,hud.ts}`, `settings/{SettingsView.tsx,Wizard.tsx,main.tsx,model.ts}`, `settings/look/*.tsx`, `look.ts` (etykiety stylów i ruchu)
+
+**Interfaces:**
+- Produces: `type Lang = 'pl' | 'en'`; `t(): Dict` (bieżący słownik), `setLang(l: Lang)`, `lang(): Lang`, `resolveLang(setting: 'auto'|'pl'|'en', languages?: readonly string[]): Lang`; `type Dict = typeof pl`; `export const en: Dict`.
+
+Struktura słownika (klucze pogrupowane jak pliki), przykłady:
+
+```ts
+// app/src/i18n/pl.ts
+const plural = (n: number, one: string, few: string, many: string) =>
+  n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
+export const pl = {
+  agent: { claude: 'Claude Code', codex: 'Codex' },
+  origin: { cli: 'CLI', desktop: 'aplikacja', router: 'Agent Router' },
+  tool: { edit: 'Edytuje pliki', bash: 'Uruchamia komendy', /* … wszystkie z tooltip/text.ts */ },
+  state: { thinking: 'Myśli', needs_you: 'Czeka na Ciebie', /* … */ },
+  time: {
+    now: 'teraz', secAgo: (s: number) => `${s} s temu`, minAgo: (m: number) => `${m} min temu`, hAgo: (h: number) => `${h} h temu`,
+    resetSoon: 'reset wkrótce', reset: (when: string) => `reset ${when}`, days: ['nd', 'pn', 'wt', 'śr', 'czw', 'pt', 'sob'],
+  },
+  window: { five_hour: '5h', weekly: 'tydzień' },
+  sessions: (n: number) => `${n} ${plural(n, 'sesja', 'sesje', 'sesji')}`,
+  more: (n: number) => `Jeszcze ${n} ${plural(n, 'sesja', 'sesje', 'sesji')}`,
+  /* panel, tooltip, settings (zakładki, wiersze, opisy), wizard, look (style, ruch, sceny, galeria), diag (raport) … */
+};
+```
+
+```ts
+// app/src/i18n/en.ts
+import type { Dict } from './index';
+export const en: Dict = {
+  agent: { claude: 'Claude Code', codex: 'Codex' },
+  origin: { cli: 'CLI', desktop: 'app', router: 'Agent Router' },
+  tool: { edit: 'Editing files', bash: 'Running commands', /* … */ },
+  state: { thinking: 'Thinking', needs_you: 'Needs you', /* … */ },
+  time: {
+    now: 'now', secAgo: s => `${s}s ago`, minAgo: m => `${m} min ago`, hAgo: h => `${h} h ago`,
+    resetSoon: 'resets soon', reset: when => `resets ${when}`, days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  },
+  window: { five_hour: '5h', weekly: 'weekly' },
+  sessions: n => `${n} ${n === 1 ? 'session' : 'sessions'}`,
+  more: n => `${n} more ${n === 1 ? 'session' : 'sessions'}`,
+  /* … */
+};
+```
+
+```ts
+// app/src/i18n/index.ts
+import { en } from './en';
+import { pl } from './pl';
+export type Dict = typeof pl;
+export type Lang = 'pl' | 'en';
+let cur: Lang = 'pl';
+export const lang = (): Lang => cur;
+export const t = (): Dict => (cur === 'en' ? en : pl);
+export function setLang(l: Lang): void { cur = l; }
+/** `auto`: polski tylko dla polskiego języka przeglądarki (WebView2 = język Windows). */
+export function resolveLang(setting: 'auto' | 'pl' | 'en', languages: readonly string[] = globalThis.navigator?.languages ?? []): Lang {
+  if (setting !== 'auto') return setting;
+  return languages[0]?.toLowerCase().startsWith('pl') ? 'pl' : 'en';
+}
+```
+
+Godziny resetu po angielsku w formacie 12-godzinnym z `Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })`, po polsku jak dziś (`HH:MM`).
+
+- [ ] **Step 1: Testy `i18n.test.ts`**
+
+```ts
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { resolveLang, setLang, t } from './index';
+import { formatAgo, badgeTooltip } from '../tooltip/text';
+
+afterEach(() => setLang('pl'));
+
+describe('i18n', () => {
+  it('auto picks Polish only for a Polish system', () => {
+    expect(resolveLang('auto', ['pl-PL', 'en'])).toBe('pl');
+    expect(resolveLang('auto', ['en-GB', 'pl'])).toBe('en');
+    expect(resolveLang('auto', [])).toBe('en');
+    expect(resolveLang('pl', ['en-US'])).toBe('pl');
+  });
+  it('switches texts at once', () => {
+    setLang('en');
+    expect(formatAgo(125_000)).toBe('2 min ago');
+    expect(badgeTooltip([{} as never, {} as never]).title).toBe('2 more sessions');
+    expect(t().sessions(1)).toBe('1 session');
+    setLang('pl');
+    expect(t().sessions(5)).toBe('5 sesji');
+  });
+  it('no Polish literals left outside the Polish dictionary', () => {
+    const roots = ['src', 'src-tauri/src'].map(r => join(__dirname, '..', '..', r));
+    const skip = /(\.test\.|testing\.ts|i18n[\\/]pl\.ts|renderer[\\/]scenes\.ts|[\\/]i18n\.rs$)/;
+    const files: string[] = [];
+    const walk = (d: string) => readdirSync(d).forEach(n => { const p = join(d, n); statSync(p).isDirectory() ? walk(p) : /\.(tsx?|rs)$/.test(n) && !skip.test(p) && files.push(p); });
+    roots.forEach(walk);
+    const bad: string[] = [];
+    for (const f of files) {
+      let src = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+      if (f.endsWith('.rs')) src = src.split('#[cfg(test)]')[0].replace(/(eprintln|println|expect|panic)!?\([^\n]*/g, '');
+      for (const m of src.match(/(["'`])(?:(?!\1)[^\\\n]|\\.)*\1|>[^<>{}]+</g) ?? []) if (/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(m)) bad.push(`${f}: ${m.slice(0, 60)}`);
+    }
+    expect(bad).toEqual([]);
+  });
+});
+```
+
+(Rust w tym skanie: teksty tłumaczone w taskach 14–15 są w `tr(lang, "pl", "en")` — polski literał w `tr(` jest dozwolony; skan pomija linie z `tr(` i `Lang::Pl =>`: dopisać do wyrażenia czyszczącego `.replace(/(tr\(|Lang::Pl\s*=>)[^\n]*/g, '')`.)
+
+- [ ] **Step 2: Run** `pnpm --dir app test i18n` → FAIL (brak modułu, potem lista polskich literałów)
+
+- [ ] **Step 3: Implementacja:** słowniki i zamiana literałów na `t().…` we wszystkich plikach z listy, aż skan jest pusty. Etykiety `STYLE_LABEL`/`MOTION_LABEL` przechodzą do słownika (`t().look.style[id]`). Dane pokazowe (`stage/demo.ts`, `settings/main.tsx`) też ze słownika. Błąd ustawień z rdzenia: `t().settings.broken(err)` („{err}; używam ustawień domyślnych” / „{err}; using default settings”).
+
+- [ ] **Step 4: Run** `pnpm --dir app test` i `tsc --noEmit` → PASS (istniejące testy po polsku, bo domyślnie `pl`)
+
+- [ ] **Step 5: Commit** `feat(ui): Polish and English dictionaries for every user-facing text`
+
+### Task 17: Wybór języka, przełączanie na żywo, instalator, README
+
+**Files:**
+- Modify: `crates/pets-core/src/settings.rs` (nic, pole jest z taska 14), `app/src/types.ts` (`language`, `SettingsView.lang`), `app/src/settings/{SettingsView.tsx,Wizard.tsx,main.tsx,model.ts}`, `app/src/stage/stage.ts`, `app/src/panel/App.tsx`, `app/src/settings/views.test.tsx`, `app/src-tauri/tauri.conf.json`, `README.md`, `docs/looks-verification.md`
+
+- [ ] **Step 1: Testy (`views.test.tsx`)**
+
+```ts
+  it('general tab offers the language, and English renders English', () => {
+    const s = { ...defaultSettings(), language: 'en' as const };
+    setLang('en');
+    const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="general" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    setLang('pl');
+    expect(html).toContain('Język / Language');
+    expect(html).toContain('Start with Windows');
+    expect(html).not.toContain('Uruchamiaj z Windows');
+  });
+  it('the wizard shows a language picker on its first step', () => {
+    const html = renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} />);
+    expect(html).toContain('aria-label="Język / Language"');
+  });
+```
+
+- [ ] **Step 2: Run** `pnpm --dir app test views` → FAIL
+
+- [ ] **Step 3: Implementacja**
+- `types.ts`: `language: 'auto' | 'pl' | 'en'` w `Settings`; `defaultSettings()` z `language: 'auto'`.
+- Wiersz w zakładce Ogólne: `<select aria-label="Język / Language">` z opcjami „Automatycznie / Automatic”, „Polski”, „English”.
+- Kreator: ten sam `select` w nagłówku pierwszego kroku; zmiana ustawia `draft.language` i od razu `setLang(resolveLang(v))` (kreator przerenderowuje się w nowym języku).
+- Na żywo: `stage.ts` (`onSettings`), `panel/App.tsx` (`pets://settings`, `settings_get`), `settings/main.tsx` (`reload` i zdarzenie) wołają `setLang(resolveLang(s.language))` przed ustawieniem stanu.
+- `tauri.conf.json`: `bundle.windows.nsis.languages: ["English", "Polish"]`, `displayLanguageSelector: false`.
+- README: usunięte zdanie „The app's interface is in Polish for now”; w Highlights „English and Polish UI (follows Windows)”.
+- `docs/looks-verification.md`: wiersze „Windows po angielsku: kreator i pasek po angielsku”, „Zmiana języka na żywo”, „Instalator po polsku/angielsku”.
+
+- [ ] **Step 4: Run** `cargo test --workspace` i `pnpm --dir app test` → PASS
+
+- [ ] **Step 5: Ręcznie:** `settings.html` i `panel.html` w podglądzie z `language: en`; zrzut do obejrzenia.
+
+- [ ] **Step 6: Commit** `feat: language picker (auto, Polski, English), live switching, bilingual installer`
+
 
 Po tym: przegląd całej gałęzi (reviewer na najmocniejszym modelu), poprawki, test użytkownika na żywo (`pnpm tauri dev` albo instalator), scalenie i push dopiero po zgodzie.
