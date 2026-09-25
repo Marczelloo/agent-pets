@@ -1,0 +1,43 @@
+# Wydanie: tag v* → testy, instalator NSIS, szkic wydania w GitHub Releases (publikacja ręczna).
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - run: cargo test --workspace
+      - run: pnpm test
+        working-directory: app
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tagName: ${{ github.ref_name }}
+          releaseName: Agent Pets ${{ github.ref_name }}
+          releaseBody: |
+            Instalator Windows (x64): pobierz plik `*-setup.exe` poniżej.
+            Instalator nie jest podpisany, więc Windows SmartScreen może pokazać ostrzeżenie: „Więcej informacji” → „Uruchom mimo to”.
+          releaseDraft: true
+          prerelease: false

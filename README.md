@@ -2,7 +2,7 @@
 
 Animated pets that live in the Windows 11 taskbar and show what your coding agents are doing: **Claude Code**, **OpenAI Codex** and **Agent Router** tasks. Each session gets its own pet. The pet codes at a desk, types commands into a terminal, reads files, catches web pages with a butterfly net, waves when it needs you, dances when it's done, and naps when idle. Progress, context usage and rate limits show up next to it.
 
-> **Status: early development.** The data core, the taskbar stage with live pets, the panel, "jump to session" and notifications work. Installer and settings come next. What you can run today is listed in [What works now](#what-works-now).
+> **Status: public beta (0.5).** Install it from [GitHub Releases](https://github.com/Marczelloo/agent-pets/releases), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
 
 Design documents (spec, plan, spike reports) are written in Polish.
 
@@ -20,9 +20,29 @@ Design documents (spec, plan, spike reports) are written in Polish.
 | Agent Router tasks: title, health, failures, router badge | ✅ | from `~/.agent-router/status.json`, see [Agent Router tasks](#agent-router-tasks) |
 | Record and replay of session events | ✅ | `pets-cli run --record`, `pets-cli replay` |
 | **Visual prototype** of the pets (animations, props, sketch style) | ✅ Prototype | open `prototype/index.html` in a browser |
-| Installer, settings, autostart | ⏳ Next phases | see [Roadmap](#roadmap) |
+| **Installer, first-run wizard, settings**, autostart, power saving | ✅ | [Install](#install) |
+| More agents (opencode, Gemini CLI and others), statistics | ⏳ Next phases | see [Roadmap](#roadmap) |
 
-## Requirements
+## Install
+
+1. Download `Agent Pets_<version>_x64-setup.exe` from [GitHub Releases](https://github.com/Marczelloo/agent-pets/releases).
+2. Run it. The installer is not code-signed yet, so Windows SmartScreen may warn you: choose **More info → Run anyway**. It installs for your user only, no administrator rights.
+3. The first-run wizard asks:
+   - which apps get pets. It shows the ones it found: Claude Code (`~/.claude`), Codex (`~/.codex`), Agent Router (`~/.agent-router`). For Claude Code it installs hooks in `~/.claude/settings.json` and keeps a backup;
+   - whether to fetch Claude plan limits from Anthropic (off by default, see [Claude rate limits](#claude-rate-limits));
+   - notifications and starting with Windows;
+   - the look: sketchy or clean.
+4. Restart open Claude Code sessions so they pick up the hooks.
+
+Change anything later in **Settings**: right-click the tray icon, or the ⚙ button in the panel. Running Agent Pets again from the Start menu opens Settings too.
+
+**Uninstall** from Windows Settings → Apps. It removes the hooks (and the statusline pass-through, restoring your previous statusline), the autostart entry and the files in `~/.agent-pets`. Tick "delete app data" to remove your settings as well.
+
+**Power saving:** on battery or with Windows energy saver on, the pets draw at 10 frames per second and only busy pets move. Set it to always or never in Settings → Pets.
+
+## Build from source
+
+### Requirements
 
 - Windows 11
 - [Rust](https://rustup.rs) 1.93 or newer (MSVC toolchain)
@@ -30,7 +50,7 @@ Design documents (spec, plan, spike reports) are written in Polish.
 - Optional: Python 3 (only for the fixture anonymizer)
 - Claude Code and/or Codex, if you want to see real sessions
 
-## Setup
+### Setup
 
 ```powershell
 git clone https://github.com/Marczelloo/agent-pets.git
@@ -42,7 +62,7 @@ pnpm install
 pnpm test
 ```
 
-### Connect Claude Code (hooks)
+#### Connect Claude Code (hooks) without the wizard
 
 Claude Code reports session state through hooks. `hook.exe` is tiny: it forwards each hook payload to the local data core and always exits with code 0 within about 0.3 s, even when the core isn't running. It never blocks or slows down Claude.
 
@@ -133,7 +153,7 @@ Nothing already going on when the app starts is reported. To turn toasts off, us
 
 Codex limits come from its session files. For Claude there are three sources; the newest reading wins:
 
-- **Your Claude plan** (main source). Every 5 minutes the app asks `https://api.anthropic.com/api/oauth/usage` for your plan usage, the same request `/usage` in Claude Code makes, with the login Claude Code keeps in `~/.claude/.credentials.json`. It gives exact percentages and reset times at once, with no session running. The token is read for each request, sent only to `api.anthropic.com` and never stored or logged. If you are not logged in to Claude Code, or the token has expired, the other two sources remain.
+- **Your Claude plan** (opt-in in the wizard or Settings → Limits). Every 5 minutes the app asks `https://api.anthropic.com/api/oauth/usage` for your plan usage, the same request `/usage` in Claude Code makes, with the login Claude Code keeps in `~/.claude/.credentials.json`. It gives exact percentages and reset times at once, with no session running. The token is read for each request, sent only to `api.anthropic.com` and never stored or logged. If you are not logged in to Claude Code, or the token has expired, the other two sources remain.
 - **The Claude app.** It saves your plan usage every 5 to 15 minutes in `plan-usage-history.json` in its data folder. Agent Pets reads the latest sample (5h and weekly percent) while the Claude app runs. The file has no reset times.
 - **Statusline pass-through** (optional, not needed when the plan request works). Claude Code in the terminal passes the exact limits with reset times to its statusline command. `hook.exe --agent-pets-statusline` forwards them to the widget and prints exactly what your previous statusline printed (nothing, if you had none). Only CLI sessions run the statusline, the Claude app does not.
 
@@ -199,7 +219,8 @@ tools/              fixture anonymizer and its test, CPU measurement
 3. ~~Phase 2: taskbar stage in Tauri with the live pets, tooltip, overflow~~
 4. ~~Phase 3: panel with sessions and limits, "jump to session", Windows notifications, Claude rate limits~~
 5. ~~Phase 4: Agent Router task state file~~
-6. **Phase 5:** installer, settings, autostart, power-saving mode
+6. ~~Phase 5: installer, first-run wizard, settings, autostart, power-saving mode~~
+7. **Next:** more agents (opencode, t3code, zcode, Gemini CLI, Grok), speech bubbles, subagents, statistics
 
 ## License
 

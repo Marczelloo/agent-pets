@@ -4,3 +4,4 @@ spikes/*/src-tauri/target
 app/node_modules
 app/dist
 app/src-tauri/gen
+app/src-tauri/resources
