@@ -3,6 +3,7 @@ import { createPet, drawPet, pen, setRng } from './index';
 import { rrP, shp } from './pen';
 import { STYLES } from '../styles';
 import { recorder, seeded } from './testing';
+import type { StyleId } from '../types';
 
 setRng(seeded(5).next);
 pen.font = 'x';
@@ -29,5 +30,22 @@ describe('styles', () => {
     const plain = draw();
     draw({ style: 'sketch', motion: 'calm' });
     expect(draw()).toEqual(plain);
+  });
+  const trace = (style: StyleId, skin: 'clawd' | 'kodek' = 'clawd', u = 0.3) => {
+    const c = createPet(skin, 'edit');
+    const r = recorder();
+    drawPet(r.ctx, c, 60, 40, u, 1, { style, motion: 'calm' });
+    return r.log;
+  };
+  it('sticker: at least 2 px outline in the taskbar and gradient fills', () => {
+    const log = trace('sticker');
+    const widths = log.filter(l => l.startsWith('lineWidth=')).map(l => +l.slice(10));
+    expect(Math.max(...widths)).toBeGreaterThanOrEqual(2);
+    expect(log.some(l => l.startsWith('createLinearGradient('))).toBe(true);
+  });
+  it('sticker: Clawd smiles and blushes, Kodek wears headphones', () => {
+    expect(trace('sticker', 'clawd', 1).length).toBeGreaterThan(trace('clean', 'clawd', 1).length);
+    const k = trace('sticker', 'kodek', 1).join('\n');
+    expect(k).toContain('#E8E6E0');
   });
 });
