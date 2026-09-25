@@ -159,8 +159,7 @@ mod tests {
         let shift = crate::time::now_ms() - 60_000 - lines.iter().filter_map(ts).max().unwrap();
         lines.into_iter().map(|mut v| {
             if let Some(t) = ts(&v) { v["timestamp"] = crate::time::rfc3339(t + shift).into(); }
-            v.to_string() + "
-"
+            v.to_string() + "\n"
         }).collect()
     }
 
