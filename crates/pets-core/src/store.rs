@@ -29,7 +29,15 @@ pub struct Store {
     limits: Vec<Limit>,
     /// czas odczytu każdego limitu (równoległe do `limits`): starszy odczyt nie nadpisuje nowszego
     limits_ts: Vec<i64>,
+    /// Zegar rdzenia: najpóźniejszy z `tick(now)` i czasów zdarzeń. Zdarzenia z plików przychodzą z opóźnieniem,
+    /// więc minimalny czas stanu liczymy od chwili, w której rdzeń go zobaczył, a nie od czasu w pliku.
+    clock: i64,
+    shown_at: BTreeMap<String, i64>,
 }
+
+/// Sesja cicha dłużej niż próg zakończenia plus tyle to stary wątek (np. dotknięty przez aplikację Codex),
+/// a nie sesja, która właśnie ucichła: znika od razu, bez stanu „zakończył” i machania.
+const LONG_DEAD_MS: i64 = 60_000;
 
 fn new_session(e: &Event) -> Session {
     let origin = e.data.origin.unwrap_or(match e.source {
@@ -74,7 +82,8 @@ fn set(s: &mut Session, st: State, tool: Option<Tool>, now: i64) {
 impl Store {
     pub fn new(timing: Timing) -> Self {
         Store { timing, sessions: BTreeMap::new(), pending: BTreeMap::new(),
-                ended_at: BTreeMap::new(), limits: Vec::new(), limits_ts: Vec::new() }
+                ended_at: BTreeMap::new(), limits: Vec::new(), limits_ts: Vec::new(),
+                clock: i64::MIN, shown_at: BTreeMap::new() }
     }
 
     pub fn session(&self, id: &str) -> Option<&Session> { self.sessions.get(id) }
@@ -127,6 +136,8 @@ impl Store {
         if e.kind == Kind::Limits { return out; }
 
         let dwell = self.timing.dwell_ms;
+        let arrival = self.clock.max(e.ts);
+        self.clock = arrival;
         // nowa sesja przyjmuje pierwszy stan od razu, bez czekania na minimalny czas
         let is_new = !self.sessions.contains_key(&e.session_id);
         let s = self.sessions.entry(e.session_id.clone()).or_insert_with(|| new_session(e));
@@ -164,8 +175,10 @@ impl Store {
             if s.state == State::Ended { self.ended_at.remove(&e.session_id); }
             if (s.state, s.tool) == (st, if st == State::Working { tool } else { None }) {
                 self.pending.remove(&e.session_id);
-            } else if is_new || e.ts - s.state_since >= dwell || s.state == State::Ended {
+            } else if is_new || arrival - self.shown_at.get(&e.session_id).copied().unwrap_or(s.state_since) >= dwell
+                || s.state == State::Ended {
                 set(s, st, tool, e.ts);
+                self.shown_at.insert(e.session_id.clone(), arrival);
                 self.pending.remove(&e.session_id);
             } else {
                 self.pending.insert(e.session_id.clone(), (st, tool));
@@ -177,6 +190,7 @@ impl Store {
 
     pub fn tick(&mut self, now: i64, alive: &dyn Fn(u32) -> bool) -> Vec<Change> {
         let t = self.timing;
+        self.clock = self.clock.max(now);
         let mut out = Vec::new();
         // po resecie stare zużycie nic nie znaczy: „brak danych” aż do nowego odczytu
         if self.retain_limits(|l| l.resets_at.map(|r| r > now).unwrap_or(true)) {
@@ -191,13 +205,18 @@ impl Store {
             }
             let before = (s.state, s.tool);
             if let Some((st, tool)) = self.pending.get(id).copied() {
-                if now - s.state_since >= t.dwell_ms {
+                if now - self.shown_at.get(id).copied().unwrap_or(s.state_since) >= t.dwell_ms {
                     set(s, st, tool, now);
+                    self.shown_at.insert(id.clone(), now);
                     self.pending.remove(id);
                 }
             }
             let quiet = now - s.last_activity;
             let dead = s.jump.pid.map(|p| !alive(p)).unwrap_or(false);
+            if quiet >= t.to_ended_ms + LONG_DEAD_MS {
+                removed.push(id.clone());
+                continue;
+            }
             if quiet >= t.to_ended_ms || dead {
                 set(s, State::Ended, None, now);
                 self.ended_at.insert(id.clone(), now);
@@ -218,6 +237,7 @@ impl Store {
             self.sessions.remove(&id);
             self.ended_at.remove(&id);
             self.pending.remove(&id);
+            self.shown_at.remove(&id);
             out.push(Change::Removed(id));
         }
         out
@@ -386,6 +406,39 @@ mod tests {
         assert_eq!(s.limits(), &[lim(20.0)]);
         assert!(matches!(ch.as_slice(), [Change::Limits(_)]));
         assert!(s.session("c1").is_none(), "samo zdarzenie limitów nie tworzy sesji");
+    }
+
+    #[test]
+    fn a_tool_read_late_from_a_file_is_still_shown_for_the_minimum_time() {
+        // Rollout Codexa: początek i koniec narzędzia (0,8 s) docierają razem, długo po zapisie w pliku.
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.tick(60_000, &alive);
+        s.apply(&tool(Tool::Bash, 59_000));
+        s.apply(&ev(Kind::ToolEnd, 59_800));
+        assert_eq!(st(&s), (State::Working, Some(Tool::Bash)), "widać narzędzie, choć jego koniec już przyszedł");
+        s.tick(60_250, &alive);
+        assert_eq!(st(&s), (State::Working, Some(Tool::Bash)));
+        s.tick(60_600, &alive);
+        assert_eq!(st(&s), (State::Thinking, None));
+    }
+
+    #[test]
+    fn a_long_dead_thread_disappears_without_waving() {
+        // Aplikacja Codex dotyka starych wątków: ich ostatnia aktywność jest sprzed dni.
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        let ch = s.tick(3 * 86_400_000, &alive);
+        assert!(s.session("s1").is_none());
+        assert_eq!(ch, vec![Change::Removed("s1".into())], "bez stanu „zakończył” i machania");
+    }
+
+    #[test]
+    fn a_session_going_quiet_now_still_says_goodbye() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.tick(Timing::default().to_ended_ms, &alive);
+        assert_eq!(st(&s).0, State::Ended);
     }
 
     #[test]

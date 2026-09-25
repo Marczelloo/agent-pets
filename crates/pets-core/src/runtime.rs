@@ -65,6 +65,8 @@ impl Runtime {
         let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
         for f in keep_for_rehydration(&recent, &live_ids) { rt.poll_file(&f); }
         if let Some(claude::desktop_usage::Usage::Limits(e)) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
+        // jeden takt przed pierwszą migawką: stare wątki z niedawno dotkniętych plików znikają, zanim się pokażą
+        rt.store.tick(crate::time::now_ms(), &pid::is_alive);
         let (ftx, files) = channel();
         rt._watcher = Some(watch(&roots, ftx)?);
         rt.files = Some(files);
@@ -149,15 +151,38 @@ mod tests {
         assert_eq!(five.map(|l| l.used_pct), Some(42.0));
     }
 
+    /// Nagranie z czasami przesuniętymi tak, że ostatnie zdarzenie było przed chwilą.
+    fn fresh(path: &str) -> String {
+        let lines: Vec<serde_json::Value> = std::fs::read_to_string(path).unwrap().lines()
+            .map(|l| serde_json::from_str(l).unwrap()).collect();
+        let ts = |v: &serde_json::Value| v["timestamp"].as_str().and_then(crate::time::rfc3339_ms);
+        let shift = crate::time::now_ms() - 60_000 - lines.iter().filter_map(ts).max().unwrap();
+        lines.into_iter().map(|mut v| {
+            if let Some(t) = ts(&v) { v["timestamp"] = crate::time::rfc3339(t + shift).into(); }
+            v.to_string() + "
+"
+        }).collect()
+    }
+
     #[test]
     fn rehydrates_recent_codex_rollouts() {
         let h = home();
         let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/codex/router-task.jsonl");
         // zapis zamiast fs::copy: kopiowanie na Windows zachowuje starą datę modyfikacji,
         // a odtwarzamy tylko pliki zmienione w ostatnich 30 minutach
-        std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-test.jsonl"), std::fs::read(fixture).unwrap()).unwrap();
+        std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-test.jsonl"), fresh(fixture)).unwrap();
         let rt = Runtime::start(cfg(&h)).unwrap();
         assert!(rt.store().sessions().iter().any(|s| s.agent == Agent::Codex && s.origin == Origin::Router));
+    }
+
+    #[test]
+    fn long_dead_rollouts_touched_recently_do_not_appear_at_startup() {
+        // aplikacja Codex zmienia daty starych rolloutów; ich zdarzenia są sprzed dni, więc zwierzak nie ma się pojawiać
+        let h = home();
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/codex/router-task.jsonl");
+        std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-old.jsonl"), std::fs::read(fixture).unwrap()).unwrap();
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        assert!(rt.store().sessions().is_empty());
     }
 
     #[test]

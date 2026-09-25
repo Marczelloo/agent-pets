@@ -13,6 +13,21 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+/// Milisekundy od epoki jako `YYYY-MM-DDTHH:MM:SS.mmmZ` (algorytm civil_from_days H. Hinnanta).
+pub fn rfc3339(ms: i64) -> String {
+    let (days, rem) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z", rem / 3_600_000, rem / 60_000 % 60, rem / 1000 % 60, rem % 1000)
+}
+
 pub fn rfc3339_ms(s: &str) -> Option<i64> {
     let b = s.as_bytes();
     if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':' {
@@ -56,5 +71,11 @@ mod tests {
         assert_eq!(rfc3339_ms("2026-09-25T18:20:00.013684+00:00"), Some(1_790_360_400_013));
         assert_eq!(rfc3339_ms("2026-09-25T20:20:00+02:00"), Some(1_790_360_400_000));
         assert_eq!(rfc3339_ms("2026-09-25T18:20:00+0"), None);
+    }
+
+    #[test]
+    fn formats_rfc3339_utc() {
+        assert_eq!(rfc3339(1_790_191_519_386), "2026-09-23T19:25:19.386Z");
+        assert_eq!(rfc3339_ms(&rfc3339(0)), Some(0));
     }
 }
