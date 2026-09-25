@@ -48,8 +48,10 @@ impl Poller {
         self.next_check = now + POLL_MS;
         let Some(m) = std::fs::metadata(&self.path).ok().and_then(|m| m.modified().ok()) else { return vec![] };
         if self.seen == Some(m) { return vec![]; }
+        // datę zapamiętujemy dopiero po udanym odczycie: nieudany (plik chwilowo zablokowany) powtórzymy
+        let Ok(bytes) = std::fs::read(&self.path) else { return vec![] };
         self.seen = Some(m);
-        std::fs::read(&self.path).map(|b| to_events(&b)).unwrap_or_default()
+        to_events(&bytes)
     }
 }
 
@@ -91,6 +93,21 @@ mod tests {
         assert!(to_events(b"{bad").is_empty());
         let v2 = String::from_utf8(fixture()).unwrap().replace("\"version\": 1", "\"version\": 2");
         assert!(to_events(v2.as_bytes()).is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_failed_read_is_retried_instead_of_losing_the_change() {
+        // np. antywirus trzyma plik: data się zmieniła, ale odczyt się nie udał
+        use std::os::windows::fs::OpenOptionsExt;
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join(FILE);
+        std::fs::write(&f, fixture()).unwrap();
+        let mut p = Poller::new(f.clone());
+        let lock = std::fs::OpenOptions::new().read(true).share_mode(0).open(&f).unwrap();
+        assert!(p.poll(0).is_empty(), "plik zablokowany");
+        drop(lock);
+        assert_eq!(p.poll(POLL_MS).len(), 3, "ta sama zmiana przeczytana przy następnej próbie");
     }
 
     #[test]

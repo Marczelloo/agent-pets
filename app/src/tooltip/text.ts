@@ -45,7 +45,7 @@ export function petTooltip(s: Session, nowMs: number): TooltipContent {
   const f = progressFraction(s.progress);
   if (f != null && s.progress) lines.push(`Zadania: ${s.progress.done}/${s.progress.total}`);
   if (s.context && s.context.max > 0) lines.push(`Kontekst: ${Math.round(clampPct(s.context.used * 100 / s.context.max))}%`);
-  if (s.router_task) lines.push(routerLine(s.router_task, nowMs));
+  if (s.router_task) lines.push(routerLine(s.router_task, nowMs, s.last_activity));
   lines.push(`Ostatnia aktywność: ${formatAgo(nowMs - s.last_activity)}`);
   return {
     title: cut(s.title || basename(s.cwd) || 'Sesja bez tytułu', 80),

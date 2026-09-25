@@ -23,6 +23,11 @@ describe('router task health', () => {
     expect(routerHealth(t, 1_000_000 + 180_000)).toBe('quiet');
     expect(routerHealth(t, 1_000_000 + 180_001)).toBe('stalled');
   });
+  it('counts activity the pet saw in the rollout too', () => {
+    // plik statusu mógł zostać zapisany dawno, a Codex dalej pisze do rolloutu
+    expect(routerHealth(task(), 1_000_000 + 300_000, 1_000_000 + 295_000)).toBe('active');
+    expect(routerLine(task(), 1_000_000 + 300_000, 1_000_000 + 295_000)).toBe('Zadanie routera: aktywne');
+  });
   it('blocked wins and a task that has not started is active', () => {
     expect(routerHealth(task({ blocked: true }), 1_000_000)).toBe('blocked');
     expect(routerHealth(task({ last_activity_at: null }), 9e12)).toBe('active');

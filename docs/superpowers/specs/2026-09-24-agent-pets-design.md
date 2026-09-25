@@ -84,7 +84,7 @@ Każdy rodzaj toastu da się wyłączyć w ustawieniach.
 ```
 Claude Code ──hook.exe──HTTP──┐
 Codex  ──pliki rollout (watch)─┼─► adaptery ─► store + maszyna stanów ─► zdarzenia do UI
-Router ──tasks.json (watch)────┘                         │
+Router ──status.json (watch)───┘                         │
                                                          └─► shell (pasek, tray, toasty, przejście do sesji)
 ```
 
@@ -271,7 +271,7 @@ interface NormalizedEvent {
 
 Widżet przegląda:
 - transkrypty Claude'a i rollouty Codexa zmienione w ciągu ostatnich 30 minut;
-- plik `tasks.json`.
+- plik `~/.agent-router/status.json`.
 
 Z nich buduje sesje z ostatnim znanym stanem. Sesje z martwym PID od razu dostają `ended`.
 
@@ -388,7 +388,7 @@ Gdy wszystko zawiedzie, widżet pokazuje toast i kopiuje komendę wznowienia do 
   - parsery Claude'a i Codexa na zanonimizowanych, prawdziwych próbkach w `fixtures/`;
   - maszyna stanów sprawdzana tabelą „sekwencja zdarzeń → oczekiwane stany”, z udawanym zegarem (minimalny czas stanu, progi czasowe, `ended`);
   - normalizacja limitów;
-  - odczyt `tasks.json` i łączenie po `threadId`.
+  - odczyt `status.json` i łączenie po `threadId`.
 - **Integracja:** `hook.exe` → HTTP → `store` → zdarzenie do UI, także ścieżka „widżet wyłączony” (hook kończy się szybko kodem 0).
 - **Narzędzie `replay`:** nagrane sesje odtwarzane z przyspieszeniem, do testów i pracy nad UI.
 - **Renderer:**
@@ -401,7 +401,7 @@ Gdy wszystko zawiedzie, widżet pokazuje toast i kopiuje komendę wznowienia do 
   - autoukrywanie paska;
   - kilka monitorów;
   - aplikacja pełnoekranowa.
-- **Router:** test zapisu atomowego `tasks.json` w repo routera.
+- **Router:** test zapisu atomowego `status.json` w repo routera.
 
 ## 13. Fazy
 
@@ -422,7 +422,7 @@ Kod ze spike'ów wyrzucamy. Każdy odpowiada na jedno pytanie.
 1. **Rdzeń danych:** `ingest`, `hook.exe`, adaptery Claude i Codex, `store` z maszyną stanów, `replay`, okno debugowania z listą sesji.
 2. **Scena i maskotki:** przeniesienie prototypu v6 do `renderer/` i `skins/`, scena w pasku, tooltip, zasady przepełnienia.
 3. **Panel:** panel, limity, „Przejdź” z łańcuchem awaryjnym, toasty.
-4. **Agent Router:** zapis `tasks.json` w repo routera, łączenie zadań ze zwierzakami Codexa.
+4. **Agent Router:** zapis `status.json` w repo routera, łączenie zadań ze zwierzakami Codexa.
 5. **Wykończenie:** instalator z instalacją i odinstalowaniem hooków, ustawienia, diagnostyka, autostart, tryb oszczędny.
 
 ## 14. Po v1

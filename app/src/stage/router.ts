@@ -8,11 +8,14 @@ const DONE: Record<string, string> = {
   completed: 'zakończone', failed: 'nieudane', interrupted: 'przerwane', quota_exhausted: 'brak limitu',
 };
 
-/** Jak `Router.healthOf` w Agent Routerze, ale liczone w chwili rysowania: plik stanu zmienia się tylko przy zdarzeniach. */
-export function routerHealth(t: RouterTask, nowMs: number): RouterHealth {
+/**
+ * Jak `Router.healthOf` w Agent Routerze, ale liczone w chwili rysowania: plik stanu zmienia się tylko przy
+ * zdarzeniach. `seenAt` to ostatnia aktywność sesji widziana w rolloucie; liczy się późniejsza z obu.
+ */
+export function routerHealth(t: RouterTask, nowMs: number, seenAt?: number): RouterHealth {
   if (t.blocked) return 'blocked';
   if (t.last_activity_at == null) return 'active';
-  const quiet = nowMs - t.last_activity_at;
+  const quiet = nowMs - Math.max(t.last_activity_at, seenAt ?? -Infinity);
   if (quiet > t.stall_ms) return 'stalled';
   if (quiet > QUIET_MS) return 'quiet';
   return 'active';
@@ -20,7 +23,7 @@ export function routerHealth(t: RouterTask, nowMs: number): RouterHealth {
 
 export const isLive = (t: RouterTask) => t.status === 'running' || t.status === 'pending';
 
-export function routerLine(t: RouterTask, nowMs: number): string {
-  const what = isLive(t) ? HEALTH[routerHealth(t, nowMs)] : DONE[t.status] ?? t.status;
+export function routerLine(t: RouterTask, nowMs: number, seenAt?: number): string {
+  const what = isLive(t) ? HEALTH[routerHealth(t, nowMs, seenAt)] : DONE[t.status] ?? t.status;
   return `Zadanie routera: ${what}`;
 }

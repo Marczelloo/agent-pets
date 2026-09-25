@@ -8,7 +8,8 @@ import { PetCanvas } from './PetCanvas';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 import type { RouterTask } from '../types';
 
-const routerHot = (t: RouterTask, nowMs: number) => isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs));
+const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
+  isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
 
 interface JumpResult { method: string; detail: string }
 interface ViewProps {
@@ -53,8 +54,8 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 <span className="state">{actionLabel(s)}</span>
                 {progressText(s) && <span>Zadania {progressText(s)}</span>}
                 {contextText(s) && <span>Kontekst {contextText(s)}</span>}
-                {s.router_task && <span className={routerHot(s.router_task, nowMs) ? 'router-hot' : undefined}>
-                  {routerLine(s.router_task, nowMs)}</span>}
+                {s.router_task && <span className={routerHot(s.router_task, nowMs, s.last_activity) ? 'router-hot' : undefined}>
+                  {routerLine(s.router_task, nowMs, s.last_activity)}</span>}
                 <span>{formatAgo(nowMs - s.last_activity)}</span>
               </div>
             </div>
