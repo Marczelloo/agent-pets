@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
-import { createPet, drawPet, pen, setScene, stepPet, type Pet } from '../renderer';
+import { createPet, pen, setScene } from '../renderer';
+import { PetPainter } from '../renderer/painter';
+import { frameBudget, reducedMotion } from '../stage/power';
 import { sceneFor, skinFor } from '../stage/sceneFor';
 import type { Look, Session } from '../types';
 
 const W = 96, H = 72;
-let fps = 30;
-/** Limit klatek zwierzaków panelu (tryb oszczędny: 10). */
-export function setPetFps(n: number): void { fps = n; }
+let fps = 30, saving = false;
+/** Tryb oszczędny panelu: 10 kl./s i Anime bez smug. */
+export function setPetSaving(s: boolean): void { saving = s; fps = frameBudget(s).fps; }
 // Skala zwierzaka ze sceny w pasku (u = 0,3 przy 48 px), przeniesiona na płótno wysokości 72 px.
 const U = 0.3 * H / 48, X = 36, Y = H - 10;
 
@@ -15,18 +17,18 @@ export function PetCanvas({ session, look }: { session: Session; look: Look }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const lookRef = useRef(look);
   lookRef.current = look;
-  const pet = useRef<Pet | null>(null);
+  const painter = useRef<PetPainter | null>(null);
   const scene = sceneFor(session);
 
   useEffect(() => {
-    if (pet.current) setScene(pet.current, scene);
+    if (painter.current) setScene(painter.current.pet, scene);
   }, [scene]);
 
   useEffect(() => {
     const c = ref.current;
     const x = c?.getContext('2d');
     if (!c || !x) return;
-    pet.current ??= createPet(skinFor(session.agent), sceneFor(session));
+    painter.current ??= new PetPainter(createPet(skinFor(session.agent), sceneFor(session)));
     pen.font = getComputedStyle(document.body).fontFamily || 'sans-serif';
     let raf = 0, last = performance.now(), T = Math.random() * 10, acc = 0;
     const frame = (now: number) => {
@@ -41,8 +43,7 @@ export function PetCanvas({ session, look }: { session: Session; look: Look }) {
       x.setTransform(d, 0, 0, d, 0, 0);
       x.clearRect(0, 0, W, H);
       pen.boil = Math.floor(T * 8);
-      stepPet(pet.current!, acc, T);
-      drawPet(x, pet.current!, X, Y, U, T, lookRef.current);
+      painter.current!.frame(x, { dt: acc, t0: T, X, Y, u: U, look: lookRef.current, animate: true, saving, reduced: reducedMotion(), dpr: d });
       acc = 0;
     };
     raf = requestAnimationFrame(frame);

@@ -4,8 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, petTooltip } from '../tooltip/text';
 import type { Pets, RouterTask, Settings, SettingsView, Snapshot } from '../types';
 import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
-import { PetCanvas, setPetFps } from './PetCanvas';
-import { frameBudget } from '../stage/power';
+import { PetCanvas, setPetSaving } from './PetCanvas';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 
@@ -90,7 +89,7 @@ export default function App() {
       listen<string>('panel://status', e => setStatus(e.payload)),
       listen<boolean>('panel://visible', e => setShown(e.payload)),
       listen<Settings>('pets://settings', e => setPets(e.payload.pets)),
-      listen<boolean>('pets://power', e => setPetFps(frameBudget(e.payload).fps)),
+      listen<boolean>('pets://power', e => setPetSaving(e.payload)),
       listen<string>('panel://focus', e => {
         setStatus(null);
         setFocusId(e.payload);
@@ -101,7 +100,7 @@ export default function App() {
     ];
     void invoke<Snapshot>('snapshot').then(s => take.current(s));
     void invoke<SettingsView>('settings_get').then(v => setPets(v.settings.pets));
-    void invoke<boolean>('power_get').then(saving => setPetFps(frameBudget(saving).fps));
+    void invoke<boolean>('power_get').then(saving => setPetSaving(saving));
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };
     addEventListener('keydown', esc);

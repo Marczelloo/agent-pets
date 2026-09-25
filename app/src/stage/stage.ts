@@ -1,12 +1,13 @@
-import { drawPet, pen, stepPet } from '../renderer';
+import { pen } from '../renderer';
+import { PetPainter } from '../renderer/painter';
 import { appFor, defaultPets, lookFor } from '../look';
 import type { Pets, PointerMsg, Snapshot, StageLayout } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
 import { layout, type LayoutOut } from './layout';
 import { Hover } from './hover';
-import { Roster } from './roster';
-import { frameBudget } from './power';
+import { Roster, type Entry } from './roster';
+import { frameBudget, reducedMotion } from './power';
 
 
 export interface StageHandle { hover: (p: PointerMsg) => void }
@@ -22,10 +23,11 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let clockOffset = 0;
   let maxPets: number | undefined;
   let pets: Pets = defaultPets();
-  let budget = frameBudget(false);
+  let budget = frameBudget(false), saving = false, reduced = reducedMotion();
+  const painters = new WeakMap<Entry, PetPainter>();
   const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
   const handle: StageHandle = { hover: p => hover.pointer(p) };
-  setInterval(() => hover.refresh(), 1000);
+  setInterval(() => { hover.refresh(); reduced = reducedMotion(); }, 1000);
 
   const relayout = () => {
     out = layout({ sessions: snap.sessions, hasLimits: limitBars(snap.limits).length > 0, maxWidth: lay.max_css, maxPets });
@@ -56,10 +58,11 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     for (const p of out.pets) {
       const e = roster.get(p.id);
       if (!e) continue;
-      const tt = T + e.phase;
-      if (budget.animate(e.session.state)) stepPet(e.pet, dt, tt);
+      let painter = painters.get(e);
+      if (!painter) { painter = new PetPainter(e.pet); painters.set(e, painter); }
       e.pet.alpha = roster.alpha(e, T);
-      drawPet(x, e.pet, p.x, Y, u, tt, lookFor(pets, appFor(e.session)));
+      painter.frame(x, { dt, t0: T + e.phase, X: p.x, Y, u, look: lookFor(pets, appFor(e.session)), animate: budget.animate(e.session.state),
+        saving, reduced, dpr: devicePixelRatio || 1 });
       drawProgress(x, p.x, h - 4, e.session, T);
       if (e.session.origin === 'router') drawRouterBadge(x, p.x, 8);
     }
@@ -80,7 +83,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
   bridge.onSettings(s => { pets = s.pets; maxPets = s.pets.max_visible; relayout(); });
-  bridge.onPower(saving => { budget = frameBudget(saving); });
+  bridge.onPower(s => { saving = s; budget = frameBudget(s); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;
 }
