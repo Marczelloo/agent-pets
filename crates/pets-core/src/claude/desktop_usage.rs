@@ -40,26 +40,44 @@ pub fn latest(bytes: &[u8], now: i64) -> Option<Event> {
     Some(e)
 }
 
+#[derive(Debug)]
+pub enum Usage {
+    /// nowa próbka
+    Limits(Event),
+    /// ostatnia zgłoszona próbka jest starsza niż `MAX_AGE_MS` (aplikacja zamknięta): jej limity trzeba zdjąć
+    Stale,
+}
+
 pub struct Poller {
     files: Vec<PathBuf>,
     next_check: i64,
     seen: Option<(PathBuf, SystemTime)>,
+    /// czas ostatniej zgłoszonej próbki, dopóki jej limity są w użyciu
+    reported: Option<i64>,
 }
 
 impl Poller {
-    pub fn new(files: Vec<PathBuf>) -> Poller { Poller { files, next_check: i64::MIN, seen: None } }
+    pub fn new(files: Vec<PathBuf>) -> Poller { Poller { files, next_check: i64::MIN, seen: None, reported: None } }
 
     /// Co `POLL_MS` sprawdza pliki; czyta tylko ten z najnowszym mtime i tylko gdy się zmienił.
-    pub fn poll(&mut self, now: i64) -> Option<Event> {
+    pub fn poll(&mut self, now: i64) -> Option<Usage> {
         if now < self.next_check { return None; }
         self.next_check = now + POLL_MS;
         let newest = self.files.iter()
             .filter_map(|f| Some((f.clone(), std::fs::metadata(f).ok()?.modified().ok()?)))
-            .max_by_key(|(_, m)| *m)?;
-        if self.seen.as_ref() == Some(&newest) { return None; }
-        let e = latest(&std::fs::read(&newest.0).ok()?, now);
-        self.seen = Some(newest);
-        e
+            .max_by_key(|(_, m)| *m);
+        if let Some(newest) = newest.filter(|n| self.seen.as_ref() != Some(n)) {
+            let e = std::fs::read(&newest.0).ok().and_then(|b| latest(&b, now));
+            self.seen = Some(newest);
+            if let Some(e) = e {
+                self.reported = Some(e.ts);
+                return Some(Usage::Limits(e));
+            }
+        }
+        match self.reported {
+            Some(t) if now - t > MAX_AGE_MS => { self.reported = None; Some(Usage::Stale) }
+            _ => None,
+        }
     }
 }
 
@@ -128,11 +146,29 @@ mod tests {
         let now = crate::time::now_ms();
         std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 1 } }]))).unwrap();
         let mut p = Poller::new(vec![d.path().join("missing.json"), f.clone()]);
-        assert_eq!(pct(&p.poll(now).unwrap(), Window::FiveHour), Some(1.0));
+        assert_eq!(pct(&limits(p.poll(now)), Window::FiveHour), Some(1.0));
         assert!(p.poll(now + POLL_MS).is_none(), "plik się nie zmienił");
         std::thread::sleep(std::time::Duration::from_millis(20));
         std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 2 } }]))).unwrap();
         assert!(p.poll(now + POLL_MS + 1).is_none(), "za wcześnie od ostatniego sprawdzenia");
-        assert_eq!(pct(&p.poll(now + 2 * POLL_MS).unwrap(), Window::FiveHour), Some(2.0));
+        assert_eq!(pct(&limits(p.poll(now + 2 * POLL_MS)), Window::FiveHour), Some(2.0));
+    }
+
+    fn limits(u: Option<Usage>) -> Event {
+        match u { Some(Usage::Limits(e)) => e, other => panic!("oczekiwano limitów, jest {other:?}") }
+    }
+
+    #[test]
+    fn poller_reports_once_when_the_app_stops_updating() {
+        // aplikacja Claude zamknięta: plik przestaje się zmieniać, a ostatnia próbka się starzeje
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join(FILE);
+        let now = crate::time::now_ms();
+        std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 50 } }]))).unwrap();
+        let mut p = Poller::new(vec![f]);
+        limits(p.poll(now));
+        assert!(p.poll(now + MAX_AGE_MS - POLL_MS).is_none());
+        assert!(matches!(p.poll(now + MAX_AGE_MS + POLL_MS), Some(Usage::Stale)));
+        assert!(p.poll(now + MAX_AGE_MS + 3 * POLL_MS).is_none(), "tylko raz");
     }
 }

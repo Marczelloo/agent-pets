@@ -64,7 +64,7 @@ impl Runtime {
         let live_ids = live.iter().map(|s| s.session_id.clone()).collect();
         let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
         for f in keep_for_rehydration(&recent, &live_ids) { rt.poll_file(&f); }
-        if let Some(e) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
+        if let Some(claude::desktop_usage::Usage::Limits(e)) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
         let (ftx, files) = channel();
         rt._watcher = Some(watch(&roots, ftx)?);
         rt.files = Some(files);
@@ -84,7 +84,11 @@ impl Runtime {
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
         for p in paths { changed |= self.poll_file(&p); }
-        if let Some(e) = self.usage.poll(now) { changed |= self.apply(e); }
+        match self.usage.poll(now) {
+            Some(claude::desktop_usage::Usage::Limits(e)) => changed |= self.apply(e),
+            Some(claude::desktop_usage::Usage::Stale) => changed |= self.store.drop_limits_without_reset(crate::model::Agent::Claude),
+            None => {}
+        }
         changed |= !self.store.tick(now, &pid::is_alive).is_empty();
         changed
     }

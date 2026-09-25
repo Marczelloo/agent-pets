@@ -85,6 +85,13 @@ impl Store {
 
     pub fn limits(&self) -> &[Limit] { &self.limits }
 
+    /// Zdejmuje limity agenta bez czasu resetu (nieaktualne dane z aplikacji Claude). Zwraca, czy coś zdjęto.
+    pub fn drop_limits_without_reset(&mut self, agent: Agent) -> bool {
+        let before = self.limits.len();
+        self.limits.retain(|l| l.agent != agent || l.resets_at.is_some());
+        self.limits.len() != before
+    }
+
     /// Limit bez czasu resetu (np. z aplikacji Claude) zachowuje znany reset, dopóki ten nie minął: to wciąż to samo okno.
     fn merge_limits(&mut self, new: &[Limit], ts: i64) {
         for l in new {
@@ -362,6 +369,22 @@ mod tests {
         assert_eq!(s.limits(), &[lim(20.0)]);
         assert!(matches!(ch.as_slice(), [Change::Limits(_)]));
         assert!(s.session("c1").is_none(), "samo zdarzenie limitów nie tworzy sesji");
+    }
+
+    #[test]
+    fn dropping_stale_limits_keeps_the_ones_with_a_reset_time() {
+        let mut s = Store::new(Timing::default());
+        let mut e = Event::new(Source::Claude, "x", Kind::Limits, 0);
+        e.data.limits = vec![
+            Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 50.0, resets_at: None },
+            Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 60.0, resets_at: Some(9) },
+            Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 70.0, resets_at: None },
+        ];
+        s.apply(&e);
+        assert!(s.drop_limits_without_reset(Agent::Claude));
+        assert_eq!(s.limits().iter().map(|l| (l.agent, l.window)).collect::<Vec<_>>(),
+            vec![(Agent::Claude, Window::Weekly), (Agent::Codex, Window::FiveHour)]);
+        assert!(!s.drop_limits_without_reset(Agent::Claude), "nic do zdjęcia");
     }
 
     #[test]
