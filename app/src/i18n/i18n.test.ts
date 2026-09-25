@@ -62,10 +62,9 @@ describe('i18n', () => {
       'newerVersionInstalled', 'older', 'olderOrUnknownVersionInstalled', 'silentDowngrades', 'unableToUninstall', 'uninstallApp',
       'uninstallBeforeInstalling', 'unknown', 'webview2AbortError', 'webview2DownloadError', 'webview2DownloadSuccess',
       'webview2Downloading', 'webview2InstallError', 'webview2InstallSuccess', 'deleteAppData'];
-    // BOM zostaje w pliku: bez niego NSIS czyta polskie znaki w stronie kodowej ANSI
-    const raw = readFileSync(join(__dirname, '..', '..', 'src-tauri', 'nsis', 'Polish.nsh'), 'utf8');
-    expect(raw.charCodeAt(0)).toBe(0xfeff);
-    const nsh = raw.slice(1);
+    // bez BOM: Tauri kopiuje plik do build i sam dopisuje BOM; drugi psuje makensis („Invalid command”)
+    const nsh = readFileSync(join(__dirname, '..', '..', 'src-tauri', 'nsis', 'Polish.nsh'), 'utf8');
+    expect(nsh.charCodeAt(0)).not.toBe(0xfeff);
     const found = [...nsh.matchAll(/^LangString (\w+) \$\{LANG_POLISH\} "/gm)].map(m => m[1]);
     expect(found.sort()).toEqual([...keys].sort());
     const conf = JSON.parse(readFileSync(join(__dirname, '..', '..', 'src-tauri', 'tauri.conf.json'), 'utf8'));
