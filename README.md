@@ -17,6 +17,7 @@ Design documents (spec, plan, spike reports) are written in Polish.
 | **Data core** (`pets-core`, `pets-cli`, `hook.exe`) | ✅ Done | `pets-cli run`: live table of all agent sessions |
 | Claude Code sessions (CLI and desktop) | ✅ | states from hooks; title, context and progress from transcripts |
 | Codex sessions (desktop, CLI, Agent Router) | ✅ | states, tools, context and 5h/weekly limits from rollout files |
+| Agent Router tasks: title, health, failures, router badge | ✅ | from `~/.agent-router/status.json`, see [Agent Router tasks](#agent-router-tasks) |
 | Record and replay of session events | ✅ | `pets-cli run --record`, `pets-cli replay` |
 | **Visual prototype** of the pets (animations, props, sketch style) | ✅ Prototype | open `prototype/index.html` in a browser |
 | Installer, settings, autostart | ⏳ Next phases | see [Roadmap](#roadmap) |
@@ -143,6 +144,17 @@ target\release\pets-cli.exe uninstall-statusline                           # res
 
 Your previous statusline command runs through `cmd`. A command that only works in Git Bash will print nothing while the pass-through is installed.
 
+### Agent Router tasks
+
+[Agent Router](https://github.com/Marczelloo/agent-router-mcp) lets Claude Code hand tasks to Codex. Its tasks already show up as Codex pets, because each one runs in a Codex thread. With a router version that writes `~/.agent-router/status.json`, the pet of a router task also gets:
+
+- the task's title;
+- a small router badge above its left arm;
+- the task's health in the tooltip and the panel: active, quiet (no events for 30 s), stalled (longer than the router's stall threshold, 3 min by default) or blocked; stalled and blocked are highlighted;
+- an error state when the task failed or ran out of quota.
+
+The status file holds only a short title per task, never the task text, diffs or commands. The router works the same without the widget.
+
 ### See the prototype
 
 Open `prototype/index.html` in a browser. Buttons switch states and tools, and the bottom strip shows the real taskbar size.
@@ -152,7 +164,8 @@ Open `prototype/index.html` in a browser. Buttons switch states and tools, and t
 ```
 Claude Code ──hook.exe──HTTP (127.0.0.1 + token)──┐
 Codex  ──~/.codex/sessions/**/rollout-*.jsonl──────┼─► adapters ─► state machine ─► taskbar stage
-Claude transcripts + ~/.claude/sessions registry ──┘
+Claude transcripts + ~/.claude/sessions registry ──┤
+Agent Router ──~/.agent-router/status.json─────────┘
 ```
 
 - **`pets-core`** is the library. It holds:
@@ -185,7 +198,7 @@ tools/              fixture anonymizer and its test, CPU measurement
 2. ~~Phase 1: data core~~
 3. ~~Phase 2: taskbar stage in Tauri with the live pets, tooltip, overflow~~
 4. ~~Phase 3: panel with sessions and limits, "jump to session", Windows notifications, Claude rate limits~~
-5. **Phase 4:** Agent Router task state file
+5. ~~Phase 4: Agent Router task state file~~
 6. **Phase 5:** installer, settings, autostart, power-saving mode
 
 ## License

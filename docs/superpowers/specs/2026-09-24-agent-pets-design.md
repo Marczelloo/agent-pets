@@ -96,7 +96,7 @@ Router ──tasks.json (watch)────┘                         │
 | `hook` (osobny binarny `hook.exe`) | Wywoływany przez hooki Claude Code. Czyta JSON ze stdin, wysyła go do `ingest` z limitem 300 ms i zawsze kończy się kodem 0. Gdy widżet nie działa, porzuca zdarzenie. |
 | `adapters::claude` | Normalizuje zdarzenia hooków. Czyta końcówkę transkryptu (lista zadań, tokeny, tytuł). |
 | `adapters::codex` | Obserwuje `~/.codex/sessions/**/rollout-*.jsonl` i czyta dopisywane linie. |
-| `adapters::router` | Obserwuje `~/.agent-router/tasks.json` i łączy zadania z wątkami Codexa. |
+| `adapters::router` | Obserwuje `~/.agent-router/status.json` i łączy zadania z wątkami Codexa. |
 | `store` | Sesje i limity. Maszyna stanów (sekcja 5), progi czasowe, sprawdzanie PID. Odtwarza stan po starcie. |
 | `shell` | Osadzanie w pasku (`SetParent` do `Shell_TrayWnd`), obsługa `TaskbarCreated`, DPI, autoukrywanie paska, główny monitor. Tray, toasty, przejście do sesji. |
 | `replay` | Narzędzie dewelopera: odtwarza nagrany plik zdarzeń z zadaną prędkością. |
@@ -236,23 +236,29 @@ interface NormalizedEvent {
 
 ### 6.3 Agent Router
 
-- **Zmiana w repo routera** (`Marczelloo/agent-router-mcp`): router przy każdej zmianie stanu zadania zapisuje atomowo (plik tymczasowy + `rename`) plik `~/.agent-router/tasks.json`:
+- **Zmiana w repo routera** (`Marczelloo/agent-router-mcp`): router przy każdym zapisie swojego stanu zapisuje atomowo (plik tymczasowy + `rename`) plik `~/.agent-router/status.json`.
+  - Nazwa `tasks.json` była już zajęta przez wewnętrzny stan routera (1,2 MB z diffami i komendami), więc plik publiczny ma własną nazwę (ustalone w fazie 4, 2026-09-25).
+  - W pliku są zadania `running`/`pending` i zakończone w ciągu ostatnich 2 h, najwyżej 50; z treści zadania tylko tytuł (pierwsza linia, do 80 znaków).
+  - „Zdrowie” zadania liczy konsument z `lastActivityAt`, `blocked` i `stallSeconds`, bo plik zmienia się tylko przy zdarzeniach i zapisane zdrowie by się starzało.
 
 ```json
 {
   "version": 1,
-  "updatedAt": "2026-09-24T12:00:00Z",
+  "updatedAt": "2026-09-25T12:00:00.000Z",
+  "stallSeconds": 180,
   "tasks": [
     {
       "taskId": "…",
       "threadId": "…",
+      "kind": "delegation",
       "title": "…",
-      "status": "running | completed | failed | interrupted | quota_exhausted",
-      "health": "active | quiet | stalled | blocked",
+      "status": "pending | running | completed | failed | interrupted | quota_exhausted",
       "model": "gpt-6-sol",
       "workingDirectory": "…",
       "startedAt": "…",
-      "updatedAt": "…"
+      "updatedAt": "…",
+      "lastActivityAt": "…",
+      "blocked": false
     }
   ]
 }
