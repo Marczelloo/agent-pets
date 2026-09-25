@@ -106,13 +106,13 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> Result<(), String> {
 pub fn integrations_list(state: tauri::State<SettingsState>) -> Vec<AppRow> {
     let s = state.get();
     AppId::ALL.iter().map(|id| AppRow {
-        id: *id, detected: integrations::detect(*id, &state.home), status: integrations::status(*id, &state.home), enabled: app_on(&s, *id),
+        id: *id, detected: integrations::detect(*id, &state.home, pets_core::i18n::Lang::Pl), status: integrations::status(*id, &state.home, pets_core::i18n::Lang::Pl), enabled: app_on(&s, *id),
     }).collect()
 }
 
 fn switch(app: &AppHandle, s: &mut Settings, id: AppId, on: bool) -> Result<String, String> {
     let home = app.state::<SettingsState>().home.clone();
-    let msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref())? } else { integrations::disable(id, &home)? };
+    let msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), pets_core::i18n::Lang::Pl)? } else { integrations::disable(id, &home, pets_core::i18n::Lang::Pl)? };
     set_app(s, id, on);
     Ok(msg)
 }
@@ -160,7 +160,7 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
         hook_exe: Some(integrations::installed_hook(&st.home)).filter(|p| p.is_file()).map(|p| p.to_string_lossy().into_owned()),
         last_seen,
         autostart_registered: crate::system::autostart_at(crate::system::RUN_KEY),
-        apps: AppId::ALL.iter().map(|id| (*id, app_on(&s, *id), integrations::status(*id, &st.home).detail)).collect(),
+        apps: AppId::ALL.iter().map(|id| (*id, app_on(&s, *id), integrations::status(*id, &st.home, pets_core::i18n::Lang::Pl).detail)).collect(),
     }
 }
 

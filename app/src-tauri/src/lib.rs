@@ -63,7 +63,7 @@ fn repair_integrations(app: &tauri::AppHandle) {
     if !st.get().apps.claude_code { return; }
     let src = settings::pick_hook(&settings::hook_candidates(app));
     if pets_core::integrations::claude_needs_repair(&st.home, src.as_deref()) {
-        let _ = pets_core::integrations::enable(pets_core::integrations::AppId::ClaudeCode, &st.home, src.as_deref());
+        let _ = pets_core::integrations::enable(pets_core::integrations::AppId::ClaudeCode, &st.home, src.as_deref(), pets_core::i18n::Lang::Pl);
     }
 }
 
@@ -71,7 +71,7 @@ fn repair_integrations(app: &tauri::AppHandle) {
 pub fn uninstall_cli(args: &[String]) -> Option<i32> {
     if !args.iter().any(|a| a == "--uninstall-integrations") { return None; }
     let remove_data = args.iter().any(|a| a == "--remove-data");
-    for step in pets_core::integrations::uninstall_all(&settings::home(), remove_data) { println!("{step}"); }
+    for step in pets_core::integrations::uninstall_all(&settings::home(), remove_data, pets_core::i18n::Lang::Pl) { println!("{step}"); }
     let _ = system::set_autostart(false);
     system::remove_aumid();
     Some(0)

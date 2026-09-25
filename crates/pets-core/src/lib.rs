@@ -2,6 +2,7 @@ pub mod claude;
 pub mod codex;
 pub mod endpoint;
 pub mod hooks_install;
+pub mod i18n;
 pub mod ingest;
 pub mod integrations;
 pub mod model;

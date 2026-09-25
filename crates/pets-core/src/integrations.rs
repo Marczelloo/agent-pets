@@ -1,5 +1,6 @@
 //! Aplikacje, dla których są zwierzaki: wykrycie, stan, włączenie, wyłączenie i pełne odinstalowanie.
 //! Nowy program w przyszłości to nowy wariant `AppId` plus adapter w rdzeniu.
+use crate::i18n::{tr, Lang};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -27,93 +28,101 @@ fn home_folder(id: AppId) -> &'static str {
 }
 
 /// Aplikację wykrywamy po jej katalogu w domu użytkownika: tworzy go przy pierwszym uruchomieniu.
-pub fn detect(id: AppId, home: &Path) -> Detected {
+pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
     let dir = home.join(home_folder(id));
     if dir.is_dir() {
         return Detected { found: true, path: Some(dir.to_string_lossy().into_owned()), note: None };
     }
     let note = match id {
-        AppId::ClaudeCode => "Nie znaleziono ~/.claude. Uruchom Claude Code raz, potem włącz tutaj.",
-        AppId::Codex => "Nie znaleziono ~/.codex. Uruchom Codex raz, potem włącz tutaj.",
-        AppId::AgentRouter => "Nie znaleziono ~/.agent-router (serwer MCP Agent Router).",
+        AppId::ClaudeCode => tr(lang, "Nie znaleziono ~/.claude. Uruchom Claude Code raz, potem włącz tutaj.",
+            "~/.claude not found. Run Claude Code once, then turn it on here."),
+        AppId::Codex => tr(lang, "Nie znaleziono ~/.codex. Uruchom Codex raz, potem włącz tutaj.",
+            "~/.codex not found. Run Codex once, then turn it on here."),
+        AppId::AgentRouter => tr(lang, "Nie znaleziono ~/.agent-router (serwer MCP Agent Router).",
+            "~/.agent-router not found (Agent Router MCP server)."),
     };
     Detected { found: false, path: None, note: Some(note.into()) }
 }
 
-fn read_claude_settings(home: &Path) -> Result<Option<serde_json::Value>, String> {
+fn read_claude_settings(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
     match std::fs::read(claude_settings(home)) {
         Ok(b) => serde_json::from_slice(&b).map(Some)
-            .map_err(|e| format!("{} jest uszkodzony ({e})", claude_settings(home).display())),
+            .map_err(|e| match lang {
+                Lang::Pl => format!("{} jest uszkodzony ({e})", claude_settings(home).display()),
+                Lang::En => format!("{} is damaged ({e})", claude_settings(home).display()),
+            }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
     }
 }
 
-pub fn status(id: AppId, home: &Path) -> Status {
-    if id != AppId::ClaudeCode { return Status { installed: true, detail: "Nic do instalowania".into() }; }
-    match read_claude_settings(home) {
+pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
+    if id != AppId::ClaudeCode { return Status { installed: true, detail: tr(lang, "Nic do instalowania", "Nothing to install").into() }; }
+    match read_claude_settings(home, lang) {
         Err(e) => Status { installed: false, detail: e },
         Ok(v) => match v.as_ref().map(crate::hooks_install::installed_count).unwrap_or(0) {
-            9 => Status { installed: true, detail: "Hooki: zainstalowane".into() },
-            0 => Status { installed: false, detail: "Hooki: brak".into() },
-            n => Status { installed: false, detail: format!("Hooki: niekompletne ({n}/9)") },
+            9 => Status { installed: true, detail: tr(lang, "Hooki: zainstalowane", "Hooks: installed").into() },
+            0 => Status { installed: false, detail: tr(lang, "Hooki: brak", "Hooks: missing").into() },
+            n => Status { installed: false, detail: format!("{} ({n}/9)", tr(lang, "Hooki: niekompletne", "Hooks: incomplete")) },
         },
     }
 }
 
 /// Kopiuje `hook.exe` do `~/.agent-pets` tylko wtedy, gdy go brak albo zawartość się różni (np. nowa wersja).
-fn place_hook(home: &Path, src: Option<&Path>) -> Result<PathBuf, String> {
+fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, String> {
     let dst = installed_hook(home);
     if let Some(src) = src.filter(|s| s.is_file()) {
-        let new = std::fs::read(src).map_err(|e| format!("Nie mogę odczytać {}: {e}", src.display()))?;
+        let new = std::fs::read(src).map_err(|e| format!("{} {}: {e}", tr(lang, "Nie mogę odczytać", "Cannot read"), src.display()))?;
         if std::fs::read(&dst).ok().as_deref() != Some(new.as_slice()) {
             std::fs::create_dir_all(pets_dir(home)).map_err(|e| e.to_string())?;
-            std::fs::write(&dst, new).map_err(|e| format!("Nie mogę zapisać {}: {e}", dst.display()))?;
+            std::fs::write(&dst, new).map_err(|e| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), dst.display()))?;
         }
     }
-    if dst.is_file() { Ok(dst) } else { Err("Brak hook.exe w instalacji Agent Pets; zainstaluj aplikację ponownie.".into()) }
+    if dst.is_file() { Ok(dst) } else { Err(tr(lang, "Brak hook.exe w instalacji Agent Pets; zainstaluj aplikację ponownie.", "hook.exe is missing from the Agent Pets install; reinstall the app.").into()) }
 }
 
-pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>) -> Result<String, String> {
-    if id != AppId::ClaudeCode { return Ok("Nic do instalowania".into()); }
-    read_claude_settings(home)?;
-    let hook = place_hook(home, hook_src)?;
+pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+    if id != AppId::ClaudeCode { return Ok(tr(lang, "Nic do instalowania", "Nothing to install").into()); }
+    read_claude_settings(home, lang)?;
+    let hook = place_hook(home, hook_src, lang)?;
     crate::hooks_install::install_file(&claude_settings(home), &hook.to_string_lossy())
-        .map_err(|e| format!("Nie udało się zapisać hooków w {}: {e}", claude_settings(home).display()))?;
-    Ok("Hooki zainstalowane. Uruchom ponownie otwarte sesje Claude Code.".into())
+        .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), claude_settings(home).display()))?;
+    Ok(tr(lang, "Hooki zainstalowane. Uruchom ponownie otwarte sesje Claude Code.", "Hooks installed. Restart open Claude Code sessions.").into())
 }
 
-pub fn disable(id: AppId, home: &Path) -> Result<String, String> {
-    if id != AppId::ClaudeCode { return Ok("Nic do usunięcia".into()); }
-    let Some(v) = read_claude_settings(home)? else { return Ok("Nic do usunięcia".into()) };
+pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, String> {
+    let nothing = || Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into());
+    if id != AppId::ClaudeCode { return nothing(); }
+    let Some(v) = read_claude_settings(home, lang)? else { return nothing() };
     let settings = claude_settings(home);
     if crate::statusline_install::is_installed(&v) {
         crate::statusline_install::uninstall_file_at(&settings, &statusline_original(home)).map_err(|e| e.to_string())?;
         let _ = std::fs::remove_file(statusline_original(home));
     }
     crate::hooks_install::uninstall_file(&settings).map_err(|e| e.to_string())?;
-    Ok("Hooki usunięte z ustawień Claude Code (kopia: settings.json.agent-pets.bak).".into())
+    Ok(tr(lang, "Hooki usunięte z ustawień Claude Code (kopia: settings.json.agent-pets.bak).",
+        "Hooks removed from Claude Code settings (backup: settings.json.agent-pets.bak).").into())
 }
 
 /// Czy trzeba ponownie włączyć Claude Code: hooki zniknęły (np. aktualizacja przez „odinstaluj, potem zainstaluj”)
 /// albo `hook.exe` w `~/.agent-pets` różni się od tego z instalacji.
 pub fn claude_needs_repair(home: &Path, hook_src: Option<&Path>) -> bool {
-    if !status(AppId::ClaudeCode, home).installed { return true; }
+    if !status(AppId::ClaudeCode, home, Lang::En).installed { return true; }
     let Some(src) = hook_src.and_then(|p| std::fs::read(p).ok()) else { return false };
     std::fs::read(installed_hook(home)).ok().as_deref() != Some(src.as_slice())
 }
 
 /// Odinstalowanie: wyłącza wszystkie integracje i usuwa pliki widżetu; `settings.json` zostaje, chyba że `remove_data`.
-pub fn uninstall_all(home: &Path, remove_data: bool) -> Vec<String> {
-    let mut steps: Vec<String> = AppId::ALL.iter().map(|id| match disable(*id, home) {
+pub fn uninstall_all(home: &Path, remove_data: bool, lang: Lang) -> Vec<String> {
+    let mut steps: Vec<String> = AppId::ALL.iter().map(|id| match disable(*id, home, lang) {
         Ok(m) => format!("{id:?}: {m}"),
-        Err(e) => format!("{id:?}: błąd: {e}"),
+        Err(e) => format!("{id:?}: {}: {e}", tr(lang, "błąd", "error")),
     }).collect();
     for f in [installed_hook(home), pets_dir(home).join("endpoint.json")] {
-        if std::fs::remove_file(&f).is_ok() { steps.push(format!("Usunięto {}", f.display())); }
+        if std::fs::remove_file(&f).is_ok() { steps.push(format!("{} {}", tr(lang, "Usunięto", "Removed"), f.display())); }
     }
     if remove_data && std::fs::remove_dir_all(pets_dir(home)).is_ok() {
-        steps.push(format!("Usunięto {}", pets_dir(home).display()));
+        steps.push(format!("{} {}", tr(lang, "Usunięto", "Removed"), pets_dir(home).display()));
     }
     steps
 }
@@ -140,13 +149,13 @@ mod tests {
     #[test]
     fn detects_apps_by_their_home_folders() {
         let h = home();
-        assert!(!detect(AppId::Codex, h.path()).found);
+        assert!(!detect(AppId::Codex, h.path(), Lang::Pl).found);
         std::fs::create_dir_all(h.path().join(".codex")).unwrap();
         std::fs::create_dir_all(h.path().join(".agent-router")).unwrap();
-        let d = detect(AppId::Codex, h.path());
+        let d = detect(AppId::Codex, h.path(), Lang::Pl);
         assert!(d.found && d.path.unwrap().ends_with(".codex"));
-        assert!(detect(AppId::AgentRouter, h.path()).found);
-        assert!(!detect(AppId::ClaudeCode, h.path()).found);
+        assert!(detect(AppId::AgentRouter, h.path(), Lang::Pl).found);
+        assert!(!detect(AppId::ClaudeCode, h.path(), Lang::Pl).found);
     }
 
     #[test]
@@ -154,20 +163,20 @@ mod tests {
         let h = home();
         std::fs::create_dir_all(h.path().join(".claude")).unwrap();
         let src = hook_src(h.path());
-        assert!(!status(AppId::ClaudeCode, h.path()).installed);
-        enable(AppId::ClaudeCode, h.path(), Some(&src)).unwrap();
+        assert!(!status(AppId::ClaudeCode, h.path(), Lang::Pl).installed);
+        enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
         let first = std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap();
         std::thread::sleep(std::time::Duration::from_millis(20));
-        enable(AppId::ClaudeCode, h.path(), Some(&src)).unwrap();
+        enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
         assert_eq!(our_hooks(&claude_json(h.path())), 9);
         assert_eq!(std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap(), first, "ten sam hook.exe nie jest kopiowany ponownie");
-        assert!(status(AppId::ClaudeCode, h.path()).installed);
+        assert!(status(AppId::ClaudeCode, h.path(), Lang::Pl).installed);
     }
 
     #[test]
     fn enabling_claude_without_any_hook_binary_is_an_error() {
         let h = home();
-        assert!(enable(AppId::ClaudeCode, h.path(), None).is_err());
+        assert!(enable(AppId::ClaudeCode, h.path(), None, Lang::Pl).is_err());
         assert!(!claude_settings(h.path()).exists());
     }
 
@@ -178,7 +187,7 @@ mod tests {
         std::fs::create_dir_all(h.path().join(".claude")).unwrap();
         let src = hook_src(h.path());
         assert!(claude_needs_repair(h.path(), Some(&src)), "brak hooków");
-        enable(AppId::ClaudeCode, h.path(), Some(&src)).unwrap();
+        enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
         assert!(!claude_needs_repair(h.path(), Some(&src)));
         assert!(!claude_needs_repair(h.path(), None), "bez zasobu nie ma z czym porównać");
         std::fs::write(&src, b"hook-binary-v2").unwrap();
@@ -190,8 +199,8 @@ mod tests {
         let h = home();
         std::fs::create_dir_all(h.path().join(".claude")).unwrap();
         std::fs::write(claude_settings(h.path()), json!({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "other.exe"}]}]}}).to_string()).unwrap();
-        enable(AppId::ClaudeCode, h.path(), Some(&hook_src(h.path()))).unwrap();
-        disable(AppId::ClaudeCode, h.path()).unwrap();
+        enable(AppId::ClaudeCode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        disable(AppId::ClaudeCode, h.path(), Lang::Pl).unwrap();
         let v = claude_json(h.path());
         assert_eq!(our_hooks(&v), 0);
         assert_eq!(v["hooks"]["Stop"][0]["hooks"][0]["command"], "other.exe");
@@ -202,7 +211,7 @@ mod tests {
         let h = home();
         std::fs::create_dir_all(h.path().join(".claude")).unwrap();
         std::fs::write(claude_settings(h.path()), "{bad").unwrap();
-        assert!(enable(AppId::ClaudeCode, h.path(), Some(&hook_src(h.path()))).is_err());
+        assert!(enable(AppId::ClaudeCode, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err());
         assert_eq!(std::fs::read_to_string(claude_settings(h.path())).unwrap(), "{bad");
     }
 
@@ -211,17 +220,25 @@ mod tests {
         let h = home();
         std::fs::create_dir_all(h.path().join(".claude")).unwrap();
         std::fs::write(claude_settings(h.path()), json!({"statusLine": {"type": "command", "command": "mine.exe"}}).to_string()).unwrap();
-        enable(AppId::ClaudeCode, h.path(), Some(&hook_src(h.path()))).unwrap();
+        enable(AppId::ClaudeCode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         crate::statusline_install::install_file_at(&claude_settings(h.path()), "h.exe", &statusline_original(h.path())).unwrap();
         std::fs::write(pets_dir(h.path()).join("endpoint.json"), "{}").unwrap();
         std::fs::write(crate::settings::path(h.path()), "{}").unwrap();
-        let steps = uninstall_all(h.path(), false);
+        let steps = uninstall_all(h.path(), false, Lang::Pl);
         assert!(!steps.is_empty());
         let v = claude_json(h.path());
         assert_eq!((our_hooks(&v), v["statusLine"]["command"].as_str()), (0, Some("mine.exe")));
         assert!(!installed_hook(h.path()).exists() && !pets_dir(h.path()).join("endpoint.json").exists());
         assert!(crate::settings::path(h.path()).exists(), "ustawienia zostają bez usuwania danych");
-        uninstall_all(h.path(), true);
+        uninstall_all(h.path(), true, Lang::Pl);
         assert!(!pets_dir(h.path()).exists());
+    }
+    #[test]
+    fn texts_follow_the_language() {
+        let h = home();
+        assert!(detect(AppId::Codex, h.path(), Lang::En).note.unwrap().starts_with("~/.codex not found"));
+        assert_eq!(status(AppId::Codex, h.path(), Lang::En).detail, "Nothing to install");
+        assert_eq!(status(AppId::ClaudeCode, h.path(), Lang::Pl).detail, "Hooki: brak");
+        assert_eq!(disable(AppId::Codex, h.path(), Lang::En).unwrap(), "Nothing to remove");
     }
 }

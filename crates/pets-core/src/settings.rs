@@ -16,6 +16,9 @@ pub struct Settings {
     pub pets: Pets,
     pub power_saving: PowerSaving,
     pub autostart: bool,
+    /// Język interfejsu: `auto` = polski przy polskim Windows, inaczej angielski.
+    #[serde(deserialize_with = "or_default")]
+    pub language: Language,
     /// Pola z nowszych wersji, zachowywane przy zapisie.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -48,6 +51,10 @@ pub enum Style { Sketch, Clean, #[default] Sticker, Pixel, Neon, Ink, Pastel }
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Motion { #[default] Calm, Anime }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Language { #[default] Auto, Pl, En }
 
 /// Wygląd agenta inny niż domyślny; brak pola = „jak domyślny”.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -91,7 +98,7 @@ impl Default for Settings {
         Settings {
             version: 1, apps: Apps::default(), claude_statusline: false, claude_plan_usage: false,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
-            autostart: true, extra: serde_json::Map::new(),
+            autostart: true, language: Language::Auto, extra: serde_json::Map::new(),
         }
     }
 }
@@ -113,7 +120,7 @@ pub fn load(path: &Path) -> Loaded {
     match serde_json::from_slice::<Settings>(&bytes) {
         Ok(s) => Loaded { settings: s, first_run: false, error: None },
         Err(e) => Loaded { settings: Settings::default(), first_run: false,
-            error: Some(format!("{} jest uszkodzony ({e}); używam ustawień domyślnych", path.display())) },
+            error: Some(format!("{}: {e}", path.display())) },
     }
 }
 
@@ -248,5 +255,18 @@ mod tests {
         assert_eq!(v["pets"]["motion"], "calm");
         assert!(v["pets"].get("skin").is_none());
         assert_eq!(v["pets"]["overrides"], serde_json::json!({}));
+    }
+    #[test]
+    fn language_defaults_to_auto_and_unknown_values_fall_back() {
+        assert_eq!(Settings::default().language, Language::Auto);
+        assert_eq!(load_str(r#"{"version":1,"language":"en"}"#).settings.language, Language::En);
+        assert_eq!(load_str(r#"{"version":1,"language":"klingon"}"#).settings.language, Language::Auto);
+    }
+
+    #[test]
+    fn a_broken_file_error_is_technical_and_names_the_path() {
+        let l = load_str("{bad");
+        let e = l.error.unwrap();
+        assert!(e.contains("settings.json") && !e.contains("uszkodzony"), "{e}");
     }
 }
