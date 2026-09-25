@@ -2,7 +2,9 @@ mod core;
 mod jump;
 mod notify;
 mod panel;
+mod settings;
 mod shell;
+mod system;
 mod tooltip;
 mod tray;
 mod usage;
@@ -41,9 +43,28 @@ pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
     jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())))
 }
 
+/// Skutki zmiany ustawień (rdzeń, powiadomienia, autostart). Wypełnia task 5.
+pub fn apply_effects(_app: &tauri::AppHandle, _old: &pets_core::settings::Settings, _new: &pets_core::settings::Settings) {}
+
+/// `agent-pets.exe --uninstall-integrations [--remove-data]` (deinstalator NSIS): sprząta i kończy bez okien.
+pub fn uninstall_cli(args: &[String]) -> Option<i32> {
+    if !args.iter().any(|a| a == "--uninstall-integrations") { return None; }
+    let remove_data = args.iter().any(|a| a == "--remove-data");
+    for step in pets_core::integrations::uninstall_all(&settings::home(), remove_data) { println!("{step}"); }
+    let _ = system::set_autostart(false);
+    system::remove_aumid();
+    Some(0)
+}
+
 pub fn run() {
     tauri::Builder::default()
+        // musi być pierwszą wtyczką: drugie uruchomienie nie startuje drugiego rdzenia, tylko otwiera ustawienia
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| settings::open(app)))
         .setup(|app| {
+            let prefs = settings::SettingsState::load(settings::home());
+            let first_run = *prefs.first_run.lock().unwrap();
+            app.manage(prefs);
+            app.manage(settings::LastSeen::default());
             let shared: core::Shared = Default::default();
             app.manage(shared.clone());
             app.manage(shell::Shell::start(app.handle())?);
@@ -54,11 +75,14 @@ pub fn run() {
             tray::build(app.handle())?;
             let snaps = notify::start(app.handle().clone());
             core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps));
+            if first_run { settings::open(app.handle()); }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             snapshot, stage_hello, stage_set_width, jump, panel::panel_open, panel::panel_hide,
-            tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide
+            tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
+            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
+            settings::wizard_finish, settings::diagnostics, settings::settings_open
         ])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")

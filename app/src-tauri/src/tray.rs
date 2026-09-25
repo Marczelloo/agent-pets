@@ -1,14 +1,19 @@
-//! Ikona w zasobniku: lewy klik przełącza panel, prawy pokazuje menu z „Zakończ”.
+//! Ikona w zasobniku: lewy klik przełącza panel, prawy pokazuje menu („Ustawienia”, „Zakończ”).
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::AppHandle;
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
+    let prefs = MenuItem::with_id(app, "settings", "Ustawienia", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Zakończ Agent Pets", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&quit])?;
+    let menu = Menu::with_items(app, &[&prefs, &quit])?;
     let mut b = TrayIconBuilder::with_id("main").tooltip("Agent Pets").menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, e| if e.id() == "quit" { app.exit(0) })
+        .on_menu_event(|app, e| match e.id().as_ref() {
+            "quit" => app.exit(0),
+            "settings" => crate::settings::open(app),
+            _ => {}
+        })
         .on_tray_icon_event(|tray, e| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
                 crate::panel::toggle(tray.app_handle(), None);

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Scena, tooltip i panel",
-  "windows": ["stage*", "tooltip", "panel"],
+  "description": "Scena, tooltip, panel i ustawienia",
+  "windows": ["stage*", "tooltip", "panel", "settings"],
   "permissions": ["core:default"]
 }
