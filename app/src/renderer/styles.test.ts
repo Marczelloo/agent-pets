@@ -48,4 +48,39 @@ describe('styles', () => {
     const k = trace('sticker', 'kodek', 1).join('\n');
     expect(k).toContain('#E8E6E0');
   });
+  it('neon glows in the agent colour and restores the context', () => {
+    const log = trace('neon');
+    expect(log.some(l => l.startsWith('shadowBlur='))).toBe(true);
+    expect(log.filter(l => l === 'save()').length).toBe(log.filter(l => l === 'restore()').length);
+  });
+  it('ink is greyscale with a black brush outline', () => {
+    const log = trace('ink');
+    expect(log).toContain('strokeStyle=#111111');
+    const fills = log.filter(l => l.startsWith('fillStyle=rgb(')).map(l => l.slice(14, -1).split(',').map(Number));
+    expect(fills.length).toBeGreaterThan(0);
+    for (const [r, g, b] of fills) expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(2);
+  });
+  it('arms follow the style too (ink arms are grey, not clay)', () => {
+    const log = trace('ink', 'clawd', 1);
+    expect(log).not.toContain('strokeStyle=rgb(217,119,87)');
+    expect(log.some(l => /^strokeStyle=rgb\((\d+),\1,\1\)$/.test(l))).toBe(true);
+  });
+  it('neon eyes keep their glow colour instead of the dark fill', () => {
+    const log = trace('neon', 'clawd', 1);
+    expect(log).not.toContain(`fillStyle=${STYLES.neon.fillFor!(STYLES.neon.ink('#D97757'))}`);
+  });
+  it('sticker draws one outline around the body, not two boxes', () => {
+    const strokes = () => trace('sticker', 'clawd', 1).filter(l => l === 'stroke()').length;
+    const one = strokes();
+    const orig = STYLES.sticker;
+    STYLES.sticker = { ...orig, shape: { ...orig.shape, flatSide: false } };
+    const two = strokes();
+    STYLES.sticker = orig;
+    expect(one).toBe(two - 1); // przednia ściana bez własnego konturu
+  });
+  it('pastel outlines take their fill hue and the shadow is soft', () => {
+    const log = trace('pastel');
+    expect(log.some(l => l.startsWith('filter=blur('))).toBe(true);
+    expect(log).not.toContain('strokeStyle=#2B1D16');
+  });
 });

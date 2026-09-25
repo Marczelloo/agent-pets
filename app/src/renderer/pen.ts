@@ -10,7 +10,7 @@ export function elP(cx: any,cy: any,rx: any,ry: any,rot?: any){const p=[],cr=Mat
 export function path(x: any,p: any,j: any,seed: any){x.beginPath();p.forEach((q: any,i: any)=>{const dx=j?(hr(seed+i*1.7)-.5)*j:0,dy=j?(hr(seed+i*2.3+50)-.5)*j:0;i?x.lineTo(q[0]+dx,q[1]+dy):x.moveTo(q[0]+dx,q[1]+dy);});x.closePath();}
 export function bbox(p: any){let a=1e9,b=1e9,c=-1e9,d=-1e9;p.forEach((q: any)=>{a=Math.min(a,q[0]);b=Math.min(b,q[1]);c=Math.max(c,q[0]);d=Math.max(d,q[1]);});return [a,b,c,d];}
 export function shp(x: any,p: any,fill: any,u: any,o?: any){o=o||{};const st=pen.st,sk=st.sketch,id=++pen.sid,
-j=sk?Math.max(1.4*u,sk.jitterPx)*(o.j==null?1:o.j):0,s=pen.boil*977+id*131,f=fill&&st.fillFor?st.fillFor(fill):fill;
+j=sk?Math.max(1.4*u,sk.jitterPx)*(o.j==null?1:o.j):0,s=pen.boil*977+id*131,f=fill&&st.fillFor&&!o.raw?st.fillFor(fill):fill;
 if(f){path(x,p,j,s);if(sk){const ox=Math.max(.9*u,sk.offsetPx);x.save();x.translate(ox,ox*7/9);}x.fillStyle=st.fill==='gradient'?grad(x,p,f):f;x.fill();if(sk)x.restore();}
 if(o.hatch&&sk){x.save();path(x,p,0,0);x.clip();x.strokeStyle='rgba(43,29,22,0.3)';x.lineWidth=Math.max(.6,.9*u);x.beginPath();const bb=bbox(p),hh=bb[3]-bb[1],gap=Math.max(5*u,sk.hatchGapPx);for(let k=bb[0]-hh,g=0;k<bb[2]&&g<400;k+=gap,g++){x.moveTo(k,bb[3]);x.lineTo(k+hh,bb[1]);}x.stroke();x.restore();}
 if(o.noStroke)return;
@@ -21,8 +21,13 @@ if(deco)x.restore();
 if(sk){x.save();x.globalAlpha*=.55;x.lineWidth*=.45;path(x,p,j*1.5,s+33);x.stroke();x.restore();}}
 /** Naklejka: jaśniej u góry, ciemniej u dołu (gradient w obrysie kształtu). */
 function grad(x: any,p: any,f: string){const b=bbox(p),g=x.createLinearGradient(0,b[1],0,b[3]);g.addColorStop(0,lighten(f,.22));g.addColorStop(.55,f);g.addColorStop(1,darken(f,.1));return g;}
-export function seg(x: any,x1: any,y1: any,x2: any,y2: any,w: any,col: any,lw: any){x.beginPath();x.moveTo(x1,y1);x.lineTo(x2,y2);x.lineCap='round';x.strokeStyle=pen.ol;x.lineWidth=w+2*lw;x.stroke();x.strokeStyle=col;x.lineWidth=w;x.stroke();x.strokeStyle=pen.ol;x.lineWidth=lw;}
+export function seg(x: any,x1: any,y1: any,x2: any,y2: any,w: any,col: any,lw: any){x.beginPath();x.moveTo(x1,y1);x.lineTo(x2,y2);x.lineCap='round';const[f,o]=tone(col);rim(x,o,w+2*lw,u0(lw));x.strokeStyle=f;x.lineWidth=w;x.stroke();x.strokeStyle=pen.ol;x.lineWidth=lw;}
 export function lines(x: any,X: any,Y: any,w: any,n: any,gap: any,col: any,u: any,seed: any){x.strokeStyle=col;x.lineWidth=Math.max(.6,1.3*u);x.beginPath();for(let i=0;i<n;i++){const ww=w*(.5+.5*hr(i*3.1+(seed||0)*9.7));x.moveTo(X,Y+i*gap);x.lineTo(X+ww,Y+i*gap);}x.stroke();x.strokeStyle=pen.ol;}
 export function hose(x: any,a: any,L: any,thk: any,cm: any,u: any,lw: any){const sx=a.sw[0],sy=a.sw[1],dx=a.hx-sx,dy=a.hy-sy,d=Math.hypot(dx,dy)||1;let nx=-dy/d,ny=dx/d;if(nx*a.s+ny*.6<0){nx=-nx;ny=-ny;}const b=Math.sqrt(Math.max(0,(L*1.05)*(L*1.05)-d*d))*.5,j=pen.st.sketch?Math.max(1.4*u,pen.st.sketch.jitterPx):0;const cx=(sx+a.hx)/2+nx*b+(j?(hr(pen.boil*31+a.s*7)-.5)*j:0),cy=(sy+a.hy)/2+ny*b+(j?(hr(pen.boil*17+a.s*3)-.5)*j:0);
-x.beginPath();x.moveTo(sx,sy);x.quadraticCurveTo(cx,cy,a.hx,a.hy);x.lineCap='round';x.strokeStyle=pen.ol;x.lineWidth=thk+2*lw;x.stroke();x.strokeStyle=cm;x.lineWidth=thk;x.stroke();x.strokeStyle=pen.ol;x.lineWidth=lw;}
+x.beginPath();x.moveTo(sx,sy);x.quadraticCurveTo(cx,cy,a.hx,a.hy);x.lineCap='round';const[f,o]=tone(cm);rim(x,o,thk+2*lw,u);x.strokeStyle=f;x.lineWidth=thk;x.stroke();x.strokeStyle=pen.ol;x.lineWidth=lw;}
+/** Wypełnienie i kontur grubej linii (łapki, nogi rekwizytów) według stylu. */
+function tone(col: string){const st=pen.st,f=st.fillFor?st.fillFor(col):col;return [f,st.strokeFor?st.strokeFor(f):pen.ol];}
+/** Kontur grubej linii; Neon dokłada poświatę tylko tutaj (save/restore tylko wtedy, parytet). */
+function rim(x: any,o: string,w: number,u: number){if(pen.st.glow){x.save();x.shadowColor=pen.ol;x.shadowBlur=Math.max(3,8*u);}x.strokeStyle=o;x.lineWidth=w;x.stroke();if(pen.st.glow)x.restore();}
+const u0=(lw: number)=>lw/2.4;
 export function mitt(x: any,a: any,r: any,cm: any,u: any){shp(x,elP(a.hx,a.hy,r,r*.9),cm,u);}
