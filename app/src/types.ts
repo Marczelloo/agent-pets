@@ -22,7 +22,11 @@ export interface Session {
   state_since: number;
   turn_started_at: number | null;
   jump: { pid: number | null; session_id: string; cwd: string; app: string | null };
+  /** zadanie Agent Routera powiązane z tym wątkiem Codexa */
+  router_task?: RouterTask | null;
 }
+
+export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
 export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null }
 export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number }

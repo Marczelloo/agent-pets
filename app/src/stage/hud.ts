@@ -31,6 +31,28 @@ export function drawProgress(x: CanvasRenderingContext2D, cx: number, y: number,
   x.restore();
 }
 
+/** Znaczek Agent Routera: kółko w kolorze Codexa ze strzałkami w obie strony, nad lewym ramieniem zwierzaka. */
+export function drawRouterBadge(x: CanvasRenderingContext2D, cx: number, y: number): void {
+  const r = 4.5, bx = cx - 17, by = y;
+  x.save();
+  x.beginPath();
+  x.arc(bx, by, r, 0, Math.PI * 2);
+  x.fillStyle = AGENT_COLOR.codex;
+  x.fill();
+  x.lineWidth = 1;
+  x.strokeStyle = '#2B1D16';
+  x.stroke();
+  x.beginPath();
+  x.lineCap = 'round';
+  x.strokeStyle = '#FFFFFF';
+  x.lineWidth = 1.1;
+  // górna strzałka w prawo, dolna w lewo
+  x.moveTo(bx - 2.2, by - 1.2); x.lineTo(bx + 2.2, by - 1.2); x.lineTo(bx + 1, by - 2.4);
+  x.moveTo(bx + 2.2, by + 1.2); x.lineTo(bx - 2.2, by + 1.2); x.lineTo(bx - 1, by + 2.4);
+  x.stroke();
+  x.restore();
+}
+
 export interface LimitBar { agent: 'claude' | 'codex'; window: 'five_hour' | 'weekly'; pct: number }
 
 export function limitBars(limits: Limit[]): LimitBar[] {

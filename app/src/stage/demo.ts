@@ -22,6 +22,9 @@ export function demoSessions(count: number, nowMs: number): Session[] {
       context: i % 2 === 0 ? { used: 40_000 + i * 30_000, max: 200_000 } : null,
       started_at: BASE + i * 1000, last_activity: nowMs - i * 15_000, state_since: nowMs, turn_started_at: null,
       jump: { pid: null, session_id: id, cwd: '', app: null },
+      router_task: i % 3 === 2
+        ? { task_id: `task-${i + 1}`, status: 'running', last_activity_at: nowMs - i * 40_000, blocked: false, stall_ms: 180_000 }
+        : null,
     };
   });
 }

@@ -1,5 +1,6 @@
 import type { Limit, Session, TooltipContent } from '../types';
 import { clampPct, progressFraction } from '../stage/hud';
+import { routerLine } from '../stage/router';
 
 const AGENT: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
 const ORIGIN: Record<string, string> = { cli: 'CLI', desktop: 'aplikacja', router: 'Agent Router' };
@@ -44,6 +45,7 @@ export function petTooltip(s: Session, nowMs: number): TooltipContent {
   const f = progressFraction(s.progress);
   if (f != null && s.progress) lines.push(`Zadania: ${s.progress.done}/${s.progress.total}`);
   if (s.context && s.context.max > 0) lines.push(`Kontekst: ${Math.round(clampPct(s.context.used * 100 / s.context.max))}%`);
+  if (s.router_task) lines.push(routerLine(s.router_task, nowMs));
   lines.push(`Ostatnia aktywność: ${formatAgo(nowMs - s.last_activity)}`);
   return {
     title: cut(s.title || basename(s.cwd) || 'Sesja bez tytułu', 80),

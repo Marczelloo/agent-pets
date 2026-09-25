@@ -1,7 +1,7 @@
 import { drawPet, pen, stepPet } from '../renderer';
 import type { PointerMsg, Snapshot, StageLayout } from '../types';
 import type { Bridge } from './bridge';
-import { drawBadge, drawLimits, drawProgress, limitBars } from './hud';
+import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
 import { layout, type LayoutOut } from './layout';
 import { Hover } from './hover';
 import { Roster } from './roster';
@@ -57,6 +57,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       e.pet.alpha = roster.alpha(e, T);
       drawPet(x, e.pet, p.x, Y, u, tt);
       drawProgress(x, p.x, h - 4, e.session, T);
+      if (e.session.origin === 'router') drawRouterBadge(x, p.x, 8);
     }
     if (out.badgeX != null) drawBadge(x, out.badgeX, h, out.hidden, pen.font);
     if (out.limitsX != null) drawLimits(x, out.limitsX, h, limitBars(snap.limits));
