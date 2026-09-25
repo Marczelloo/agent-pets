@@ -9,20 +9,20 @@ setRng(seeded(5).next);
 pen.font = 'x';
 
 describe('styles', () => {
-  it('sketch jitter is visible at taskbar scale (≥ 1.2 px wide, not 0.42)', () => {
+  it('sketch v2: outline jitter of at least 2 px in the taskbar', () => {
     pen.st = STYLES.sketch;
     const rec = recorder();
     let worst = 0;
     for (pen.boil = 0; pen.boil < 20; pen.boil++) {
       rec.log.length = 0;
-      shp(rec.ctx, rrP(0, 0, 30, 30, 0), '#fff', 0.3);
+      shp(rec.ctx, rrP(0, 0, 30, 30, 0), null, 0.3); // sam kontur, bez kreskowania
       for (const l of rec.log) {
         const m = /^(?:moveTo|lineTo)\(([-\d.]+),([-\d.]+)\)$/.exec(l);
         if (m) worst = Math.max(worst, Math.min(Math.abs(+m[1]), Math.abs(+m[1] - 30)), Math.min(Math.abs(+m[2]), Math.abs(+m[2] - 30)));
       }
     }
     pen.st = STYLES.clean;
-    expect(worst).toBeGreaterThan(0.3);
+    expect(worst).toBeGreaterThan(0.95);
   });
   it('each drawPet sets its own style; nothing leaks to the next pet', () => {
     const a = createPet('clawd', 'idle'), b = createPet('clawd', 'idle');
@@ -37,6 +37,19 @@ describe('styles', () => {
     drawPet(r.ctx, c, 60, 40, u, 1, { style, motion: 'calm' });
     return r.log;
   };
+  it('sketch v2: hatched fills over a light wash, graphite outline in several passes', () => {
+    const log = trace('sketch'), clean = trace('clean');
+    expect(log.filter(l => l === 'stroke()').length).toBeGreaterThan(clean.filter(l => l === 'stroke()').length * 2.5);
+    expect(log).toContain(`strokeStyle=${STYLES.sketch.ink('#D97757')}`);
+    expect(log.some(l => /^globalAlpha=0\.[0-3]\d*$/.test(l))).toBe(true);
+  });
+  it('sketch v2 boils at 12 Hz on the pet clock', () => {
+    // takt drgania bierze się z zegara zwierzaka, nie z tego, co ustawił wołający
+    const c = createPet('clawd', 'idle');
+    const at = (boil: number) => { pen.boil = boil; const r = recorder(); drawPet(r.ctx, c, 60, 40, .3, 1.5, { style: 'sketch', motion: 'calm' }); return r.log.join(); };
+    expect(at(0)).toBe(at(999));
+    expect(pen.boil).toBe(18);
+  });
   it('neon glows in the agent colour and restores the context', () => {
     const log = trace('neon');
     expect(log.some(l => l.startsWith('shadowBlur='))).toBe(true);

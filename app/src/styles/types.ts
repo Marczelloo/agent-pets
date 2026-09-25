@@ -19,7 +19,15 @@ export interface StyleDef {
   brush?: boolean;
   softShadow?: boolean;
   /** Szkic: drganie konturu, przesunięcie wypełnienia i odstęp kreskowania, minima w px CSS */
-  sketch?: { jitterPx: number; offsetPx: number; hatchGapPx: number };
+  sketch?: {
+    jitterPx: number; offsetPx: number; hatchGapPx: number;
+    /** przejścia konturu (pierwsze pełne, kolejne cieńsze i bledsze) */
+    passes: number;
+    /** drganie konturu na sekundę, z zegara zwierzaka */
+    boilHz: number;
+    /** wypełnienie kreskowaniem na lekkim tle zamiast płaskiej plamy */
+    hatchFill: boolean;
+  };
   shape?: { radius?: Partial<Record<SkinId, number>>; flatSide?: boolean };
   face?: { smile?: boolean; blush?: boolean; eyes?: 'accent' };
   extras?: { ears?: boolean; phones?: boolean };

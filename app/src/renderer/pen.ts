@@ -13,14 +13,17 @@ export function path(x: any,p: any,j: any,seed: any){x.beginPath();p.forEach((q:
 export function bbox(p: any){let a=1e9,b=1e9,c=-1e9,d=-1e9;p.forEach((q: any)=>{a=Math.min(a,q[0]);b=Math.min(b,q[1]);c=Math.max(c,q[0]);d=Math.max(d,q[1]);});return [a,b,c,d];}
 export function shp(x: any,p: any,fill: any,u: any,o?: any){o=o||{};const st=pen.st,sk=st.sketch,id=++pen.sid,
 j=sk?Math.max(1.4*u,sk.jitterPx)*(o.j==null?1:o.j):0,s=pen.boil*977+id*131,f=fill&&st.fillFor&&!o.raw?st.fillFor(fill):fill;
-if(f){path(x,p,j,s);if(sk){const ox=Math.max(.9*u,sk.offsetPx);x.save();x.translate(ox,ox*7/9);}x.fillStyle=st.fill==='gradient'?grad(x,p,f):f;x.fill();if(sk)x.restore();}
+if(f&&sk&&sk.hatchFill&&!o.noStroke){path(x,p,j,s);x.save();x.globalAlpha*=.3;x.fillStyle=f;x.fill();x.restore();scribble(x,p,darken(f,.25),Math.max(4*u,sk.hatchGapPx),u,s);}
+else if(f){path(x,p,j,s);if(sk){const ox=Math.max(.9*u,sk.offsetPx);x.save();x.translate(ox,ox*7/9);}x.fillStyle=st.fill==='gradient'?grad(x,p,f):f;x.fill();if(sk)x.restore();}
 if(o.hatch&&sk){x.save();path(x,p,0,0);x.clip();x.strokeStyle='rgba(43,29,22,0.3)';x.lineWidth=Math.max(.6,.9*u);x.beginPath();const bb=bbox(p),hh=bb[3]-bb[1],gap=Math.max(5*u,sk.hatchGapPx);for(let k=bb[0]-hh,g=0;k<bb[2]&&g<400;k+=gap,g++){x.moveTo(k,bb[3]);x.lineTo(k+hh,bb[1]);}x.stroke();x.restore();}
 if(o.noStroke)return;
 const deco=!!(st.strokeFor&&f)||!!st.glow;if(deco){x.save();if(st.strokeFor&&f)x.strokeStyle=st.strokeFor(f);if(st.glow){x.shadowColor=pen.ol;x.shadowBlur=Math.max(3,8*u);}}
 path(x,p,j,s+17);x.stroke();
 if(st.brush){const b=Math.max(1,u*2);x.save();x.lineWidth*=.5;x.translate(.5*b,.4*b);path(x,p,j,s+51);x.stroke();x.restore();}
 if(deco)x.restore();
-if(sk){x.save();x.globalAlpha*=.55;x.lineWidth*=.45;path(x,p,j*1.5,s+33);x.stroke();x.restore();}}
+if(sk)for(let i=1;i<sk.passes;i++){x.save();x.globalAlpha*=.5;x.lineWidth*=.6;path(x,p,j*1.6,s+17+i*29);x.stroke();x.restore();}}
+/** Szkic: kreskowanie wypełnienia w kolorze bryły, w obrysie kształtu, z lekko drżącymi końcami kresek. */
+function scribble(x: any,p: any,col: string,gap: number,u: number,seed: number){x.save();path(x,p,0,0);x.clip();x.strokeStyle=col;x.globalAlpha*=.8;x.lineWidth=Math.max(.7,1*u);x.beginPath();const bb=bbox(p),hh=bb[3]-bb[1];for(let k=bb[0]-hh*.6,g=0;k<bb[2]&&g<400;k+=gap,g++){const d=(hr(seed+g*3.1)-.5)*gap*.6;x.moveTo(k+d,bb[3]+gap);x.lineTo(k+hh*.6+d,bb[1]-gap);}x.stroke();x.restore();}
 /** Naklejka: jaśniej u góry, ciemniej u dołu (gradient w obrysie kształtu). */
 function grad(x: any,p: any,f: string){const b=bbox(p),g=x.createLinearGradient(0,b[1],0,b[3]);g.addColorStop(0,lighten(f,.22));g.addColorStop(.55,f);g.addColorStop(1,darken(f,.1));return g;}
 export function seg(x: any,x1: any,y1: any,x2: any,y2: any,w: any,col: any,lw: any){x.beginPath();x.moveTo(x1,y1);x.lineTo(x2,y2);x.lineCap='round';const[f,o]=tone(col);rim(x,o,w+2*lw,u0(lw));x.strokeStyle=f;x.lineWidth=w;x.stroke();x.strokeStyle=pen.ol;x.lineWidth=lw;}

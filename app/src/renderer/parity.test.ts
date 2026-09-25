@@ -59,8 +59,8 @@ function drawTrace(api: {
 
 describe('port rysowania = prototyp v6', () => {
   // Szkic przy u = 0,3 różni się celowo (minima w pikselach, styles.test.ts).
-  for (const skin of SKIN_IDS) for (const scene of PROTO_SCENES) for (const sketch of [true, false]) for (const u of [1, 0.3]) {
-    if (sketch && u === 0.3) continue;
+  // Szkic v2 nie jest już zgodny z prototypem (spec wyglądu v2, 4): zgodność pilnuje tylko Czysty.
+  for (const skin of SKIN_IDS) for (const scene of PROTO_SCENES) for (const sketch of [false]) for (const u of [1, 0.3]) {
     it(`${skin} / ${scene} / ${sketch ? 'rysowany' : 'czysty'} / u=${u}`, () => {
       proto.setSK(sketch);
       const a = drawTrace({ make: () => proto.mkC(skin, scene), step: proto.stepC, draw: proto.drawC, boil: proto.setBoil }, u);
