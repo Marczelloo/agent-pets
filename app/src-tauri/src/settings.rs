@@ -26,12 +26,18 @@ impl SettingsState {
     pub fn get(&self) -> Settings { self.current.read().unwrap().clone() }
     /// Język tekstów z Rusta: ustawienie albo język Windows.
     pub fn lang(&self) -> Lang { i18n::current(self.get().language) }
+    /// Widok dla UI; `system` to język Windows (UI rozstrzyga nim `auto` po późniejszej zmianie ustawienia).
+    pub fn view(&self, system: Lang) -> SettingsView {
+        let settings = self.get();
+        let lang = i18n::resolve(settings.language, system == Lang::Pl);
+        SettingsView { settings, first_run: *self.first_run.lock().unwrap(), load_error: self.load_error.lock().unwrap().clone(), lang, system_lang: system }
+    }
 }
 
 pub fn home() -> PathBuf { std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(std::env::temp_dir) }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct SettingsView { pub settings: Settings, pub first_run: bool, pub load_error: Option<String>, pub lang: Lang }
+pub struct SettingsView { pub settings: Settings, pub first_run: bool, pub load_error: Option<String>, pub lang: Lang, pub system_lang: Lang }
 
 #[derive(Serialize, Clone, Debug)]
 pub struct AppRow { pub id: AppId, pub detected: Detected, pub status: Status, pub enabled: bool }
@@ -96,7 +102,7 @@ pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings {
 
 #[tauri::command]
 pub fn settings_get(state: tauri::State<SettingsState>) -> SettingsView {
-    SettingsView { settings: state.get(), first_run: *state.first_run.lock().unwrap(), load_error: state.load_error.lock().unwrap().clone(), lang: state.lang() }
+    state.view(i18n::system())
 }
 
 #[tauri::command]
@@ -168,6 +174,9 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
     }
 }
 
+/// Tytuł okna ustawień (pasek tytułu, przycisk w pasku zadań, Alt+Tab).
+pub fn window_title(lang: Lang) -> &'static str { i18n::tr(lang, "Agent Pets: ustawienia", "Agent Pets: settings") }
+
 /// Otwiera okno ustawień (albo kreator przy pierwszym uruchomieniu); drugie wywołanie tylko je pokazuje.
 pub fn open(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
@@ -181,7 +190,7 @@ pub fn open(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
         let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
-            .title("Agent Pets: ustawienia").inner_size(760.0, 560.0).min_inner_size(620.0, 460.0).center().build();
+            .title(window_title(app.state::<SettingsState>().lang())).inner_size(760.0, 560.0).min_inner_size(620.0, 460.0).center().build();
     });
 }
 
@@ -191,6 +200,23 @@ pub fn settings_open(app: AppHandle) { crate::panel::hide(&app); open(&app); }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_view_reports_the_windows_language_not_the_resolved_one() {
+        let d = tempfile::tempdir().unwrap();
+        let p = core_settings::path(d.path());
+        let mut s = Settings::default();
+        s.language = pets_core::settings::Language::En;
+        core_settings::save(&p, &s).unwrap();
+        let v = SettingsState::load(d.path().to_path_buf()).view(Lang::Pl);
+        assert_eq!((v.lang, v.system_lang), (Lang::En, Lang::Pl));
+    }
+
+    #[test]
+    fn the_window_title_follows_the_language() {
+        assert_eq!(window_title(Lang::En), "Agent Pets: settings");
+        assert_eq!(window_title(Lang::Pl), "Agent Pets: ustawienia");
+    }
 
     #[test]
     fn settings_from_the_window_never_change_the_apps() {

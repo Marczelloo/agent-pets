@@ -26,6 +26,9 @@ pub fn system_polish() -> bool {
 #[cfg(not(windows))]
 pub fn system_polish() -> bool { std::env::var("LANG").map(|v| v.starts_with("pl")).unwrap_or(false) }
 
+/// Język Windows jako `Lang` (to, co wybiera `Auto`).
+pub fn system() -> Lang { resolve(Language::Auto, system_polish()) }
+
 /// Język z ustawień i systemu.
 pub fn current(setting: Language) -> Lang { resolve(setting, system_polish()) }
 

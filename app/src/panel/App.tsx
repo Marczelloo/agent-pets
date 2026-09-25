@@ -98,7 +98,7 @@ export default function App() {
     ];
     void invoke<Snapshot>('snapshot').then(s => take.current(s));
     void invoke<SettingsView>('settings_get').then(v => {
-      setSystemLang(v.lang);
+      setSystemLang(v.system_lang);
       setLang(resolveLang(v.settings.language ?? 'auto'));
       setPets(v.settings.pets);
     });

@@ -35,7 +35,7 @@ export function tauriBridge(): Bridge {
     onLayout: cb => on('pets://layout', cb),
     onVisibility: cb => on('pets://visibility', cb),
     onPointer: cb => on('pets://pointer', cb),
-    onSettings: cb => { on('pets://settings', cb); void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.lang); cb(v.settings); }); },
+    onSettings: cb => { on('pets://settings', cb); void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); cb(v.settings); }); },
     onPower: cb => { on<boolean>('pets://power', cb); void invoke<boolean>('power_get').then(cb); },
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
     showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },

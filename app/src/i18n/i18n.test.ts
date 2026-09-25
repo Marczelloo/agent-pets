@@ -13,6 +13,13 @@ describe('i18n', () => {
     expect(resolveLang('auto', [])).toBe('en');
     expect(resolveLang('pl', ['en-US'])).toBe('pl');
   });
+  it('the document language follows the UI language', () => {
+    const g = globalThis as unknown as { document?: { documentElement: { lang: string } } };
+    g.document = { documentElement: { lang: 'pl' } };
+    setLang('en');
+    expect(g.document.documentElement.lang).toBe('en');
+    delete g.document;
+  });
   it('switches texts at once', () => {
     setLang('en');
     expect(formatAgo(125_000)).toBe('2 min ago');
@@ -47,5 +54,21 @@ describe('i18n', () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+  it('the Polish installer file translates every Tauri NSIS message', () => {
+    // klucze z wbudowanego English.nsh w @tauri-apps/cli 2.11.5
+    const keys = ['addOrReinstall', 'alreadyInstalled', 'alreadyInstalledLong', 'appRunning', 'appRunningOkKill', 'chooseMaintenanceOption',
+      'choowHowToInstall', 'createDesktop', 'dontUninstall', 'dontUninstallDowngrade', 'failedToKillApp', 'installingWebview2',
+      'newerVersionInstalled', 'older', 'olderOrUnknownVersionInstalled', 'silentDowngrades', 'unableToUninstall', 'uninstallApp',
+      'uninstallBeforeInstalling', 'unknown', 'webview2AbortError', 'webview2DownloadError', 'webview2DownloadSuccess',
+      'webview2Downloading', 'webview2InstallError', 'webview2InstallSuccess', 'deleteAppData'];
+    // BOM zostaje w pliku: bez niego NSIS czyta polskie znaki w stronie kodowej ANSI
+    const raw = readFileSync(join(__dirname, '..', '..', 'src-tauri', 'nsis', 'Polish.nsh'), 'utf8');
+    expect(raw.charCodeAt(0)).toBe(0xfeff);
+    const nsh = raw.slice(1);
+    const found = [...nsh.matchAll(/^LangString (\w+) \$\{LANG_POLISH\} "/gm)].map(m => m[1]);
+    expect(found.sort()).toEqual([...keys].sort());
+    const conf = JSON.parse(readFileSync(join(__dirname, '..', '..', 'src-tauri', 'tauri.conf.json'), 'utf8'));
+    expect(conf.bundle.windows.nsis.customLanguageFiles).toEqual({ Polish: 'nsis/Polish.nsh' });
   });
 });

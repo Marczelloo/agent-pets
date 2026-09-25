@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { K } from './pose';
 import { SCENES, createPet, drawPet, pen, setRng, setScene, stepPet } from './index';
 import { recorder, seeded } from './testing';
+import { PetPainter } from './painter';
+import { STYLE_IDS } from '../look';
 
 const rng = seeded(11);
 setRng(rng.next);
@@ -41,4 +43,21 @@ describe('każda scena i skórka: bez NaN i wyjątków', () => {
     expect(draw(0.5)).not.toEqual(draw());
     expect(draw(1)).toEqual(draw());
   });
+});
+
+describe('każdy styl × ruch × skórka × scena przez PetPainter: bez NaN, stan płótna przywrócony', () => {
+  const surface = (w: number, h: number) => ({ canvas: { width: w, height: h } as HTMLCanvasElement, ctx: recorder().ctx });
+  for (const style of STYLE_IDS) for (const motion of ['calm', 'anime'] as const) {
+    it(`${style} / ${motion}`, () => {
+      for (const skin of ['clawd', 'kodek'] as const) for (const scene of Object.keys(SCENES)) {
+        const p = new PetPainter(createPet(skin, scene), surface);
+        const rec = recorder();
+        for (let f = 0; f < 40; f++) p.frame(rec.ctx, { dt: f % 2 ? 0.05 : 1 / 30, t0: 1 + f / 30, X: 60, Y: 40, u: 0.3, look: { style, motion },
+          animate: true, saving: f > 20, reduced: false, dpr: 1 });
+        for (const k of K) expect(Number.isFinite(p.pet.p[k].x), `${skin}/${scene}/${k}`).toBe(true);
+        expect(rec.log.some(l => l.includes('NaN')), `${skin}/${scene}`).toBe(false);
+        expect(rec.log.filter(l => l === 'save()').length).toBe(rec.log.filter(l => l === 'restore()').length);
+      }
+    });
+  }
 });

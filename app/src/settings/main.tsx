@@ -38,7 +38,7 @@ function Root() {
       return;
     }
     const [v, r, d] = await Promise.all([invoke<View>('settings_get'), invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
-    setSystemLang(v.lang);
+    setSystemLang(v.system_lang);
     setLang(resolveLang(v.settings.language ?? 'auto'));
     setView(v);
     setRows(r);

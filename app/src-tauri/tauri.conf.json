@@ -38,6 +38,7 @@
         "installMode": "currentUser",
         "languages": ["English", "Polish"],
         "displayLanguageSelector": false,
+        "customLanguageFiles": { "Polish": "nsis/Polish.nsh" },
         "installerHooks": "nsis/hooks.nsh",
         "installerIcon": "icons/icon.ico"
       }
