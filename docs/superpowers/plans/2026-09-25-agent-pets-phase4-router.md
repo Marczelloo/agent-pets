@@ -5,7 +5,7 @@
 **Cel:** zwierzak zadania Agent Routera ma tytuł zadania, znaczek routera i „zdrowie” zadania (aktywne, cisza, utknęło, zablokowane), a nieudane zadanie pokazuje błąd. Router zapisuje w tym celu mały publiczny plik stanu, a widżet go czyta.
 
 **Architektura:**
-- **Router** (`C:\Users\moskw\Documents\ChatGPT\Agent Router MCP`, repo `Marczelloo/agent-router-mcp`): przy każdym zapisie stanu wewnętrznego (`TaskStore.flush`) zapisuje też atomowo `~/.agent-router/status.json`, wyliczony czystą funkcją `publicStatus(tasks, now, stallSeconds)`.
+- **Router** (repo `Marczelloo/agent-router-mcp`, lokalnie obok tego repo: `../Agent Router MCP`): przy każdym zapisie stanu wewnętrznego (`TaskStore.flush`) zapisuje też atomowo `~/.agent-router/status.json`, wyliczony czystą funkcją `publicStatus(tasks, now, stallSeconds)`.
 - **Rdzeń** (`pets-core`): nowy moduł `router` z parserem pliku (plik → zdarzenia `Meta`/`Error` dla sesji o id = `threadId`) i odpytywaniem po mtime co 1 s; `Session.router_task` w modelu.
 - **UI:** „zdrowie” liczone z czasu ostatniej aktywności w chwili rysowania (`routerHealth`), linia w tooltipie i panelu, znaczek routera przy zwierzaku w pasku.
 
