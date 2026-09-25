@@ -14,9 +14,9 @@ const acts=s.acts;if(s.cycle){startAct(c,acts[(acts.indexOf(c.act)+1)%acts.lengt
 let a=acts[0];if(c.act===acts[0]&&acts.length>1&&rng()>.3)a=acts[1+Math.floor(rng()*(acts.length-1))];startAct(c,a);}
 export function targets(c: any,t: any){const o=Object.assign({},DEF,SCENES[c.st].base,c.act[2](c.aT,c,t)||{});['L','R'].forEach((k: any,i: any)=>{if(!o['ik'+k]){o['hx'+k]=c.aHand[i][0];o['hy'+k]=c.aHand[i][1];}});return o;}
 function slot(c: any,tg: any,key: any,ak: any){const nm=key.slice(1),want=tg[key]||null,P=c.p[ak];if(want&&want!==c[nm]){if(!c[nm]||P.x<.1)c[nm]=want;else{tg[ak]=0;return;}}tg[ak]=want?1:0;if(!want&&P.x<.03)c[nm]=null;}
-export function stepPet(c: any,dt: any,t: any){c.aT+=dt;if(c.pend&&c.aT>=c.pend.t){const f=c.pend.fn;c.pend=null;f();}if(c.aT>c.act[1])nextAct(c);
+export function stepPet(c: any,dt: any,t: any,spr?: {k:number;d:number}){const sk=spr?.k??1,sd=spr?.d??1;c.aT+=dt;if(c.pend&&c.aT>=c.pend.t){const f=c.pend.fn;c.pend=null;f();}if(c.aT>c.act[1])nextAct(c);
 const tg=targets(c,t);c.tg=tg;c.f=tg._f||20;c.hp+=(tg._hf||.85)*dt;slot(c,tg,'_prop','propA');slot(c,tg,'_hold','holdA');const P=c.p;
-K.forEach((k: any)=>{const s=P[k],sp=SPR[k]||[90,16];s.v+=((tg[k]-s.x)*sp[0]-s.v*sp[1])*dt;s.x+=s.v*dt;});
+K.forEach((k: any)=>{const s=P[k],sp=SPR[k]||[90,16];s.v+=((tg[k]-s.x)*sp[0]*sk-s.v*sp[1]*sd)*dt;s.x+=s.v*dt;});
 if(tg._poleDirect){const nv=(tg.pole-P.pole.x)/dt;P.pole.v=P.pole.v*.6+nv*.4;P.pole.x=tg.pole;}
 c.nb-=dt;if(c.nb<0){c.blink=.16;c.nb=2.5+rng()*3;}c.blink=Math.max(0,c.blink-dt);
 if(SKINS[c.type as SkinId].antenna){const drive=-P.th.v*.8+Math.sin(t*1.7)*.4+(P.hopW.x>.1?Math.cos(TAU*(c.hp%1))*1.5*P.hopW.x:0)+P.typeW.x*Math.sin(t*20)*1.2+P.walkW.x*Math.sin(t*10)*1.2;c.av+=(drive*20-c.aa*120-c.av*7)*dt;c.aa+=c.av*dt;}

@@ -8,16 +8,17 @@ import { morph } from "../fold";
 import { SKINS } from "../../skins";
 import type { Pet } from "../pet";
 import { ACCENT, STYLES } from "../../styles";
+import { MOTIONS } from "../../motion";
 import { DEFAULT_LOOK } from "../../look";
 import type { Look } from "../../types";
 export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
-const lk=look??DEFAULT_LOOK,st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=ACCENT[c.type];pen.ol=st.ink(pen.accent);
+const lk=look??DEFAULT_LOOK,st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=ACCENT[c.type];pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.emotes;
 const P=c.p,tg=c.tg||{},sk=SKINS[c.type],pal=sk.pal;
 const gr=cl(P.grey.x),cm=lerpC(pal.m,pal.g,gr),cs=lerpC(pal.s,pal.gs,gr),cb=lerpC(pal.b,pal.gs,gr);
 const wob=cl(P.wobW.x),shk=cl(P.shake.x),th=P.th.x+.4*Math.cos(t*4)*wob+.35*Math.sin(t*28)*shk,co=Math.cos(th),si=Math.sin(th);
 const sit=cl(P.sit.x),loaf=cl(P.loaf.x),down=Math.max(sit,loaf),walk=cl(P.walkW.x),lean=cl(P.lean.x);
 const hph=c.hp%1;let h=0,sq=0;if(hph<.42){h=Math.sin(PI*hph/.42);sq=.07*Math.cos(PI*hph/.42);}else if(hph<.58){sq=-.13*Math.sin(PI*(hph-.42)/.16);}
-const hw=cl(P.hopW.x);h*=hw;sq*=hw;
+const hw=cl(P.hopW.x);h*=hw;sq*=hw*pen.squash;
 const wb=Math.abs(Math.sin(t*10))*walk,br=Math.sin(t*(2.3-loaf))*.02*(1+cl(P.sleep.x)*1.5),tb=Math.abs(Math.sin(t*20))*.008*cl(P.typeW.x);
 const pil=c.prop==='pillow'?cl(P.propA.x)*loaf:0;
 const hopY=(h*24+wb*2.5+pil*4)*u;
@@ -68,6 +69,7 @@ if(open>.02&&!saver){x.globalAlpha=GA*ea;shp(x,rrP(ex-ew/2,ey-eh*open/2,ew,Math.
 if(sl>.02&&!saver){x.globalAlpha=GA*ea*sl;x.beginPath();x.arc(ex,ey-2*u,5.5*u,.15*PI,.85*PI);x.stroke();}
 if(sqn>.05){x.globalAlpha=GA*ea*sqn;x.beginPath();x.moveTo(ex-5*u,ey-3*u*s);x.lineTo(ex+5*u,ey+3*u*s);x.moveTo(ex-5*u,ey+1*u);x.lineTo(ex+5*u,ey+1*u);x.stroke();}
 if(hp>.02){x.globalAlpha=GA*ea*hp;x.beginPath();x.arc(ex,ey+5*u,5.5*u,1.15*PI,1.85*PI);x.stroke();}
+if(pen.fx&&hp>.3){x.globalAlpha=GA*ea*hp;x.fillStyle='#FFFFFF';x.font=`${Math.max(6,10*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.fillText('✦',ex+ew*.5,ey-eh*.35);}
 if(dz>.02){x.globalAlpha=GA*ea*dz;const k=5*u;x.beginPath();x.moveTo(ex-k,ey-k);x.lineTo(ex+k,ey+k);x.moveTo(ex+k,ey-k);x.lineTo(ex-k,ey+k);x.stroke();}
 if(st.face?.smile&&!sk.screenFace&&s>0&&open>.3&&hp<.02){x.globalAlpha=GA*ea;x.strokeStyle=pen.ol;x.lineWidth=Math.max(1,2.2*u);x.beginPath();x.arc(fcx,ey+eh*.45,5*u*co,.15*PI,.85*PI);x.stroke();}
 if((hp>.02||st.face?.blush)&&sk.blush){x.globalAlpha=GA*ea*Math.max(hp,st.face?.blush?.75:0)*.6;x.fillStyle='#F0997B';x.beginPath();x.ellipse(ex+s*6*u*co,ey+14*u,6*u*co,3.5*u,0,0,TAU);x.fill();}
