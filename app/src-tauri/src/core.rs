@@ -71,10 +71,20 @@ pub fn failure_text(e: &anyhow::Error) -> String {
 
 fn live(publish: &dyn Fn(&Store, i64)) -> anyhow::Result<()> {
     let mut rt = Runtime::start(RuntimeConfig::from_env()?)?;
+    // limity konta Claude z serwera Anthropic (dokładne czasy resetu, bez sesji CLI)
+    let (usage_tx, usage) = std::sync::mpsc::channel();
+    let has_token = crate::usage::spawn(usage_tx);
+    // Pierwsza migawka czeka chwilę na limity z serwera: reguły powiadomień uznają wtedy zastany limit
+    // powyżej 90% za stan sprzed startu, a nie za nowy.
+    if has_token {
+        if let Ok(e) = usage.recv_timeout(Duration::from_secs(3)) { rt.apply_external(e); }
+    }
     publish(rt.store(), now_ms());
     loop {
         let now = now_ms();
-        if rt.step(now) { publish(rt.store(), now); }
+        let mut changed = rt.step(now);
+        for e in usage.try_iter() { changed |= rt.apply_external(e); }
+        if changed { publish(rt.store(), now); }
         std::thread::sleep(Duration::from_millis(250));
     }
 }

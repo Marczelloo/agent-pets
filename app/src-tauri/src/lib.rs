@@ -5,6 +5,7 @@ mod panel;
 mod shell;
 mod tooltip;
 mod tray;
+mod usage;
 
 use tauri::{Manager, RunEvent};
 

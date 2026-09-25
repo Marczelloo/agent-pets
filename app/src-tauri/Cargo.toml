@@ -16,6 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 tauri-winrt-notification = "0.8"
+ureq = { version = "2", features = ["json"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
@@ -27,3 +28,4 @@ windows = { version = "0.61", features = [
 
 [dev-dependencies]
 tempfile = "3"
+tiny_http = "0.12"

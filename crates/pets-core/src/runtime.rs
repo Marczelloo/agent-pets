@@ -73,6 +73,9 @@ impl Runtime {
 
     pub fn store(&self) -> &Store { &self.store }
 
+    /// Zdarzenie z zewnątrz rdzenia (np. limity konta Claude pobrane przez aplikację). Zwraca, czy stan się zmienił.
+    pub fn apply_external(&mut self, e: Event) -> bool { self.apply(e) }
+
     /// Przetwarza zaległe zdarzenia i przesuwa zegar. Zwraca `true`, gdy stan się zmienił.
     pub fn step(&mut self, now: i64) -> bool {
         let mut changed = false;

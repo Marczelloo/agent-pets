@@ -1,3 +1,4 @@
+pub mod account_usage;
 pub mod desktop_usage;
 pub mod hook;
 pub mod registry;

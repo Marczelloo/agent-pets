@@ -20,14 +20,23 @@ pub fn rfc3339_ms(s: &str) -> Option<i64> {
     }
     let n = |a: usize, z: usize| s.get(a..z)?.parse::<i64>().ok();
     let (y, mo, d, h, mi, se) = (n(0, 4)?, n(5, 7)?, n(8, 10)?, n(11, 13)?, n(14, 16)?, n(17, 19)?);
-    let rest = &s[19..];
+    let mut rest = &s[19..];
     let ms = if let Some(frac) = rest.strip_prefix('.') {
         let digits: String = frac.chars().take_while(|c| c.is_ascii_digit()).collect();
+        rest = &frac[digits.len()..];
         let padded = format!("{:0<3}", &digits[..digits.len().min(3)]);
         padded.parse::<i64>().ok()?
     } else { 0 };
-    if !s.ends_with('Z') { return None; }
-    Some(((days_from_civil(y, mo, d) * 86_400 + h * 3600 + mi * 60 + se) * 1000) + ms)
+    // strefa: `Z` albo `±HH:MM`
+    let offset_s = match rest.as_bytes() {
+        [b'Z'] => 0,
+        [sign @ (b'+' | b'-'), _, _, b':', _, _] => {
+            let v = rest[1..3].parse::<i64>().ok()? * 3600 + rest[4..6].parse::<i64>().ok()? * 60;
+            if *sign == b'+' { v } else { -v }
+        }
+        _ => return None,
+    };
+    Some(((days_from_civil(y, mo, d) * 86_400 + h * 3600 + mi * 60 + se - offset_s) * 1000) + ms)
 }
 
 #[cfg(test)]
@@ -39,5 +48,13 @@ mod tests {
         assert_eq!(rfc3339_ms("2026-09-23T19:25:19.386Z"), Some(1_790_191_519_386));
         assert_eq!(rfc3339_ms("2026-09-23T19:25:19Z"), Some(1_790_191_519_000));
         assert_eq!(rfc3339_ms("nonsense"), None);
+    }
+
+    #[test]
+    fn parses_numeric_offsets_and_microseconds() {
+        // format odpowiedzi `api/oauth/usage`
+        assert_eq!(rfc3339_ms("2026-09-25T18:20:00.013684+00:00"), Some(1_790_360_400_013));
+        assert_eq!(rfc3339_ms("2026-09-25T20:20:00+02:00"), Some(1_790_360_400_000));
+        assert_eq!(rfc3339_ms("2026-09-25T18:20:00+0"), None);
     }
 }
