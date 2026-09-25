@@ -23,6 +23,12 @@ describe('PanelView', () => {
     expect(html).toContain('brak danych');
     expect(html).not.toContain('0%');
   });
+  it('draws no pets while the panel is hidden', () => {
+    const view = (animate: boolean) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0}
+      status={null} focusId={null} onJump={() => {}} animate={animate} />);
+    expect(view(true)).toContain('<canvas');
+    expect(view(false)).not.toContain('<canvas');
+  });
   it('shows the jump result in the status line', () => {
     const html = renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0}
       status="Skopiowano komendę: claude --resume a" focusId={null} onJump={() => {}} />);

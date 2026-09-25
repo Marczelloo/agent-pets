@@ -45,6 +45,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     w.on_window_event(move |e| if let WindowEvent::Focused(false) = e {
         if let Some(win) = a.get_webview_window("panel") { let _ = win.hide(); }
         a.state::<Panel>().0.lock().unwrap().blurred(pets_core::time::now_ms());
+        let _ = a.emit_to("panel", "panel://visible", false);
     });
     Ok(())
 }
@@ -69,6 +70,7 @@ pub fn open(app: &AppHandle, focus: Option<String>) {
     let _ = win.show();
     let _ = win.set_focus();
     app.state::<Panel>().0.lock().unwrap().shown();
+    let _ = app.emit_to("panel", "panel://visible", true);
     if let Some(id) = focus { let _ = app.emit_to("panel", "panel://focus", id); }
 }
 
@@ -81,6 +83,7 @@ pub fn open_with_status(app: &AppHandle, focus: Option<String>, status: String) 
 pub fn hide(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("panel") { let _ = win.hide(); }
     app.state::<Panel>().0.lock().unwrap().hidden();
+    let _ = app.emit_to("panel", "panel://visible", false);
 }
 
 pub fn toggle(app: &AppHandle, focus: Option<String>) {

@@ -7,13 +7,17 @@ import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } 
 import { PetCanvas } from './PetCanvas';
 
 interface JumpResult { method: string; detail: string }
-interface ViewProps { snap: Snapshot; nowMs: number; status: string | null; focusId: string | null; onJump: (id: string) => void }
+interface ViewProps {
+  snap: Snapshot; nowMs: number; status: string | null; focusId: string | null; onJump: (id: string) => void;
+  /** ukryty panel nie rysuje zwierzaków (WebView2 animuje także w ukrytym oknie) */
+  animate?: boolean;
+}
 
 const plural = (n: number) =>
   n === 1 ? 'sesja' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'sesje' : 'sesji';
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   return (
     <div className="panel">
@@ -37,7 +41,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump }: ViewProps) {
         {sessions.length === 0 && <p className="empty">Brak aktywnych sesji</p>}
         {sessions.map(s => (
           <article key={s.id} id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
-            <PetCanvas session={s} />
+            {animate ? <PetCanvas session={s} /> : <div className="pet" />}
             <div className="info">
               <div className="title">{petTooltip(s, nowMs).title}</div>
               <div className="sub">{sessionSubtitle(s)}</div>
@@ -62,6 +66,7 @@ export default function App() {
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [shown, setShown] = useState(false);
   const [, tick] = useState(0);
   const take = useRef((s: Snapshot) => { setSnap(s); setOffset(s.now - Date.now()); });
 
@@ -70,6 +75,7 @@ export default function App() {
     const un = [
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
+      listen<boolean>('panel://visible', e => setShown(e.payload)),
       listen<string>('panel://focus', e => {
         setStatus(null);
         setFocusId(e.payload);
@@ -91,5 +97,5 @@ export default function App() {
     setStatus(r.method === 'clipboard' || r.method === 'none' ? r.detail : null);
   };
 
-  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} />;
+  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} />;
 }
