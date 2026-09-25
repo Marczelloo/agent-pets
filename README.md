@@ -53,7 +53,7 @@ The app's interface is in Polish for now. Design documents (spec, plans, spike r
 
 ## Install
 
-1. Download `Agent Pets_<version>_x64-setup.exe` from [GitHub Releases](https://github.com/Marczelloo/agent-pets/releases).
+1. Download `Agent.Pets_<version>_x64-setup.exe` from [GitHub Releases](https://github.com/Marczelloo/agent-pets/releases).
 2. Run it. The installer is not code-signed yet, so Windows SmartScreen may warn you: choose **More info → Run anyway**. It installs for your user only, no administrator rights.
 3. The first-run wizard asks:
    - which apps get pets. It shows the ones it found: Claude Code (`~/.claude`), Codex (`~/.codex`), Agent Router (`~/.agent-router`). For Claude Code it installs hooks in `~/.claude/settings.json` and keeps a backup;
