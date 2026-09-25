@@ -1,4 +1,7 @@
+import { setPreviewLang } from './i18n';
 import { fakeBridge } from './stage/bridge';
+
+setPreviewLang();
 import { startStage } from './stage/stage';
 import { renderTooltip } from './tooltip/view';
 

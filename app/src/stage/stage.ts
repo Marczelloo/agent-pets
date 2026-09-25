@@ -1,6 +1,7 @@
 import { pen } from '../renderer';
 import { PetPainter } from '../renderer/painter';
 import { appFor, defaultPets, lookFor } from '../look';
+import { resolveLang, setLang } from '../i18n';
 import type { Pets, PointerMsg, Snapshot, StageLayout } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
@@ -82,7 +83,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   bridge.onLayout(l => { lay = l; relayout(); });
   bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
-  bridge.onSettings(s => { pets = s.pets; maxPets = s.pets.max_visible; relayout(); });
+  bridge.onSettings(s => { setLang(resolveLang(s.language ?? 'auto')); pets = s.pets; maxPets = s.pets.max_visible; relayout(); });
   bridge.onPower(s => { saving = s; budget = frameBudget(s); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;

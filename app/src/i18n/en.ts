@@ -115,6 +115,8 @@ export const en: Dict = {
     loading: 'Loading…',
     copied: 'Copied',
     copyReport: 'Copy report',
+    langAuto: 'Automatic (like Windows)',
+    broken: e => `The settings file is damaged (${e}); using default settings.`,
     appHint: {
       claude_code: 'I’ll install hooks in ~/.claude/settings.json (with a backup).',
       codex: 'Nothing to install: reads session files in ~/.codex/sessions.',

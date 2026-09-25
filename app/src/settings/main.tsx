@@ -8,9 +8,10 @@ import { SettingsView, type Tab } from './SettingsView';
 import { Wizard } from './Wizard';
 import { setLoopSaving } from './look/loop';
 import { setPreviewSaving } from './look/PetsCanvas';
-import { t } from '../i18n';
+import { resolveLang, setLang, setPreviewLang, setSystemLang, t } from '../i18n';
 
 const inTauri = '__TAURI_INTERNALS__' in window;
+if (!inTauri) setPreviewLang();
 
 /** Dane pokazowe dla podglądu w przeglądarce (`pnpm dev`, /settings.html, `?wizard` pokazuje kreator). */
 const demoRows: AppRow[] = [
@@ -37,16 +38,21 @@ function Root() {
       return;
     }
     const [v, r, d] = await Promise.all([invoke<View>('settings_get'), invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
+    setSystemLang(v.lang);
+    setLang(resolveLang(v.settings.language ?? 'auto'));
     setView(v);
     setRows(r);
     setDiag(d);
-    if (v.load_error) setMessage(v.load_error);
+    if (v.load_error) setMessage(t().settings.broken(v.load_error));
   }, []);
 
   useEffect(() => {
     void reload();
     if (!inTauri) return;
-    const un = listen<Settings>('pets://settings', e => setView(v => (v ? { ...v, settings: e.payload } : v)));
+    const un = listen<Settings>('pets://settings', e => {
+      setLang(resolveLang(e.payload.language ?? 'auto'));
+      setView(v => (v ? { ...v, settings: e.payload } : v));
+    });
     const power = (s: boolean) => { setLoopSaving(s); setPreviewSaving(s); };
     const unPower = listen<boolean>('pets://power', e => power(e.payload));
     void invoke<boolean>('power_get').then(power);
@@ -64,9 +70,13 @@ function Root() {
   }
 
   const onChange = (s: Settings) => {
+    setLang(resolveLang(s.language ?? 'auto'));
     setView({ ...view, settings: s });
     setMessage(null);
-    if (inTauri) void invoke('settings_set', { settings: s }).catch(e => setMessage(String(e)));
+    if (!inTauri) return;
+    const relang = s.language !== view.settings.language;
+    // opisy integracji i diagnostyka przychodzą z Rusta już w nowym języku
+    void invoke('settings_set', { settings: s }).then(() => { if (relang) void reload(); }).catch(e => setMessage(String(e)));
   };
   const onIntegration = async (id: AppId, on: boolean) => {
     if (!inTauri) return '';

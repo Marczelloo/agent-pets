@@ -7,7 +7,7 @@ import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } 
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
-import { t } from '../i18n';
+import { resolveLang, setLang, setSystemLang, t } from '../i18n';
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
   isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
@@ -86,7 +86,7 @@ export default function App() {
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
       listen<boolean>('panel://visible', e => setShown(e.payload)),
-      listen<Settings>('pets://settings', e => setPets(e.payload.pets)),
+      listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); setPets(e.payload.pets); }),
       listen<boolean>('pets://power', e => setPetSaving(e.payload)),
       listen<string>('panel://focus', e => {
         setStatus(null);
@@ -97,7 +97,11 @@ export default function App() {
       }),
     ];
     void invoke<Snapshot>('snapshot').then(s => take.current(s));
-    void invoke<SettingsView>('settings_get').then(v => setPets(v.settings.pets));
+    void invoke<SettingsView>('settings_get').then(v => {
+      setSystemLang(v.lang);
+      setLang(resolveLang(v.settings.language ?? 'auto'));
+      setPets(v.settings.pets);
+    });
     void invoke<boolean>('power_get').then(saving => setPetSaving(saving));
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };

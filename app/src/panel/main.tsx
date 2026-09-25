@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { demoLimits, demoSessions } from '../stage/demo';
 import App, { PanelView } from './App';
-import { t } from '../i18n';
+import { setPreviewLang, t } from '../i18n';
 
 /** Podgląd w zwykłej przeglądarce (`pnpm dev`, /panel.html): dane pokazowe zamiast rdzenia. */
 function Demo() {
@@ -13,4 +13,5 @@ function Demo() {
   return <PanelView snap={snap} nowMs={now} status={status} focusId={null} onJump={id => setStatus(t().panel.copiedCommand(id))} />;
 }
 
+if (!('__TAURI_INTERNALS__' in window)) setPreviewLang();
 createRoot(document.getElementById('root')!).render('__TAURI_INTERNALS__' in window ? <App /> : <Demo />);

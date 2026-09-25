@@ -4,7 +4,8 @@ import { LookGallery } from './look/LookGallery';
 import { MotionSwitch } from './look/LookTab';
 import { appHint, appLabel, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
 import { Toggle } from './Toggle';
-import { t } from '../i18n';
+import { resolveLang, setLang, t } from '../i18n';
+import { LanguageSelect } from './LanguageSelect';
 
 
 interface Props {
@@ -40,9 +41,12 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
 
   return (
     <main className="wizard">
-      <p className="steps" aria-label={t().wizard.step(step + 1, WIZARD_STEPS.length)}>
-        {WIZARD_STEPS.map((s, i) => <span key={s} className={i === step ? 'on' : ''} />)}
-      </p>
+      <div className="wizard-top">
+        <p className="steps" aria-label={t().wizard.step(step + 1, WIZARD_STEPS.length)}>
+          {WIZARD_STEPS.map((s, i) => <span key={s} className={i === step ? 'on' : ''} />)}
+        </p>
+        {step === 0 && <LanguageSelect value={draft.language ?? 'auto'} onChange={l => { setLang(resolveLang(l)); set({ language: l }); }} />}
+      </div>
       <h1>{t().wizard.title[cur]}</h1>
 
       {cur === 'apps' && <section className="card">

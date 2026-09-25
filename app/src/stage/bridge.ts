@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { PointerMsg, Settings, SettingsView, Snapshot, StageLayout, TooltipContent } from '../types';
 import { demoLimits, demoSessions } from './demo';
+import { setSystemLang } from '../i18n';
 
 export interface Bridge {
   /** Po zarejestrowaniu nasłuchu: zgłasza gotowość i zwraca bieżącą migawkę. */
@@ -34,7 +35,7 @@ export function tauriBridge(): Bridge {
     onLayout: cb => on('pets://layout', cb),
     onVisibility: cb => on('pets://visibility', cb),
     onPointer: cb => on('pets://pointer', cb),
-    onSettings: cb => { on('pets://settings', cb); void invoke<SettingsView>('settings_get').then(v => cb(v.settings)); },
+    onSettings: cb => { on('pets://settings', cb); void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.lang); cb(v.settings); }); },
     onPower: cb => { on<boolean>('pets://power', cb); void invoke<boolean>('power_get').then(cb); },
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
     showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },

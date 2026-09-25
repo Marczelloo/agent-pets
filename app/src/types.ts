@@ -53,9 +53,12 @@ export interface Settings {
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;
+  language: Language;
   [extra: string]: unknown;
 }
-export interface SettingsView { settings: Settings; first_run: boolean; load_error: string | null }
+export type Language = 'auto' | 'pl' | 'en';
+/** `lang`: język tekstów z Rusta (ustawienie albo język Windows), dla `auto` w UI. */
+export interface SettingsView { settings: Settings; first_run: boolean; load_error: string | null; lang?: 'pl' | 'en' }
 export interface AppRow {
   id: AppId;
   detected: { found: boolean; path: string | null; note: string | null };

@@ -12,6 +12,9 @@ Checklista z planu `2026-09-25-agent-pets-looks.md` (task 13, a część o języ
 | 6 | Nadpisanie per agent | testy `look.test.ts` (`lookFor`, `withOverride`), pasek w galerii pokazuje wygląd każdego agenta | ✅ automatycznie; na żywo: test użytkownika | 2026-09-25 |
 | 7 | Migracja `skin` → `style` | testy rdzenia (`the_old_skin_field_becomes_the_style`, nieznane wartości) | ✅ automatycznie; na maszynie użytkownika: przy teście na żywo | 2026-09-25 |
 | 8 | Tryb oszczędny i wyłączone efekty animacji | testy `effective`, `PetPainter` (bez smug przy oszczędzaniu), `reducedMotion` | ✅ | 2026-09-25 |
-| 9 | Testy automatyczne | `cargo test --workspace`, `pnpm --dir app test` | ✅ | 2026-09-25 |
+| 9 | Interfejs po angielsku | zrzuty `settings.html`, `settings.html?wizard`, `panel.html` z `?lang=en`; testy `i18n.test.ts` (auto, przełączanie, skan polskich literałów w UI i w aplikacji Tauri) i `views.test.tsx` | ✅ | 2026-09-25 |
+| 10 | Teksty z Rusta po angielsku | testy: powiadomienia (`toasts_speak_english_when_asked`), przejście do sesji, status rdzenia, opisy integracji | ✅ automatycznie; tray i toasty na żywo: test użytkownika | 2026-09-25 |
+| 11 | Instalator dwujęzyczny | `tauri.conf.json`: `languages: [English, Polish]`, wybór według języka Windows | sprawdzi pierwszy build instalatora | 2026-09-25 |
+| 12 | Testy automatyczne | `cargo test --workspace`, `pnpm --dir app test` | ✅ | 2026-09-25 |
 
-Do sprawdzenia przez użytkownika na żywo: wygląd w prawdziwym pasku (DPI, jasny i ciemny pasek), płynność Anime, zmiana stylu bez restartu, nadpisania.
+Do sprawdzenia przez użytkownika na żywo: wygląd w prawdziwym pasku (DPI, jasny i ciemny pasek), płynność Anime, zmiana stylu bez restartu, nadpisania, przełączenie języka (tray, panel, ustawienia i powiadomienia bez restartu).

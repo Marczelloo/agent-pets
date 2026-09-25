@@ -26,6 +26,7 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
 - **Seven looks and two ways to move.** Sticker (like the app icon), Sketch, Clean, Pixel art, Neon, Ink and Pastel, all readable at taskbar size, plus an Anime motion mode: snappier, springier, with swoosh trails, speed lines, impact bursts and manga emotes. Pick one look for everyone or a different one per agent, from a live gallery in Settings.
 - **Windows notifications** when an agent waits for you, finishes a long turn, or passes 90% of a limit.
 - **Agent Router tasks** get the task's title, a router badge and live health (active, quiet, stalled, blocked).
+- **English and Polish.** Pets, panel, settings, notifications and the installer follow your Windows language, or pick one in Settings.
 - **Private by default.** Everything is read from local files and hooks. The only optional network call, fetching your Claude plan limits from Anthropic, is off until you allow it.
 - **Light on resources.** Drawing stops under full-screen apps and when the taskbar is hidden; on battery the pets slow down to 10 fps.
 
@@ -33,7 +34,7 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
 |---|---|---|
 | <img src="docs/images/panel.png" alt="Panel with limits and sessions" width="260"> | <img src="docs/images/wizard.png" alt="Wizard step: choose the pets' look, with a live preview" width="340"> | <img src="docs/images/settings.png" alt="Settings window, Apps tab" width="340"> |
 
-The app's interface is in Polish for now. Design documents (spec, plans, spike reports) are in Polish too.
+The interface is in English and Polish and follows the Windows display language; change it in Settings → General. Design documents (spec, plans, spike reports) are in Polish.
 
 ## What works now
 

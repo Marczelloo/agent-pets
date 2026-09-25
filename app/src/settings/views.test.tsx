@@ -37,6 +37,25 @@ describe('Wizard', () => {
   });
 });
 
+describe('language', () => {
+  it('general tab offers the language, and English renders English', () => {
+    const s = { ...defaultSettings(), language: 'en' as const };
+    setLang('en');
+    const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="general" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toContain('Język / Language');
+    expect(html).toContain('Start with Windows');
+    expect(html).not.toContain('Uruchamiaj z Windows');
+  });
+  it('the wizard shows a language picker on its first step', () => {
+    const html = renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} />);
+    expect(html).toContain('aria-label="Język / Language"');
+  });
+  it('new settings follow the system language', () => {
+    expect(defaultSettings().language).toBe('auto');
+  });
+});
+
 describe('SettingsView', () => {
   it('renders the look tab in English after switching', () => {
     setLang('en');

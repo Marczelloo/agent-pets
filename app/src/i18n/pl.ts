@@ -3,6 +3,9 @@ import type { AppId, MotionId, StyleId } from '../types';
 const noun = (n: number) => n === 1 ? 'sesja'
   : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'sesje' : 'sesji';
 
+/** Etykieta wyboru języka: dwujęzyczna, żeby znalazł ją ktoś, kto nie zna bieżącego języka. */
+export const LANGUAGE_LABEL = 'Język / Language';
+
 export const pl = {
   agent: {
     claude: 'Claude Code',
@@ -118,6 +121,8 @@ export const pl = {
     loading: 'Wczytuję…',
     copied: 'Skopiowano',
     copyReport: 'Skopiuj raport',
+    langAuto: 'Automatycznie (jak Windows)',
+    broken: (e: string) => `Plik ustawień jest uszkodzony (${e}); używam ustawień domyślnych.`,
     appHint: {
       claude_code: 'Zainstaluję hooki w ~/.claude/settings.json (z kopią zapasową).',
       codex: 'Nic do instalowania: czytam pliki sesji z ~/.codex/sessions.',

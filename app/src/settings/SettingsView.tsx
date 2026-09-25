@@ -4,6 +4,8 @@ import { LookTab } from './look/LookTab';
 import { appHint, appLabel, clampMaxVisible, reportText } from './model';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
+import { LANGUAGE_LABEL } from '../i18n/pl';
+import { LanguageSelect } from './LanguageSelect';
 
 export type Tab = 'apps' | 'look' | 'notify' | 'limits' | 'general' | 'diag';
 const TABS: Tab[] = ['apps', 'look', 'notify', 'limits', 'general', 'diag'];
@@ -88,6 +90,10 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         </section>}
 
         {tab === 'general' && <section className="card">
+          <div className="row">
+            <span className="text"><span className="label">{LANGUAGE_LABEL}</span></span>
+            <LanguageSelect value={s.language ?? 'auto'} onChange={l => set({ language: l })} />
+          </div>
           <Toggle label={t().settings.autostart} checked={s.autostart} onChange={on => set({ autostart: on })}>
             {t().settings.autostartDesc}
           </Toggle>
