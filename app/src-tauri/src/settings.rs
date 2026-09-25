@@ -1,5 +1,6 @@
 //! Ustawienia w aplikacji: stan wczytany z `~/.agent-pets/settings.json`, komendy dla okna ustawień
 //! i kreatora, okno ustawień (jedno) oraz wybór `hook.exe` do instalacji hooków Claude Code.
+use pets_core::i18n::{self, Lang};
 use pets_core::integrations::{self, AppId, Detected, Status};
 use pets_core::settings::{self as core_settings, Settings};
 use serde::Serialize;
@@ -23,12 +24,14 @@ impl SettingsState {
         SettingsState { home, path, current: RwLock::new(l.settings), first_run: Mutex::new(l.first_run), load_error: Mutex::new(l.error) }
     }
     pub fn get(&self) -> Settings { self.current.read().unwrap().clone() }
+    /// Język tekstów z Rusta: ustawienie albo język Windows.
+    pub fn lang(&self) -> Lang { i18n::current(self.get().language) }
 }
 
 pub fn home() -> PathBuf { std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(std::env::temp_dir) }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct SettingsView { pub settings: Settings, pub first_run: bool, pub load_error: Option<String> }
+pub struct SettingsView { pub settings: Settings, pub first_run: bool, pub load_error: Option<String>, pub lang: Lang }
 
 #[derive(Serialize, Clone, Debug)]
 pub struct AppRow { pub id: AppId, pub detected: Detected, pub status: Status, pub enabled: bool }
@@ -80,7 +83,7 @@ pub fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
 /// Zapisuje i rozsyła ustawienia; skutki (rdzeń, powiadomienia, autostart) podłącza `apply_effects`.
 fn store(app: &AppHandle, new: Settings) -> Result<(), String> {
     let st = app.state::<SettingsState>();
-    core_settings::save(&st.path, &new).map_err(|e| format!("Nie udało się zapisać {}: {e}", st.path.display()))?;
+    core_settings::save(&st.path, &new).map_err(|e| format!("{} {}: {e}", i18n::tr(st.lang(), "Nie udało się zapisać", "Could not save"), st.path.display()))?;
     let old = std::mem::replace(&mut *st.current.write().unwrap(), new.clone());
     *st.load_error.lock().unwrap() = None;
     crate::apply_effects(app, &old, &new);
@@ -93,7 +96,7 @@ pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings {
 
 #[tauri::command]
 pub fn settings_get(state: tauri::State<SettingsState>) -> SettingsView {
-    SettingsView { settings: state.get(), first_run: *state.first_run.lock().unwrap(), load_error: state.load_error.lock().unwrap().clone() }
+    SettingsView { settings: state.get(), first_run: *state.first_run.lock().unwrap(), load_error: state.load_error.lock().unwrap().clone(), lang: state.lang() }
 }
 
 #[tauri::command]
@@ -104,15 +107,16 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> Result<(), String> {
 
 #[tauri::command]
 pub fn integrations_list(state: tauri::State<SettingsState>) -> Vec<AppRow> {
-    let s = state.get();
+    let (s, lang) = (state.get(), state.lang());
     AppId::ALL.iter().map(|id| AppRow {
-        id: *id, detected: integrations::detect(*id, &state.home, pets_core::i18n::Lang::Pl), status: integrations::status(*id, &state.home, pets_core::i18n::Lang::Pl), enabled: app_on(&s, *id),
+        id: *id, detected: integrations::detect(*id, &state.home, lang), status: integrations::status(*id, &state.home, lang), enabled: app_on(&s, *id),
     }).collect()
 }
 
 fn switch(app: &AppHandle, s: &mut Settings, id: AppId, on: bool) -> Result<String, String> {
     let home = app.state::<SettingsState>().home.clone();
-    let msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), pets_core::i18n::Lang::Pl)? } else { integrations::disable(id, &home, pets_core::i18n::Lang::Pl)? };
+    let lang = i18n::current(s.language);
+    let msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), lang)? } else { integrations::disable(id, &home, lang)? };
     set_app(s, id, on);
     Ok(msg)
 }
@@ -149,7 +153,7 @@ pub fn wizard_finish(app: AppHandle, settings: Settings) -> Vec<String> {
 #[tauri::command]
 pub fn diagnostics(app: AppHandle) -> Diagnostics {
     let st = app.state::<SettingsState>();
-    let s = st.get();
+    let (s, lang) = (st.get(), st.lang());
     let settings_error = st.load_error.lock().unwrap().clone();
     let last_seen = app.state::<LastSeen>().0.lock().unwrap().clone();
     Diagnostics {
@@ -160,7 +164,7 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
         hook_exe: Some(integrations::installed_hook(&st.home)).filter(|p| p.is_file()).map(|p| p.to_string_lossy().into_owned()),
         last_seen,
         autostart_registered: crate::system::autostart_at(crate::system::RUN_KEY),
-        apps: AppId::ALL.iter().map(|id| (*id, app_on(&s, *id), integrations::status(*id, &st.home, pets_core::i18n::Lang::Pl).detail)).collect(),
+        apps: AppId::ALL.iter().map(|id| (*id, app_on(&s, *id), integrations::status(*id, &st.home, lang).detail)).collect(),
     }
 }
 

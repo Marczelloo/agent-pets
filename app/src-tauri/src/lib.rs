@@ -36,11 +36,12 @@ fn jump(app: tauri::AppHandle, session_id: String) -> jump::JumpResult {
 /// Wspólne dla komendy panelu i przycisku „Przejdź” w toaście.
 pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
     let snap = app.state::<core::Shared>().lock().unwrap().clone();
+    let lang = app.state::<settings::SettingsState>().lang();
     let Some(s) = snap.sessions.iter().find(|s| s.id == session_id) else {
-        return jump::JumpResult { method: "none".into(), detail: "Sesja już nie istnieje".into() };
+        return jump::JumpResult { method: "none".into(), detail: pets_core::i18n::tr(lang, "Sesja już nie istnieje", "The session no longer exists").into() };
     };
     let reg = std::env::var_os("USERPROFILE").and_then(|h| jump::registry::find(std::path::Path::new(&h), session_id));
-    jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())))
+    jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())), lang)
 }
 
 /// Skutki zmiany ustawień. Powiadomienia i zgoda na limity Anthropic są czytane na bieżąco w swoich wątkach.
@@ -48,6 +49,7 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(new.apps); }
     if old.autostart != new.autostart { sync_autostart(new.autostart); }
     if old.power_saving != new.power_saving { system::refresh_power(app); }
+    if old.language != new.language { tray::relabel(app, pets_core::i18n::current(new.language)); }
 }
 
 /// Wpis autostartu zgodny z ustawieniem (porównanie z rejestrem, nie z poprzednimi ustawieniami).
@@ -63,7 +65,7 @@ fn repair_integrations(app: &tauri::AppHandle) {
     if !st.get().apps.claude_code { return; }
     let src = settings::pick_hook(&settings::hook_candidates(app));
     if pets_core::integrations::claude_needs_repair(&st.home, src.as_deref()) {
-        let _ = pets_core::integrations::enable(pets_core::integrations::AppId::ClaudeCode, &st.home, src.as_deref(), pets_core::i18n::Lang::Pl);
+        let _ = pets_core::integrations::enable(pets_core::integrations::AppId::ClaudeCode, &st.home, src.as_deref(), st.lang());
     }
 }
 
@@ -71,7 +73,9 @@ fn repair_integrations(app: &tauri::AppHandle) {
 pub fn uninstall_cli(args: &[String]) -> Option<i32> {
     if !args.iter().any(|a| a == "--uninstall-integrations") { return None; }
     let remove_data = args.iter().any(|a| a == "--remove-data");
-    for step in pets_core::integrations::uninstall_all(&settings::home(), remove_data, pets_core::i18n::Lang::Pl) { println!("{step}"); }
+    let home = settings::home();
+    let lang = pets_core::i18n::current(pets_core::settings::load(&pets_core::settings::path(&home)).settings.language);
+    for step in pets_core::integrations::uninstall_all(&home, remove_data, lang) { println!("{step}"); }
     let _ = system::set_autostart(false);
     system::remove_aumid();
     Some(0)
@@ -93,7 +97,7 @@ pub fn run() {
             tooltip::build(app.handle())?;
             app.manage(panel::Panel::default());
             panel::build(app.handle())?;
-            tray::build(app.handle())?;
+            tray::build(app.handle(), app.state::<settings::SettingsState>().lang())?;
             let snaps = notify::start(app.handle().clone());
             let (apps_tx, apps_rx) = std::sync::mpsc::channel();
             app.manage(core::Control(std::sync::Mutex::new(apps_tx)));

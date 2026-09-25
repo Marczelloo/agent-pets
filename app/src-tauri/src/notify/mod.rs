@@ -58,14 +58,16 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
             }
             // pierwsza obserwacja (bez powiadomień) dopiero na prawdziwej migawce rdzenia, nie na pustej
             if !seen_first { continue; }
-            let n = app.state::<crate::settings::SettingsState>().get().notifications;
+            let cur = app.state::<crate::settings::SettingsState>().get();
+            let (n, lang) = (cur.notifications, pets_core::i18n::current(cur.language));
             rules.set_settings(rules::Settings { needs_you: n.needs_you, done: n.done, limits: n.limits });
+            rules.set_lang(lang);
             let now = last.now.max(pets_core::time::now_ms());
             for t in rules.observe(&last, now, &focused) {
                 let a = app.clone();
                 let sid = t.session_id.clone();
                 let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body);
-                if sid.is_some() { toast = toast.add_button("Przejdź", "jump"); }
+                if sid.is_some() { toast = toast.add_button(pets_core::i18n::tr(lang, "Przejdź", "Open"), "jump"); }
                 let _ = toast.on_activated(move |action| {
                     match (action.as_deref(), &sid) {
                         (Some("jump"), Some(id)) => {

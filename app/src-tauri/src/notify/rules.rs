@@ -1,5 +1,6 @@
 //! Kiedy wysłać powiadomienie (spec 2.4). Czysta logika; dostarczanie jest w `notify/mod.rs`.
 use crate::core::Snapshot;
+use pets_core::i18n::{tr, Lang};
 use pets_core::model::{Agent, Limit, Session, State, Window};
 use std::collections::{HashMap, HashSet};
 
@@ -16,6 +17,7 @@ pub struct Toast { pub kind: ToastKind, pub session_id: Option<String>, pub titl
 
 pub struct Rules {
     settings: Settings,
+    lang: Lang,
     primed: bool,
     /// zgłoszone epizody `needs_you` i tury `done`
     sent: HashSet<String>,
@@ -31,23 +33,28 @@ const LIMIT_REARM_PCT: f32 = 80.0;
 /// Czas resetu tego samego okna drga między odczytami; nowe okno to reset przesunięty o więcej niż to.
 const RESET_JITTER_MS: i64 = 60_000;
 
-fn name(s: &Session) -> String {
+fn name(s: &Session, lang: Lang) -> String {
     if !s.title.is_empty() { return s.title.chars().take(60).collect(); }
-    s.cwd.rsplit(['\\', '/']).find(|p| !p.is_empty()).unwrap_or("Sesja").to_string()
+    s.cwd.rsplit(['\\', '/']).find(|p| !p.is_empty()).unwrap_or(tr(lang, "Sesja", "Session")).to_string()
 }
 
-fn limit_toast(l: &Limit) -> Toast {
+fn limit_toast(l: &Limit, lang: Lang) -> Toast {
     let who = match l.agent { Agent::Claude => "Claude", Agent::Codex => "Codex" };
-    let win = match l.window { Window::FiveHour => "5h", Window::Weekly => "tygodniowy" };
-    Toast { kind: ToastKind::Limit, session_id: None, title: format!("{who}: limit {win}"),
-        body: format!("Zużyto {:.0}% limitu {win}", l.used_pct) }
+    let (title, body) = match (lang, l.window) {
+        (Lang::Pl, w) => { let win = if w == Window::FiveHour { "5h" } else { "tygodniowy" };
+            (format!("{who}: limit {win}"), format!("Zużyto {:.0}% limitu {win}", l.used_pct)) }
+        (Lang::En, w) => { let win = if w == Window::FiveHour { "5h" } else { "weekly" };
+            (format!("{who}: {win} limit"), format!("{:.0}% of the {win} limit used", l.used_pct)) }
+    };
+    Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }
 
 impl Rules {
     pub fn set_settings(&mut self, settings: Settings) { self.settings = settings; }
+    pub fn set_lang(&mut self, lang: Lang) { self.lang = lang; }
 
     pub fn new(settings: Settings) -> Rules {
-        Rules { settings, primed: false, sent: HashSet::new(), limits: HashMap::new() }
+        Rules { settings, lang: Lang::Pl, primed: false, sent: HashSet::new(), limits: HashMap::new() }
     }
 
     /// Pierwsze wywołanie tylko zapamiętuje stan: nic zastanego przy starcie aplikacji nie jest zgłaszane.
@@ -63,15 +70,16 @@ impl Rules {
                     if self.settings.needs_you && now - s.state_since > NEEDS_AFTER_MS && !self.sent.contains(&key) && !focused(s) {
                         self.sent.insert(key);
                         out.push(Toast { kind: ToastKind::NeedsYou, session_id: Some(s.id.clone()),
-                            title: "Agent czeka na Ciebie".into(), body: format!("{} czeka na Ciebie", name(s)) });
+                            title: tr(self.lang, "Agent czeka na Ciebie", "Agent needs you").into(),
+                            body: format!("{} {}", name(s, self.lang), tr(self.lang, "czeka na Ciebie", "is waiting for you")) });
                     }
                 }
                 State::Done => if let Some(t) = s.turn_started_at {
                     let key = format!("done:{}:{t}", s.id);
                     if priming { self.sent.insert(key); continue; }
                     if self.settings.done && s.state_since - t > LONG_TURN_MS && self.sent.insert(key) {
-                        out.push(Toast { kind: ToastKind::Done, session_id: Some(s.id.clone()), title: "Agent skończył".into(),
-                            body: format!("{} skończył ({} min)", name(s), (s.state_since - t) / 60_000) });
+                        out.push(Toast { kind: ToastKind::Done, session_id: Some(s.id.clone()), title: tr(self.lang, "Agent skończył", "Agent finished").into(),
+                            body: format!("{} {} ({} min)", name(s, self.lang), tr(self.lang, "skończył", "finished"), (s.state_since - t) / 60_000) });
                     }
                 },
                 _ => {}
@@ -90,7 +98,7 @@ impl Rules {
             };
             if !new_window { continue; }
             self.limits.insert(key, l.resets_at);
-            if !priming && self.settings.limits { out.push(limit_toast(l)); }
+            if !priming && self.settings.limits { out.push(limit_toast(l, self.lang)); }
         }
         out
     }
@@ -141,6 +149,17 @@ mod tests {
         let t = r.observe(&snap(vec![sess("b", State::Done, 200_000, Some(0))], vec![]), 201_000, &|_| false);
         assert_eq!((t.len(), t[0].kind), (1, ToastKind::Done));
         assert_eq!(t[0].body, "T-b skończył (3 min)");
+    }
+
+    #[test]
+    fn toasts_speak_english_when_asked() {
+        let mut r = Rules::new(ALL);
+        r.set_lang(Lang::En);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let t = r.observe(&snap(vec![sess("b", State::Done, 200_000, Some(0))], vec![]), 201_000, &|_| false);
+        assert_eq!((t[0].title.as_str(), t[0].body.as_str()), ("Agent finished", "T-b finished (3 min)"));
+        let l = r.observe(&snap(vec![], vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 95.0, resets_at: Some(9) }]), 202_000, &|_| false);
+        assert_eq!((l[0].title.as_str(), l[0].body.as_str()), ("Codex: weekly limit", "95% of the weekly limit used"));
     }
 
     #[test]

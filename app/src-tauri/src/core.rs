@@ -1,4 +1,5 @@
 //! Wątek rdzenia: zdarzenia z `pets-core` → migawka stanu dla UI (`pets://snapshot`).
+use pets_core::i18n::{tr, Lang};
 use pets_core::model::{Limit, Session};
 use pets_core::replay::Replay;
 use pets_core::runtime::{Runtime, RuntimeConfig};
@@ -59,18 +60,22 @@ pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Sn
         if let Err(e) = result {
             eprintln!("agent-pets: rdzeń danych zatrzymany: {e:#}");
             // wydanie nie ma konsoli: bez tego użytkownik widziałby tylko pusty pasek
-            crate::tray::set_status(&app, &failure_text(&e));
+            {
+                use tauri::Manager;
+                let lang = pets_core::i18n::current(app.state::<crate::settings::SettingsState>().get().language);
+                crate::tray::set_status(&app, &failure_text(&e, lang));
+            }
         }
     });
 }
 
 /// Podpowiedź ikony w trayu przy awarii rdzenia; Windows ucina ją do 127 znaków.
-pub fn failure_text(e: &anyhow::Error) -> String {
-    const HEAD: &str = "Agent Pets: rdzeń danych nie działa (";
-    let room = 127 - HEAD.chars().count() - 1;
+pub fn failure_text(e: &anyhow::Error, lang: Lang) -> String {
+    let head = tr(lang, "Agent Pets: rdzeń danych nie działa (", "Agent Pets: data core stopped (");
+    let room = 127 - head.chars().count() - 1;
     let msg = format!("{e:#}");
     let msg = if msg.chars().count() > room { format!("{}…", msg.chars().take(room - 1).collect::<String>()) } else { msg };
-    format!("{HEAD}{msg})")
+    format!("{head}{msg})")
 }
 
 fn live(app: &AppHandle, apps: std::sync::mpsc::Receiver<pets_core::settings::Apps>, publish: &dyn Fn(&Store, i64))
@@ -149,11 +154,16 @@ mod tests {
 
     #[test]
     fn failure_text_names_the_problem_and_fits_the_tray_tooltip() {
-        let short = failure_text(&anyhow::anyhow!("brak katalogu domowego"));
+        let short = failure_text(&anyhow::anyhow!("brak katalogu domowego"), Lang::Pl);
         assert_eq!(short, "Agent Pets: rdzeń danych nie działa (brak katalogu domowego)");
-        let long = failure_text(&anyhow::anyhow!("{}", "ż".repeat(300)));
+        let long = failure_text(&anyhow::anyhow!("{}", "ż".repeat(300)), Lang::Pl);
         assert!(long.chars().count() <= 127, "{}", long.chars().count());
         assert!(long.ends_with("…)"));
+    }
+
+    #[test]
+    fn failure_text_in_english() {
+        assert_eq!(failure_text(&anyhow::anyhow!("no home"), Lang::En), "Agent Pets: data core stopped (no home)");
     }
 
     #[test]

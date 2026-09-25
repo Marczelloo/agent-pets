@@ -1,4 +1,5 @@
 //! Wykonanie kroków „Przejdź”. Pierwszy udany krok kończy łańcuch; schowek zawsze kończy łańcuch.
+use pets_core::i18n::{tr, Lang};
 use super::{JumpResult, Step};
 use std::os::windows::process::CommandExt;
 use windows::core::{BOOL, HSTRING, PCWSTR};
@@ -121,16 +122,28 @@ fn clipboard(text: &str) -> bool {
     }
 }
 
-pub fn run(steps: &[Step]) -> JumpResult {
+pub fn run(steps: &[Step], lang: Lang) -> JumpResult {
     for s in steps {
         let r = match s {
-            Step::DeepLink(u) if deep_link(u) => Some(("deeplink", "Otworzono sesję w aplikacji".to_string())),
-            Step::FocusProcess(p) if focus(*p) => Some(("focus", "Przełączono na okno sesji".to_string())),
-            Step::OpenTerminal { cwd, program, args } if terminal(cwd, program, args) => Some(("terminal", "Otworzono nowy terminal".to_string())),
-            Step::Clipboard(t) => Some(("clipboard", if clipboard(t) { format!("Skopiowano komendę: {t}") } else { format!("Wznów ręcznie: {t}") })),
+            Step::DeepLink(u) if deep_link(u) => Some(("deeplink", tr(lang, "Otworzono sesję w aplikacji", "Opened the session in the app").to_string())),
+            Step::FocusProcess(p) if focus(*p) => Some(("focus", tr(lang, "Przełączono na okno sesji", "Switched to the session window").to_string())),
+            Step::OpenTerminal { cwd, program, args } if terminal(cwd, program, args) => Some(("terminal", tr(lang, "Otworzono nowy terminal", "Opened a new terminal").to_string())),
+            Step::Clipboard(t) => Some(("clipboard", if clipboard(t) { format!("{} {t}", tr(lang, "Skopiowano komendę:", "Copied the command:")) } else { format!("{} {t}", tr(lang, "Wznów ręcznie:", "Resume manually:")) })),
             _ => None,
         };
         if let Some((m, d)) = r { return JumpResult { method: m.into(), detail: d }; }
     }
-    JumpResult { method: "none".into(), detail: "Nie udało się przejść do sesji".into() }
+    JumpResult { method: "none".into(), detail: tr(lang, "Nie udało się przejść do sesji", "Could not jump to the session").into() }
+}
+
+#[cfg(test)]
+mod text_tests {
+    use super::run;
+    use pets_core::i18n::Lang;
+
+    #[test]
+    fn failure_text_is_translated() {
+        assert_eq!(run(&[], Lang::En).detail, "Could not jump to the session");
+        assert_eq!(run(&[], Lang::Pl).detail, "Nie udało się przejść do sesji");
+    }
 }
