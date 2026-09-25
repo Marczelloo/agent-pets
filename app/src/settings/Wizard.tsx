@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { PetCanvas } from '../panel/PetCanvas';
-import { STYLE_IDS, STYLE_LABEL } from '../look';
-import type { AppRow, Session, Settings } from '../types';
+import type { AppRow, Settings } from '../types';
+import { LookGallery } from './look/LookGallery';
+import { MotionSwitch } from './look/LookTab';
 import { APP_HINT, APP_LABEL, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
 import { Toggle } from './Toggle';
 
@@ -12,11 +12,6 @@ const TITLE: Record<WizardStep, string> = {
   look: 'Wygląd zwierzaków',
 };
 
-const preview = (agent: 'claude' | 'codex'): Session => ({
-  id: `preview-${agent}`, agent, origin: 'cli', title: '', cwd: '', state: 'working', tool: agent === 'claude' ? 'edit' : 'bash',
-  progress: null, context: null, started_at: 0, last_activity: 0, state_since: 0, turn_started_at: null,
-  jump: { pid: null, session_id: '', cwd: '', app: null }, router_task: null,
-});
 
 interface Props {
   rows: AppRow[];
@@ -93,18 +88,8 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
       </section>}
 
       {cur === 'look' && <section className="card look">
-        <div className="skins" role="radiogroup" aria-label="Skórka">
-          {STYLE_IDS.map(k => (
-            <label key={k} className={`skin${draft.pets.style === k ? ' on' : ''}`}>
-              <input type="radio" name="skin" checked={draft.pets.style === k} onChange={() => set({ pets: { ...draft.pets, style: k } })} />
-              {STYLE_LABEL[k]}
-            </label>
-          ))}
-        </div>
-        <div className="preview" key={draft.pets.style}>
-          <PetCanvas session={preview('claude')} look={{ style: draft.pets.style, motion: draft.pets.motion }} />
-          <PetCanvas session={preview('codex')} look={{ style: draft.pets.style, motion: draft.pets.motion }} />
-        </div>
+        <MotionSwitch motion={draft.pets.motion} onPick={m => set({ pets: { ...draft.pets, motion: m } })} />
+        <LookGallery compact style={draft.pets.style} motion={draft.pets.motion} scene="edit" onPick={st => set({ pets: { ...draft.pets, style: st } })} />
       </section>}
 
       <footer>

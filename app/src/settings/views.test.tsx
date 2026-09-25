@@ -16,6 +16,12 @@ const diag: Diagnostics = { version: '0.5.0', endpoint_port: 1, settings_path: '
 const noop = async () => [] as string[];
 
 describe('Wizard', () => {
+  it('the look step offers the style gallery and the motion switch', () => {
+    const html = renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} initialStep="look" />);
+    expect(html).toContain('gallery compact');
+    expect(html).toContain('Pixel-art');
+    expect(html).toContain('Anime');
+  });
   it('starts with the apps it found; missing ones are greyed out with a hint', () => {
     const html = renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} />);
     expect(html).toContain('Claude Code');
