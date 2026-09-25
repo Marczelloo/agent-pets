@@ -3,6 +3,7 @@ pub mod codex;
 pub mod endpoint;
 pub mod hooks_install;
 pub mod ingest;
+pub mod integrations;
 pub mod model;
 pub mod pid;
 pub mod rehydrate;

@@ -22,6 +22,14 @@ pub fn uninstall(settings: &mut Value) {
     if hooks.is_empty() { settings.as_object_mut().unwrap().remove("hooks"); }
 }
 
+/// Ile z dziewięciu zdarzeń ma nasz hook (9 = komplet).
+pub fn installed_count(settings: &Value) -> usize {
+    let Some(hooks) = settings.get("hooks").and_then(|h| h.as_object()) else { return 0 };
+    EVENTS.iter().filter(|ev| hooks.get(**ev).and_then(|g| g.as_array()).map(|arr| arr.iter()
+        .flat_map(|g| g.get("hooks").and_then(|h| h.as_array()).into_iter().flatten())
+        .any(is_ours)).unwrap_or(false)).count()
+}
+
 pub fn install(settings: &mut Value, hook_exe: &str) {
     uninstall(settings);
     if !settings.is_object() { *settings = json!({}); }

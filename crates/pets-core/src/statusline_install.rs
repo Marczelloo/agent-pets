@@ -36,20 +36,31 @@ pub fn uninstall(settings: &mut Value, original: Option<Value>) {
 }
 
 pub fn install_file(settings: &Path, hook_exe: &str) -> std::io::Result<()> {
+    install_file_at(settings, hook_exe, &original_path())
+}
+
+pub fn uninstall_file(settings: &Path) -> std::io::Result<()> {
+    uninstall_file_at(settings, &original_path())
+}
+
+/// Jak `install_file`, z jawną ścieżką zapamiętanego oryginału (instalator, testy).
+pub fn install_file_at(settings: &Path, hook_exe: &str, original: &Path) -> std::io::Result<()> {
     let mut remembered = None;
     crate::hooks_install::edit_file(settings, |v| remembered = install(v, hook_exe))?;
     if let Some(orig) = remembered {
-        let p = original_path();
-        if let Some(d) = p.parent() { std::fs::create_dir_all(d)?; }
-        std::fs::write(p, serde_json::to_vec_pretty(&orig)?)?;
+        if let Some(d) = original.parent() { std::fs::create_dir_all(d)?; }
+        std::fs::write(original, serde_json::to_vec_pretty(&orig)?)?;
     }
     Ok(())
 }
 
-pub fn uninstall_file(settings: &Path) -> std::io::Result<()> {
-    let original = std::fs::read(original_path()).ok().and_then(|b| serde_json::from_slice(&b).ok());
+pub fn uninstall_file_at(settings: &Path, original: &Path) -> std::io::Result<()> {
+    let original = std::fs::read(original).ok().and_then(|b| serde_json::from_slice(&b).ok());
     crate::hooks_install::edit_file(settings, |v| uninstall(v, original))
 }
+
+/// Czy `statusLine` w ustawieniach Claude Code to nasza przelotka.
+pub fn is_installed(settings: &Value) -> bool { settings.get("statusLine").map(is_ours).unwrap_or(false) }
 
 #[cfg(test)]
 mod tests {
