@@ -20,13 +20,19 @@ export function recorder() {
     textAlign: 'start', textBaseline: 'alphabetic', lineCap: 'butt', lineJoin: 'miter',
   };
   const r = (v: unknown) => (typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : String(v));
+  let grads = 0;
   const ctx = new Proxy({} as Record<string, unknown>, {
     get: (_t, k: string) => {
       if (k in props) return props[k];
       if (k === 'measureText') return () => ({ width: 1 });
+      if (k === 'createLinearGradient') return (...a: unknown[]) => {
+        log.push(`createLinearGradient(${a.map(r).join(',')})`);
+        const name = `grad${++grads}`;
+        return { name, addColorStop: (o: number, c: string) => { log.push(`${name}.addColorStop(${r(o)},${c})`); } };
+      };
       return (...a: unknown[]) => { log.push(`${k}(${a.map(r).join(',')})`); };
     },
-    set: (_t, k: string, v) => { props[k] = v; log.push(`${k}=${r(v)}`); return true; },
+    set: (_t, k: string, v) => { props[k] = v; log.push(`${k}=${typeof v === 'object' && v && 'name' in v ? (v as { name: string }).name : r(v)}`); return true; },
   });
   return { ctx: ctx as unknown as CanvasRenderingContext2D, log };
 }
