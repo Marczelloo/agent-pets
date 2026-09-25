@@ -8,18 +8,19 @@ import { SettingsView, type Tab } from './SettingsView';
 import { Wizard } from './Wizard';
 import { setLoopSaving } from './look/loop';
 import { setPreviewSaving } from './look/PetsCanvas';
+import { t } from '../i18n';
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 
 /** Dane pokazowe dla podglądu w przeglądarce (`pnpm dev`, /settings.html, `?wizard` pokazuje kreator). */
 const demoRows: AppRow[] = [
-  { id: 'claude_code', detected: { found: true, path: 'C:/Users/ja/.claude', note: null }, status: { installed: true, detail: 'Hooki: zainstalowane' }, enabled: true },
-  { id: 'codex', detected: { found: true, path: 'C:/Users/ja/.codex', note: null }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: true },
-  { id: 'agent_router', detected: { found: true, path: 'C:/Users/ja/.agent-router', note: null }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: true },
+  { id: 'claude_code', detected: { found: true, path: 'C:/Users/ja/.claude', note: null }, status: { installed: true, detail: '' }, enabled: true },
+  { id: 'codex', detected: { found: true, path: 'C:/Users/ja/.codex', note: null }, status: { installed: true, detail: '' }, enabled: true },
+  { id: 'agent_router', detected: { found: true, path: 'C:/Users/ja/.agent-router', note: null }, status: { installed: true, detail: '' }, enabled: true },
 ];
 const demoDiag: Diagnostics = { version: '0.5.0', endpoint_port: 61234, settings_path: 'C:/Users/ja/.agent-pets/settings.json', settings_error: null,
   hook_exe: 'C:/Users/ja/.agent-pets/hook.exe', autostart_registered: true, last_seen: { claude_code: Date.now() - 20_000, codex: Date.now() - 300_000 },
-  apps: [['claude_code', true, 'Hooki: zainstalowane'], ['codex', true, 'Nic do instalowania'], ['agent_router', true, 'Nic do instalowania']] };
+  apps: [['claude_code', true, ''], ['codex', true, ''], ['agent_router', true, '']] };
 
 function Root() {
   const [view, setView] = useState<View | null>(null);
@@ -31,8 +32,8 @@ function Root() {
   const reload = useCallback(async () => {
     if (!inTauri) {
       setView({ settings: defaultSettings(), first_run: location.search.includes('wizard'), load_error: null });
-      setRows(demoRows);
-      setDiag(demoDiag);
+      setRows(demoRows.map(r => ({ ...r, status: { ...r.status, detail: r.id === 'claude_code' ? t().demo.hooksInstalled : t().demo.nothingToInstall } })));
+      setDiag({ ...demoDiag, apps: demoDiag.apps.map(([id, on]) => [id, on, id === 'claude_code' ? t().demo.hooksInstalled : t().demo.nothingToInstall]) });
       return;
     }
     const [v, r, d] = await Promise.all([invoke<View>('settings_get'), invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
@@ -58,7 +59,7 @@ function Root() {
 
   if (view.first_run) {
     return <Wizard rows={rows} initial={view.settings}
-      onFinish={s => (inTauri ? invoke<string[]>('wizard_finish', { settings: s }) : Promise.resolve(['Podgląd: nic nie zapisano.']))}
+      onFinish={s => (inTauri ? invoke<string[]>('wizard_finish', { settings: s }) : Promise.resolve([t().wizard.demoResult]))}
       onDone={() => void reload().then(() => setView(v => (v ? { ...v, first_run: false } : v)))} />;
   }
 

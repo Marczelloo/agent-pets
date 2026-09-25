@@ -3,10 +3,6 @@ import type { AppId, Look, MotionId, Pets, Session, StyleId } from './types';
 
 export const STYLE_IDS: StyleId[] = ['sticker', 'sketch', 'clean', 'pixel', 'neon', 'ink', 'pastel'];
 export const MOTION_IDS: MotionId[] = ['calm', 'anime'];
-export const STYLE_LABEL: Record<StyleId, string> = {
-  sticker: 'Naklejka', sketch: 'Szkic', clean: 'Czysty', pixel: 'Pixel-art', neon: 'Neon', ink: 'Tusz', pastel: 'Pastel',
-};
-export const MOTION_LABEL: Record<MotionId, string> = { calm: 'Spokojny', anime: 'Anime' };
 /** Wygląd bez ustawień: dokładnie rysunek prototypu v6 (testy parytetu). */
 export const DEFAULT_LOOK: Look = { style: 'clean', motion: 'calm' };
 

@@ -40,11 +40,10 @@ fn name(s: &Session, lang: Lang) -> String {
 
 fn limit_toast(l: &Limit, lang: Lang) -> Toast {
     let who = match l.agent { Agent::Claude => "Claude", Agent::Codex => "Codex" };
-    let (title, body) = match (lang, l.window) {
-        (Lang::Pl, w) => { let win = if w == Window::FiveHour { "5h" } else { "tygodniowy" };
-            (format!("{who}: limit {win}"), format!("Zużyto {:.0}% limitu {win}", l.used_pct)) }
-        (Lang::En, w) => { let win = if w == Window::FiveHour { "5h" } else { "weekly" };
-            (format!("{who}: {win} limit"), format!("{:.0}% of the {win} limit used", l.used_pct)) }
+    let five = l.window == Window::FiveHour;
+    let (title, body) = match lang {
+        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w}"), format!("Zużyto {:.0}% limitu {w}", l.used_pct)) }
+        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit"), format!("{:.0}% of the {w} limit used", l.used_pct)) }
     };
     Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }

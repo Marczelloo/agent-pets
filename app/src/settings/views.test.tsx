@@ -1,5 +1,6 @@
 import { renderToString } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLang } from '../i18n';
 import { PanelView } from '../panel/App';
 import type { AppRow, Diagnostics } from '../types';
 import { defaultSettings } from './model';
@@ -14,6 +15,7 @@ const rows: AppRow[] = [
 const diag: Diagnostics = { version: '0.5.0', endpoint_port: 1, settings_path: 's', settings_error: null, hook_exe: null,
   autostart_registered: false, last_seen: {}, apps: [] };
 const noop = async () => [] as string[];
+afterEach(() => setLang('pl'));
 
 describe('Wizard', () => {
   it('the look step offers the style gallery and the motion switch', () => {
@@ -36,6 +38,13 @@ describe('Wizard', () => {
 });
 
 describe('SettingsView', () => {
+  it('renders the look tab in English after switching', () => {
+    setLang('en');
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toContain('Same as default');
+    expect(html).not.toContain('Jak domyślny');
+  });
   it('look tab: seven style cards, the chosen one checked, motion switch and per-agent overrides', () => {
     const s = defaultSettings();
     const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="look" onTab={() => {}}

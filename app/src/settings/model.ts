@@ -1,16 +1,12 @@
 import { defaultPets } from '../look';
 import { formatAgo } from '../tooltip/text';
 import type { AppId, AppRow, Diagnostics, Settings } from '../types';
+import { t } from '../i18n';
 
 export const APP_LABEL: Record<AppId, string> = { claude_code: 'Claude Code', codex: 'Codex', agent_router: 'Agent Router' };
-export const APP_HINT: Record<AppId, string> = {
-  claude_code: 'Zainstaluję hooki w ~/.claude/settings.json (z kopią zapasową).',
-  codex: 'Nic do instalowania: czytam pliki sesji z ~/.codex/sessions.',
-  agent_router: 'Nic do instalowania: czytam ~/.agent-router/status.json.',
-};
-const SOURCE_LABEL: Record<string, string> = {
-  claude_code: 'Claude Code', codex: 'Codex', agent_router: 'Agent Router', claude_usage: 'Limity Claude\'a',
-};
+export const appLabel = (id: AppId): string => ({ claude_code: t().agent.claude, codex: t().agent.codex, agent_router: t().origin.router })[id];
+export const appHint = (id: AppId): string => t().settings.appHint[id];
+const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id === 'claude_code' || id === 'codex' || id === 'agent_router' ? appLabel(id) : id;
 
 export const WIZARD_STEPS = ['apps', 'limits', 'notify', 'look'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
@@ -37,12 +33,12 @@ export const clampMaxVisible = (n: number) => (Number.isFinite(n) ? Math.min(8, 
 export function reportText(d: Diagnostics, nowMs: number): string {
   const lines = [
     `Agent Pets ${d.version}`,
-    `Serwer hooków: ${d.endpoint_port != null ? `port ${d.endpoint_port}` : 'nie działa'}`,
-    `Ustawienia: ${d.settings_path}${d.settings_error ? ` (błąd: ${d.settings_error})` : ''}`,
-    `hook.exe: ${d.hook_exe ?? 'brak'}`,
-    `Autostart w rejestrze: ${d.autostart_registered ? 'tak' : 'nie'}`,
-    ...d.apps.map(([id, on, detail]) => `${APP_LABEL[id]}: ${on ? 'włączone' : 'wyłączone'}, ${detail}`),
-    ...Object.entries(d.last_seen).map(([k, ts]) => `${SOURCE_LABEL[k] ?? k}: ostatnie zdarzenie ${formatAgo(nowMs - ts)}`),
+    t().settings.report.server(d.endpoint_port != null ? `port ${d.endpoint_port}` : t().settings.report.inactive),
+    t().settings.report.settings(d.settings_path, d.settings_error ? t().settings.report.error(d.settings_error) : ''),
+    t().settings.report.hook(d.hook_exe ?? t().settings.report.missing),
+    t().settings.report.autostart(d.autostart_registered ? t().settings.report.yes : t().settings.report.no),
+    ...d.apps.map(([id, on, detail]) => `${appLabel(id)}: ${on ? t().settings.report.enabled : t().settings.report.disabled}, ${detail}`),
+    ...Object.entries(d.last_seen).map(([k, ts]) => t().settings.report.lastSeen(sourceLabel(k), formatAgo(nowMs - ts))),
   ];
   return lines.join('\n');
 }

@@ -1,12 +1,9 @@
 import type { RouterTask } from '../types';
+import { t as translate } from '../i18n';
 
 export type RouterHealth = 'active' | 'quiet' | 'stalled' | 'blocked';
 
 const QUIET_MS = 30_000;
-const HEALTH: Record<RouterHealth, string> = { active: 'aktywne', quiet: 'cisza', stalled: 'utknęło', blocked: 'zablokowane' };
-const DONE: Record<string, string> = {
-  completed: 'zakończone', failed: 'nieudane', interrupted: 'przerwane', quota_exhausted: 'brak limitu',
-};
 
 /**
  * Jak `Router.healthOf` w Agent Routerze, ale liczone w chwili rysowania: plik stanu zmienia się tylko przy
@@ -24,6 +21,6 @@ export function routerHealth(t: RouterTask, nowMs: number, seenAt?: number): Rou
 export const isLive = (t: RouterTask) => t.status === 'running' || t.status === 'pending';
 
 export function routerLine(t: RouterTask, nowMs: number, seenAt?: number): string {
-  const what = isLive(t) ? HEALTH[routerHealth(t, nowMs, seenAt)] : DONE[t.status] ?? t.status;
-  return `Zadanie routera: ${what}`;
+  const what = isLive(t) ? translate().router.health[routerHealth(t, nowMs, seenAt)] : (translate().router.done as Record<string, string>)[t.status] ?? t.status;
+  return translate().router.task(what);
 }

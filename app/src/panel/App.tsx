@@ -7,6 +7,7 @@ import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } 
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
+import { t } from '../i18n';
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
   isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
@@ -21,9 +22,6 @@ interface ViewProps {
   pets?: Pets;
 }
 
-const plural = (n: number) =>
-  n === 1 ? 'sesja' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'sesje' : 'sesji';
-
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
 export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets() }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
@@ -31,14 +29,14 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
     <div className="panel">
       <header>
         <h1>Agent Pets</h1>
-        <span className="count">{sessions.length} {plural(sessions.length)}</span>
-        {onSettings && <button type="button" className="gear" aria-label="Ustawienia" title="Ustawienia" onClick={onSettings}>⚙</button>}
+        <span className="count">{t().sessions(sessions.length)}</span>
+        {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}>⚙</button>}
       </header>
-      <section className="limits" aria-label="Limity">
+      <section className="limits" aria-label={t().panel.limits}>
         {limitRows(snap.limits, nowMs).map(r => (
           <div className="limit" key={`${r.agent}-${r.window}`}>
             <span className="label">{r.label}</span>
-            {r.pct == null ? <span className="none">brak danych</span> : <>
+            {r.pct == null ? <span className="none">{t().panel.noData}</span> : <>
               <span className={`bar ${r.agent}`}><i style={{ width: `${r.pct}%` }} className={r.pct >= 90 ? 'hot' : ''} /></span>
               <span className="pct">{Math.round(r.pct)}%</span>
               <span className="reset">{r.reset}</span>
@@ -46,8 +44,8 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           </div>
         ))}
       </section>
-      <section className="sessions" aria-label="Sesje">
-        {sessions.length === 0 && <p className="empty">Brak aktywnych sesji</p>}
+      <section className="sessions" aria-label={t().panel.sessions}>
+        {sessions.length === 0 && <p className="empty">{t().panel.noSessions}</p>}
         {sessions.map(s => (
           <article key={s.id} id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
             {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} /> : <div className="pet" />}
@@ -56,14 +54,14 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
               <div className="sub">{sessionSubtitle(s)}</div>
               <div className="meta">
                 <span className="state">{actionLabel(s)}</span>
-                {progressText(s) && <span>Zadania {progressText(s)}</span>}
-                {contextText(s) && <span>Kontekst {contextText(s)}</span>}
+                {progressText(s) && <span>{t().panel.tasks} {progressText(s)}</span>}
+                {contextText(s) && <span>{t().panel.context} {contextText(s)}</span>}
                 {s.router_task && <span className={routerHot(s.router_task, nowMs, s.last_activity) ? 'router-hot' : undefined}>
                   {routerLine(s.router_task, nowMs, s.last_activity)}</span>}
                 <span>{formatAgo(nowMs - s.last_activity)}</span>
               </div>
             </div>
-            <button type="button" onClick={() => onJump(s.id)}>Przejdź</button>
+            <button type="button" onClick={() => onJump(s.id)}>{t().panel.open}</button>
           </article>
         ))}
       </section>

@@ -1,10 +1,9 @@
 import { clampPct, progressFraction } from '../stage/hud';
 import { formatReset } from '../tooltip/text';
 import type { Limit, Session } from '../types';
+import { t } from '../i18n';
 
 const URGENT = new Set(['needs_you', 'error']);
-const AGENT: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
-const ORIGIN: Record<string, string> = { cli: 'CLI', desktop: 'aplikacja', router: 'Agent Router' };
 
 /** Najpierw sesje, które czekają na Ciebie albo mają błąd, potem od ostatnio aktywnej. */
 export function panelSessions(sessions: Session[]): Session[] {
@@ -21,7 +20,7 @@ export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
     const l = limits.find(v => v.agent === agent && v.window === window);
     const ok = l != null && Number.isFinite(l.used_pct);
     rows.push({
-      agent, window, label: `${agent === 'claude' ? 'Claude' : 'Codex'} · ${window === 'five_hour' ? '5h' : 'tydzień'}`,
+      agent, window, label: `${agent === 'claude' ? t().agent.limitClaude : t().agent.codex} · ${t().window[window]}`,
       pct: ok ? clampPct(l!.used_pct) : null, reset: ok ? formatReset(l!.resets_at, nowMs) : '',
     });
   }
@@ -31,7 +30,7 @@ export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
 const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? '';
 
 export function sessionSubtitle(s: Session): string {
-  return [AGENT[s.agent] ?? s.agent, ORIGIN[s.origin] ?? s.origin, basename(s.cwd)].filter(Boolean).join(' · ');
+  return [t().agent[s.agent] ?? s.agent, t().origin[s.origin] ?? s.origin, basename(s.cwd)].filter(Boolean).join(' · ');
 }
 
 export function progressText(s: Session): string | null {

@@ -1,20 +1,21 @@
 import { useState } from 'react';
-import { MOTION_IDS, MOTION_LABEL, STYLE_IDS, STYLE_LABEL, lookFor, withOverride } from '../../look';
+import { MOTION_IDS, STYLE_IDS, lookFor, withOverride } from '../../look';
 import type { SceneKey } from '../../stage/sceneFor';
 import type { AppId, Look, MotionId, Pets, StyleId } from '../../types';
-import { APP_LABEL } from '../model';
+import { appLabel } from '../model';
+import { t } from '../../i18n';
 import { LookGallery } from './LookGallery';
 import { PetsCanvas } from './PetsCanvas';
 
-const SCENES: [SceneKey, string][] = [['edit', 'Pracuje'], ['needs', 'Czeka'], ['done', 'Gotowe'], ['sleep', 'Śpi'], ['error', 'Błąd']];
+const SCENES = ['edit', 'needs', 'done', 'sleep', 'error'] as const satisfies readonly SceneKey[];
 const APPS: AppId[] = ['claude_code', 'codex', 'agent_router'];
 
 export function MotionSwitch({ motion, onPick }: { motion: MotionId; onPick: (m: MotionId) => void }) {
   return (
-    <div className="segmented" role="radiogroup" aria-label="Ruch">
+    <div className="segmented" role="radiogroup" aria-label={t().look.motionTitle}>
       {MOTION_IDS.map(m => (
         <button type="button" key={m} role="radio" aria-checked={motion === m} className={motion === m ? 'on' : ''} onClick={() => onPick(m)}>
-          {MOTION_LABEL[m]}
+          {t().look.motion[m]}
         </button>
       ))}
     </div>
@@ -29,35 +30,35 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
   return <>
     <section className="card look-top">
       <div className="row">
-        <span className="text"><span className="label">Ruch</span>
-          <span className="desc">Anime: szybciej, sprężyście, ze smugami i efektami</span></span>
+        <span className="text"><span className="label">{t().look.motionTitle}</span>
+          <span className="desc">{t().look.motionDesc}</span></span>
         <MotionSwitch motion={pets.motion} onPick={m => onChange({ ...pets, motion: m })} />
       </div>
-      <div className="chips" role="radiogroup" aria-label="Scena podglądu">
-        {SCENES.map(([k, l]) => (
-          <button type="button" key={k} role="radio" aria-checked={scene === k} className={scene === k ? 'on' : ''} onClick={() => setScene(k)}>{l}</button>
+      <div className="chips" role="radiogroup" aria-label={t().look.previewScene}>
+        {SCENES.map(k => (
+          <button type="button" key={k} role="radio" aria-checked={scene === k} className={scene === k ? 'on' : ''} onClick={() => setScene(k)}>{t().look.scene[k]}</button>
         ))}
       </div>
       <LookGallery style={pets.style} motion={pets.motion} scene={scene} onPick={s => onChange({ ...pets, style: s })} />
-      <p className="label strip-label">Tak wygląda w pasku</p>
+      <p className="label strip-label">{t().look.taskbar}</p>
       <PetsCanvas className="taskbar" scene={scene} u={0.3} width={330} height={48}
         pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : 'codex', look: lookFor(pets, a) }))} />
     </section>
     <details className="card overrides">
-      <summary>Osobno dla agentów</summary>
+      <summary>{t().look.perAgent}</summary>
       {APPS.map(a => {
         const o = pets.overrides?.[a] ?? {};
         return (
           <div className="row" key={a}>
-            <span className="text"><span className="label">{APP_LABEL[a]}</span></span>
+            <span className="text"><span className="label">{appLabel(a)}</span></span>
             <span className="pair">
-              <select aria-label={`${APP_LABEL[a]}: styl`} value={o.style ?? ''} onChange={e => pick(a, 'style', e.target.value)}>
-                <option value="">Jak domyślny</option>
-                {STYLE_IDS.map(id => <option key={id} value={id}>{STYLE_LABEL[id]}</option>)}
+              <select aria-label={t().look.styleField(appLabel(a))} value={o.style ?? ''} onChange={e => pick(a, 'style', e.target.value)}>
+                <option value="">{t().look.sameDefault}</option>
+                {STYLE_IDS.map(id => <option key={id} value={id}>{t().look.style[id]}</option>)}
               </select>
-              <select aria-label={`${APP_LABEL[a]}: ruch`} value={o.motion ?? ''} onChange={e => pick(a, 'motion', e.target.value)}>
-                <option value="">Jak domyślny</option>
-                {MOTION_IDS.map(id => <option key={id} value={id}>{MOTION_LABEL[id]}</option>)}
+              <select aria-label={t().look.motionField(appLabel(a))} value={o.motion ?? ''} onChange={e => pick(a, 'motion', e.target.value)}>
+                <option value="">{t().look.sameDefault}</option>
+                {MOTION_IDS.map(id => <option key={id} value={id}>{t().look.motion[id]}</option>)}
               </select>
             </span>
           </div>

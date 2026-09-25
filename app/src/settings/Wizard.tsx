@@ -2,15 +2,9 @@ import { useState } from 'react';
 import type { AppRow, Settings } from '../types';
 import { LookGallery } from './look/LookGallery';
 import { MotionSwitch } from './look/LookTab';
-import { APP_HINT, APP_LABEL, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
+import { appHint, appLabel, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
 import { Toggle } from './Toggle';
-
-const TITLE: Record<WizardStep, string> = {
-  apps: 'Dla których aplikacji mają być zwierzaki?',
-  limits: 'Limity Claude\'a z godzinami resetu',
-  notify: 'Powiadomienia i uruchamianie',
-  look: 'Wygląd zwierzaków',
-};
+import { t } from '../i18n';
 
 
 interface Props {
@@ -34,10 +28,10 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
   if (result) {
     return (
       <main className="wizard">
-        <h1>Gotowe</h1>
+        <h1>{t().wizard.done}</h1>
         <ul className="result">{result.map((m, i) => <li key={i}>{m}</li>)}</ul>
-        <p className="desc">Wszystko to zmienisz później w Ustawieniach (ikona w trayu albo ⚙ w panelu).</p>
-        <footer><span /><button type="button" className="accent" onClick={onDone}>Przejdź do ustawień</button></footer>
+        <p className="desc">{t().wizard.doneDesc}</p>
+        <footer><span /><button type="button" className="accent" onClick={onDone}>{t().wizard.goSettings}</button></footer>
       </main>
     );
   }
@@ -46,44 +40,42 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
 
   return (
     <main className="wizard">
-      <p className="steps" aria-label={`Krok ${step + 1} z ${WIZARD_STEPS.length}`}>
+      <p className="steps" aria-label={t().wizard.step(step + 1, WIZARD_STEPS.length)}>
         {WIZARD_STEPS.map((s, i) => <span key={s} className={i === step ? 'on' : ''} />)}
       </p>
-      <h1>{TITLE[cur]}</h1>
+      <h1>{t().wizard.title[cur]}</h1>
 
       {cur === 'apps' && <section className="card">
         {rows.map(r => (
-          <Toggle key={r.id} label={APP_LABEL[r.id]} checked={r.detected.found && draft.apps[r.id]} disabled={!r.detected.found}
+          <Toggle key={r.id} label={appLabel(r.id)} checked={r.detected.found && draft.apps[r.id]} disabled={!r.detected.found}
             onChange={on => set({ apps: { ...draft.apps, [r.id]: on } })}>
-            {r.detected.found ? `${r.detected.path}. ${APP_HINT[r.id]}` : r.detected.note}
+            {r.detected.found ? `${r.detected.path}. ${appHint(r.id)}` : r.detected.note}
           </Toggle>
         ))}
       </section>}
 
       {cur === 'limits' && <section className="card">
         <p className="desc">
-          Widżet może co 5 minut pytać serwer Anthropic o zużycie Twojego planu Claude, tak jak robi to <code>/usage</code> w Claude Code.
-          Daje to dokładne limity 5h i tygodniowy z godzinami resetu, bez żadnej otwartej sesji.
+          {t().wizard.limitsIntro}<code>/usage</code>{t().wizard.limitsIntroAfter}
         </p>
         <p className="desc">
-          Użyje do tego logowania Claude Code z <code>~/.claude/.credentials.json</code>. Token trafia wyłącznie do
-          <code> api.anthropic.com</code> i nigdzie go nie zapisujemy. Bez zgody limity Claude'a pochodzą z aplikacji Claude
-          (bez godzin resetu) albo z sesji w terminalu.
+          {t().wizard.limitsAuth}<code>~/.claude/.credentials.json</code>{t().wizard.limitsAuthAfter}
+          <code> api.anthropic.com</code>{t().wizard.limitsAuthEnd}
         </p>
-        <Toggle label="Limity z Anthropic" checked={draft.claude_plan_usage} onChange={on => set({ claude_plan_usage: on })}>
-          Pobieraj limity planu z api.anthropic.com
+        <Toggle label={t().limits.fromAnthropic} checked={draft.claude_plan_usage} onChange={on => set({ claude_plan_usage: on })}>
+          {t().wizard.fetchLimits}
         </Toggle>
       </section>}
 
       {cur === 'notify' && <section className="card">
-        <Toggle label="Czeka na Ciebie" checked={draft.notifications.needs_you}
-          onChange={on => set({ notifications: { ...draft.notifications, needs_you: on } })}>Gdy agent czeka na odpowiedź dłużej niż 15 s</Toggle>
-        <Toggle label="Skończył" checked={draft.notifications.done}
-          onChange={on => set({ notifications: { ...draft.notifications, done: on } })}>Po turze dłuższej niż 2 minuty</Toggle>
-        <Toggle label="Limit" checked={draft.notifications.limits}
-          onChange={on => set({ notifications: { ...draft.notifications, limits: on } })}>Gdy zużycie limitu przekroczy 90%</Toggle>
-        <Toggle label="Uruchamiaj z Windows" checked={draft.autostart} onChange={on => set({ autostart: on })}>
-          Zwierzaki pojawią się po zalogowaniu
+        <Toggle label={t().state.needs_you} checked={draft.notifications.needs_you}
+          onChange={on => set({ notifications: { ...draft.notifications, needs_you: on } })}>{t().settings.notifyNeeds}</Toggle>
+        <Toggle label={t().state.done} checked={draft.notifications.done}
+          onChange={on => set({ notifications: { ...draft.notifications, done: on } })}>{t().settings.notifyDone}</Toggle>
+        <Toggle label={t().limits.label} checked={draft.notifications.limits}
+          onChange={on => set({ notifications: { ...draft.notifications, limits: on } })}>{t().limits.notification}</Toggle>
+        <Toggle label={t().settings.autostart} checked={draft.autostart} onChange={on => set({ autostart: on })}>
+          {t().settings.autostartDesc}
         </Toggle>
       </section>}
 
@@ -93,10 +85,10 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
       </section>}
 
       <footer>
-        <button type="button" disabled={step === 0} onClick={() => setStep(s => s - 1)}>Wstecz</button>
+        <button type="button" disabled={step === 0} onClick={() => setStep(s => s - 1)}>{t().wizard.back}</button>
         {step < WIZARD_STEPS.length - 1
-          ? <button type="button" className="accent" onClick={() => setStep(s => s + 1)}>Dalej</button>
-          : <button type="button" className="accent" disabled={busy} onClick={() => void finish()}>Zakończ</button>}
+          ? <button type="button" className="accent" onClick={() => setStep(s => s + 1)}>{t().wizard.next}</button>
+          : <button type="button" className="accent" disabled={busy} onClick={() => void finish()}>{t().wizard.finish}</button>}
       </footer>
     </main>
   );
