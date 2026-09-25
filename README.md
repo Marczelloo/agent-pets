@@ -1,10 +1,38 @@
+<p align="center">
+  <img src="docs/images/banner.png" alt="Agent Pets: Clawd and Kodek, two cartoon pets, working on a Windows 11 taskbar" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Marczelloo/agent-pets/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Marczelloo/agent-pets?include_prereleases&color=D97757"></a>
+  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-5DCAA5">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/Marczelloo/agent-pets?color=8C887E"></a>
+</p>
+
 # Agent Pets
 
 Animated pets that live in the Windows 11 taskbar and show what your coding agents are doing: **Claude Code**, **OpenAI Codex** and **Agent Router** tasks. Each session gets its own pet. The pet codes at a desk, types commands into a terminal, reads files, catches web pages with a butterfly net, waves when it needs you, dances when it's done, and naps when idle. Progress, context usage and rate limits show up next to it.
 
-> **Status: public beta (0.5).** Install it from [GitHub Releases](https://github.com/Marczelloo/agent-pets/releases), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
+<p align="center">
+  <img src="docs/images/taskbar.png" alt="Five pets in the taskbar: a knocked-out Codex robot after an error, a Codex robot presenting a web page, Clawd waving because it needs you, a Codex robot with the Agent Router badge, Clawd typing at a desk; a +2 badge and rate-limit bars" width="900">
+</p>
 
-Design documents (spec, plan, spike reports) are written in Polish.
+> **Status: public beta (0.5).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
+
+## Highlights
+
+- **One pet per session.** Clawd for Claude Code, Kodek for Codex. Their pose follows the session: thinking, editing, running commands, reading, searching, browsing, delegating to subagents, waiting for you, done, error, idle, asleep.
+- **Everything at a glance.** Task progress under each pet, 5-hour and weekly limits for Claude and Codex next to them, a "+N" badge when the taskbar runs out of room. Pets that wait for you never get hidden.
+- **Panel and "Przejdź" (Go).** Click a pet for all your sessions and limits with reset times; one click takes you back to the session: the Claude or Codex app, its terminal window, or a new terminal that resumes it.
+- **Windows notifications** when an agent waits for you, finishes a long turn, or passes 90% of a limit.
+- **Agent Router tasks** get the task's title, a router badge and live health (active, quiet, stalled, blocked).
+- **Private by default.** Everything is read from local files and hooks. The only optional network call, fetching your Claude plan limits from Anthropic, is off until you allow it.
+- **Light on resources.** Drawing stops under full-screen apps and when the taskbar is hidden; on battery the pets slow down to 10 fps.
+
+| Panel | First-run wizard | Settings |
+|---|---|---|
+| <img src="docs/images/panel.png" alt="Panel with limits and sessions" width="260"> | <img src="docs/images/wizard.png" alt="Wizard step: choose the pets' look, with a live preview" width="340"> | <img src="docs/images/settings.png" alt="Settings window, Apps tab" width="340"> |
+
+The app's interface is in Polish for now. Design documents (spec, plans, spike reports) are in Polish too.
 
 ## What works now
 
@@ -205,10 +233,11 @@ Agent Router ──~/.agent-router/status.json─────────┘
 ## Project layout
 
 ```
-crates/pets-core    core library (model, state machine, adapters, ingest, watcher)
+crates/pets-core    core library (model, state machine, adapters, ingest, watcher, settings, integrations)
 crates/pets-hook    hook.exe
 crates/pets-cli     pets-cli (run / replay / install-hooks / uninstall-hooks / install-statusline / uninstall-statusline)
-app/                Tauri app: taskbar stage, renderer, skins, tooltip, panel (React), jump, notifications
+app/                Tauri app: taskbar stage, renderer, skins, tooltip, panel and settings (React), jump, notifications, installer
+docs/images/        README banner and screenshots (demo data)
 prototype/          visual prototype of the pets (Canvas 2D)
 spikes/             throwaway feasibility spikes (taskbar embed, statusline dump)
 docs/               spec, plans, spike reports, verification checklists (Polish)

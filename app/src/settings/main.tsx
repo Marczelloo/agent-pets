@@ -13,11 +13,11 @@ const inTauri = '__TAURI_INTERNALS__' in window;
 const demoRows: AppRow[] = [
   { id: 'claude_code', detected: { found: true, path: 'C:/Users/ja/.claude', note: null }, status: { installed: true, detail: 'Hooki: zainstalowane' }, enabled: true },
   { id: 'codex', detected: { found: true, path: 'C:/Users/ja/.codex', note: null }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: true },
-  { id: 'agent_router', detected: { found: false, path: null, note: 'Nie znaleziono ~/.agent-router (serwer MCP Agent Router).' }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: false },
+  { id: 'agent_router', detected: { found: true, path: 'C:/Users/ja/.agent-router', note: null }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: true },
 ];
 const demoDiag: Diagnostics = { version: '0.5.0', endpoint_port: 61234, settings_path: 'C:/Users/ja/.agent-pets/settings.json', settings_error: null,
   hook_exe: 'C:/Users/ja/.agent-pets/hook.exe', autostart_registered: true, last_seen: { claude_code: Date.now() - 20_000, codex: Date.now() - 300_000 },
-  apps: [['claude_code', true, 'Hooki: zainstalowane'], ['codex', true, 'Nic do instalowania'], ['agent_router', false, 'Nic do instalowania']] };
+  apps: [['claude_code', true, 'Hooki: zainstalowane'], ['codex', true, 'Nic do instalowania'], ['agent_router', true, 'Nic do instalowania']] };
 
 function Root() {
   const [view, setView] = useState<View | null>(null);
