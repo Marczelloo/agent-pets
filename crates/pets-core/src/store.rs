@@ -98,13 +98,25 @@ impl Store {
 
     pub fn limits(&self) -> &[Limit] { &self.limits }
 
+    /// Zostawia sesje spełniające `keep` (np. po wyłączeniu aplikacji w ustawieniach). Zwraca, czy coś usunięto.
+    pub fn retain_sessions(&mut self, keep: impl Fn(&Session) -> bool) -> bool {
+        let gone: Vec<String> = self.sessions.values().filter(|s| !keep(s)).map(|s| s.id.clone()).collect();
+        for id in &gone {
+            self.sessions.remove(id);
+            self.pending.remove(id);
+            self.ended_at.remove(id);
+            self.shown_at.remove(id);
+        }
+        !gone.is_empty()
+    }
+
     /// Zdejmuje limity agenta bez czasu resetu (nieaktualne dane z aplikacji Claude). Zwraca, czy coś zdjęto.
     pub fn drop_limits_without_reset(&mut self, agent: Agent) -> bool {
         self.retain_limits(|l| l.agent != agent || l.resets_at.is_some())
     }
 
     /// Zostawia limity spełniające `keep` (razem z ich czasami odczytu). Zwraca, czy coś usunięto.
-    fn retain_limits(&mut self, keep: impl Fn(&Limit) -> bool) -> bool {
+    pub fn retain_limits(&mut self, keep: impl Fn(&Limit) -> bool) -> bool {
         let before = self.limits.len();
         let (limits, ts): (Vec<Limit>, Vec<i64>) = self.limits.iter().copied().zip(self.limits_ts.iter().copied())
             .filter(|(l, _)| keep(l)).unzip();

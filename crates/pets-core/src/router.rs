@@ -42,6 +42,9 @@ pub struct Poller { path: PathBuf, next_check: i64, seen: Option<SystemTime> }
 impl Poller {
     pub fn new(path: PathBuf) -> Poller { Poller { path, next_check: i64::MIN, seen: None } }
 
+    /// Następne `poll` przeczyta plik od nowa (np. po ponownym włączeniu routera w ustawieniach).
+    pub fn reset(&mut self) { self.seen = None; self.next_check = i64::MIN; }
+
     /// Co `POLL_MS` sprawdza mtime; czyta cały (mały) plik tylko po zmianie.
     pub fn poll(&mut self, now: i64) -> Vec<Event> {
         if now < self.next_check { return vec![]; }

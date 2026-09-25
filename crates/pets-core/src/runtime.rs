@@ -23,6 +23,8 @@ pub struct RuntimeConfig {
     pub claude_usage_files: Vec<PathBuf>,
     /// Publiczny plik stanu zadań Agent Routera (`~/.agent-router/status.json`).
     pub router_status: Option<PathBuf>,
+    /// Aplikacje, dla których są zwierzaki (ustawienia).
+    pub apps: crate::settings::Apps,
 }
 
 impl RuntimeConfig {
@@ -34,6 +36,7 @@ impl RuntimeConfig {
             claude_usage_files: claude::desktop_usage::candidate_files(
                 &dirs::data_local_dir().unwrap_or_default(), &dirs::config_dir().unwrap_or_default()),
             router_status: dirs::home_dir().map(|h| h.join(".agent-router").join(crate::router::FILE)),
+            apps: crate::settings::Apps::default(),
         })
     }
 }
@@ -47,6 +50,8 @@ pub struct Runtime {
     files: Option<Receiver<PathBuf>>,
     usage: claude::desktop_usage::Poller,
     router: Option<crate::router::Poller>,
+    apps: crate::settings::Apps,
+    last_seen: std::collections::BTreeMap<&'static str, i64>,
     _ingest: Ingest,
     _watcher: Option<notify::RecommendedWatcher>,
 }
@@ -59,7 +64,8 @@ impl Runtime {
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
-            router: cfg.router_status.map(crate::router::Poller::new), _ingest: ingest, _watcher: None,
+            router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
+            _ingest: ingest, _watcher: None,
         };
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
         // Odtworzenie stanu: żywe sesje Claude'a z rejestru, potem ich transkrypty i rollouty Codexa.
@@ -84,6 +90,20 @@ impl Runtime {
     /// Zdarzenie z zewnątrz rdzenia (np. limity konta Claude pobrane przez aplikację). Zwraca, czy stan się zmienił.
     pub fn apply_external(&mut self, e: Event) -> bool { self.apply(e) }
 
+    /// Włącza i wyłącza aplikacje w locie: sesje i limity wyłączonych znikają od razu. Zwraca, czy stan się zmienił.
+    pub fn set_apps(&mut self, apps: crate::settings::Apps) -> bool {
+        if apps == self.apps { return false; }
+        if apps.agent_router && !self.apps.agent_router {
+            if let Some(p) = self.router.as_mut() { p.reset(); }
+        }
+        self.apps = apps;
+        let removed = self.store.retain_sessions(|s| session_on(apps, s));
+        removed | self.store.retain_limits(|l| agent_on(apps, l.agent))
+    }
+
+    /// Czas ostatniego zdarzenia z każdego źródła (diagnostyka).
+    pub fn last_seen(&self) -> std::collections::BTreeMap<&'static str, i64> { self.last_seen.clone() }
+
     /// Przetwarza zaległe zdarzenia i przesuwa zegar. Zwraca `true`, gdy stan się zmienił.
     pub fn step(&mut self, now: i64) -> bool {
         let mut changed = false;
@@ -106,28 +126,78 @@ impl Runtime {
     }
 
     fn poll_router(&mut self, now: i64) -> bool {
+        if !self.apps.agent_router { return false; }
         let events = self.router.as_mut().map(|p| p.poll(now)).unwrap_or_default();
         events.into_iter().fold(false, |c, e| self.apply(e) | c)
     }
 
-    fn apply(&mut self, e: Event) -> bool {
+    fn apply(&mut self, mut e: Event) -> bool {
+        if !event_on(self.apps, &e) {
+            // sesja wyłączonej aplikacji odpada, ale limity konta (np. Codexa z wątku routera) mogą zostać
+            let limits: Vec<_> = e.data.limits.iter().filter(|l| agent_on(self.apps, l.agent)).copied().collect();
+            if limits.is_empty() { return false; }
+            let mut only = Event::new(e.source, e.session_id.clone(), crate::model::Kind::Limits, e.ts);
+            only.data.limits = limits;
+            e = only;
+        }
+        let key = source_key(&e);
+        let seen = self.last_seen.entry(key).or_insert(e.ts);
+        *seen = (*seen).max(e.ts);
         if let Some(f) = &mut self.record { let _ = writeln!(f, "{}", serde_json::to_string(&e).unwrap_or_default()); }
         !self.store.apply(&e).is_empty()
     }
 
     fn poll_file(&mut self, p: &Path) -> bool {
+        use crate::watch::{kind_of, FileKind};
+        match kind_of(p) {
+            Some(FileKind::ClaudeTranscript) if !self.apps.claude_code => return false,
+            // rollouty Codexa niosą też wątki routera
+            Some(FileKind::CodexRollout) if !self.apps.codex && !self.apps.agent_router => return false,
+            _ => {}
+        }
         let mut changed = false;
         if self.sources.track(p, true) { for e in self.sources.poll(p) { changed |= self.apply(e); } }
         changed
     }
 
     fn on_hook(&mut self, env: HookEnvelope) -> bool {
+        if !self.apps.claude_code { return false; }
         let mut changed = false;
         if let Some(tp) = claude::hook::transcript_path(&env) { changed |= self.poll_file(&tp); }
         for e in claude::hook::to_events(&env) { changed |= self.apply(e); }
         if let Some(e) = self.tasks.observe(&env) { changed |= self.apply(e); }
         changed
     }
+}
+
+fn agent_on(apps: crate::settings::Apps, agent: crate::model::Agent) -> bool {
+    match agent {
+        crate::model::Agent::Claude => apps.claude_code,
+        // router zleca zadania na tym samym koncie Codexa
+        crate::model::Agent::Codex => apps.codex || apps.agent_router,
+    }
+}
+
+fn session_on(apps: crate::settings::Apps, s: &crate::model::Session) -> bool {
+    match (s.origin, s.agent) {
+        (crate::model::Origin::Router, _) => apps.agent_router,
+        (_, crate::model::Agent::Claude) => apps.claude_code,
+        (_, crate::model::Agent::Codex) => apps.codex,
+    }
+}
+
+fn event_on(apps: crate::settings::Apps, e: &Event) -> bool {
+    use crate::model::{Origin, Source};
+    if e.source == Source::Router || e.data.origin == Some(Origin::Router) { return apps.agent_router; }
+    match e.source { Source::Claude => apps.claude_code, Source::Codex => apps.codex, Source::Router => apps.agent_router }
+}
+
+fn source_key(e: &Event) -> &'static str {
+    use crate::model::Source;
+    if e.session_id == claude::desktop_usage::SESSION_ID || e.session_id == claude::account_usage::SESSION_ID {
+        return "claude_usage";
+    }
+    match e.source { Source::Claude => "claude_code", Source::Codex => "codex", Source::Router => "agent_router" }
 }
 
 #[cfg(test)]
@@ -148,7 +218,8 @@ mod tests {
     fn cfg(h: &tempfile::TempDir) -> RuntimeConfig {
         RuntimeConfig { home: h.path().into(), endpoint_path: h.path().join("endpoint.json"), record: None,
             claude_usage_files: vec![h.path().join("Claude").join(claude::desktop_usage::FILE)],
-            router_status: Some(h.path().join(".agent-router").join(crate::router::FILE)) }
+            router_status: Some(h.path().join(".agent-router").join(crate::router::FILE)),
+            apps: crate::settings::Apps::default() }
     }
 
     #[test]
@@ -216,6 +287,52 @@ mod tests {
         router_status(&h, "stary-watek", "failed", crate::time::now_ms() - 2 * 3_600_000);
         let rt = Runtime::start(cfg(&h)).unwrap();
         assert!(rt.store().sessions().is_empty());
+    }
+
+    fn event(src: crate::model::Source, id: &str, kind: crate::model::Kind) -> crate::model::Event {
+        crate::model::Event::new(src, id, kind, crate::time::now_ms())
+    }
+
+    #[test]
+    fn a_disabled_app_brings_no_pets() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let mut c = cfg(&h);
+        c.apps.claude_code = false;
+        let mut rt = Runtime::start(c).unwrap();
+        assert!(!rt.apply_external(event(Source::Claude, "c1", Kind::Prompt)));
+        assert!(rt.store().session("c1").is_none());
+        assert!(rt.apply_external(event(Source::Codex, "x1", Kind::Prompt)));
+    }
+
+    #[test]
+    fn turning_an_app_off_removes_its_pets_and_limits_at_once() {
+        use crate::model::{Agent, Kind, Limit, Source, Window};
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        rt.apply_external(event(Source::Claude, "c1", Kind::Prompt));
+        rt.apply_external(event(Source::Codex, "x1", Kind::Prompt));
+        rt.apply_external(event(Source::Router, "r1", Kind::Prompt));
+        let mut l = event(Source::Codex, "x1", Kind::Limits);
+        l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 10.0, resets_at: None }];
+        rt.apply_external(l);
+        let apps = crate::settings::Apps { claude_code: true, codex: false, agent_router: false };
+        assert!(rt.set_apps(apps));
+        let ids: Vec<&str> = rt.store().sessions().iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["c1"], "sesja routera znika z routerem, choć to wątek Codexa");
+        assert!(rt.store().limits().is_empty());
+        assert!(!rt.set_apps(apps), "druga taka sama zmiana niczego nie zmienia");
+        assert!(!rt.apply_external(event(Source::Codex, "x2", Kind::Prompt)));
+    }
+
+    #[test]
+    fn last_event_per_source_for_diagnostics() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        assert!(rt.last_seen().get("codex").is_none());
+        rt.apply_external(event(Source::Codex, "x1", Kind::Prompt));
+        assert!(rt.last_seen().get("codex").is_some());
     }
 
     #[test]
