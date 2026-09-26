@@ -45,6 +45,9 @@ describe('PanelView', () => {
     expect(dl).toContain('aria-valuenow="40"');
     expect(view({ state: 'ready', version: '0.7.1' })).toContain('Zainstaluj teraz');
     for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update');
+    // błąd ręcznego sprawdzenia należy do ustawień; w panelu tylko problem z samą aktualizacją
+    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).not.toContain('class="update');
+    expect(view({ state: 'error', message: 'Nie udało się zweryfikować aktualizacji', verify: true })).toContain('Nie udało się zweryfikować');
   });
   it('each session has a labelled remove button; "remove inactive" is off when nothing is inactive', () => {
     const view = (sessions: Session[]) => renderToString(<PanelView snap={{ sessions, limits: [], now: 0 }} nowMs={0}

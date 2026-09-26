@@ -68,7 +68,8 @@ export type UpdateStatus =
   | { state: 'available'; version: string; notes: string | null }
   | { state: 'downloading'; version: string; pct: number | null }
   | { state: 'ready'; version: string }
-  | { state: 'error'; message: string };
+  /** `verify`: problem z samą aktualizacją (panel i ustawienia); inaczej błąd sprawdzania (tylko ustawienia) */
+  | { state: 'error'; message: string; verify: boolean };
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';
 export type StageOrder = 'start' | 'attention' | 'agent';

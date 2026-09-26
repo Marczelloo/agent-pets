@@ -71,7 +71,7 @@ describe('SettingsView', () => {
     expect(html).toContain('Wersja 0.7.0');
     expect(view({ state: 'latest' })).toContain('Masz najnowszą wersję');
     expect(view({ state: 'available', version: '0.7.1', notes: null })).toContain('Dostępna wersja 0.7.1');
-    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji' })).toContain('Błąd sprawdzania aktualizacji');
+    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).toContain('Błąd sprawdzania aktualizacji');
   });
   it('renders the look tab in English after switching', () => {
     setLang('en');

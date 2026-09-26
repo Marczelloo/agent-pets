@@ -23,6 +23,7 @@ dependencies = [
  "tauri-winrt-notification",
  "tempfile",
  "tiny_http",
+ "tokio",
  "ureq",
  "windows 0.61.3",
 ]

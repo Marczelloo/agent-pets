@@ -24,7 +24,7 @@ export function updateBar(u: UpdateStatus | undefined): UpdateBar | null {
     case 'available': return { text: x.available(u.version), action: x.install, pct: null };
     case 'downloading': return { text: x.downloading(u.version), action: null, pct: u.pct ?? 0 };
     case 'ready': return { text: x.ready(u.version), action: x.installNow, pct: null };
-    case 'error': return { text: u.message, action: null, pct: null };
+    case 'error': return u.verify ? { text: u.message, action: null, pct: null } : null;
     default: return null;
   }
 }

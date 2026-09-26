@@ -25,7 +25,9 @@ pub enum UpdateStatus {
     Downloading { version: String, pct: Option<u8> },
     /// pobrana i zweryfikowana, czeka na spokojny moment (tryb automatyczny)
     Ready { version: String },
-    Error { message: String },
+    /// `verify`: problem z samą aktualizacją (podpis, instalacja), widoczny też w panelu;
+    /// inaczej błąd ręcznego sprawdzenia, widoczny tylko w ustawieniach.
+    Error { message: String, verify: bool },
 }
 
 /// Tryb „powiadamiaj” zgłasza każdą wersję jeden raz (także po restarcie aplikacji).
@@ -65,6 +67,14 @@ impl Drop for Busy<'_> { fn drop(&mut self) { self.0.store(false, Ordering::Rele
 impl Updater {
     pub fn status(&self) -> UpdateStatus { self.status.lock().unwrap().clone().unwrap_or(UpdateStatus::Idle) }
     fn take(&self) -> Option<Busy<'_>> { (!self.working.swap(true, Ordering::AcqRel)).then_some(Busy(&self.working)) }
+    /// Czeka (do 10 min), aż skończy się trwające sprawdzanie albo pobieranie: drugie „Zainstaluj” nie zgłasza błędu.
+    async fn acquire(&self) -> Option<Busy<'_>> {
+        for _ in 0..3000 {
+            if let Some(b) = self.take() { return Some(b); }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        None
+    }
     fn found(&self) -> Found { self.found.lock().unwrap().clone() }
     fn downloaded(&self) -> bool { matches!(&*self.found.lock().unwrap(), Some((_, Some(_)))) }
 }
@@ -116,7 +126,7 @@ pub async fn check(app: &AppHandle, manual: bool) -> UpdateStatus {
             }
             Err(e) => {
                 eprintln!("agent-pets: sprawdzanie aktualizacji: {e}");
-                if manual { set(app, UpdateStatus::Error { message: tr(lang(app), "Błąd sprawdzania aktualizacji", "Could not check for updates").into() }); }
+                if manual { set(app, UpdateStatus::Error { message: tr(lang(app), "Błąd sprawdzania aktualizacji", "Could not check for updates").into(), verify: false }); }
             }
         }
     }
@@ -127,7 +137,7 @@ pub async fn check(app: &AppHandle, manual: bool) -> UpdateStatus {
 /// Pobiera i weryfikuje instalator znalezionej wersji; zostaje w pamięci jako `Ready`.
 async fn download(app: &AppHandle) -> bool {
     let u = app.state::<Updater>();
-    let Some(_busy) = u.take() else { return u.downloaded() };
+    let Some(_busy) = u.acquire().await else { return u.downloaded() };
     let Some((up, None)) = u.found() else { return u.downloaded() };
     let version = up.version.clone();
     set(app, UpdateStatus::Downloading { version: version.clone(), pct: Some(0) });
@@ -153,7 +163,7 @@ async fn download(app: &AppHandle) -> bool {
         Err(e) => {
             eprintln!("agent-pets: pobieranie aktualizacji: {e}");
             *u.found.lock().unwrap() = None;
-            set(app, UpdateStatus::Error { message: verify_failed(app) });
+            set(app, UpdateStatus::Error { message: verify_failed(app), verify: true });
             false
         }
     }
@@ -165,7 +175,14 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
     if u.found().is_none() { check(app, true).await; }
     if !u.downloaded() && !download(app).await { return Err(verify_failed(app)); }
     let Some((up, Some(bytes))) = u.found() else { return Err(verify_failed(app)) };
-    up.install(bytes).map_err(|e| { eprintln!("agent-pets: instalacja aktualizacji: {e}"); verify_failed(app) })
+    up.install(bytes).map_err(|e| {
+        eprintln!("agent-pets: instalacja aktualizacji: {e}");
+        // nie „gotowa” już: brama spokoju nie ponawia co 2 min, następna próba po kolejnym sprawdzeniu
+        *u.found.lock().unwrap() = None;
+        let msg = tr(lang(app), "Nie udało się zainstalować aktualizacji", "Could not install the update").to_string();
+        set(app, UpdateStatus::Error { message: msg.clone(), verify: true });
+        msg
+    })
 }
 
 fn announce(app: &AppHandle, version: &str, notes: Option<&str>) {
@@ -181,6 +198,14 @@ fn announce(app: &AppHandle, version: &str, notes: Option<&str>) {
             crate::panel::open(&a, None);
         }
     });
+}
+
+/// Zmiana trybu w ustawieniach: po przejściu na „automatycznie” czekająca wersja pobiera się od razu,
+/// a nie dopiero przy kolejnym sprawdzeniu za kilka godzin.
+pub fn mode_changed(app: &AppHandle, mode: Updates) {
+    if mode != Updates::Auto || !matches!(app.state::<Updater>().status(), UpdateStatus::Available { .. }) { return; }
+    let a = app.clone();
+    tauri::async_runtime::spawn(async move { download(&a).await; });
 }
 
 /// Czy użytkownik ma otwarty panel albo ustawienia (wtedy nie przerywamy mu instalacją).
@@ -267,6 +292,25 @@ mod tests {
         assert_eq!(serde_json::to_value(UpdateStatus::Latest).unwrap(), serde_json::json!({ "state": "latest" }));
         let d = serde_json::to_value(UpdateStatus::Downloading { version: "0.7.1".into(), pct: Some(40) }).unwrap();
         assert_eq!(d["pct"], 40);
+    }
+
+    #[test]
+    fn errors_say_whether_they_are_about_the_update_itself() {
+        let v = serde_json::to_value(UpdateStatus::Error { message: "x".into(), verify: true }).unwrap();
+        assert_eq!(v, serde_json::json!({ "state": "error", "message": "x", "verify": true }));
+    }
+
+    #[test]
+    fn a_second_install_waits_for_the_running_download_instead_of_failing() {
+        let u = std::sync::Arc::new(Updater::default());
+        let busy = u.take().unwrap();
+        let t = std::time::Instant::now();
+        let u2 = u.clone();
+        let waiter = std::thread::spawn(move || tauri::async_runtime::block_on(async { u2.acquire().await.is_some() }));
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        drop(busy);
+        assert!(waiter.join().unwrap());
+        assert!(t.elapsed() >= std::time::Duration::from_millis(150));
     }
 
     #[test]

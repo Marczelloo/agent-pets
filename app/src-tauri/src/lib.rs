@@ -95,6 +95,7 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Apps(new.apps)); }
     if old.autostart != new.autostart { sync_autostart(new.autostart); }
     if old.stage != new.stage { app.state::<shell::Shell>().settings_changed(); }
+    if old.updates != new.updates { updater::mode_changed(app, new.updates); }
     if old.power_saving != new.power_saving { system::refresh_power(app); }
     if old.language != new.language {
         let lang = pets_core::i18n::current(new.language);
