@@ -81,6 +81,10 @@ pub struct RolloutParser {
     titled: bool,
     /// Po `request_user_input_async` tura kończy się bez odpowiedzi; czekamy na następną turę (odpowiedź użytkownika).
     waiting: bool,
+    /// numer bieżącej linii pliku
+    line: usize,
+    /// wątek-dziecko z historią skopiowaną od rodzica (`subagent_history_start_ordinal`): własne linie od tej
+    skip_until: usize,
 }
 
 impl Default for RolloutParser {
@@ -91,7 +95,7 @@ impl RolloutParser {
     pub fn new() -> Self { Self::default() }
 
     pub fn with_lang(lang: Lang) -> Self {
-        RolloutParser { lang, sid: None, parent: None, skip: false, router: false, titled: false, waiting: false }
+        RolloutParser { lang, sid: None, parent: None, skip: false, router: false, titled: false, waiting: false, line: 0, skip_until: 0 }
     }
 
     fn ev(&self, kind: Kind, ts: i64) -> Option<Event> {
@@ -133,6 +137,10 @@ impl RolloutParser {
     }
 
     pub fn parse_line(&mut self, line: &str) -> Vec<Event> {
+        let index = self.line;
+        self.line += 1;
+        // kopia historii rodzica w pliku wątku-dziecka (razem z jego `session_meta`) nie należy do dziecka
+        if index < self.skip_until { return vec![]; }
         let Ok(d) = serde_json::from_str::<Value>(line) else { return vec![] };
         let Some(ts) = d.get("timestamp").and_then(|v| v.as_str()).and_then(rfc3339_ms) else { return vec![] };
         let ty = d.get("type").and_then(|v| v.as_str()).unwrap_or("");
@@ -142,6 +150,8 @@ impl RolloutParser {
         let ps = |k: &str| p.get(k).and_then(|v| v.as_str());
 
         if ty == "session_meta" {
+            // plik ma jednego właściciela: kolejne metadane to kopia z innego wątku
+            if self.sid.is_some() || self.skip { return vec![]; }
             let id = ps("id").or(ps("session_id")).unwrap_or("").to_string();
             if ps("thread_source") == Some("subagent") {
                 let spawn = p.pointer("/source/subagent/thread_spawn");
@@ -153,6 +163,7 @@ impl RolloutParser {
                     return vec![];
                 };
                 self.sid = Some(id);
+                self.skip_until = p.get("subagent_history_start_ordinal").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                 // nazwa dziecka pochodzi z metadanych; wiadomość od rodzica bywa zaszyfrowana
                 self.titled = true;
                 let sub = SubInfo { kind: SubKind::Codex, agent_type: sp("agent_role"), description: sp("agent_nickname"), background: false };
@@ -501,5 +512,23 @@ mod tests {
         assert!(p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": other}))).is_empty());
         let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "codex_task_status", "namespace": "mcp__agent-router", "arguments": "{}"})));
         assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Mcp), Some("agent-router: codex_task_status")));
+    }
+
+    #[test]
+    fn a_forked_subagent_skips_the_copied_parent_history() {
+        // Codex Desktop 09-2026: plik dziecka zaczyna się od jego metadanych, potem kopia metadanych i historii rodzica
+        let mut p = RolloutParser::new();
+        let meta = l("session_meta", json!({"id": "c1", "session_id": "par", "forked_from_id": "par", "thread_source": "subagent",
+            "cwd": "C:\\p", "originator": "Codex Desktop", "subagent_history_start_ordinal": 4,
+            "source": {"subagent": {"thread_spawn": {"parent_thread_id": "par", "depth": 1, "agent_nickname": "Newton"}}}}));
+        let mut evs = p.parse_line(&meta);
+        evs.extend(p.parse_line(&l("session_meta", json!({"id": "par", "cwd": "C:\\p", "originator": "Codex Desktop", "source": "vscode", "thread_source": "user"}))));
+        evs.extend(p.parse_line(&l("event_msg", json!({"type": "task_started"}))));
+        evs.extend(p.parse_line(&l("event_msg", json!({"type": "task_complete"}))));
+        let own = p.parse_line(&l("event_msg", json!({"type": "task_started"})));
+        assert!(evs.iter().all(|e| e.session_id == "c1" || (e.session_id == "par" && e.kind == Kind::ToolStart)),
+            "kopia historii nie zmienia rodzica: {:?}", evs.iter().map(|e| (&e.session_id, e.kind)).collect::<Vec<_>>());
+        assert!(!evs.iter().any(|e| e.session_id == "c1" && e.kind == Kind::TurnEnd), "kopia tur rodzica nie należy do dziecka");
+        assert_eq!((own[0].session_id.as_str(), own[0].kind, own[0].data.parent.as_deref()), ("c1", Kind::Prompt, Some("par")));
     }
 }

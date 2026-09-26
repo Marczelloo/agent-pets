@@ -95,7 +95,8 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(p) = d.pid { s.jump.pid = Some(p); }
     if let Some(a) = d.app { s.jump.app = Some(a); }
     if let Some(r) = &d.router_task { s.router_task = Some(r.clone()); }
-    if let Some(p) = &d.parent { s.parent = Some(p.clone()); }
+    // sesja nigdy nie jest własnym rodzicem (zniknęłaby ze sceny i z panelu)
+    if let Some(p) = d.parent.as_ref().filter(|p| **p != s.id) { s.parent = Some(p.clone()); }
     if let Some(i) = &d.sub {
         // hook zna tylko typ dziecka, plik meta także opis i pracę w tle: brak nie kasuje tego, co już wiemy
         s.sub = Some(match s.sub.take() {
@@ -967,5 +968,14 @@ mod tests {
         assert!(s.session("p/b").is_none());
         s.apply(&kid("p/b", "p", Kind::ToolEnd, 8_500, sub(SubKind::Claude, false)));
         assert!(s.session("p/b").is_none(), "linia z pliku po zniknięciu dziecka");
+    }
+
+    #[test]
+    fn a_session_is_never_its_own_parent() {
+        let mut s = Store::new(Timing::default());
+        let mut e = ev(Kind::Prompt, 0);
+        e.data.parent = Some("s1".into());
+        s.apply(&e);
+        assert_eq!(s.session("s1").unwrap().parent, None);
     }
 }
