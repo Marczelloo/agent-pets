@@ -66,13 +66,23 @@ fn ask_core(app: &tauri::AppHandle, make: impl FnOnce(std::sync::mpsc::Sender<Ve
     rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap_or_default()
 }
 
+pub fn dismiss(app: &tauri::AppHandle, ids: Vec<String>) -> Vec<String> { ask_core(app, |tx| core::CoreMsg::Dismiss(ids, tx)) }
+pub fn dismiss_inactive(app: &tauri::AppHandle) -> Vec<String> { ask_core(app, core::CoreMsg::DismissInactive) }
+
 /// Ukrywa sesje (✕ w panelu, „Usuń z paska”); wracają przy nowej aktywności.
 #[tauri::command]
-fn session_dismiss(app: tauri::AppHandle, ids: Vec<String>) -> Vec<String> { ask_core(&app, |tx| core::CoreMsg::Dismiss(ids, tx)) }
+fn session_dismiss(app: tauri::AppHandle, ids: Vec<String>) -> Vec<String> { dismiss(&app, ids) }
 
 /// „Usuń nieaktywne”: ukrywa sesje bezczynne, gotowe, uśpione i zakończone.
 #[tauri::command]
-fn sessions_dismiss_inactive(app: tauri::AppHandle) -> Vec<String> { ask_core(&app, core::CoreMsg::DismissInactive) }
+fn sessions_dismiss_inactive(app: tauri::AppHandle) -> Vec<String> { dismiss_inactive(&app) }
+
+/// Prawy klik na scenie: `target` to id zwierzaka albo nic (plakietka, limity, puste tło).
+#[tauri::command]
+fn stage_menu(app: tauri::AppHandle, target: Option<String>, x: f64, y: f64) {
+    let t = target.map(shell::menu::Target::Pet).unwrap_or(shell::menu::Target::Other);
+    if let Err(e) = shell::menu::show(&app, t, x, y) { eprintln!("agent-pets: menu sceny: {e}"); }
+}
 
 /// „Cofnij” po ukryciu.
 #[tauri::command]
@@ -147,6 +157,8 @@ pub fn run() {
             app.manage(system::Power::default());
             system::watch_power(app.handle().clone());
             app.manage(updater::Updater::default());
+            app.manage(shell::menu::MenuTarget::default());
+            app.on_menu_event(|app, e| shell::menu::on_event(app, e.id().as_ref()));
             updater::start(app.handle().clone());
             if !first_run {
                 sync_autostart(app.state::<settings::SettingsState>().get().autostart);
@@ -156,7 +168,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            snapshot, stage_hello, stage_set_width, stage_move, stage_passthrough, monitors_list, jump, panel::panel_open, panel::panel_hide,
+            snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,

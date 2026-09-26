@@ -1,5 +1,6 @@
 //! Okno sceny w pasku zadań: osadzenie, pętla układu, odtwarzanie po restarcie Explorera, widoczność.
 pub mod memo;
+pub mod menu;
 pub mod placement;
 pub mod pointer;
 mod taskbar;

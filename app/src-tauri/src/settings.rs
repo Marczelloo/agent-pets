@@ -185,8 +185,14 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
 pub fn window_title(lang: Lang) -> &'static str { i18n::tr(lang, "Agent Pets: ustawienia", "Agent Pets: settings") }
 
 /// Otwiera okno ustawień (albo kreator przy pierwszym uruchomieniu); drugie wywołanie tylko je pokazuje.
-pub fn open(app: &AppHandle) {
+pub fn open(app: &AppHandle) { open_at(app, None) }
+
+/// Okno ustawień na wskazanej karcie (np. „stage” z menu sceny).
+pub fn open_tab(app: &AppHandle, tab: &str) { open_at(app, Some(tab)) }
+
+fn open_at(app: &AppHandle, tab: Option<&str>) {
     if let Some(w) = app.get_webview_window("settings") {
+        if let Some(t) = tab { let _ = app.emit_to("settings", "settings://tab", t); }
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
@@ -195,8 +201,10 @@ pub fn open(app: &AppHandle) {
     // Budowanie okna w synchronicznej komendzie albo w obsłudze zdarzenia (tray, druga instancja) zakleszcza się
     // na Windows (dokumentacja WebviewWindowBuilder), więc budujemy je w osobnym wątku.
     let app = app.clone();
+    let tab = tab.map(str::to_string);
     std::thread::spawn(move || {
-        let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+        let url = tab.map(|t| format!("settings.html#{t}")).unwrap_or_else(|| "settings.html".into());
+        let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App(url.into()))
             .title(window_title(app.state::<SettingsState>().lang())).inner_size(760.0, 560.0).min_inner_size(620.0, 460.0).center().build();
     });
 }

@@ -15,6 +15,8 @@ export interface Bridge {
   onSettings(cb: (s: Settings) => void): void;
   /** Tryb oszczędny: od razu bieżący, potem każda zmiana. */
   onPower(cb: (saving: boolean) => void): void;
+  /** Menu pod prawym klikiem: na zwierzaku (`id`) albo ogólne (`null`); x, y w pikselach CSS sceny. */
+  openMenu?(id: string | null, x: number, y: number): void;
   /** Okno pływające: przepuszczanie kliknięć przez puste miejsca. */
   setPassthrough?(on: boolean): void;
   /** Tryb „Przesuń” w pasku: scena pokazuje przerywaną ramkę. */
@@ -43,6 +45,7 @@ export function tauriBridge(): Bridge {
     onPower: cb => { on<boolean>('pets://power', cb); void invoke<boolean>('power_get').then(cb); },
     onMoving: cb => on('pets://moving', cb),
     setPassthrough: on => { void invoke('stage_passthrough', { on }); },
+    openMenu: (target, x, y) => { void invoke('stage_menu', { target, x, y }); },
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
     showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },
     hideTooltip: () => { void invoke('tooltip_hide'); },

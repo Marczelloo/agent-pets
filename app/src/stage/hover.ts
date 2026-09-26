@@ -18,6 +18,13 @@ export class Hover {
   pointer(p: PointerMsg): void {
     if (p.kind === 'leave') { this.clear(); return; }
     if (p.kind === 'move') { this.x = p.x; this.y = p.y; this.refresh(); }
+    if (p.kind === 'context') {
+      const { out, height } = this.view();
+      const t = hitTest(out, p.x, p.y, height);
+      this.clear();
+      this.bridge.openMenu?.(t?.kind === 'pet' ? t.id : null, p.x, p.y);
+      return;
+    }
     if (p.kind === 'click') {
       const { out, height } = this.view();
       const a = clickAction(hitTest(out, p.x, p.y, height));
