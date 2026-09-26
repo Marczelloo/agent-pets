@@ -87,6 +87,13 @@ pub fn take_basic(pending: &mut Vec<Cmd>, want: &mut f64) -> bool {
     hello
 }
 
+/// Czy mierzyć pasek i monitory od nowa. Samo przeciąganie (do ~33 razy na sekundę) korzysta z pomiaru
+/// sprzed najwyżej sekundy: wyliczanie monitorów i przejście UI Automation kosztują.
+pub fn remeasure(pending: &[Cmd], age: Option<Duration>) -> bool {
+    let only_drags = !pending.is_empty() && pending.iter().all(|c| matches!(c, Cmd::Drag(_)));
+    !only_drags || age.map_or(true, |a| a >= Duration::from_secs(1))
+}
+
 /// Trwające „Przesuń”: kotwica w chwili chwycenia (px ekranu) i bieżąca pozycja.
 struct Moving { anchor: Anchor, at: f64, grab: Option<i32> }
 
@@ -190,6 +197,9 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
     // rodzic okna sceny: uchwyt paska (0 = okno najwyższego poziomu, None = jeszcze nieustalony)
     let (mut parent, mut embed_failed): (Option<isize>, bool) = (None, false);
     let mut pending: Vec<Cmd> = Vec::new();
+    // ostatni pomiar monitorów i paska (przeciąganie korzysta z niego do sekundy)
+    let mut measured: Option<(std::time::Instant, Vec<taskbar::Mon>)> = None;
+    let mut bar_metrics: Option<(isize, placement::Metrics)> = None;
     let mut last_layout: Option<Layout> = None;
     let mut last_visible: Option<bool> = None;
     let mut moving: Option<Moving> = None;
@@ -207,7 +217,9 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         }
         if take_basic(&mut pending, &mut want) { last_layout = None; last_visible = None; }
         let st = app.state::<crate::settings::SettingsState>().get().stage;
-        let mons = taskbar::monitors();
+        let fresh = remeasure(&pending, measured.as_ref().map(|(t, _)| t.elapsed()));
+        if fresh || measured.is_none() { measured = Some((std::time::Instant::now(), taskbar::monitors())); }
+        let Some((_, mons)) = measured.as_ref() else { continue };
         let float = st.position == Position::Floating;
         let chosen = placement::pick(&mons.iter().map(|m| (m.info.clone(), m.bar.is_some())).collect::<Vec<_>>(), &st.monitor, float);
         let Some(mon) = mons.get(chosen) else { continue };
@@ -285,7 +297,9 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         last_rect = None;
         if moving.is_none() { set_pmode(pointer::NORMAL); }
         let Some(b) = bar else { continue };
-        let Some(m) = taskbar::metrics(b, uia.as_ref()) else { continue };
+        let cached = bar_metrics.filter(|(h, _)| !fresh && *h == b.0 as isize).map(|(_, m)| m);
+        let Some(m) = cached.or_else(|| taskbar::metrics(b, uia.as_ref())) else { continue };
+        bar_metrics = Some((b.0 as isize, m));
         let width = (m.tray.right - m.tray.left).max(1) as f64;
         let px_of = |at: f64| m.tray.left + (at * width).round() as i32;
         for c in std::mem::take(&mut pending) {
@@ -356,6 +370,16 @@ mod tests {
         assert!(needs_apply(Some(r), None, None));
         assert!(needs_apply(None, Some(r), Some(r)));
         assert!(!needs_apply(None, None, Some(r)));
+    }
+
+    #[test]
+    fn dragging_reuses_the_last_measurement_for_up_to_a_second() {
+        let drags = [Cmd::Drag(Drag::Move { dx: 1, dy: 0 }), Cmd::Drag(Drag::Move { dx: 2, dy: 0 })];
+        assert!(!remeasure(&drags, Some(Duration::from_millis(300))));
+        assert!(remeasure(&drags, Some(Duration::from_millis(1000))));
+        assert!(remeasure(&drags, None), "nothing measured yet");
+        assert!(remeasure(&[Cmd::Settings], Some(Duration::from_millis(10))));
+        assert!(remeasure(&[], Some(Duration::from_millis(10))), "the regular 1 s tick always measures");
     }
 
     #[test]
