@@ -37,7 +37,7 @@ pub struct Layout {
     pub left_fallback: bool,
 }
 
-pub struct Shell { tx: Sender<Cmd>, pub stage: Arc<AtomicIsize> }
+pub struct Shell { tx: Sender<Cmd>, pub stage: Arc<AtomicIsize>, mode: Arc<AtomicU8> }
 
 /// Kotwica okna według wyrównania z ustawień.
 pub fn anchor_of(a: Align) -> Anchor { match a { Align::Left => Anchor::Left, Align::Center => Anchor::Center, Align::Right => Anchor::Right } }
@@ -73,8 +73,8 @@ impl Shell {
         let mode = Arc::new(AtomicU8::new(pointer::NORMAL));
         let m = mode.clone();
         std::thread::spawn(move || run(a, rx, s, m));
-        pointer::spawn(app.clone(), stage.clone(), mode, tx.clone());
-        Ok(Shell { tx, stage })
+        pointer::spawn(app.clone(), stage.clone(), mode.clone(), tx.clone());
+        Ok(Shell { tx, stage, mode })
     }
 
     pub fn set_width(&self, css: f64) { let _ = self.tx.send(Cmd::Width(css)); }
@@ -82,13 +82,40 @@ impl Shell {
     pub fn hello(&self) { let _ = self.tx.send(Cmd::Hello); }
     pub fn settings_changed(&self) { let _ = self.tx.send(Cmd::Settings); }
     pub fn start_move(&self) { let _ = self.tx.send(Cmd::Move(true)); }
+    fn hwnd(&self) -> windows::Win32::Foundation::HWND { taskbar::hwnd(self.stage.load(Ordering::Relaxed)) }
+    pub fn floating(&self) -> bool { self.mode.load(Ordering::Relaxed) == pointer::FLOATING }
 
-    pub fn stage_origin(&self) -> Option<(i32, i32, f64)> {
-        let h = taskbar::hwnd(self.stage.load(Ordering::Relaxed));
-        let r = taskbar::rect_of(h)?;
-        Some((r.left, r.top, taskbar::scale_of(h)))
+    /// Przepuszczanie kliknięć przez przezroczyste miejsca okna pływającego (w pasku nic nie robi).
+    pub fn passthrough(&self, on: bool) {
+        let on = on && self.floating();
+        pointer::PASSTHROUGH.store(on, Ordering::Relaxed);
+        taskbar::passthrough(self.hwnd(), on);
+    }
+
+    /// Scena, jej monitor i skala: do ustawienia tooltipa.
+    pub fn stage_geom(&self) -> Option<(placement::Rect, placement::Rect, f64)> {
+        let h = self.hwnd();
+        let (monitor, _) = taskbar::monitor_of(h)?;
+        Some((taskbar::rect_of(h)?, monitor, taskbar::scale_of(h)))
+    }
+
+    /// Gdzie otworzyć panel: przy pasku monitora sceny albo obok sceny pływającej.
+    pub fn panel_at(&self) -> Option<PanelAt> {
+        let h = self.hwnd();
+        let (monitor, work) = taskbar::monitor_of(h)?;
+        let scale = taskbar::scale_of(h);
+        if self.floating() { return Some(PanelAt::Near { stage: taskbar::rect_of(h)?, work, scale }); }
+        Some(PanelAt::Taskbar { bar: taskbar::parent_rect(h), monitor, scale })
     }
 }
+
+pub enum PanelAt {
+    Taskbar { bar: Option<placement::Rect>, monitor: placement::Rect, scale: f64 },
+    Near { stage: placement::Rect, work: placement::Rect, scale: f64 },
+}
+
+/// Monitory dla karty „Pasek”.
+pub fn monitors() -> Vec<placement::MonitorInfo> { taskbar::monitors().into_iter().map(|m| m.info).collect() }
 
 /// Gra, film albo prezentacja na pełnym ekranie.
 pub fn fullscreen_app() -> bool { taskbar::fullscreen_app() }
@@ -115,17 +142,24 @@ fn recreate(app: &AppHandle, n: u32) -> Option<isize> {
     rx.recv_timeout(Duration::from_secs(10)).ok()?.ok()
 }
 
+/// Przeciąganie okna pływającego: prostokąt w chwili chwycenia i bieżąca kotwica.
+struct FloatDrag { from: placement::Rect, at: (f64, f64) }
+
 fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<AtomicU8>) {
     use tauri::Manager;
     let uia = taskbar::Uia::new().ok();
     if uia.is_none() { eprintln!("agent-pets: UI Automation niedostępne, scena zostanie mała przy zasobniku"); }
-    let (mut want, mut last_tray, mut floating, mut n) = (0.0f64, 0isize, false, 1u32);
+    let (mut want, mut n) = (0.0f64, 1u32);
+    // rodzic okna sceny: uchwyt paska, w którym jest osadzone (0 = okno najwyższego poziomu)
+    let (mut parent, mut embed_failed) = (0isize, false);
     let mut last_layout: Option<Layout> = None;
     let mut last_visible: Option<bool> = None;
     let mut moving: Option<Moving> = None;
-    let set_moving = |on: bool| {
-        pmode.store(if on { pointer::MOVING } else { pointer::NORMAL }, Ordering::Relaxed);
-        let _ = app.emit("pets://moving", on);
+    let mut dragging: Option<FloatDrag> = None;
+    let mut last_rect: Option<placement::Rect> = None;
+    let set_pmode = |m: u8| {
+        let old = pmode.swap(m, Ordering::Relaxed);
+        if (old == pointer::MOVING) != (m == pointer::MOVING) { let _ = app.emit("pets://moving", m == pointer::MOVING); }
     };
     loop {
         let mut msgs = Vec::new();
@@ -134,24 +168,86 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
         }
-        let Some(tray) = taskbar::tray() else { continue };
-        let mut h = stage.load(Ordering::Relaxed);
-        if tray.0 as isize != last_tray {
-            // pierwszy start albo restart Explorera (nowy uchwyt paska)
-            if !taskbar::is_window(h) {
-                let Some(nh) = recreate(&app, n) else { continue };
-                n += 1;
-                h = nh;
-                stage.store(nh, Ordering::Relaxed);
-                last_layout = None;
-                last_visible = None;
-            }
-            floating = taskbar::embed(taskbar::hwnd(h), tray).is_err();
-            if floating { eprintln!("agent-pets: osadzenie w pasku nie powiodło się, okno pływające"); }
-            last_tray = tray.0 as isize;
-        }
-        let Some(m) = taskbar::metrics(tray, uia.as_ref()) else { continue };
         let st = app.state::<crate::settings::SettingsState>().get().stage;
+        let mons = taskbar::monitors();
+        let chosen = placement::pick(&mons.iter().map(|m| (m.info.clone(), m.bar.is_some())).collect::<Vec<_>>(), &st.monitor);
+        let Some(mon) = mons.get(chosen) else { continue };
+        let float = st.position == Position::Floating;
+        let bar = if float { None } else { mon.bar.or_else(taskbar::tray) };
+        if !float && bar.is_none() { continue; }
+        let mut h = stage.load(Ordering::Relaxed);
+        if !taskbar::is_window(h) {
+            // okno zginęło razem z paskiem przy restarcie Explorera
+            let Some(nh) = recreate(&app, n) else { continue };
+            n += 1;
+            h = nh;
+            stage.store(nh, Ordering::Relaxed);
+            parent = 0;
+            last_layout = None;
+            last_visible = None;
+        }
+        let hw = taskbar::hwnd(h);
+        match bar {
+            Some(b) if b.0 as isize != parent => {
+                // z okna pływającego: w pasku kliknięcia zawsze są nasze
+                pointer::PASSTHROUGH.store(false, Ordering::Relaxed);
+                taskbar::passthrough(hw, false);
+                embed_failed = taskbar::embed(hw, b).is_err();
+                if embed_failed { eprintln!("agent-pets: osadzenie w pasku nie powiodło się, okno pływające"); }
+                parent = b.0 as isize;
+                last_layout = None;
+            }
+            None if parent != 0 => {
+                taskbar::detach(hw);
+                parent = 0;
+                embed_failed = false;
+                last_layout = None;
+            }
+            _ => {}
+        }
+        if float {
+            moving = None;
+            set_pmode(pointer::FLOATING);
+            let size = st.size.clamp(pets_core::settings::SIZE.0, pets_core::settings::SIZE.1) as f64;
+            let h_css = 48.0 * size / 100.0;
+            let anchor = anchor_of(st.align);
+            let saved = st.floating_at.map(|p| (p.x, p.y));
+            for c in msgs {
+                match c {
+                    Cmd::Width(w) => want = w,
+                    Cmd::Hello => { last_layout = None; last_visible = None; }
+                    Cmd::Drag(Drag::Start) => if let Some(r) = last_rect {
+                        dragging = Some(FloatDrag { from: r, at: placement::float_anchor(mon.work, r, anchor, mon.scale) });
+                    },
+                    Cmd::Drag(Drag::Move { dx, dy }) => if let Some(d) = dragging.as_mut() {
+                        let r = placement::Rect { left: d.from.left + dx, top: d.from.top + dy, right: d.from.right + dx, bottom: d.from.bottom + dy };
+                        d.at = placement::float_anchor(mon.work, r, anchor, mon.scale);
+                    },
+                    Cmd::Drag(Drag::End) => if let Some(d) = dragging.take() {
+                        let r = placement::float_rect(mon.work, Some(d.at), anchor, want, h_css, mon.scale);
+                        let (x, y) = placement::float_anchor(mon.work, r, anchor, mon.scale);
+                        if let Err(e) = crate::settings::update(&app, |s| s.stage.floating_at = Some(pets_core::settings::Point { x, y })) {
+                            eprintln!("agent-pets: {e}");
+                        }
+                    },
+                    _ => {}
+                }
+            }
+            let at = dragging.as_ref().map(|d| d.at).or(saved);
+            let l = Layout { max_css: ((mon.work.right - mon.work.left) as f64 / mon.scale - 16.0).floor(), height_css: h_css,
+                scale: mon.scale, mode: "floating", light: crate::system::light_taskbar(), left_fallback: false };
+            if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); }
+            let vis = !taskbar::fullscreen_app();
+            if last_visible != Some(vis) { let _ = app.emit("pets://visibility", vis); last_visible = Some(vis); }
+            let r = (want > 0.0 && vis).then(|| placement::float_rect(mon.work, at, anchor, want, h_css, mon.scale));
+            if r != last_rect { taskbar::apply_rect(hw, r); last_rect = r; }
+            continue;
+        }
+        dragging = None;
+        last_rect = None;
+        if moving.is_none() { set_pmode(pointer::NORMAL); }
+        let Some(b) = bar else { continue };
+        let Some(m) = taskbar::metrics(b, uia.as_ref()) else { continue };
         let width = (m.tray.right - m.tray.left).max(1) as f64;
         let px_of = |at: f64| m.tray.left + (at * width).round() as i32;
         for c in msgs {
@@ -159,13 +255,13 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 Cmd::Width(w) => want = w,
                 Cmd::Hello => { last_layout = None; last_visible = None; }
                 Cmd::Settings => {}
-                Cmd::Move(true) if moving.is_none() && st.position != Position::Floating => {
+                Cmd::Move(true) if moving.is_none() => {
                     let mode = mode_of(&st);
                     let anchor = match mode { Mode::Left => Anchor::Left, Mode::Custom { anchor, .. } => anchor, Mode::Right => Anchor::Right };
                     let Some(p) = placement::place_mode(&m, want, mode) else { continue };
                     let x = m.tray.left + p.x + match anchor { Anchor::Left => 0, Anchor::Center => p.w / 2, Anchor::Right => p.w };
                     moving = Some(Moving { anchor, at: placement::custom_at(&m, x), grab: None });
-                    set_moving(true);
+                    set_pmode(pointer::MOVING);
                 }
                 Cmd::Move(_) => {}
                 Cmd::Drag(d) => if let Some(mv) = moving.as_mut() {
@@ -176,7 +272,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                     }
                 },
                 Cmd::MoveDone(commit) => if let Some(mv) = moving.take() {
-                    set_moving(false);
+                    set_pmode(pointer::NORMAL);
                     if commit {
                         let (at, align) = (mv.at, align_of(mv.anchor));
                         if let Err(e) = crate::settings::update(&app, |s| { s.stage.position = Position::Custom; s.stage.custom_at = Some(at); s.stage.align = align; }) {
@@ -186,7 +282,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 },
             }
         }
-        // ustawienia sprzed zapisu: w tym obrocie pozycja z przesuwania
+        // w trakcie przesuwania pozycja z przesuwania, inaczej z ustawień
         let mode = match &moving { Some(mv) => Mode::Custom { at: mv.at, anchor: mv.anchor }, None => mode_of(&st) };
         let p = placement::place_mode(&m, want, mode);
         if let Some(p) = p {
@@ -194,8 +290,8 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 light: crate::system::light_taskbar(), left_fallback: p.left_fallback && st.position == Position::Left };
             if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); }
         }
-        if floating { taskbar::apply_floating(taskbar::hwnd(h), &m, p) } else { taskbar::apply(taskbar::hwnd(h), p) }
-        let vis = placement::taskbar_visible(m.tray, taskbar::screen_rect()) && !taskbar::fullscreen_app();
+        if embed_failed { taskbar::apply_floating(hw, &m, p) } else { taskbar::apply(hw, p) }
+        let vis = placement::taskbar_visible(m.tray, mon.monitor) && !taskbar::fullscreen_app();
         if last_visible != Some(vis) { let _ = app.emit("pets://visibility", vis); last_visible = Some(vis); }
     }
 }

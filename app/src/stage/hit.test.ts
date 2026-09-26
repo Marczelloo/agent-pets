@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clickAction, hitTest } from './hit';
+import { clickAction, hitTest, passthroughAt } from './hit';
 import { LEFT_REACH, SLOT, geometry, layout, type LayoutOut } from './layout';
 import type { Session } from '../types';
 
@@ -32,6 +32,18 @@ describe('hitTest with stage settings', () => {
     const o = layout({ sessions, hasLimits: true, maxWidth: 2000, geo });
     for (const p of o.pets) expect(hitTest(o, p.x + 5, 30, 48)).toEqual({ kind: 'pet', id: p.id, x: p.x });
     expect(hitTest(o, o.limitsX! + 2, 30, 48)?.kind).toBe('limits');
+  });
+});
+
+describe('passthroughAt (floating window)', () => {
+  it('lets clicks through empty space, but not over a pet, the badge, the limits or a visible background', () => {
+    expect(passthroughAt(out, 50, 30, 48, false)).toBe(false);
+    expect(passthroughAt(out, 10, 24, 48, false)).toBe(false);
+    expect(passthroughAt(out, 240, 5, 48, false)).toBe(false);
+    expect(passthroughAt(out, 251, 24, 48, false)).toBe(true);
+    const gap: LayoutOut = { ...out, pets: [{ id: 'a', x: 50 }], badgeX: null, limitsX: null, width: 250 };
+    expect(passthroughAt(gap, 200, 24, 48, false)).toBe(true);
+    expect(passthroughAt(gap, 200, 24, 48, true)).toBe(false);
   });
 });
 

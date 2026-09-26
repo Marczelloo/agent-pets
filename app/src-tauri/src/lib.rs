@@ -28,6 +28,14 @@ fn stage_hello(app: tauri::AppHandle, shell: tauri::State<shell::Shell>, tip: ta
 #[tauri::command]
 fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_width(width); }
 
+/// Monitory do wyboru w karcie „Pasek”.
+#[tauri::command]
+fn monitors_list() -> Vec<shell::placement::MonitorInfo> { shell::monitors() }
+
+/// Okno pływające: kursor nad pustym miejscem przepuszcza kliknięcia do okien pod spodem.
+#[tauri::command]
+fn stage_passthrough(on: bool, shell: tauri::State<shell::Shell>) { shell.passthrough(on); }
+
 /// „Przesuń” (menu sceny, karta „Pasek”): scena w pasku da się przeciągnąć; Enter albo klik obok zapisuje, Esc cofa.
 #[tauri::command]
 fn stage_move(shell: tauri::State<shell::Shell>) { shell.start_move(); }
@@ -148,7 +156,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            snapshot, stage_hello, stage_set_width, stage_move, jump, panel::panel_open, panel::panel_hide,
+            snapshot, stage_hello, stage_set_width, stage_move, stage_passthrough, monitors_list, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,

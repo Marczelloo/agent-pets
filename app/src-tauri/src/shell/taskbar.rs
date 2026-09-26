@@ -1,12 +1,13 @@
 //! Pasek zadań Windows 11: uchwyty, pomiary (Win32 + UI Automation), osadzenie okna sceny.
 use super::memo::KeyedCache;
-use super::placement::{Metrics, Placement, Rect};
+use super::placement::{Metrics, MonitorInfo, Placement, Rect};
 use std::cell::RefCell;
-use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::core::{w, BOOL, PCWSTR};
+use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, MonitorFromWindow, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
 use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTreeWalker};
-use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -82,6 +83,28 @@ impl Uia {
     }
 }
 
+impl Uia {
+    /// Lewa krawędź zegara i ikon zasobnika drugiego paska (tam nie ma `TrayNotifyWnd`): elementy `SystemTray.*`.
+    pub fn tray_left(&self, bar: HWND) -> Option<i32> {
+        let root = unsafe { self.auto.ElementFromHandle(bar) }.ok()?;
+        let mut best: Option<i32> = None;
+        let mut stack = vec![(root, 0u32)];
+        while let Some((el, depth)) = stack.pop() {
+            let mut c = unsafe { self.walker.GetFirstChildElement(&el) }.ok();
+            while let Some(ch) = c {
+                let cls = unsafe { ch.CurrentClassName() }.map(|b| b.to_string()).unwrap_or_default();
+                if cls.starts_with("SystemTray.") {
+                    if let Ok(r) = unsafe { ch.CurrentBoundingRectangle() } { if r.right > r.left { best = Some(best.map_or(r.left, |b| b.min(r.left))); } }
+                } else if depth < 1 {
+                    stack.push((ch.clone(), depth + 1));
+                }
+                c = unsafe { self.walker.GetNextSiblingElement(&ch) }.ok();
+            }
+        }
+        best
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Edges { pub icons_right: Option<i32>, pub first_left: Option<i32>, pub widgets_right: Option<i32> }
 
@@ -96,7 +119,8 @@ pub fn edges_of(boxes: &[(i32, i32, bool)]) -> Edges {
 pub fn metrics(tray: HWND, uia: Option<&Uia>) -> Option<Metrics> {
     let r = rect_of(tray)?;
     let notify = unsafe { FindWindowExW(Some(tray), None, w!("TrayNotifyWnd"), PCWSTR::null()) }.ok()
-        .and_then(rect_of).map(|n| n.left);
+        .and_then(rect_of).map(|n| n.left)
+        .or_else(|| uia.and_then(|u| u.tray_left(tray)));
     let e = uia.and_then(|u| u.edges(tray)).unwrap_or_default();
     Some(Metrics { tray: r, notify_left: notify, icons_right: e.icons_right, first_left: e.first_left, widgets_right: e.widgets_right, scale: scale_of(tray) })
 }
@@ -129,6 +153,91 @@ pub fn apply_floating(stage: HWND, m: &Metrics, p: Option<Placement>) {
         }
     }
 }
+
+/// Monitor z obszarem roboczym, skalą i paskiem zadań (jeśli Windows go tam pokazuje).
+pub struct Mon { pub info: MonitorInfo, pub monitor: Rect, pub work: Rect, pub scale: f64, pub bar: Option<HWND> }
+
+fn rect_from(r: &RECT) -> Rect { Rect { left: r.left, top: r.top, right: r.right, bottom: r.bottom } }
+
+fn monitor_info(h: HMONITOR) -> Option<(String, Rect, Rect, bool)> {
+    let mut mi = MONITORINFOEXW::default();
+    mi.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+    unsafe { GetMonitorInfoW(h, &mut mi as *mut _ as *mut MONITORINFO).ok().ok()?; }
+    let dev = String::from_utf16_lossy(&mi.szDevice).trim_end_matches('\0').to_string();
+    Some((dev, rect_from(&mi.monitorInfo.rcMonitor), rect_from(&mi.monitorInfo.rcWork), mi.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0))
+}
+
+/// Paski zadań wszystkich monitorów: główny `Shell_TrayWnd` i `Shell_SecondaryTrayWnd` (spike S1).
+fn bars() -> Vec<HWND> {
+    unsafe extern "system" fn collect(h: HWND, l: LPARAM) -> BOOL {
+        let out = &mut *(l.0 as *mut Vec<HWND>);
+        let mut buf = [0u16; 64];
+        let n = GetClassNameW(h, &mut buf);
+        let cls = String::from_utf16_lossy(&buf[..n.max(0) as usize]);
+        if cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" { out.push(h); }
+        BOOL(1)
+    }
+    let mut out: Vec<HWND> = Vec::new();
+    unsafe { let _ = EnumWindows(Some(collect), LPARAM(&mut out as *mut _ as isize)); }
+    out
+}
+
+pub fn monitors() -> Vec<Mon> {
+    unsafe extern "system" fn collect(h: HMONITOR, _: HDC, _: *mut RECT, l: LPARAM) -> BOOL {
+        (&mut *(l.0 as *mut Vec<HMONITOR>)).push(h);
+        BOOL(1)
+    }
+    let mut hs: Vec<HMONITOR> = Vec::new();
+    unsafe { let _ = EnumDisplayMonitors(None, None, Some(collect), LPARAM(&mut hs as *mut _ as isize)); }
+    let bars: Vec<(HWND, isize)> = bars().into_iter().map(|b| (b, unsafe { MonitorFromWindow(b, MONITOR_DEFAULTTONEAREST) }.0 as isize)).collect();
+    hs.iter().enumerate().filter_map(|(i, h)| {
+        let (id, monitor, work, primary) = monitor_info(*h)?;
+        let (mut dx, mut dy) = (0u32, 0u32);
+        let scale = unsafe { GetDpiForMonitor(*h, MDT_EFFECTIVE_DPI, &mut dx, &mut dy) }.ok().map(|_| dx as f64 / 96.0).filter(|s| *s > 0.0).unwrap_or(1.0);
+        let bar = bars.iter().find(|(_, m)| *m == h.0 as isize).map(|(b, _)| *b);
+        Some(Mon { info: MonitorInfo { id, primary, width: monitor.right - monitor.left, height: monitor.bottom - monitor.top, index: i as u32 + 1 },
+            monitor, work, scale, bar })
+    }).collect()
+}
+
+/// Monitor, na którym jest okno (prostokąt monitora i obszaru roboczego).
+pub fn monitor_of(h: HWND) -> Option<(Rect, Rect)> {
+    let m = unsafe { MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) };
+    monitor_info(m).map(|(_, mon, work, _)| (mon, work))
+}
+
+/// Okno pływające: z powrotem zwykłe okno najwyższego poziomu (bez rodzica), zawsze na wierzchu, bez fokusu.
+pub fn detach(stage: HWND) {
+    unsafe {
+        let _ = SetParent(stage, None);
+        let style = GetWindowLongW(stage, GWL_STYLE) as u32;
+        SetWindowLongW(stage, GWL_STYLE, ((style & !WS_CHILD.0) | WS_POPUP.0) as i32);
+        let ex = GetWindowLongW(stage, GWL_EXSTYLE) as u32;
+        SetWindowLongW(stage, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) as i32);
+    }
+}
+
+pub fn apply_rect(stage: HWND, r: Option<Rect>) {
+    unsafe {
+        match r {
+            Some(r) if r.right > r.left => { let _ = SetWindowPos(stage, Some(HWND_TOPMOST), r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED); }
+            _ => { let _ = ShowWindow(stage, SW_HIDE); }
+        }
+    }
+}
+
+/// Przezroczystość dla myszy (jak `set_ignore_cursor_events` w Tauri): kliknięcia trafiają do okna pod spodem.
+pub fn passthrough(stage: HWND, on: bool) {
+    unsafe {
+        let ex = GetWindowLongW(stage, GWL_EXSTYLE) as u32;
+        let bits = WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0;
+        let new = if on { ex | bits } else { ex & !WS_EX_TRANSPARENT.0 };
+        if new != ex { SetWindowLongW(stage, GWL_EXSTYLE, new as i32); }
+    }
+}
+
+/// Prostokąt rodzica okna (paska, w którym scena jest osadzona).
+pub fn parent_rect(h: HWND) -> Option<Rect> { unsafe { GetParent(h) }.ok().and_then(rect_of) }
 
 pub fn hide(h: HWND) { unsafe { let _ = ShowWindow(h, SW_HIDE); } }
 

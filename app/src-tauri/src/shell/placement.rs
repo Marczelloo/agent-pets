@@ -120,6 +120,48 @@ pub fn custom_at(m: &Metrics, anchor_x: i32) -> f64 {
     (anchor_x.clamp(z.left, z.right) - m.tray.left) as f64 / width
 }
 
+/// Monitor dla karty „Pasek”: `id` to nazwa urządzenia (`szDevice`), `index` od 1 w kolejności Windows.
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+pub struct MonitorInfo { pub id: String, pub primary: bool, pub width: i32, pub height: i32, pub index: u32 }
+
+/// Który monitor: wybrany, jeśli jest podłączony i ma pasek; inaczej główny (ustawienie się nie zmienia).
+pub fn pick(monitors: &[(MonitorInfo, bool)], want: &str) -> usize {
+    let primary = monitors.iter().position(|(m, _)| m.primary).unwrap_or(0);
+    if want == pets_core::settings::PRIMARY { return primary; }
+    monitors.iter().position(|(m, bar)| *bar && m.id == want).unwrap_or(primary)
+}
+
+/// Odstęp okna pływającego od paska przy pozycji domyślnej (px CSS).
+pub const FLOAT_MARGIN_CSS: f64 = 16.0;
+
+/// Okno pływające w pikselach ekranu. `at`: kotwica (px CSS od lewego górnego rogu obszaru roboczego) na dolnej
+/// krawędzi okna, po stronie `anchor`; brak: środek nad paskiem. Wynik zawsze w obszarze roboczym.
+pub fn float_rect(work: Rect, at: Option<(f64, f64)>, anchor: Anchor, w_css: f64, h_css: f64, scale: f64) -> Rect {
+    let (w, h) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32);
+    let (ax, ay, anchor) = match at {
+        Some((x, y)) => (work.left + (x * scale).round() as i32, work.top + (y * scale).round() as i32, anchor),
+        None => ((work.left + work.right) / 2, work.bottom - (FLOAT_MARGIN_CSS * scale).round() as i32, Anchor::Center),
+    };
+    let x = match anchor { Anchor::Left => ax, Anchor::Center => ax - w / 2, Anchor::Right => ax - w };
+    let x = x.clamp(work.left, (work.right - w).max(work.left));
+    let y = (ay - h).clamp(work.top, (work.bottom - h).max(work.top));
+    Rect { left: x, top: y, right: x + w, bottom: y + h }
+}
+
+/// Odwrotność `float_rect`: kotwica okna do zapisania w ustawieniach.
+pub fn float_anchor(work: Rect, r: Rect, anchor: Anchor, scale: f64) -> (f64, f64) {
+    let x = match anchor { Anchor::Left => r.left, Anchor::Center => (r.left + r.right) / 2, Anchor::Right => r.right };
+    ((x - work.left) as f64 / scale, (r.bottom - work.top) as f64 / scale)
+}
+
+/// Tooltip nad sceną (albo pod nią, gdy nad nią brak miejsca), w granicach monitora sceny.
+pub fn tooltip_pos(anchor_x: i32, stage: Rect, monitor: Rect, pw: i32, ph: i32, scale: f64) -> (i32, i32) {
+    let (m4, gap) = ((4.0 * scale).round() as i32, (6.0 * scale).round() as i32);
+    let x = (anchor_x - pw / 2).clamp(monitor.left + m4, (monitor.right - pw - m4).max(monitor.left + m4));
+    let above = stage.top - ph - gap;
+    (x, if above >= monitor.top { above } else { stage.bottom + gap })
+}
+
 /// Autoukryty pasek chowa się za dolną krawędź ekranu, zostawiając ok. 2 px.
 pub fn taskbar_visible(tray: Rect, screen: Rect) -> bool {
     screen.bottom - tray.top > 4 && tray.bottom > screen.top
@@ -245,6 +287,50 @@ mod tests {
         let mut mm = m(Some(1657), 1.0);
         mm.tray.bottom = mm.tray.top;
         assert!(place(&mm, 400.0).is_none());
+    }
+
+    fn mon(id: &str, primary: bool, has_bar: bool) -> (MonitorInfo, bool) {
+        (MonitorInfo { id: id.into(), primary, width: 1920, height: 1080, index: 0 }, has_bar)
+    }
+
+    #[test]
+    fn picks_the_chosen_monitor_or_falls_back_to_the_primary() {
+        let ms = [mon(r"\\.\DISPLAY2", false, true), mon(r"\\.\DISPLAY1", true, true), mon(r"\\.\DISPLAY3", false, false)];
+        assert_eq!(pick(&ms, "primary"), 1);
+        assert_eq!(pick(&ms, r"\\.\DISPLAY2"), 0);
+        assert_eq!(pick(&ms, r"\\.\DISPLAY3"), 1, "no taskbar on that monitor");
+        assert_eq!(pick(&ms, r"\\.\DISPLAY9"), 1, "unplugged");
+        assert_eq!(pick(&[], "primary"), 0);
+    }
+
+    // obszar roboczy drugiego monitora ze spike'a S1: na lewo od głównego, przesunięty w pionie
+    const WORK2: Rect = Rect { left: -1920, top: 139, right: 0, bottom: 1171 };
+
+    #[test]
+    fn floating_window_defaults_above_the_taskbar_and_grows_from_its_anchor() {
+        let r = float_rect(WORK2, None, Anchor::Right, 200.0, 48.0, 1.0);
+        assert_eq!((r.left, r.right, r.bottom), (-960 - 100, -960 + 100, 1171 - 16));
+        let at = Some((400.0, 500.0));
+        assert_eq!(float_rect(WORK2, at, Anchor::Left, 200.0, 48.0, 1.0), Rect { left: -1520, top: 139 + 500 - 48, right: -1320, bottom: 639 });
+        assert_eq!(float_rect(WORK2, at, Anchor::Center, 200.0, 48.0, 1.0).left, -1620);
+        assert_eq!(float_rect(WORK2, at, Anchor::Right, 200.0, 48.0, 1.0).right, -1520);
+    }
+
+    #[test]
+    fn floating_window_never_leaves_the_work_area_and_honours_the_scale() {
+        let r = float_rect(WORK2, Some((5000.0, -300.0)), Anchor::Left, 200.0, 48.0, 1.5);
+        assert_eq!((r.right, r.top, r.right - r.left, r.bottom - r.top), (0, 139, 300, 72));
+        let back = float_anchor(WORK2, r, Anchor::Left, 1.5);
+        assert_eq!(float_rect(WORK2, Some(back), Anchor::Left, 200.0, 48.0, 1.5), r);
+    }
+
+    #[test]
+    fn tooltip_stays_on_the_stage_monitor_and_flips_below_near_the_top() {
+        let stage = Rect { left: -1500, top: 1171, right: -1300, bottom: 1219 };
+        let mon2 = Rect { left: -1920, top: 139, right: 0, bottom: 1219 };
+        assert_eq!(tooltip_pos(-1910, stage, mon2, 200, 80, 1.0), (-1916, 1171 - 80 - 6));
+        let high = Rect { left: -500, top: 150, right: -300, bottom: 198 };
+        assert_eq!(tooltip_pos(-400, high, mon2, 200, 80, 1.0), (-500, 198 + 6));
     }
 
     #[test]

@@ -16,6 +16,12 @@ export function hitTest(out: LayoutOut, x: number, y: number, height: number): T
   return null;
 }
 
+/** Okno pływające: czy kursor jest nad pustym miejscem (kliknięcie ma trafić do okna pod spodem). */
+export function passthroughAt(out: LayoutOut, x: number, y: number, height: number, hasBg: boolean): boolean {
+  if (x < 0 || x > out.width || y < 0 || y > height) return true;
+  return !hasBg && hitTest(out, x, y, height) == null;
+}
+
 /** Klik w scenę otwiera panel: na sesji klikniętego zwierzaka albo ogólnie dla „+N” i limitów. */
 export function clickAction(t: Target): { focus: string | null } | null {
   if (!t) return null;

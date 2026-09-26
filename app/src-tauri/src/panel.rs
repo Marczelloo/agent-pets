@@ -37,6 +37,15 @@ pub fn origin(tray: Option<Rect>, screen: Rect, scale: f64) -> (i32, i32) {
     ((screen.right as f64 - w - m).round() as i32, (bottom as f64 - h - m).round() as i32)
 }
 
+/// Panel przy scenie pływającej: nad nią (albo pod nią, gdy brak miejsca), wyśrodkowany, w obszarze roboczym.
+pub fn origin_near(stage: Rect, work: Rect, scale: f64) -> (i32, i32) {
+    let (w, h, m) = ((W * scale).round() as i32, (H * scale).round() as i32, (MARGIN * scale).round() as i32);
+    let x = ((stage.left + stage.right) / 2 - w / 2).clamp(work.left + m, (work.right - w - m).max(work.left + m));
+    let above = stage.top - h - m;
+    let y = if above >= work.top + m { above } else { (stage.bottom + m).min((work.bottom - h - m).max(work.top)) };
+    (x, y)
+}
+
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let w = WebviewWindowBuilder::new(app, "panel", WebviewUrl::App("panel.html".into()))
         .title("Agent Pets").inner_size(W, H).decorations(false).transparent(true).always_on_top(true)
@@ -52,14 +61,22 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
 fn place(app: &AppHandle) {
     let Some(win) = app.get_webview_window("panel") else { return };
-    let (tray, screen, scale) = match crate::shell::taskbar_geometry() {
-        Some((t, s, k)) => (Some(t), s, k),
+    let at = app.try_state::<crate::shell::Shell>().and_then(|s| s.panel_at());
+    let (x, y, scale) = match at {
+        Some(crate::shell::PanelAt::Near { stage, work, scale }) => { let (x, y) = origin_near(stage, work, scale); (x, y, scale) }
+        Some(crate::shell::PanelAt::Taskbar { bar, monitor, scale }) => { let (x, y) = origin(bar, monitor, scale); (x, y, scale) }
         None => {
-            let (w, h) = crate::shell::screen_size();
-            (None, Rect { left: 0, top: 0, right: w, bottom: h }, win.scale_factor().unwrap_or(1.0))
+            let (tray, screen, scale) = match crate::shell::taskbar_geometry() {
+                Some((t, s, k)) => (Some(t), s, k),
+                None => {
+                    let (w, h) = crate::shell::screen_size();
+                    (None, Rect { left: 0, top: 0, right: w, bottom: h }, win.scale_factor().unwrap_or(1.0))
+                }
+            };
+            let (x, y) = origin(tray, screen, scale);
+            (x, y, scale)
         }
     };
-    let (x, y) = origin(tray, screen, scale);
     let _ = win.set_size(tauri::PhysicalSize::new((W * scale).round() as u32, (H * scale).round() as u32));
     let _ = win.set_position(PhysicalPosition::new(x, y));
 }
@@ -124,6 +141,22 @@ mod tests {
     fn panel_sits_above_the_real_taskbar_at_the_right_edge() {
         let tray = Rect { left: 0, top: 1368, right: 2560, bottom: 1440 };
         assert_eq!(origin(Some(tray), SCREEN, 1.5), (2560 - 600 - 18, 1368 - 810 - 18));
+    }
+
+    #[test]
+    fn on_the_second_monitor_the_panel_stays_on_that_monitor() {
+        let mon2 = Rect { left: -1920, top: 139, right: 0, bottom: 1219 };
+        let bar2 = Rect { left: -1920, top: 1171, right: 0, bottom: 1219 };
+        assert_eq!(origin(Some(bar2), mon2, 1.0), (-400 - 12, 1171 - 540 - 12));
+    }
+
+    #[test]
+    fn next_to_a_floating_stage_above_it_or_below_when_there_is_no_room() {
+        let work = Rect { left: 0, top: 0, right: 2560, bottom: 1392 };
+        let low = Rect { left: 1000, top: 1200, right: 1200, bottom: 1248 };
+        assert_eq!(origin_near(low, work, 1.0), (1100 - 200, 1200 - 540 - 12));
+        let high = Rect { left: 2500, top: 20, right: 2560, bottom: 68 };
+        assert_eq!(origin_near(high, work, 1.0), (2560 - 400 - 12, 68 + 12));
     }
 
     #[test]

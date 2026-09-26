@@ -9,6 +9,7 @@ import { geometry, layout, zoomOf, type LayoutOut } from './layout';
 import { Orderer } from './order';
 import { bgStyle } from './background';
 import { Hover } from './hover';
+import { passthroughAt } from './hit';
 import { Roster, type Entry } from './roster';
 import { frameBudget, reducedMotion } from './power';
 
@@ -32,7 +33,15 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let budget = frameBudget(false), saving = false, reduced = reducedMotion();
   const painters = new WeakMap<Entry, PetPainter>();
   const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
-  const handle: StageHandle = { hover: p => hover.pointer(p) };
+  let through: boolean | null = null;
+  const handle: StageHandle = {
+    hover: p => {
+      hover.pointer(p);
+      if (lay.mode !== 'floating' || p.kind !== 'move') return;
+      const on = passthroughAt(out, p.x, p.y, lay.height_css, stage.background.kind !== 'none');
+      if (on !== through) { through = on; bridge.setPassthrough?.(on); }
+    },
+  };
   // co sekundę: czas w tooltipie, a przy kolejności „uwaga” przesunięcia po histerezie
   setInterval(() => { if (stage.order === 'attention') relayout(); hover.refresh(); reduced = reducedMotion(); }, 1000);
 

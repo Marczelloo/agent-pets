@@ -59,6 +59,9 @@ impl Dragger {
     }
 }
 
+/// Okno pływające przepuszcza teraz kliknięcia (kursor nad pustym miejscem): wciśnięcia nie są nasze.
+pub static PASSTHROUGH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Tryb wskaźnika ustawiany przez pętlę sceny.
 pub const NORMAL: u8 = 0;
 /// „Przesuń” w pasku: przeciąganie bez progu, Enter/klik obok zatwierdza, Esc cofa, bez kliknięć do UI.
@@ -85,6 +88,8 @@ pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: S
                     keys = now;
                 }
                 FLOATING => {
+                    // kliknięcie w puste miejsce trafia do okna pod spodem, nie do sceny
+                    let cur = if PASSTHROUGH.load(Ordering::Relaxed) { Sample { left: false, right: false, ..cur } } else { cur };
                     for e in diff(&prev, &cur) {
                         if !matches!(e, PointerEvent::Click { .. }) { let _ = app.emit("pets://pointer", e); }
                     }
