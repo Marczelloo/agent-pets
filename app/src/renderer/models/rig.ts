@@ -1,6 +1,7 @@
 // Płaski szkielet przodem dla modeli naklejki i pikselowego: te same sprężyny co body.ts, bez obrotu 3D.
 // Ustawia c.hand i c.aHand w tych samych jednostkach co body.ts, więc targets(), rekwizyty i energia ruchu działają bez zmian.
 import { PI, cl } from '../math';
+import { pen } from '../pen';
 import type { Pet } from '../pet';
 
 export interface RigArm {
@@ -34,7 +35,7 @@ export function rig(c: Pet, X: number, Y: number, u: number, t: number, size: { 
   let h = 0, sq = 0;
   if (hph < .42) { h = Math.sin(PI * hph / .42); sq = .07 * Math.cos(PI * hph / .42); } else if (hph < .58) sq = -.13 * Math.sin(PI * (hph - .42) / .16);
   const hw = cl(P.hopW.x);
-  h *= hw; sq *= hw;
+  h *= hw; sq *= hw * pen.squash;
   const wb = Math.abs(Math.sin(t * 10)) * walk, br = Math.sin(t * (2.3 - loaf)) * .02 * (1 + cl(P.sleep.x) * 1.5);
   const oy = -(h * 24 + wb * 2.5) * u + lean * 4 * u;
   const W = size.w * u, H = size.h * u * (1 - .1 * loaf), bot = -12 * u * (1 - down), top = bot - H, legH = 17 * u;

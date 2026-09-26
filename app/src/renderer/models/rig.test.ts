@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPet, setRng, stepPet } from '../index';
+import { createPet, pen, setRng, stepPet } from '../index';
 import { seeded } from '../testing';
 import { rig } from './rig';
 
@@ -33,5 +33,16 @@ describe('rig', () => {
     expect(sleep.eyes.open).toBeLessThan(0.5);
     const hop = rig(warm('done', 200), 0, 0, 1, 3.3, SIZE);
     for (const v of [hop.oy, hop.sx, hop.sy, hop.rot, ...hop.arms.flatMap(a => [a.hx, a.hy])]) expect(Number.isFinite(v)).toBe(true);
+  });
+  it('squash & stretch follows the motion profile (pen.squash)', () => {
+    const squashAt = (k: number) => {
+      const c = createPet('clawd', 'needs');
+      c.hp = 0.5; c.p.hopW.x = 1; // lądowanie: faza 0,42–0,58
+      pen.squash = k;
+      const r = rig(c, 0, 0, 1, 0, { w: 100, h: 70, arm: 16 });
+      pen.squash = 1;
+      return r.sx;
+    };
+    expect(squashAt(1.6) - 1).toBeGreaterThan((squashAt(1) - 1) * 1.4);
   });
 });

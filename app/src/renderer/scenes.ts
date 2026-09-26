@@ -2,7 +2,9 @@ import { PI, TAU, cl, ease, kf, hr } from "./math";
 import { foldHW } from "./fold";
 import { rng } from "./rng";
 import type { Pet } from "./pet";
-export type Act = [name: string, dur: number, fn: (a: number, c: Pet, t: number) => Record<string, any> | undefined, onStart?: (c: Pet) => void, onEnd?: (c: Pet) => void];
+export type Act = [name: string, dur: number, fn: (a: number, c: Pet, t: number) => Record<string, any> | undefined, onStart?: (c: Pet) => void, onEnd?: (c: Pet) => void,
+  /** hak kroku (tylko Anime): cząsteczki, uderzenia, słowa; `a` = czas akcji po tym kroku */
+  hook?: (a: number, c: Pet, t: number, dt: number) => void];
 export type Scene = { base: Record<string, any>; acts: Act[]; seq?: Act[]; cycle?: number };
 export const pend=(c: any,t: any,fn: any)=>{c.pend={t,fn};};
 const dance=(a: any)=>{const b=Math.sin(a*TAU),w=Math.sin(a*PI);return {th:.4*w,lx:6*w,tilt:.06*b,armL:1.8+.85*b,armR:1.8-.85*b,hopW:.45,_hf:2,_notes:1};};

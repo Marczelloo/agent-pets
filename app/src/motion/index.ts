@@ -1,14 +1,13 @@
 import type { MotionId } from '../types';
-import type { MotionDef } from './types';
-export type { MotionDef } from './types';
+import type { FxEnv, MotionDef } from './types';
+export type { FxEnv, MotionDef } from './types';
 
 export const MOTIONS: Record<MotionId, MotionDef> = {
-  calm: { id: 'calm', tempo: 1, spring: { k: 1, d: 1 }, squash: 1, speedLines: false, impacts: false, emotes: false },
-  anime: { id: 'anime', tempo: 1.4, spring: { k: 1.8, d: 0.7 }, squash: 1.6, speedLines: true, impacts: true, emotes: true },
+  calm: { id: 'calm', tempo: 1, spring: { k: 1, d: 1 }, squash: 1, fx: false },
+  anime: { id: 'anime', tempo: 1.4, spring: { k: 1.8, d: 1, crit: true }, squash: 1.6, fx: true },
 };
 
-/** Tryb oszczędny: bez linii prędkości. Wyłączone efekty animacji w Windows: także bez impaktów. */
-export function effective(m: MotionDef, env: { saving: boolean; reduced: boolean }): MotionDef {
-  if (!env.saving && !env.reduced) return m;
-  return { ...m, speedLines: false, impacts: m.impacts && !env.reduced };
+/** Tryb oszczędny: połowa cząsteczek, bez tła akcji. Wyłączone efekty animacji w Windows: bez błysków i wstrząsów (spec 8.2). */
+export function effective(m: MotionDef, env: { saving: boolean; reduced: boolean }): FxEnv {
+  return { fx: m.fx, bg: m.fx && !env.saving, flash: m.fx && !env.reduced, shake: m.fx && !env.reduced, parts: env.saving ? 0.5 : 1 };
 }
