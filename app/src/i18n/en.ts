@@ -73,6 +73,7 @@ export const en: Dict = {
     tasks: (done, total) => `Tasks: ${done}/${total}`,
     context: pct => `Context: ${pct}%`,
     lastActivity: ago => `Last active: ${ago}`,
+    runningFor: d => `Running for: ${d}`,
     untitled: 'Untitled session',
     moreSessions: n => `${n} more ${n === 1 ? 'session' : 'sessions'}`,
   },

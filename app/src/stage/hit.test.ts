@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { clickAction, hitTest, passthroughAt } from './hit';
+import { clickAction, hitTest, menuTarget, passthroughAt } from './hit';
 import { LEFT_REACH, SLOT, geometry, layout, type LayoutOut } from './layout';
 import type { Session } from '../types';
 
-const out: LayoutOut = { width: 250, pets: [{ id: 'a', x: 50 }, { id: 'b', x: 124 }], hidden: 1, hiddenIds: ['z'],
+const out: LayoutOut = { width: 250, pets: [{ id: 'a', x: 50, minis: [], miniMore: null }, { id: 'b', x: 124, minis: [], miniMore: null }], hidden: 1, hiddenIds: ['z'],
   badgeX: 2, limitsX: 222 };
 
 describe('hitTest', () => {
@@ -41,7 +41,7 @@ describe('passthroughAt (floating window)', () => {
     expect(passthroughAt(out, 10, 24, 48, false)).toBe(false);
     expect(passthroughAt(out, 240, 5, 48, false)).toBe(false);
     expect(passthroughAt(out, 251, 24, 48, false)).toBe(true);
-    const gap: LayoutOut = { ...out, pets: [{ id: 'a', x: 50 }], badgeX: null, limitsX: null, width: 250 };
+    const gap: LayoutOut = { ...out, pets: [{ id: 'a', x: 50, minis: [], miniMore: null }], badgeX: null, limitsX: null, width: 250 };
     expect(passthroughAt(gap, 200, 24, 48, false)).toBe(true);
     expect(passthroughAt(gap, 200, 24, 48, true)).toBe(false);
   });
@@ -53,5 +53,24 @@ describe('clickAction', () => {
     expect(clickAction({ kind: 'badge', x: 14 })).toEqual({ focus: null });
     expect(clickAction({ kind: 'limits', x: 235 })).toEqual({ focus: null });
     expect(clickAction(null)).toBeNull();
+  });
+});
+
+describe('mini pets', () => {
+  const mk = (id: string, parent: string | null = null) => ({
+    id, agent: 'claude', origin: 'cli', title: id, cwd: '', state: 'working', tool: 'edit', progress: null, context: null,
+    started_at: 0, last_activity: 0, state_since: 0, turn_started_at: null, jump: { pid: null, session_id: id, cwd: '', app: null }, parent,
+  }) as Session;
+  const all = [mk('p'), mk('a', 'p'), mk('b', 'p')];
+  const out = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minisLeft: true,
+    minis: p => ({ shown: all.filter(c => c.parent === p.id), more: 0 }) });
+
+  it('a click on a mini opens the panel on that child, a right click is the parent menu', () => {
+    const m = out.pets[0].minis[1];
+    const t = hitTest(out, m.x, 30, 48);
+    expect(t).toEqual({ kind: 'mini', id: 'b', parent: 'p', x: m.x });
+    expect(clickAction(t)).toEqual({ focus: 'b' });
+    expect(menuTarget(t)).toBe('p');
+    expect(hitTest(out, out.pets[0].x, 30, 48)).toMatchObject({ kind: 'pet', id: 'p' });
   });
 });

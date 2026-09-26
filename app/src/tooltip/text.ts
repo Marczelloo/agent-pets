@@ -20,6 +20,14 @@ export function formatAgo(ms: number): string {
   return t().time.hourAgo(Math.floor(s / 3600));
 }
 
+/** Czas trwania: „45 s”, „3 min”, „1 h 5 min”. */
+export function formatDuration(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
 export function formatReset(resetsAt: number | null, nowMs: number): string {
   if (resetsAt == null) return '';
   if (resetsAt <= nowMs) return t().time.resetSoon;
@@ -29,11 +37,12 @@ export function formatReset(resetsAt: number | null, nowMs: number): string {
 }
 
 export function petTooltip(s: Session, nowMs: number): TooltipContent {
-  const lines = [actionLabel(s)];
+  const lines = [s.action || actionLabel(s)];
   const f = progressFraction(s.progress);
   if (f != null && s.progress) lines.push(t().tooltip.tasks(s.progress.done, s.progress.total));
   if (s.context && s.context.max > 0) lines.push(t().tooltip.context(Math.round(clampPct(s.context.used * 100 / s.context.max))));
   if (s.router_task) lines.push(routerLine(s.router_task, nowMs, s.last_activity));
+  if (s.parent) lines.push(t().tooltip.runningFor(formatDuration(nowMs - s.started_at)));
   lines.push(t().tooltip.lastActivity(formatAgo(nowMs - s.last_activity)));
   return {
     title: cut(s.title || basename(s.cwd) || t().tooltip.untitled, 80),

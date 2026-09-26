@@ -31,13 +31,16 @@ export function drawProgress(x: CanvasRenderingContext2D, cx: number, y: number,
   x.restore();
 }
 
-/** Znaczek Agent Routera: kółko w kolorze Codexa ze strzałkami w obie strony, nad lewym ramieniem zwierzaka. */
-export function drawRouterBadge(x: CanvasRenderingContext2D, cx: number, y: number): void {
+/** Kolor ostrzeżenia plakietki: zadanie routera stoi albo jest zablokowane. */
+const WARN = '#EF9F27';
+
+/** Znaczek Agent Routera: kółko w kolorze Codexa (albo ostrzeżenia) ze strzałkami w obie strony, nad lewym ramieniem. */
+export function drawRouterBadge(x: CanvasRenderingContext2D, cx: number, y: number, warn = false): void {
   const r = 4.5, bx = cx - 17, by = y;
   x.save();
   x.beginPath();
   x.arc(bx, by, r, 0, Math.PI * 2);
-  x.fillStyle = AGENT_COLOR.codex;
+  x.fillStyle = warn ? WARN : AGENT_COLOR.codex;
   x.fill();
   x.lineWidth = 1;
   x.strokeStyle = '#2B1D16';
@@ -96,5 +99,21 @@ export function drawBadge(x: CanvasRenderingContext2D, bx: number, h: number, hi
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   x.fillText(`+${hidden}`, bx + 2 + w / 2, y + hh / 2 + .5);
+  x.restore();
+}
+
+/** „+N” dzieci przy mini-zwierzakach: mała pigułka przy ziemi (współrzędne w układzie 1×, `h` = 48). */
+export function drawMiniMore(x: CanvasRenderingContext2D, cx: number, h: number, n: number, font: string): void {
+  const w = 14, hh = 11, y = h - 9 - hh / 2;
+  x.save();
+  x.fillStyle = 'rgba(128,128,128,0.35)';
+  x.beginPath();
+  x.roundRect(cx - w / 2, y, w, hh, 4);
+  x.fill();
+  x.fillStyle = '#FAF9F5';
+  x.font = `600 8px ${font}`;
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText(`+${n}`, cx, y + hh / 2 + .5);
   x.restore();
 }

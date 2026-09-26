@@ -1,7 +1,7 @@
 import { badgeTooltip, limitsTooltip, petTooltip } from '../tooltip/text';
 import type { PointerMsg, Session, Snapshot, TooltipContent } from '../types';
 import type { Bridge } from './bridge';
-import { clickAction, hitTest } from './hit';
+import { clickAction, hitTest, menuTarget } from './hit';
 import type { LayoutOut } from './layout';
 
 interface View { out: LayoutOut; snap: Snapshot; height: number; nowMs: number }
@@ -22,7 +22,7 @@ export class Hover {
       const { out, height } = this.view();
       const t = hitTest(out, p.x, p.y, height);
       this.clear();
-      this.bridge.openMenu?.(t?.kind === 'pet' ? t.id : null, p.x, p.y);
+      this.bridge.openMenu?.(menuTarget(t), p.x, p.y);
       return;
     }
     if (p.kind === 'click') {
@@ -37,10 +37,10 @@ export class Hover {
     const { out, snap, height, nowMs } = this.view();
     const t = hitTest(out, this.x, this.y, height);
     if (!t) { this.hide(); return; }
-    const key = t.kind === 'pet' ? `pet:${t.id}` : t.kind;
+    const key = t.kind === 'pet' || t.kind === 'mini' ? `pet:${t.id}` : t.kind;
     if (!force && key === this.key && Date.now() - this.sentAt < 1000) return;
     let content: TooltipContent;
-    if (t.kind === 'pet') {
+    if (t.kind === 'pet' || t.kind === 'mini') {
       const s = snap.sessions.find(v => v.id === t.id);
       if (!s) { this.hide(); return; }
       content = petTooltip(s, nowMs);

@@ -48,3 +48,17 @@ describe('Roster', () => {
     expect(r.alpha(e, 21.5)).toBeCloseTo(0);
   });
 });
+
+describe('Roster with subagents', () => {
+  it('the stage can pick the scene (a delegating parent, a mini saying goodbye)', () => {
+    const r = new Roster();
+    r.sync([s('p', 'thinking'), s('k', 'working', 'bash')], 0, v => (v.id === 'p' ? 'agent' : 'bye'));
+    expect(r.get('p')?.scene).toBe('agent');
+    expect(r.get('k')).toBeUndefined();
+    r.sync([s('p', 'thinking'), s('k', 'working', 'bash')], 1);
+    expect(r.get('k')?.scene).toBe('bash');
+    r.sync([s('p', 'thinking'), s('k', 'working', 'bash')], 2, v => (v.id === 'k' ? 'bye' : 'thinking'));
+    expect(r.get('k')?.scene).toBe('bye');
+    expect(r.get('k')?.byeAt).toBe(2);
+  });
+});

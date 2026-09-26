@@ -80,6 +80,7 @@ export const pl = {
     tasks: (done: number, total: number) => `Zadania: ${done}/${total}`,
     context: (pct: number) => `Kontekst: ${pct}%`,
     lastActivity: (ago: string) => `Ostatnia aktywność: ${ago}`,
+    runningFor: (d: string) => `Pracuje od: ${d}`,
     untitled: 'Sesja bez tytułu',
     moreSessions: (n: number) => `Jeszcze ${n} ${noun(n)}`,
   },
