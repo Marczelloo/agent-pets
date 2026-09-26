@@ -11,11 +11,10 @@ const flags = (skin: 'clawd' | 'kodek', scene: string, secs: number) => {
 };
 
 describe('dynamic state scenes', () => {
-  it('thinking: shadow over the eyes, dramatic smile, a page falling in slow motion, ゴゴゴ', () => {
-    const { seen, stats } = flags('clawd', 'thinking', 5);
+  it('thinking: shadow over the eyes, dramatic smile, a page falling in slow motion', () => {
+    const { seen } = flags('clawd', 'thinking', 5);
     expect(seen.some(s => s._face === 'shadow')).toBe(true);
     expect(seen.some(s => s._face === 'shadow' && s._smile)).toBe(true);
-    expect(stats['word:ゴゴゴ']).toBeGreaterThanOrEqual(2);
     const pages = seen.flatMap(s => (s.parts as { k: string; vy: number }[]).filter(p => p.k === 'page'));
     expect(pages.length).toBeGreaterThan(0);
     expect(Math.max(...pages.map(p => Math.abs(p.vy)))).toBeLessThan(40); // zwolnione tempo
@@ -64,7 +63,6 @@ describe('dynamic state scenes', () => {
     expect(seen.some(s => s._orbs === 1)).toBe(true);
     expect(seen.some(s => s._orbs === 2)).toBe(true);
     expect(stats.impact).toBeGreaterThanOrEqual(1);
-    expect(stats['word:ゴゴゴ']).toBeGreaterThanOrEqual(1);
     const inward = seen.flatMap(s => (s.parts as { k: string; x: number; y: number; vx: number; vy: number; life: number }[])
       .filter(p => p.k === 'energy' && p.life < 0.03)).filter(p => p.x * p.vx + (p.y + 50) * p.vy < 0);
     expect(inward.length).toBeGreaterThanOrEqual(5);
@@ -76,6 +74,5 @@ describe('dynamic state scenes', () => {
     expect(lx.at(-1)!).toBeGreaterThanOrEqual(45);
     expect(Math.max(...lx)).toBeLessThanOrEqual(50);
     expect(stats.dust).toBeGreaterThanOrEqual(6);
-    expect(stats['word:シュッ']).toBeGreaterThanOrEqual(1);
   });
 });

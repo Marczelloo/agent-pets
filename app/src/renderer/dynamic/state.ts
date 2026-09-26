@@ -11,7 +11,9 @@ export interface Word { text: string; x: number; y: number; life: number; max: n
 export interface FxState {
   parts: Particle[]; words: Word[];
   /** prośba o klatkę uderzenia (decyduje `PetPainter`: limit 3/s, `reduced`) i pozostałe klatki błysku */
-  flashReq: number; flashFrames: number; flashLog: number[];
+  flashReq: number; flashUntil: number; flashLog: number[];
+  /** hit-stop: do tej chwili zegara zwierzak stoi w miejscu (`tick` nie liczy kroków) */
+  stopUntil: number;
   shakeAt: number; shakeAmp: number;
   /** ślad dłoni [x, y, czas] do smug (zapisuje `PetPainter` po narysowaniu modelu) */
   trail: [number, number, number][][];
@@ -41,7 +43,7 @@ export const PHYS: Record<PKind, { g: number; drag: number; life: number; s: num
 const FULL: FxEnv = { fx: true, bg: true, flash: true, shake: true, parts: 1 };
 
 export function fxState(c: Pet): FxState {
-  return c.fx ??= { parts: [], words: [], flashReq: 0, flashFrames: 0, flashLog: [], shakeAt: -Infinity, shakeAmp: 0, trail: [[], []], env: FULL, n: 0, t: 0, stats: {} };
+  return c.fx ??= { parts: [], words: [], flashReq: 0, flashUntil: -Infinity, flashLog: [], stopUntil: -Infinity, shakeAt: -Infinity, shakeAmp: 0, trail: [[], []], env: FULL, n: 0, t: 0, stats: {} };
 }
 
 const count = (s: FxState, k: string) => { s.stats[k] = (s.stats[k] ?? 0) + 1; };
@@ -72,6 +74,13 @@ export function impact(c: Pet, amp: number, flash = true): void {
 }
 
 /** Onomatopeja; startuje najwyżej na −92u, żeby z unoszeniem i powiększeniem zmieściła się w pasku 48 px. */
+/** Zatrzymana klatka przy uderzeniu: cały zwierzak (poza, czas akcji, cząsteczki) stoi przez `secs` zegara. */
+export function hitStop(c: Pet, secs: number): void {
+  const s = fxState(c);
+  count(s, 'stop');
+  s.stopUntil = s.t + secs;
+}
+
 export function word(c: Pet, text: string, x: number, y: number, s = 30): void {
   const f = fxState(c);
   count(f, 'word:' + text);

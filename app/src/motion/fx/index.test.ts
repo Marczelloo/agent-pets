@@ -6,7 +6,7 @@ import { FLASH_MAX, TRAIL_S, flashFrame, recordTrail, shakeOffset, stretchOf } f
 const ENV = { fx: true, bg: true, flash: true, shake: true, parts: 1 };
 
 describe('dynamic frame composition', () => {
-  it('a flash lasts two frames and at most 3 start in any second', () => {
+  it('at most 3 flashes start in any second', () => {
     const s = fxState(createPet('clawd', 'edit'));
     const starts: number[] = [];
     let prev = false;
@@ -18,6 +18,14 @@ describe('dynamic frame composition', () => {
     }
     for (const a of starts) expect(starts.filter(b => b >= a && b < a + 1).length).toBeLessThanOrEqual(FLASH_MAX);
     expect(starts.length).toBeGreaterThanOrEqual(12);
+  });
+  it('an impact frame stays visible for at least 120 ms, also at 10 fps', () => {
+    const at = (fps: number) => { const s = fxState(createPet('clawd', 'edit')); s.flashReq = 1; const on: boolean[] = [];
+      for (let f = 0; f < fps; f++) on.push(flashFrame(s, 5 + f / fps, ENV)); return on; };
+    expect(at(10).slice(0, 3)).toEqual([true, true, false]);
+    const sixty = at(60);
+    expect(sixty.slice(0, 7).every(Boolean)).toBe(true);
+    expect(sixty.slice(8).some(Boolean)).toBe(false);
   });
   it('reduced motion: no flash, no shake', () => {
     const s = fxState(createPet('clawd', 'edit'));

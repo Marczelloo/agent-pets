@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { SCENES } from '../scenes';
 import { SCENES_DYNAMIC } from './index';
-import { at, every, keys, snapE } from './kit';
+import { WORDS, at, every, keys, snapE } from './kit';
+import { simulate } from '../testing';
 
 describe('dynamic kit', () => {
+  it('scenes say only the few climax words (no Japanese text): BAM!, POOF!, NICE!, "!"', () => {
+    for (const scene of Object.keys(SCENES_DYNAMIC)) {
+      const c = simulate('clawd', scene, 9);
+      const words = Object.keys(c.fx?.stats ?? {}).filter(k => k.startsWith('word:')).map(k => k.slice(5));
+      for (const w of words) expect(WORDS as readonly string[], `${scene}: ${w}`).toContain(w);
+    }
+    expect([...WORDS]).toEqual(['BAM!', 'POOF!', 'NICE!', '!']);
+  });
   it('SCENES_DYNAMIC covers exactly the calm scene keys', () => {
     expect(Object.keys(SCENES_DYNAMIC).sort()).toEqual(Object.keys(SCENES).sort());
   });

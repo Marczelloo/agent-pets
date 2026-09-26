@@ -12,6 +12,7 @@ export function tick(c: Pet, dt: number, t0: number, m: MotionDef, animate: bool
   const d = dt * m.tempo;
   c.clk = prev + d;
   if (!animate) return c.clk;
+  if (c.fx && prev < c.fx.stopUntil) return c.clk; // hit-stop: zwierzak stoi
   if (m.id === 'calm') { stepPet(c, dt, c.clk); return c.clk; }
   const n = Math.max(1, Math.ceil(d / STEP - 1e-9));
   for (let i = 1; i <= n; i++) stepPet(c, d / n, prev + d * i / n, m.spring);

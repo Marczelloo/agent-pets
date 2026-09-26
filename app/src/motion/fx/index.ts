@@ -11,9 +11,11 @@ export interface FxCtx { X: number; Y: number; u: number; t: number; dpr: number
 
 export const FLASH_MAX = 3;
 export const TRAIL_S = 0.12;
+/** Klatka uderzenia trwa tyle czasu (nie klatek), żeby była widoczna także w pasku przy 10 kl./s. */
+export const FLASH_S = 0.12;
 
 /**
- * Czy ta klatka jest klatką uderzenia: 2 klatki na uderzenie, najwyżej 3 uderzenia w ciągu sekundy (czas `now` = zegar sceny).
+ * Czy ta klatka jest klatką uderzenia: FLASH_S (0,12 s) na uderzenie, najwyżej 3 uderzenia w ciągu sekundy (czas `now` = zegar sceny).
  * Prośby w trakcie błysku i bliżej niż 1/3 s od poprzedniego przepadają (błyski nie zlewają się w jeden długi).
  */
 export function flashFrame(s: FxState, now: number, env: FxEnv): boolean {
@@ -21,11 +23,9 @@ export function flashFrame(s: FxState, now: number, env: FxEnv): boolean {
     s.flashReq = 0;
     s.flashLog = s.flashLog.filter(v => now - v < 1 && v <= now);
     const last = s.flashLog.at(-1) ?? -Infinity;
-    if (env.flash && s.flashFrames === 0 && s.flashLog.length < FLASH_MAX && now - last >= 1 / FLASH_MAX - 1e-9) { s.flashLog.push(now); s.flashFrames = 2; }
+    if (env.flash && !(now < s.flashUntil) && s.flashLog.length < FLASH_MAX && now - last >= 1 / FLASH_MAX - 1e-9) { s.flashLog.push(now); s.flashUntil = now + FLASH_S; }
   }
-  if (s.flashFrames > 0 && env.flash) { s.flashFrames--; return true; }
-  s.flashFrames = 0;
-  return false;
+  return env.flash && now >= (s.flashLog.at(-1) ?? Infinity) && now < s.flashUntil;
 }
 
 /** Przesunięcie wstrząsu w px; `cell` > 0 zaokrągla do komórki siatki pikselowej. */

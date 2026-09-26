@@ -11,14 +11,14 @@ const flags = (skin: 'clawd' | 'kodek', scene: string, secs: number) => {
 };
 
 describe('dynamic work scenes', () => {
-  it('edit: ORA barrage into the keyboard with flying keys, sparks, ドドド and a final punch with an impact frame', () => {
+  it('edit: ORA barrage into the keyboard with flying keys and sparks (no text), then a final punch with an impact frame', () => {
     const { seen, stats } = flags('clawd', 'edit', 7);
     expect(seen.some(s => s._barrage)).toBe(true);
     const hits = seen.filter(s => s._barrage).map(s => Math.max(s.hyL as number, s.hyR as number));
     expect(Math.max(...hits)).toBeGreaterThan(-36); // pięść dochodzi do klawiatury (y ≈ −30)
     expect(stats.key).toBeGreaterThanOrEqual(15);
     expect(stats.spark).toBeGreaterThanOrEqual(5);
-    expect(stats['word:ドドド']).toBeGreaterThanOrEqual(2);
+    expect(Object.keys(stats).filter(k => k.startsWith('word:'))).toEqual(['word:BAM!']);
     expect(stats.impact).toBeGreaterThanOrEqual(1);
     expect(seen.some(s => s._prop === 'desk')).toBe(true);
   });
@@ -30,6 +30,17 @@ describe('dynamic work scenes', () => {
     expect(bottom).toBeGreaterThan(-34);
     expect(fin.findIndex(s => (s.hyR as number) === top)).toBeLessThan(fin.findIndex(s => (s.hyR as number) === bottom));
   });
+  it('edit: the final punch is readable — ≥ 0.2 s wind-up, hit-stop with BAM!, and the pose held ≥ 0.6 s', () => {
+    const { seen, stats } = flags('clawd', 'edit', 8);
+    const fin = seen.filter(s => s.act === 'finałowy cios');
+    const topAt = fin.findIndex(s => (s.hyR as number) < -70);
+    expect(topAt).toBeGreaterThanOrEqual(12);
+    const struck = fin.findIndex(s => (s.hyR as number) > -36);
+    let held = 0; for (let i = struck; i < fin.length && (fin[i].hyR as number) > -36; i++) held++;
+    expect(held).toBeGreaterThanOrEqual(36);
+    expect(stats.stop).toBeGreaterThanOrEqual(1);
+    expect(stats['word:BAM!']).toBeGreaterThanOrEqual(1);
+  });
   it('bash: at least 4 distinct hand seals, then a poof of smoke and the command runs', () => {
     const { seen, stats } = flags('kodek', 'bash', 4.5);
     const seals = seen.filter(s => s.act === 'pieczęcie rąk');
@@ -38,7 +49,7 @@ describe('dynamic work scenes', () => {
       if (!poses.some(q => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2], q[3] - p[3]) < 6)) poses.push(p); }
     expect(poses.length).toBeGreaterThanOrEqual(4);
     expect(stats.smoke).toBeGreaterThanOrEqual(6);
-    expect(stats['word:ボン']).toBeGreaterThanOrEqual(1);
+    expect(stats['word:POOF!']).toBeGreaterThanOrEqual(1);
     expect(seen.some(s => s._scr === 'run')).toBe(true);
   });
   it('read: glasses glint, pages fly off in the wind', () => {
@@ -67,7 +78,6 @@ describe('dynamic work scenes', () => {
     let turns = 0; for (let i = 2; i < lx.length; i++) if (Math.sign(lx[i] - lx[i - 1]) * Math.sign(lx[i - 1] - lx[i - 2]) < 0) turns++;
     expect(turns).toBeGreaterThanOrEqual(3);
     expect(stats.bolt).toBeGreaterThanOrEqual(5);
-    expect(stats['word:シュッ']).toBeGreaterThanOrEqual(1);
     expect(seen.some(s => s._hold === 'sheet')).toBe(true);
     expect(Math.min(...seen.filter(s => s.act === 'ogląda stronę').map(s => Math.abs(s.lx as number)))).toBeLessThan(8); // wrócił na miejsce
   });
@@ -76,7 +86,7 @@ describe('dynamic work scenes', () => {
     expect(seen.some(s => s._ground === 'seal')).toBe(true);
     expect(stats.smoke).toBeGreaterThanOrEqual(8);
     expect(stats.helper).toBeGreaterThanOrEqual(1);
-    expect(stats['word:ボン']).toBeGreaterThanOrEqual(1);
+    expect(stats['word:POOF!']).toBeGreaterThanOrEqual(1);
     const h = c.fx.parts.find((p: Particle) => p.k === 'helper');
     if (h) expect(h.vx).toBeGreaterThan(0);
   });

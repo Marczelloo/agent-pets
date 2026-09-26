@@ -28,5 +28,5 @@ export const every = (a: number, dt: number, period: number, from = 0) =>
 
 /** Lewa ręka na biodrze (jak w scenach Spokojnych). */
 export const HIP = { ikL: 1, hxL: -47, hyL: -25 };
-/** Onomatopeje używane w scenach (czcionka pikselowa w `motion/fx/glyphs.ts` musi mieć każdy znak). */
-export const WORDS = ['ドドド', 'バン', 'ボン', 'ゴゴゴ', 'シュッ', 'NICE!', '!'] as const;
+/** Jedyne napisy scen, tylko w kulminacjach (czcionka pikselowa w `motion/fx/glyphs.ts` musi mieć każdy znak). */
+export const WORDS = ['BAM!', 'POOF!', 'NICE!', '!'] as const;

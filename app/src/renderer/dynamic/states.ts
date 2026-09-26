@@ -13,12 +13,10 @@ const THUMB = keys([[0, { ikR: 1, hxR: 20, hyR: -30, lean: -0.3, squint: 0.8, _s
 
 export const STATES: Record<string, Scene> = {
   thinking: { cycle: 1, base: { th: 0, look: 0.3 }, acts: [
-    ['cień na oczach', 2.4, (a) => ({ ikL: 1, hxL: -8, hyL: -38, ikR: 1, hxR: 8, hyR: -38, _face: 'shadow', _faceK: snapE(a / 0.4), _bg: 'dark', _bgK: snapE(a / 0.6) }), undefined, undefined, (a, c, _t, dt) => {
-      if (every(a, dt, 0.8, 0.4)) word(c, 'ゴゴゴ', rng() < 0.5 ? -44 : 44, -96, 26);
-    }],
+    ['cień na oczach', 2.4, (a) => ({ ikL: 1, hxL: -8, hyL: -38, ikR: 1, hxR: 8, hyR: -38, _face: 'shadow', _faceK: snapE(a / 0.4), _bg: 'dark', _bgK: snapE(a / 0.6) })],
     ['dramatyczny uśmiech', 1.6, () => ({ ikL: 1, hxL: -8, hyL: -38, ikR: 1, hxR: 8, hyR: -38, tilt: -0.08, _face: 'shadow', _faceK: 1, _smile: 1, _bg: 'dark' }), (c) => {
       emit(c, 'page', 34, -118, { vx: 8, vy: 12, vr: 1.2, max: 1.6, s: 14 });
-    }, undefined, (a, c, _t, dt) => { if (at(a, dt, 0.1)) word(c, 'ゴゴゴ', -44, -96, 26); }],
+    }],
   ] },
   needs: { base: { th: 0, look: 0 }, acts: [
     ['błyszczące oczy', 2.2, () => ({ hopW: 0.6, armR: 2.3, oscR: 0.55, _f: 11, _face: 'sparkle', _faceK: 1, _bang: 1, _shock: 1 })],
@@ -63,7 +61,7 @@ export const STATES: Record<string, Scene> = {
   compact: { cycle: 1, base: { th: 0, look: 0.3 }, acts: [
     ['dwie kule', 1, (a) => ({ ikL: 1, hxL: -40, hyL: -50, ikR: 1, hxR: 40, hyR: -50, squint: 0.5, _orbs: 1, _bg: 'purple', _bgK: snapE(a / 0.5), _stiff: 2 })],
     ['łączy', 0.6, keys([[0, { ikL: 1, hxL: -40, hyL: -50, ikR: 1, hxR: 40, hyR: -50, _orbs: 1, _bg: 'purple', _stiff: 3 }], [0.15, { hxL: -52, hxR: 52, lean: -0.2 }], [0.35, { hxL: -3, hxR: 3, lean: 0.3 }], [0.6, {}]]), undefined, undefined, (a, c, _t, dt) => {
-      if (at(a, dt, 0.35)) { impact(c, 3); word(c, 'ゴゴゴ', 0, -104, 26); }
+      if (at(a, dt, 0.35)) { impact(c, 3); }
     }],
     ['implozja', 0.9, (a) => ({ ikL: 1, hxL: -3, hyL: -50, ikR: 1, hxR: 3, hyR: -50, squint: 0.9, _orbs: 2, _orbK: 1 - a / 0.9, _bg: 'purple' }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.06)) { const an = rng() * TAU; emit(c, 'energy', Math.cos(an) * 40, -50 + Math.sin(an) * 30, { vx: -Math.cos(an) * 70, vy: -Math.sin(an) * 50 }); }
@@ -76,7 +74,7 @@ export const STATES: Record<string, Scene> = {
     ['macha na pożegnanie', 0.5, () => ({ th: 0, look: 0, happy: 0.8, armR: 2.3, oscR: 0.55, _f: 11 })],
     ['zamach do biegu', 0.25, () => ({ th: PI / 2, lx: -6, lean: -0.4, squint: 0.8, sit: 0.3, _stiff: 3 })],
     ['ucieczka', 0.35, () => ({ th: PI / 2, lx: 50, walkW: 1, squint: 0.8, _stiff: 3, _bg: 'speed' }), undefined, undefined, (a, c, _t, dt) => {
-      if (at(a, dt, 0)) { spray(c, 'dust', 8, -6, -2, 60, PI, PI / 2); word(c, 'シュッ', -20, -84); }
+      if (at(a, dt, 0)) { spray(c, 'dust', 8, -6, -2, 60, PI, PI / 2); }
       if (every(a, dt, 0.05)) spray(c, 'dust', 1, c.p.lx.x - 12, -2, 30, PI, PI / 3);
     }],
   ], acts: [['odszedł', 5, () => ({ th: PI / 2, lx: 50, _stiff: 3 })]] }, // ta sama sztywność: bez przestrzelenia przy zmianie w biegu

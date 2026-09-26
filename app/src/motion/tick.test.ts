@@ -4,6 +4,7 @@ import { SCENES, createPet, setRng, stepPet } from '../renderer';
 import { SCENES_DYNAMIC } from '../renderer/dynamic';
 import { critStep, sceneTable, setMotion, setScene, stiffOf } from '../renderer/pet';
 import { seeded } from '../renderer/testing';
+import { emit, fxState, hitStop } from '../renderer/dynamic/state';
 import { MOTIONS, effective } from './index';
 import { tick } from './tick';
 
@@ -102,6 +103,20 @@ describe('motion', () => {
     expect(run(MOTIONS.dynamic).has('✦')).toBe(false);
     rng.reset(4); const e = createPet('clawd', 'edit'); setMotion(e, true); let T = 0;
     for (let f = 0; f < 240; f++) { T += 1 / 60; tick(e, 1 / 60, T, MOTIONS.dynamic, true); expect(e.parts.some((q: { k?: string }) => q.k === 'drop')).toBe(false); }
+  });
+  it('a hit-stop freezes the whole pet (pose, act time, particles) for its duration, then it moves on', () => {
+    const c = createPet('clawd', 'edit'); setMotion(c, true);
+    let T = 0; const run = (s: number) => { for (let f = 0; f < Math.round(s * 60); f++) { T += 1 / 60; tick(c, 1 / 60, T, MOTIONS.dynamic, true); } };
+    run(1);
+    emit(c, 'spark', 0, -40, { vx: 50, max: 5 });
+    fxState(c).t = c.clk; hitStop(c, 0.15);
+    const pose = K.map(k => c.p[k].x), aT = c.aT, px = c.fx.parts[0].x;
+    run(0.12);
+    expect(K.map(k => c.p[k].x)).toEqual(pose);
+    expect(c.aT).toBe(aT);
+    expect(c.fx.parts[0].x).toBe(px);
+    run(0.2);
+    expect(c.aT).toBeGreaterThan(aT);
   });
   it('the step hook runs every step with the act time, pet clock and dt', () => {
     const seen: number[][] = [];
