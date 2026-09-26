@@ -4,7 +4,7 @@ export type { FxEnv, MotionDef } from './types';
 
 export const MOTIONS: Record<MotionId, MotionDef> = {
   calm: { id: 'calm', tempo: 1, spring: { k: 1, d: 1 }, squash: 1, fx: false },
-  dynamic: { id: 'dynamic', tempo: 1.4, spring: { k: 1.8, d: 1, crit: true }, squash: 1.6, fx: true },
+  dynamic: { id: 'dynamic', tempo: 1, spring: { k: 1, d: 1, crit: true, action: 2.5 }, squash: 1.6, fx: true },
 };
 
 /** Tryb oszczędny: połowa cząsteczek, bez tła akcji. Wyłączone efekty animacji w Windows: bez błysków i wstrząsów (spec 8.2). */

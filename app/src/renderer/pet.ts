@@ -1,4 +1,4 @@
-import { TAU } from "./math";
+import { TAU, cl } from "./math";
 import { K, DEF, SPR } from "./pose";
 import { SCENES } from "./scenes";
 import { SCENES_DYNAMIC } from "./dynamic";
@@ -15,7 +15,7 @@ export function setMotion(c: Pet,dynamic: boolean){if(!!c.dynamic===dynamic)retu
 const tg=targets(c,0);if((tg._prop||null)!==c.prop){c.prop=null;c.p.propA.x=0;c.p.propA.v=0;}if((tg._hold||null)!==c.hold){c.hold=null;c.p.holdA.x=0;c.p.holdA.v=0;}}
 /** Krytycznie tłumiona sprężyna, rozwiązanie dokładne: bez przestrzelenia i stabilna przy każdym dt. */
 export function critStep(s: {x:number;v:number},target: number,k: number,dt: number){const w=Math.sqrt(k),e=s.x-target,j=s.v+w*e,ex=Math.exp(-w*dt);s.x=target+(e+j*dt)*ex;s.v=(s.v-w*j*dt)*ex;}
-export function setScene(c: any,st: any,inst?: any){c.st=st;c.seqI=0;const s=sceneTable(c)[st];startAct(c,s.seq?s.seq[0]:s.acts[0]);if(inst){const tg=targets(c,0);c.prop=tg._prop||null;c.hold=tg._hold||null;tg.propA=c.prop?1:0;tg.holdA=c.hold?1:0;K.forEach((k: any)=>{c.p[k].x=tg[k];c.p[k].v=0;});c.tg=tg;}}
+export function setScene(c: any,st: any,inst?: any){c.st=st;c.seqI=0;c.sceneT=0;const s=sceneTable(c)[st];startAct(c,s.seq?s.seq[0]:s.acts[0]);if(inst){const tg=targets(c,0);c.prop=tg._prop||null;c.hold=tg._hold||null;tg.propA=c.prop?1:0;tg.holdA=c.hold?1:0;K.forEach((k: any)=>{c.p[k].x=tg[k];c.p[k].v=0;});c.tg=tg;}}
 export function nextAct(c: any){const s=sceneTable(c)[c.st];if(c.act[4])c.act[4](c);c.p.th.x-=TAU*Math.round(c.p.th.x/TAU);
 if(s.seq&&c.seqI<s.seq.length-1){c.seqI++;startAct(c,s.seq[c.seqI]);return;}
 if(s.seq&&c.seqI===s.seq.length-1){c.seqI++;startAct(c,s.acts[0]);return;}
@@ -23,9 +23,14 @@ const acts=s.acts;if(s.cycle){startAct(c,acts[(acts.indexOf(c.act)+1)%acts.lengt
 let a=acts[0];if(c.act===acts[0]&&acts.length>1&&rng()>.3)a=acts[1+Math.floor(rng()*(acts.length-1))];startAct(c,a);}
 export function targets(c: any,t: any){const o=Object.assign({},DEF,sceneTable(c)[c.st].base,c.act[2](c.aT,c,t)||{});['L','R'].forEach((k: any,i: any)=>{if(!o['ik'+k]){o['hx'+k]=c.aHand[i][0];o['hy'+k]=c.aHand[i][1];}});return o;}
 function slot(c: any,tg: any,key: any,ak: any){const nm=key.slice(1),want=tg[key]||null,P=c.p[ak];if(want&&want!==c[nm]){if(!c[nm]||P.x<.1)c[nm]=want;else{tg[ak]=0;return;}}tg[ak]=want?1:0;if(!want&&P.x<.03)c[nm]=null;}
-export function stepPet(c: any,dt: any,t: any,spr?: {k:number;d:number;crit?:boolean}){const sk=spr?.k??1,sd=spr?.d??1;c.aT+=dt;if(c.pend&&c.aT>=c.pend.t){const f=c.pend.fn;c.pend=null;f();}if(c.aT>c.act[1])nextAct(c);
+/**
+ * Sztywność sprężyn Dynamicznego: zwykła (k) przy przejściach, a akcje z `_stiff` twardnieją dopiero po wejściu
+ * w nowy stan (0,2–0,4 s po zmianie), żeby zmiana stanu była płynna, a same ruchy szybkie.
+ */
+export function stiffOf(c: any,tg: any,spr: {k:number;action?:number}){const st=tg._stiff;if(!st)return spr.k;const r=cl(((c.sceneT??1)-.2)/.2);return spr.k*(1+(st*(spr.action??1)-1)*r);}
+export function stepPet(c: any,dt: any,t: any,spr?: {k:number;d:number;crit?:boolean;action?:number}){const sk=spr?.k??1,sd=spr?.d??1;c.aT+=dt;c.sceneT=(c.sceneT??0)+dt;if(c.pend&&c.aT>=c.pend.t){const f=c.pend.fn;c.pend=null;f();}if(c.aT>c.act[1])nextAct(c);
 const tg=targets(c,t);c.tg=tg;c.f=tg._f||20;c.hp+=(tg._hf||.85)*dt;slot(c,tg,'_prop','propA');slot(c,tg,'_hold','holdA');if(c.act[5]){fxState(c).t=t;c.act[5](c.aT,c,t,dt);}if(c.fx)stepFx(c,dt,t);const P=c.p;
-K.forEach((k: any)=>{const s=P[k],sp=SPR[k]||[90,16];if(spr?.crit)critStep(s,tg[k],sp[0]*sk*(tg._stiff||1),dt);else{s.v+=((tg[k]-s.x)*sp[0]*sk-s.v*sp[1]*sd)*dt;s.x+=s.v*dt;}});
+const kk=spr?.crit?stiffOf(c,tg,spr):1;K.forEach((k: any)=>{const s=P[k],sp=SPR[k]||[90,16];if(spr?.crit)critStep(s,tg[k],sp[0]*kk,dt);else{s.v+=((tg[k]-s.x)*sp[0]*sk-s.v*sp[1]*sd)*dt;s.x+=s.v*dt;}});
 if(tg._poleDirect){const nv=(tg.pole-P.pole.x)/dt;P.pole.v=P.pole.v*.6+nv*.4;P.pole.x=tg.pole;}
 c.nb-=dt;if(c.nb<0){c.blink=.16;c.nb=2.5+rng()*3;}c.blink=Math.max(0,c.blink-dt);
 if(SKINS[c.type as SkinId].antenna){const drive=-P.th.v*.8+Math.sin(t*1.7)*.4+(P.hopW.x>.1?Math.cos(TAU*(c.hp%1))*1.5*P.hopW.x:0)+P.typeW.x*Math.sin(t*20)*1.2+P.walkW.x*Math.sin(t*10)*1.2;c.av+=(drive*20-c.aa*120-c.av*7)*dt;c.aa+=c.av*dt;}

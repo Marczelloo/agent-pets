@@ -5,8 +5,11 @@ export interface MotionDef {
   id: MotionId;
   /** mnożnik zegara zwierzaka */
   tempo: number;
-  /** mnożniki sprężyn; `crit` = krytycznie tłumione, liczone analitycznie (bez przestrzelenia) */
-  spring: { k: number; d: number; crit?: boolean };
+  /**
+   * mnożniki sprężyn; `crit` = krytycznie tłumione, liczone analitycznie (bez przestrzelenia);
+   * `action` = dodatkowa sztywność akcji oznaczonych `_stiff` (przejścia między stanami zostają miękkie)
+   */
+  spring: { k: number; d: number; crit?: boolean; action?: number };
   /** mnożnik squash & stretch przy skokach */
   squash: number;
   fx: boolean;

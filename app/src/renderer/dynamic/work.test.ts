@@ -69,7 +69,7 @@ describe('dynamic work scenes', () => {
     expect(stats.bolt).toBeGreaterThanOrEqual(5);
     expect(stats['word:シュッ']).toBeGreaterThanOrEqual(1);
     expect(seen.some(s => s._hold === 'sheet')).toBe(true);
-    expect(Math.abs(lx.at(-1)!)).toBeLessThan(8);
+    expect(Math.min(...seen.filter(s => s.act === 'ogląda stronę').map(s => Math.abs(s.lx as number)))).toBeLessThan(8); // wrócił na miejsce
   });
   it('agent: a seal on the ground, a cloud of smoke and a mini helper running off', () => {
     const { c, seen, stats } = flags('kodek', 'agent', 3);

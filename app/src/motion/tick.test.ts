@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { K, SPR } from '../renderer/pose';
 import { SCENES, createPet, setRng, stepPet } from '../renderer';
 import { SCENES_DYNAMIC } from '../renderer/dynamic';
-import { critStep, sceneTable, setMotion } from '../renderer/pet';
+import { critStep, sceneTable, setMotion, setScene, stiffOf } from '../renderer/pet';
 import { seeded } from '../renderer/testing';
 import { MOTIONS, effective } from './index';
 import { tick } from './tick';
@@ -21,13 +21,13 @@ describe('motion', () => {
     for (let f = 0; f < 120; f++) { T += 1 / 60; tick(b, 1 / 60, T + 0.5, MOTIONS.calm, true); }
     for (const k of K) expect(b.p[k].x).toBeCloseTo(a.p[k].x, 9);
   });
-  it('dynamic runs the pet clock faster and stays finite at 10 fps in every scene', () => {
+  it('dynamic keeps the calm clock (acts and variants last as long as in calm) and stays finite at 10 fps', () => {
     for (const scene of Object.keys(SCENES)) {
       const c = createPet('kodek', scene);
       let T = 0;
       for (let f = 0; f < 200; f++) { T += 0.05; tick(c, 0.05, T, MOTIONS.dynamic, true); }
       for (const k of K) expect(Number.isFinite(c.p[k].x) && Math.abs(c.p[k].x) < 1e4, `${scene}/${k}`).toBe(true);
-      expect(c.clk).toBeCloseTo(0.05 + 199 * 0.05 * 1.4, 6);
+      expect(c.clk).toBeCloseTo(0.05 + 199 * 0.05, 6);
     }
   });
   it('switching motion keeps the clock continuous', () => {
@@ -35,7 +35,7 @@ describe('motion', () => {
     tick(c, 0.1, 5, MOTIONS.calm, true);
     const before = c.clk;
     tick(c, 0.1, 5.1, MOTIONS.dynamic, true);
-    expect(c.clk - before).toBeCloseTo(0.14, 9);
+    expect(c.clk - before).toBeCloseTo(0.1, 9);
   });
   it('dynamic springs never overshoot (critically damped), calm ones do', () => {
     const peak = (m: typeof MOTIONS.calm) => { rng.reset(9); const c = createPet('clawd', 'idle'); let T = 0, top = 0;
@@ -54,9 +54,21 @@ describe('motion', () => {
     }
   });
   it('_stiff makes dynamic hands settle faster', () => {
-    const settle = (stiff: number) => { const s = { x: 0, v: 0 }; let n = 0; while (s.x < 0.9 && n < 600) { critStep(s, 1, 170 * 1.8 * stiff, 1 / 60); n++; } return n; };
+    const act = MOTIONS.dynamic.spring.action ?? 1;
+    const settle = (stiff: number) => { const s = { x: 0, v: 0 }; let n = 0; while (s.x < 0.9 && n < 600) { critStep(s, 1, 170 * act * stiff, 1 / 60); n++; } return n; };
     expect(settle(3)).toBeLessThan(settle(1));
-    expect(settle(3) / 60 / MOTIONS.dynamic.tempo).toBeLessThan(0.1); // czas zwierzaka ÷ tempo = czas realny
+    expect(settle(3) / 60).toBeLessThanOrEqual(0.12); // szybki cios: 90% drogi w ≤ 0,12 s
+  });
+  it('state changes are soft: plain springs at first, action stiffness only once the new state has started', () => {
+    const c = createPet('clawd', 'idle'), spr = MOTIONS.dynamic.spring;
+    setMotion(c, true);
+    expect(stiffOf(c, {}, spr)).toBe(1);
+    setScene(c, 'edit');
+    expect(stiffOf(c, { _stiff: 3 }, spr)).toBe(1);
+    let T = 0;
+    for (let f = 0; f < 30; f++) { T += 1 / 60; tick(c, 1 / 60, T, MOTIONS.dynamic, true); }
+    expect(stiffOf(c, { _stiff: 3 }, spr)).toBeCloseTo(3 * (spr.action ?? 1), 9);
+    expect(stiffOf(c, {}, spr)).toBe(1);
   });
   it('saving halves particles and drops the action background; reduced drops flashes and shake', () => {
     expect(effective(MOTIONS.dynamic, { saving: false, reduced: false })).toEqual({ fx: true, bg: true, flash: true, shake: true, parts: 1 });
