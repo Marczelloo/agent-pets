@@ -178,6 +178,21 @@ pub fn show_no_activate(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::
 /// przez `ShowWindow`, uważa okno za ukryte i jego `hide()` nic nie robi.
 pub fn hide(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::hide(h); } }
 
+/// Okno bez aktywacji: klik w nie nie zabiera fokusu aktywnemu oknu (okno dymków).
+pub fn no_activate(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::no_activate(h); } }
+
+/// Przepuszczanie myszy przez całe okno (dymki: poza dymkami tak, nad dymkiem nie).
+pub fn set_passthrough(w: &WebviewWindow, on: bool) { if let Ok(h) = w.hwnd() { taskbar::passthrough(h, on); } }
+
+/// Kursor względem okna w px CSS i stan lewego przycisku.
+pub struct Cursor { pub x: f64, pub y: f64, pub left: bool }
+
+pub fn cursor_in(w: &WebviewWindow) -> Option<Cursor> {
+    let h = w.hwnd().ok()?;
+    let (x, y, left) = taskbar::cursor_rel(h)?;
+    Some(Cursor { x, y, left })
+}
+
 /// Tworzy nowe okno sceny na wątku głównym (stare zginęło razem z paskiem).
 fn recreate(app: &AppHandle, n: u32) -> Option<isize> {
     let (tx, rx) = channel();

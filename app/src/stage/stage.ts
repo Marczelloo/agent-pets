@@ -22,7 +22,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let snap: Snapshot = { sessions: [], limits: [], now: 0 };
   let lay: StageLayout = { max_css: 0, height_css: 48, scale: 1 };
   let out: LayoutOut = layout({ sessions: [], hasLimits: false, maxWidth: 0 });
-  let visible = true, running = false, T = 0, last = performance.now(), sentWidth = -1;
+  let visible = true, running = false, T = 0, last = performance.now(), sentWidth = -1, sentPets = '';
   const roster = new Roster();
   let clockOffset = 0;
   let maxPets: number | undefined;
@@ -61,6 +61,9 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     });
     roster.sync(snap.sessions, T);
     if (out.width !== sentWidth) { sentWidth = out.width; bridge.setWidth(out.width); }
+    const at = out.pets.map(p => ({ id: p.id, x: Math.round(p.x) })), zoom = out.geo?.zoom ?? 1;
+    const key = JSON.stringify([at, out.width, zoom]);
+    if (key !== sentPets) { sentPets = key; bridge.setPets?.(at, out.width, zoom); }
     hover.refresh(true);
   };
   const take = (s: Snapshot) => { snap = s; clockOffset = s.now - Date.now(); relayout(); };
