@@ -41,6 +41,12 @@ describe('dynamic work scenes', () => {
     expect(stats.stop).toBeGreaterThanOrEqual(1);
     expect(stats['word:BAM!']).toBeGreaterThanOrEqual(1);
   });
+  it('edit: the impact (flash, hit-stop, BAM!) fires when the fist actually lands on the keyboard', () => {
+    let at: number | null = null, stops = 0;
+    simulate('clawd', 'edit', 8, cc => { const n = cc.fx?.stats.stop ?? 0; if (n > stops) { stops = n; at ??= cc.p.hyR.x; } });
+    expect(at).not.toBeNull();
+    expect(at!).toBeGreaterThan(-35); // klawiatura y ≈ −30
+  });
   it('bash: at least 4 distinct hand seals, then a poof of smoke and the command runs', () => {
     const { seen, stats } = flags('kodek', 'bash', 4.5);
     const seals = seen.filter(s => s.act === 'pieczęcie rąk');

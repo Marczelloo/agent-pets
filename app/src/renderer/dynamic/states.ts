@@ -14,9 +14,9 @@ const THUMB = keys([[0, { ikR: 1, hxR: 20, hyR: -30, lean: -0.3, squint: 0.8, _s
 export const STATES: Record<string, Scene> = {
   // Shikamaru: siedzi, dłonie złożone w kółko, oczy zamknięte, wokół głowy krążą „?”, trybik i żarówka; potem pomysł
   thinking: { cycle: 1, base: { sit: 1, th: 0, look: 0 }, acts: [
-    ['medytuje', 4, (a) => ({ ikL: 1, hxL: -7, hyL: -27, ikR: 1, hxR: 7, hyR: -27, sleep: 0.9, _orbit: 1, _orbitK: snapE(a / 0.6) })],
-    ['wpada na pomysł', 1.4, keys([[0, { ikL: 1, hxL: -7, hyL: -27, ikR: 1, hxR: 7, hyR: -27, sleep: 0.9, _orbit: 1, _idea: 0, _stiff: 2 }],
-      [0.12, { sleep: 0, hyR: -80, hxR: 20, _idea: 1, happy: 0.4 }], [1.1, {}], [1.4, { hyR: -27, hxR: 7, _idea: 0, happy: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
+    ['medytuje', 4, (a) => ({ ikL: 1, hxL: -8, hyL: -12, ikR: 1, hxR: 8, hyR: -12, sleep: 0.9, _orbit: 1, _orbitK: snapE(a / 0.6) })],
+    ['wpada na pomysł', 1.4, keys([[0, { ikL: 1, hxL: -8, hyL: -12, ikR: 1, hxR: 8, hyR: -12, sleep: 0.9, _orbit: 1, _idea: 0, _stiff: 2 }],
+      [0.12, { sleep: 0, hyR: -80, hxR: 20, _idea: 1, happy: 0.4 }], [1.1, {}], [1.4, { hyR: -12, hxR: 7, _idea: 0, happy: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.12)) { const [fx, fy] = faceOf(c); spray(c, 'spark', 6, fx, fy - 58, 90, -Math.PI / 2, 2 * Math.PI); impact(c, 0.8, false); }
     }],
   ] },

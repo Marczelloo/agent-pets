@@ -8,7 +8,7 @@ import { SLOT, vectorBack, vectorFront } from './vector';
 setRng(seeded(2).next);
 pen.font = 'x';
 const ENV = { fx: true, bg: true, flash: true, shake: true, parts: 1 };
-const G = (o: Partial<FxCtx> = {}): FxCtx => ({ X: 60, Y: 40, u: 0.3, t: 1, dpr: 1, env: ENV, model: 'vector', flash: false, accent: '#D97757', alpha: 1, ...o });
+const G = (o: Partial<FxCtx> = {}): FxCtx => ({ X: 60, Y: 40, u: 0.3, t: 1, dpr: 1, env: ENV, model: 'vector', flash: false, glow: 0, accent: '#D97757', alpha: 1, ...o });
 const pet = (tg: Record<string, unknown> = {}) => { const c = createPet('clawd', 'idle'); c.tg = { ...c.tg, ...tg }; c.face = [0, -45, 12]; c.hand = [[-30, -30], [30, -30]]; fxState(c); return c; };
 const ok = (log: string[]) => { expect(log.some(l => l.includes('NaN'))).toBe(false); expect(log.filter(l => l === 'save()').length).toBe(log.filter(l => l === 'restore()').length); };
 
@@ -41,6 +41,13 @@ describe('vector dynamic effects', () => {
     const r = recorder(); vectorBack(r.ctx, pet(), G({ flash: true }));
     expect(r.log).toContain('fillStyle=#FFFFFF');
     expect(r.log.filter(l => l.startsWith('moveTo(')).length).toBeGreaterThanOrEqual(12);
+  });
+  it('a fading flash draws the white disc at its strength, without the inverted frame', () => {
+    const r = recorder(); vectorBack(r.ctx, pet(), G({ glow: 0.5 }));
+    expect(r.log).toContain('fillStyle=#FFFFFF');
+    expect(r.log).toContain('globalAlpha=0.5');
+    const n = recorder(); vectorBack(n.ctx, pet(), G({ glow: 0 }));
+    expect(n.log).toEqual([]);
   });
   it('ground seals draw under the pet in their colour', () => {
     const r = recorder(); vectorBack(r.ctx, pet({ _ground: 'circle', _groundK: 1 }), G());

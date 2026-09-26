@@ -9,7 +9,7 @@ import { pixelBack, pixelFront } from './pixel';
 
 setRng(seeded(2).next);
 const ENV = { fx: true, bg: true, flash: true, shake: true, parts: 1 };
-const G = (dpr: number, o: Partial<FxCtx> = {}): FxCtx => ({ X: 61.3, Y: 40.2, u: 0.3, t: 1.37, dpr, env: ENV, model: 'pixel', flash: false, accent: '#D97757', alpha: 1, ...o });
+const G = (dpr: number, o: Partial<FxCtx> = {}): FxCtx => ({ X: 61.3, Y: 40.2, u: 0.3, t: 1.37, dpr, env: ENV, model: 'pixel', flash: false, glow: 0, accent: '#D97757', alpha: 1, ...o });
 const TGS: Record<string, unknown>[] = [
   { _bg: 'speed' }, { _bg: 'rays' }, { _bg: 'purple' }, { _bg: 'wind' }, { _ground: 'seal' }, { _ground: 'circle', _groundK: 0.6 },
   { _face: 'glasses' }, { _face: 'sparkle' }, { _face: 'teeth' },
@@ -27,7 +27,7 @@ describe('pixel dynamic effects', () => {
   it('only integer device-pixel rectangles for every effect at 100/125/150 %', () => {
     for (const dpr of [1, 1.25, 1.5]) for (const tg of TGS) for (const flash of [false, true]) {
       const r = recorder(), c = pet(tg);
-      pixelBack(r.ctx, c, G(dpr, { flash })); pixelFront(r.ctx, c, G(dpr, { flash }));
+      pixelBack(r.ctx, c, G(dpr, { flash, glow: flash ? 1 : 0.4 })); pixelFront(r.ctx, c, G(dpr, { flash }));
       const tag = `${JSON.stringify(tg)}@${dpr}`;
       expect(r.log.some(l => /^(moveTo|lineTo|arc|ellipse|quadraticCurveTo|fillText|strokeText|drawImage|stroke|fill)\(/.test(l)), tag).toBe(false);
       expect(r.log.some(l => l.startsWith('fillRect(')), tag).toBe(true);

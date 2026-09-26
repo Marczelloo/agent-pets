@@ -1,5 +1,5 @@
 import { MOTIONS, effective } from '../motion';
-import { drawFxBack, drawFxFront, flashFrame, recordTrail, shakeOffset, stretchOf, type FxCtx } from '../motion/fx';
+import { drawFxBack, drawFxFront, flashFrame, flashGlow, recordTrail, shakeOffset, stretchOf, type FxCtx } from '../motion/fx';
 import { tick } from '../motion/tick';
 import { ACCENT, STYLES } from '../styles';
 import type { Look } from '../types';
@@ -29,7 +29,7 @@ export class PetPainter {
     s.env = env;
     const flash = flashFrame(s, f.t0, env);
     const [dx, dy] = shakeOffset(s, t, env, f.u, pixel ? gridPx(f.u, f.dpr) / f.dpr : 0);
-    const g: FxCtx = { X: f.X + dx, Y: f.Y + dy, u: f.u, t, dpr: f.dpr, env, model: st.model, flash, accent: ACCENT[pet.type], alpha: pet.alpha ?? 1 };
+    const g: FxCtx = { X: f.X + dx, Y: f.Y + dy, u: f.u, t, dpr: f.dpr, env, model: st.model, flash, glow: flashGlow(s, f.t0, env), accent: ACCENT[pet.type], alpha: pet.alpha ?? 1 };
     drawFxBack(x, pet, g);
     const k = pixel ? 0 : stretchOf(pet);
     x.save();

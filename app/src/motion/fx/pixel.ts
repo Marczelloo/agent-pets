@@ -48,13 +48,13 @@ function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet, off = c.p.lx.x) {
 
 export function pixelBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const tg = c.tg || {}, bg = g.env.bg ? tg._bg : null, gr = tg._ground && cl(tg._groundK ?? 1) > 0.02 ? tg._ground : null;
-  if (!bg && !gr && !g.flash) return;
+  if (!bg && !gr && !g.flash && !(g.glow > 0)) return;
   const { U, cell, line, ring } = grid(x, g, c), cy = U(-40), seed = Math.floor(g.t * 12);
   x.save(); x.globalAlpha = g.alpha;
   const rays = (n: number, r0: number, r1: number, col: string) => { for (let i = 0; i < n; i++) { const a = TAU * (i + hr(i + seed) * 0.6) / n;
     line(Math.round(Math.cos(a) * U(r0)), cy + Math.round(Math.sin(a) * U(r0) * 0.8), Math.round(Math.cos(a) * U(r1)), cy + Math.round(Math.sin(a) * U(r1) * 0.8), col); } };
-  if (g.flash) { ring(0, cy, U(60), U(50), WHITE, true); rays(12, 36, 62, pen.ol); }
-  else if (bg === 'speed' || bg === 'purple') { x.globalAlpha = g.alpha * 0.4; rays(14, 52, 72, bg === 'purple' ? PURPLE : pen.ol); }
+  if (g.flash || g.glow > 0) { x.save(); if (!g.flash) x.globalAlpha = g.alpha * g.glow; ring(0, cy, U(60), U(50), WHITE, true); rays(12, 36, 62, pen.ol); x.restore(); }
+  if (g.flash) { /* tylko błysk */ } else if (bg === 'speed' || bg === 'purple') { x.globalAlpha = g.alpha * 0.4; rays(14, 52, 72, bg === 'purple' ? PURPLE : pen.ol); }
   else if (bg === 'rays') { x.globalAlpha = g.alpha * 0.35; rays(10, 10, 75, AMBER); }
   else if (bg === 'wind') { x.globalAlpha = g.alpha * 0.45; for (let i = 0; i < 6; i++) { const off = Math.round(((g.t * 160 + i * 37) % 150) / 150 * U(150)); cell(U(-75) + off, cy + U(-40 + i * 14), U(22), 1, pen.ol); } }
   if (gr) { x.globalAlpha = g.alpha * cl(tg._groundK ?? 1); const col = gr === 'seal' ? RED : TEAL, gx = U(tg._groundX ?? 0);

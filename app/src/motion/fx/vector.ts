@@ -21,16 +21,20 @@ const rays = (x: CanvasRenderingContext2D, cx: number, cy: number, r0: number, r
 export function vectorBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const tg = c.tg || {}, u = g.u, XX = g.X + c.p.lx.x * u, Y = g.Y;
   const bg = g.env.bg ? tg._bg : null, gr = tg._ground && cl(tg._groundK ?? 1) > 0.02 ? tg._ground : null;
-  if (!bg && !gr && !g.flash) return;
+  if (!bg && !gr && !g.flash && !(g.glow > 0)) return;
   x.save();
   x.globalAlpha = g.alpha;
   x.beginPath(); x.rect(XX - 75 * u, Y - 135 * u, SLOT.w * u, SLOT.h * u); x.clip();
   const cx = XX, cy = Y - 40 * u, seed = Math.floor(g.t * 12), k = cl(tg._bgK ?? 1);
   x.lineCap = 'round';
-  if (g.flash) {
+  if (g.flash || g.glow > 0) {
+    // klatka uderzenia: białe tło z promieniami; potem to samo wygasa (alfa = glow)
+    x.save(); if (!g.flash) x.globalAlpha = g.alpha * g.glow;
     x.fillStyle = WHITE; x.beginPath(); x.arc(cx, cy, 70 * u, 0, TAU); x.fill();
-    x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 2 * u); rays(x, cx, cy, 34 * u, 78 * u, 14, seed);
-  } else if (bg === 'speed' || bg === 'purple') {
+    x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 2 * u); rays(x, cx, cy, 34 * u, 78 * u, 14, g.flash ? seed : 0);
+    x.restore();
+  }
+  if (g.flash) { /* tylko błysk */ } else if (bg === 'speed' || bg === 'purple') {
     x.globalAlpha = g.alpha * k * 0.35;
     x.strokeStyle = bg === 'purple' ? PURPLE : pen.ol; x.lineWidth = Math.max(1, 1.6 * u);
     rays(x, cx, cy, 52 * u, 80 * u, 18, seed);

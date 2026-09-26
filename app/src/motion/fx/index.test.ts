@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPet } from '../../renderer';
 import { fxState } from '../../renderer/dynamic/state';
-import { FLASH_MAX, TRAIL_S, flashFrame, recordTrail, shakeOffset, stretchOf } from './index';
+import { FLASH_MAX, TRAIL_S, flashFrame, flashGlow, recordTrail, shakeOffset, stretchOf } from './index';
 
 const ENV = { fx: true, bg: true, flash: true, shake: true, parts: 1 };
 
@@ -55,5 +55,17 @@ describe('dynamic frame composition', () => {
     for (let f = 0; f < 30; f++) { c.hand = [[f, 0], [-f, 0]]; recordTrail(s, c, f / 60); }
     expect(s.trail[0].every(p => 29 / 60 - p[2] <= TRAIL_S + 1e-9)).toBe(true);
     expect(s.trail[0].at(-1)).toEqual([29, 0, 29 / 60]);
+  });
+  it('after the inverted frame the white flash fades out over ~0.4 s instead of vanishing', () => {
+    const s = fxState(createPet('clawd', 'edit'));
+    s.flashReq = 1;
+    expect(flashFrame(s, 5, ENV)).toBe(true);
+    expect(flashGlow(s, 5.05, ENV)).toBe(1);
+    expect(flashFrame(s, 5.2, ENV)).toBe(false);
+    const mid = flashGlow(s, 5.25, ENV);
+    expect(mid).toBeGreaterThan(0.3); expect(mid).toBeLessThan(1);
+    expect(flashGlow(s, 5.4, ENV)).toBeLessThan(mid);
+    expect(flashGlow(s, 5.6, ENV)).toBe(0);
+    expect(flashGlow(s, 5.05, { ...ENV, flash: false })).toBe(0);
   });
 });

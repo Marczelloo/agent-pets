@@ -98,4 +98,12 @@ describe('PetPainter', () => {
     drawPet(d.ctx, p.pet, frame.X, frame.Y, frame.u, p.pet.clk, { style: 'clean', motion: 'dynamic' });
     expect(r.log).toEqual(d.log);
   });
+  it('thinking: the joined hands rest below the eyes in every model (they must not cover the face)', () => {
+    for (const style of ['clean', 'sticker', 'pixel'] as const) for (const skin of ['clawd', 'kodek'] as const) {
+      const p = new PetPainter(createPet(skin, 'thinking'));
+      for (let f = 0; f < 60; f++) p.frame(recorder().ctx, { ...frame, t0: 1 + f / 30, look: { style, motion: 'dynamic' } });
+      const eyeY = (p.pet.face as number[])[1];
+      for (const [, hy] of p.pet.hand as number[][]) expect(hy, `${style}/${skin}`).toBeGreaterThan(eyeY + 8);
+    }
+  });
 });

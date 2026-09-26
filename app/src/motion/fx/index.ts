@@ -7,12 +7,16 @@ import type { FxEnv } from '../types';
 import { pixelBack, pixelFront } from './pixel';
 import { vectorBack, vectorFront } from './vector';
 
-export interface FxCtx { X: number; Y: number; u: number; t: number; dpr: number; env: FxEnv; model: 'vector' | 'sticker' | 'pixel'; flash: boolean; accent: string; alpha: number }
+export interface FxCtx { X: number; Y: number; u: number; t: number; dpr: number; env: FxEnv; model: 'vector' | 'sticker' | 'pixel'; flash: boolean;
+  /** siła wygasającego białego błysku po klatce uderzenia (1 → 0) */
+  glow: number; accent: string; alpha: number }
 
 export const FLASH_MAX = 3;
 export const TRAIL_S = 0.12;
 /** Klatka uderzenia trwa tyle czasu (nie klatek), żeby była widoczna także w pasku przy 10 kl./s. */
 export const FLASH_S = 0.12;
+/** Po odwróconej klatce białe tło z promieniami wygasa przez tyle sekund (błysk nie znika od razu). */
+export const FLASH_FADE = 0.4;
 
 /**
  * Czy ta klatka jest klatką uderzenia: FLASH_S (0,12 s) na uderzenie, najwyżej 3 uderzenia w ciągu sekundy (czas `now` = zegar sceny).
@@ -26,6 +30,14 @@ export function flashFrame(s: FxState, now: number, env: FxEnv): boolean {
     if (env.flash && !(now < s.flashUntil) && s.flashLog.length < FLASH_MAX && now - last >= 1 / FLASH_MAX - 1e-9) { s.flashLog.push(now); s.flashUntil = now + FLASH_S; }
   }
   return env.flash && now >= (s.flashLog.at(-1) ?? Infinity) && now < s.flashUntil;
+}
+
+/** Siła białego błysku: 1 w klatce uderzenia, potem liniowo do 0 przez FLASH_FADE. */
+export function flashGlow(s: FxState, now: number, env: FxEnv): number {
+  const start = s.flashLog.at(-1);
+  if (!env.flash || start == null || now < start) return 0;
+  if (now < s.flashUntil) return 1;
+  return cl(1 - (now - s.flashUntil) / FLASH_FADE);
 }
 
 /** Przesunięcie wstrząsu w px; `cell` > 0 zaokrągla do komórki siatki pikselowej. */

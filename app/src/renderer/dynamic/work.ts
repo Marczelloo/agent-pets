@@ -49,9 +49,9 @@ export const WORK: Record<string, Scene> = {
         if (rng() < 0.5) spray(c, 'spark', 1, hx, -30, 90);
       }
     }],
-    ['finałowy cios', 1.6, (a) => ({ ...FINAL(a), typeW: 1, _bg: a > 0.3 && a < 1.1 ? 'speed' : null }), undefined, undefined, (a, c, _t, dt) => {
-      // uderzenie: zatrzymana klatka (hit-stop) z klatką uderzenia, duży i wolniejszy wybuch, BAM!
-      if (at(a, dt, 0.33)) { impact(c, 3.5); hitStop(c, 0.15); spray(c, 'spark', 14, 12, -30, 110); spray(c, 'key', 5, 12, -30, 150); word(c, 'BAM!', 30, -92, 34); }
+    ['finałowy cios', 1.6, (a) => ({ ...FINAL(a), typeW: 1, _bg: a > 0.3 && a < 1.1 ? 'speed' : null }), (c) => { c.landed = false; }, undefined, (a, c, _t, dt) => {
+      // uderzenie dopiero, gdy pięść naprawdę dotknie klawiatury: zatrzymana klatka (hit-stop), klatka uderzenia, wybuch, BAM!
+      if (!c.landed && a > 0.3 && (c.p.hyR.x > -34 || at(a, dt, 0.7))) { c.landed = true; impact(c, 3.5); hitStop(c, 0.15); spray(c, 'spark', 14, 12, -30, 110); spray(c, 'key', 5, 12, -30, 150); word(c, 'BAM!', 30, -92, 34); }
     }],
   ] },
   bash: { cycle: 1, base: { th: 0.55, look: -0.1, ex: 0.8, _prop: 'crt' }, acts: [
