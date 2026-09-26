@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { setRng } from '../index';
 import { seeded, simulate } from '../testing';
+import type { Particle } from './state';
 
 setRng(seeded(11).next);
 const flags = (skin: 'clawd' | 'kodek', scene: string, secs: number) => {
@@ -57,5 +58,35 @@ describe('anime work scenes', () => {
     expect(new Set(scan.map(s => Math.round((s._scan as number) * 10))).size).toBeGreaterThan(3);
     expect(stats['word:!']).toBeGreaterThanOrEqual(1);
     expect(stats.impact).toBeGreaterThanOrEqual(1);
+  });
+  it('web: thunder-breathing zigzag dash with lightning, catches the page, comes back within the slot', () => {
+    const { seen, stats } = flags('clawd', 'web', 4);
+    const lx = seen.map(s => s.lx as number);
+    expect(Math.max(...lx)).toBeGreaterThanOrEqual(30);
+    expect(Math.max(...lx.map(Math.abs))).toBeLessThanOrEqual(50);
+    let turns = 0; for (let i = 2; i < lx.length; i++) if (Math.sign(lx[i] - lx[i - 1]) * Math.sign(lx[i - 1] - lx[i - 2]) < 0) turns++;
+    expect(turns).toBeGreaterThanOrEqual(3);
+    expect(stats.bolt).toBeGreaterThanOrEqual(5);
+    expect(stats['word:シュッ']).toBeGreaterThanOrEqual(1);
+    expect(seen.some(s => s._hold === 'sheet')).toBe(true);
+    expect(Math.abs(lx.at(-1)!)).toBeLessThan(8);
+  });
+  it('agent: a seal on the ground, a cloud of smoke and a mini helper running off', () => {
+    const { c, seen, stats } = flags('kodek', 'agent', 3);
+    expect(seen.some(s => s._ground === 'seal')).toBe(true);
+    expect(stats.smoke).toBeGreaterThanOrEqual(8);
+    expect(stats.helper).toBeGreaterThanOrEqual(1);
+    expect(stats['word:ボン']).toBeGreaterThanOrEqual(1);
+    const h = c.fx.parts.find((p: Particle) => p.k === 'helper');
+    if (h) expect(h.vx).toBeGreaterThan(0);
+  });
+  it('mcp: clap (hands meet), glowing transmutation circle, the tool rises from sparks', () => {
+    const { seen, stats } = flags('clawd', 'mcp', 3);
+    const clap = seen.filter(s => s.act === 'klaśnięcie');
+    expect(Math.min(...clap.map(s => Math.abs((s.hxR as number) - (s.hxL as number))))).toBeLessThan(12);
+    expect(seen.some(s => s._ground === 'circle')).toBe(true);
+    expect(seen.some(s => s._hold === 'wrench')).toBe(true);
+    expect(stats.spark).toBeGreaterThanOrEqual(10);
+    expect(stats.energy).toBeGreaterThanOrEqual(5);
   });
 });
