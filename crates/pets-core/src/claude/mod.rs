@@ -3,6 +3,7 @@ pub mod desktop_usage;
 pub mod hook;
 pub mod registry;
 pub mod statusline;
+pub mod subagent;
 pub mod transcript;
 
 use serde::{Deserialize, Serialize};

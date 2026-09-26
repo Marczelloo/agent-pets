@@ -7,6 +7,9 @@ pub fn keep_for_rehydration(files: &[PathBuf], live_claude: &std::collections::H
     use crate::watch::{kind_of, FileKind};
     files.iter().filter(|p| match kind_of(p) {
         Some(FileKind::ClaudeTranscript) => p.file_stem().and_then(|s| s.to_str()).map(|s| live_claude.contains(s)).unwrap_or(false),
+        // subagent wraca z żywym rodzicem: `…/<sesja>/subagents/agent-<id>.jsonl`
+        Some(FileKind::ClaudeSubagent) => p.parent().and_then(|d| d.parent()).and_then(|d| d.file_name()).and_then(|s| s.to_str())
+            .map(|s| live_claude.contains(s)).unwrap_or(false),
         Some(FileKind::CodexRollout) => true,
         None => false,
     }).cloned().collect()
@@ -47,6 +50,16 @@ mod tests {
         let live: std::collections::HashSet<String> = ["live-1".to_string()].into();
         let kept = keep_for_rehydration(&files, &live);
         assert_eq!(kept, vec![files[0].clone(), files[2].clone()]);
+    }
+
+    #[test]
+    fn subagents_come_back_only_with_their_live_parent() {
+        let files = vec![
+            PathBuf::from(r"C:\u\.claude\projects\p\live-1\subagents\agent-a.jsonl"),
+            PathBuf::from(r"C:\u\.claude\projects\p\dead-2\subagents\agent-b.jsonl"),
+        ];
+        let live: std::collections::HashSet<String> = ["live-1".to_string()].into();
+        assert_eq!(keep_for_rehydration(&files, &live), vec![files[0].clone()]);
     }
     #[test]
     fn finds_recent_jsonl_recursively() {

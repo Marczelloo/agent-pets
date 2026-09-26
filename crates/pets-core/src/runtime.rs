@@ -73,6 +73,7 @@ impl Runtime {
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
             _ingest: ingest, _watcher: None,
         };
+        rt.sources.lang = rt.lang;
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
         // Odtworzenie stanu: żywe sesje Claude'a z rejestru, potem ich transkrypty i rollouty Codexa.
         let live: Vec<_> = claude::registry::read_registry(&cfg.home.join(".claude").join("sessions"))
@@ -108,7 +109,7 @@ impl Runtime {
     }
 
     /// Język nowych tekstów akcji i pytań (zmiana w ustawieniach).
-    pub fn set_lang(&mut self, lang: crate::i18n::Lang) { self.lang = lang; }
+    pub fn set_lang(&mut self, lang: crate::i18n::Lang) { self.lang = lang; self.sources.lang = lang; }
 
     /// Czas ostatniego zdarzenia z każdego źródła (diagnostyka).
     pub fn last_seen(&self) -> std::collections::BTreeMap<&'static str, i64> { self.last_seen.clone() }
@@ -159,7 +160,7 @@ impl Runtime {
     fn poll_file(&mut self, p: &Path) -> bool {
         use crate::watch::{kind_of, FileKind};
         match kind_of(p) {
-            Some(FileKind::ClaudeTranscript) if !self.apps.claude_code => return false,
+            Some(FileKind::ClaudeTranscript | FileKind::ClaudeSubagent) if !self.apps.claude_code => return false,
             // rollouty Codexa niosą też wątki routera
             Some(FileKind::CodexRollout) if !self.apps.codex && !self.apps.agent_router => return false,
             _ => {}

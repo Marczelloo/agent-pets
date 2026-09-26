@@ -78,7 +78,18 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(a) = d.app { s.jump.app = Some(a); }
     if let Some(r) = &d.router_task { s.router_task = Some(r.clone()); }
     if let Some(p) = &d.parent { s.parent = Some(p.clone()); }
-    if let Some(i) = &d.sub { s.sub = Some(i.clone()); }
+    if let Some(i) = &d.sub {
+        // hook zna tylko typ dziecka, plik meta także opis i pracę w tle: brak nie kasuje tego, co już wiemy
+        s.sub = Some(match s.sub.take() {
+            Some(old) => SubInfo {
+                kind: i.kind,
+                agent_type: i.agent_type.clone().or(old.agent_type),
+                description: i.description.clone().or(old.description),
+                background: i.background || old.background,
+            },
+            None => i.clone(),
+        });
+    }
 }
 
 /// Tekst akcji żyje od początku do końca narzędzia; pytanie, dopóki sesja czeka (meta go nie kończy).
@@ -603,5 +614,18 @@ mod tests {
         let x = s.session("s1").unwrap();
         assert_eq!(x.parent.as_deref(), Some("p"));
         assert_eq!(x.sub.as_ref().unwrap().agent_type.as_deref(), Some("Explore"));
+    }
+
+    #[test]
+    fn partial_sub_info_from_a_hook_keeps_what_the_file_said() {
+        let mut s = Store::new(Timing::default());
+        let mut f = ev(Kind::SessionStart, 0);
+        f.data.sub = Some(SubInfo { kind: SubKind::Claude, agent_type: Some("Explore".into()), description: Some("Znajdź".into()), background: true });
+        s.apply(&f);
+        let mut h = tool(Tool::Bash, 100);
+        h.data.sub = Some(SubInfo { kind: SubKind::Claude, agent_type: None, description: None, background: false });
+        s.apply(&h);
+        let sub = s.session("s1").unwrap().sub.clone().unwrap();
+        assert_eq!((sub.agent_type.as_deref(), sub.description.as_deref(), sub.background), (Some("Explore"), Some("Znajdź"), true));
     }
 }
