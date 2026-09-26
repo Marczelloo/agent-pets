@@ -16,7 +16,7 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
   <img src="docs/images/taskbar.png" alt="Five pets in the taskbar: a knocked-out Codex robot after an error, a Codex robot presenting a web page, Clawd waving because it needs you, a Codex robot with the Agent Router badge, Clawd typing at a desk; a +2 badge and rate-limit bars" width="900">
 </p>
 
-> **Status: public beta (0.6).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
+> **Status: public beta (0.7).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
 
 ## Highlights
 
@@ -24,10 +24,13 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
 - **Everything at a glance.** Task progress under each pet, 5-hour and weekly limits for Claude and Codex next to them, a "+N" badge when the taskbar runs out of room. Pets that wait for you never get hidden.
 - **Panel and "Przejdź" (Go).** Click a pet for all your sessions and limits with reset times; one click takes you back to the session: the Claude or Codex app, its terminal window, or a new terminal that resumes it.
 - **Seven looks and two ways to move.** Sticker (like the app icon), Sketch, Clean, Pixel art, Neon, Ink and Pastel, all readable at taskbar size, plus a Dynamic motion mode with anime-inspired scenes: a punch barrage on the keyboard with a final BAM!, ninja hand seals before a command, a detective with a giant magnifier, Shikamaru-style thinking, a thunder dash for the web, a summoning seal for subagents, Hollow Purple while compacting, and particles, impact frames and speed lines. Pick one look for everyone or a different one per agent, and preview every animation in Settings.
+- **Your taskbar, your layout.** Put the pets next to the tray, on the left, anywhere you drag them, or in a floating window on the desktop; pick the monitor, a glass or solid background, the pet size, spacing, order (by start, agent, or those that need you first) and which bars show. Settings → Taskbar.
+- **Tidy up by hand.** Remove a pet from the taskbar (right-click it) or a session from the panel (✕, or "Remove inactive"), with undo. It comes back on its own as soon as the agent does something new.
+- **Updates itself.** A notification when a new version is out, with an Install button, or silent installs at a quiet moment (no agent working, no full-screen game). Updates are signed and checked before they run.
 - **Windows notifications** when an agent waits for you, finishes a long turn, or passes 90% of a limit.
 - **Agent Router tasks** get the task's title, a router badge and live health (active, quiet, stalled, blocked).
 - **English and Polish.** Pets, panel, settings, notifications and the installer follow your Windows language, or pick one in Settings.
-- **Private by default.** Everything is read from local files and hooks. The only optional network call, fetching your Claude plan limits from Anthropic, is off until you allow it.
+- **Private by default.** Everything is read from local files and hooks. Besides the update check on GitHub (can be turned off), the only optional network call, fetching your Claude plan limits from Anthropic, is off until you allow it.
 - **Light on resources.** Drawing stops under full-screen apps and when the taskbar is hidden; on battery the pets slow down to 10 fps.
 
 | Panel | First-run wizard | Settings |
@@ -51,6 +54,8 @@ The interface is in English and Polish and follows the Windows display language;
 | Record and replay of session events | ✅ | `pets-cli run --record`, `pets-cli replay` |
 | **Visual prototype** of the pets (animations, props, sketch style) | ✅ Prototype | open `prototype/index.html` in a browser |
 | **Installer, first-run wizard, settings**, autostart, power saving | ✅ | [Install](#install) |
+| **Automatic updates** (notify or install at a quiet moment), signed | ✅ from 0.7 | Settings → General |
+| **Taskbar layout**: position, monitor, floating window, background, size, order; remove pets and sessions | ✅ from 0.7 | Settings → Taskbar, right-click a pet |
 | More agents (opencode, Gemini CLI and others), statistics | ⏳ Next phases | see [Roadmap](#roadmap) |
 
 ## Install
@@ -65,6 +70,8 @@ The interface is in English and Polish and follows the Windows display language;
 4. Restart open Claude Code sessions so they pick up the hooks.
 
 Change anything later in **Settings**: right-click the tray icon, or the ⚙ button in the panel. Running Agent Pets again from the Start menu opens Settings too.
+
+**Updates:** from 0.7 on, Agent Pets checks GitHub for a new version 15 seconds after start and every 6 hours and tells you, or installs it by itself at a quiet moment if you choose so in Settings → General (or turn it off). Versions before 0.7 have no updater: install 0.7 by hand once.
 
 **Uninstall** from Windows Settings → Apps. It removes the hooks (and the statusline pass-through, restoring your previous statusline), the autostart entry and the files in `~/.agent-pets`. Tick "delete app data" to remove your settings as well.
 
@@ -93,7 +100,7 @@ cargo build --release --workspace
 cargo test --workspace
 ```
 
-`pnpm tauri build` (in `app/`) produces the installer in `target\release\bundle\nsis\`.
+`pnpm tauri build` (in `app/`) produces the installer in `target\release\bundle\nsis\`. The build also signs the update files and needs the release key, which only the maintainer has; for your own build turn that off with `pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'`. Releases are made with `scripts/release.ps1`, see [docs/release.md](docs/release.md).
 
 #### Connect Claude Code (hooks) without the wizard
 
@@ -230,7 +237,7 @@ Agent Router ──~/.agent-router/status.json─────────┘
 - **`hook.exe`** is the Claude Code hook client and, with `--agent-pets-statusline`, the statusline pass-through.
 - **`pets-cli`** runs everything as a terminal app, with record and replay.
 - **`app/`** is the Tauri app. Rust embeds the stage window in the taskbar (`SetParent` into `Shell_TrayWnd`), measures the free space with UI Automation, follows DPI and Explorer restarts, reads the mouse natively and shows the tooltip window. The TypeScript side draws the pets on a Canvas at 30 fps and pauses while the taskbar is hidden or a fullscreen app runs. The renderer is a 1:1 port of the prototype, checked call-by-call against it in tests.
-- **Privacy:** session data stays on your machine. The only outgoing connection is the plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. From transcripts only titles, task progress and token counters are kept, never message content.
+- **Privacy:** session data stays on your machine. Outgoing connections: the update check (`latest.json` and the installer from this repository's GitHub releases, nothing is sent; off in Settings → General) and the opt-in plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. From transcripts only titles, task progress and token counters are kept, never message content.
 
 ## Project layout
 
@@ -255,7 +262,9 @@ tools/              fixture anonymizer and its test, CPU measurement
 5. ~~Phase 4: Agent Router task state file~~
 6. ~~Phase 5: installer, first-run wizard, settings, autostart, power-saving mode~~
 7. ~~Looks: seven styles (sticker and pixel art as their own models), dynamic motion, preview of every animation, English UI~~
-8. **Next:** more agents (opencode, t3code, zcode, Gemini CLI, Grok), speech bubbles, subagents, statistics
+8. ~~0.7: automatic updates, removing pets and sessions by hand, taskbar layout (position, monitor, floating window, background, size, order)~~
+9. **Next (0.8):** speech bubbles above the pets, subagents
+10. Later: more agents (opencode, t3code, zcode, Gemini CLI, Grok), statistics
 
 ## License
 
