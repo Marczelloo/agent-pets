@@ -91,8 +91,15 @@ fn verify_failed(app: &AppHandle) -> String {
     tr(lang(app), "Nie udało się zweryfikować aktualizacji", "Could not verify the update").into()
 }
 
-/// Adres `latest.json`; `AGENT_PETS_UPDATE_URL` podmienia go do testów lokalnych (podpis i tak jest sprawdzany).
-fn endpoint() -> String { std::env::var("AGENT_PETS_UPDATE_URL").unwrap_or_else(|_| ENDPOINT.into()) }
+/// Adres `latest.json`. `AGENT_PETS_UPDATE_URL` podmienia go tylko w buildzie deweloperskim albo testowym
+/// (`--features update-test`, docs/release.md); wydanie zawsze pyta GitHuba. Podpis jest sprawdzany zawsze.
+fn endpoint_from(env: Option<String>, allow_override: bool) -> String {
+    env.filter(|_| allow_override).unwrap_or_else(|| ENDPOINT.into())
+}
+
+fn endpoint() -> String {
+    endpoint_from(std::env::var("AGENT_PETS_UPDATE_URL").ok(), cfg!(any(debug_assertions, feature = "update-test")))
+}
 
 async fn find(app: &AppHandle) -> Result<Option<Update>, String> {
     let url = endpoint().parse().map_err(|e| format!("{e}"))?;
@@ -292,6 +299,13 @@ mod tests {
         assert_eq!(serde_json::to_value(UpdateStatus::Latest).unwrap(), serde_json::json!({ "state": "latest" }));
         let d = serde_json::to_value(UpdateStatus::Downloading { version: "0.7.1".into(), pct: Some(40) }).unwrap();
         assert_eq!(d["pct"], 40);
+    }
+
+    #[test]
+    fn the_test_address_is_honoured_only_in_test_builds() {
+        assert_eq!(endpoint_from(Some("http://127.0.0.1:8765/latest.json".into()), true), "http://127.0.0.1:8765/latest.json");
+        assert_eq!(endpoint_from(Some("http://127.0.0.1:8765/latest.json".into()), false), ENDPOINT);
+        assert_eq!(endpoint_from(None, true), ENDPOINT);
     }
 
     #[test]

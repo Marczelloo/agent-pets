@@ -6,6 +6,10 @@ version.workspace = true
 [lib]
 name = "agent_pets_lib"
 
+[features]
+# test lokalny aktualizacji: AGENT_PETS_UPDATE_URL działa także w buildzie release (docs/release.md)
+update-test = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

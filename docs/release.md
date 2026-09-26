@@ -32,12 +32,12 @@ Workflow `release` tylko uruchamia testy.
 
 ## Test aktualizacji lokalnie
 
-Zmienna `AGENT_PETS_UPDATE_URL` podmienia adres `latest.json`. Podpis i tak jest sprawdzany kluczem z konfiguracji.
-Build release wtyczki przyjmuje tylko `https`. Wersje testowe buduj więc z dodatkową konfiguracją, a w prawdziwym wydaniu nigdy jej nie używaj:
-`pnpm --dir app tauri build --config '{"plugins":{"updater":{"dangerousInsecureTransportProtocol":true}}}'`.
+Zmienna `AGENT_PETS_UPDATE_URL` podmienia adres `latest.json`, ale tylko w buildzie deweloperskim albo testowym (feature `update-test`). Wydanie zawsze pyta GitHuba, a podpis jest sprawdzany zawsze.
+Build release wtyczki przyjmuje tylko `https`, więc wersje testowe buduj z feature i dodatkową konfiguracją. W prawdziwym wydaniu nigdy ich nie używaj:
+`pnpm --dir app tauri build --features update-test --config '{"plugins":{"updater":{"dangerousInsecureTransportProtocol":true}}}'`.
 Zmienne podpisu ustaw jak w `scripts/release.ps1`.
 
-1. Zbuduj i zainstaluj wersję N.
+1. Zbuduj buildem testowym (jak wyżej) i zainstaluj wersję N.
 2. Zbuduj wersję N+1 skryptem i podaj katalog `target/release/upload` lokalnym serwerem, na przykład `python -m http.server 8765 --bind 127.0.0.1`.
    W `latest.json` ustaw `url` na `http://127.0.0.1:8765/<plik>`.
 3. Uruchom wersję N z `AGENT_PETS_UPDATE_URL=http://127.0.0.1:8765/latest.json` i w ustawieniach kliknij „Sprawdź teraz”.
