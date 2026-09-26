@@ -30,8 +30,8 @@ describe('vector dynamic effects', () => {
   it('the action background is clipped to the pet slot and skipped in power saving', () => {
     for (const bg of ['speed', 'rays', 'purple', 'wind']) {
       const r = recorder(); vectorBack(r.ctx, pet({ _bg: bg }), G());
-      expect(SLOT).toEqual({ w: 150, h: 140 });
-      expect(r.log, bg).toContain('rect(37.5,-0.5,45,42)'); // 150u × 140u wokół podstawy (60, 40) przy u = 0,3
+      expect(SLOT).toEqual({ w: 150, h: 145 });
+      expect(r.log, bg).toContain('rect(37.5,-0.5,45,43.5)'); // 150u × 145u wokół podstawy (60, 40) przy u = 0,3
       expect(r.log).toContain('clip()'); ok(r.log);
       const s = recorder(); vectorBack(s.ctx, pet({ _bg: bg }), G({ env: { ...ENV, bg: false } }));
       expect(s.log, bg).toEqual([]);
@@ -103,5 +103,11 @@ describe('vector dynamic effects', () => {
     expect(xs).toEqual([63]);
     const tx = r.log.filter(l => l.startsWith('fillText(')).map(l => +l.split(',')[1]);
     expect(tx).toEqual([63]);
+  });
+  it('the ground seal fits inside the slot clip (its bottom is not cut flat)', () => {
+    const r = recorder(); vectorBack(r.ctx, pet({ _ground: 'seal', _groundK: 1 }), G());
+    const [, cy, , h] = r.log.find(l => l.startsWith('rect('))!.slice(5, -1).split(',').map(Number);
+    const bottoms = r.log.filter(l => l.startsWith('ellipse(')).map(l => { const a = l.slice(8, -1).split(',').map(Number); return a[1] + a[3]; });
+    expect(Math.max(...bottoms)).toBeLessThanOrEqual(cy + h);
   });
 });

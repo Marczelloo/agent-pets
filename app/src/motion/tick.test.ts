@@ -118,6 +118,16 @@ describe('motion', () => {
     run(0.2);
     expect(c.aT).toBeGreaterThan(aT);
   });
+  it('a brand-new pet starts right in the dynamic pose (no spring-in from the calm pose)', () => {
+    const c = createPet('clawd', 'thinking'); // Spokojny: stoi; Dynamiczny: siedzi (Shikamaru)
+    setMotion(c, true);
+    expect(c.p.sit.x).toBe(1);
+    const d = createPet('clawd', 'idle'); let T = 0;
+    for (let f = 0; f < 10; f++) { T += 1 / 60; tick(d, 1 / 60, T, MOTIONS.calm, true); }
+    setScene(d, 'thinking'); const sit = d.p.sit.x;
+    setMotion(d, true); // pracujący zwierzak: przejście sprężynami, bez skoku
+    expect(d.p.sit.x).toBe(sit);
+  });
   it('the step hook runs every step with the act time, pet clock and dt', () => {
     const seen: number[][] = [];
     const c = createPet('clawd', 'idle');

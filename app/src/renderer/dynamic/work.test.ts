@@ -47,6 +47,11 @@ describe('dynamic work scenes', () => {
     expect(at).not.toBeNull();
     expect(at!).toBeGreaterThan(-35); // klawiatura y ≈ −30
   });
+  it('edit: flying keys stay inside the pet slot (not past the left window edge)', () => {
+    let min = Infinity;
+    simulate('clawd', 'edit', 8, cc => { for (const p of (cc.fx?.parts ?? []) as Particle[]) if (p.k === 'key') min = Math.min(min, p.x); });
+    expect(min).toBeGreaterThanOrEqual(-70);
+  });
   it('bash: at least 4 distinct hand seals, then a poof of smoke and the command runs', () => {
     const { seen, stats } = flags('kodek', 'bash', 4.5);
     const seals = seen.filter(s => s.act === 'pieczęcie rąk');

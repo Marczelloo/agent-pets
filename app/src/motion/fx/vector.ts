@@ -6,7 +6,7 @@ import type { FxState, Particle } from '../../renderer/dynamic/state';
 import type { Pet } from '../../renderer/pet';
 import type { FxCtx } from './index';
 
-export const SLOT = { w: 150, h: 140 };
+export const SLOT = { w: 150, h: 145 }; // do Y + 10u: krąg na ziemi mieści się cały
 const AMBER = '#EF9F27', WHITE = '#FFFFFF', RED = '#E24B4A', BLUE = '#5B8DEF', PURPLE = '#7F77DD', TEAL = '#5DCAA5';
 
 const rays = (x: CanvasRenderingContext2D, cx: number, cy: number, r0: number, r1: number, n: number, seed: number) => {

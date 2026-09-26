@@ -14,7 +14,7 @@ const AMBER = '#EF9F27', WHITE = '#FFFFFF', RED = '#E24B4A', BLUE = '#5B8DEF', P
 /** `off` = przesunięcie początku w u: `lx` zwierzaka dla nakładek na ciele, 0 dla cząsteczek i słów (żyją w miejscu zwierzaka). */
 function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet, off = c.p.lx.x) {
   const G = gridPx(g.u, g.dpr) / g.dpr, snap = (v: number) => Math.round(v * g.dpr) / g.dpr;
-  const X0 = snap(g.X + off * g.u), Y0 = snap(g.Y), U = (v: number) => Math.round(v * g.u / G);
+  const U = (v: number) => Math.round(v * g.u / G), X0 = snap(g.X) + U(off) * G, Y0 = snap(g.Y); // ta sama siatka co ciało (models/pixel.ts)
   const cell = (cx: number, cy: number, w: number, h: number, col: string) => { if (w > 0 && h > 0) { x.fillStyle = col; x.fillRect(X0 + cx * G, Y0 + cy * G, w * G, h * G); } };
   const line = (x0: number, y0: number, x1: number, y1: number, col: string) => {
     let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), e = dx + dy, n = 0; const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -77,8 +77,8 @@ const PAL: Record<string, string> = { a: AMBER, g: GREY, k: '#2B1D16', l: '#F1EF
 
 export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const s: FxState | undefined = c.fx; if (!s) return;
-  const tg = c.tg || {}, { U, cell, line, ring, text, icon } = grid(x, g, c), hands: number[][] = c.hand ?? [];
-  const [fx0, fy0, gp] = (c.face as number[]) ?? [0, -45, 12], fx = U(fx0), fy = U(fy0), gap = Math.max(2, U(gp));
+  const tg = c.tg || {}, { G, U, cell, line, ring, text, icon } = grid(x, g, c), hands: number[][] = c.hand ?? [];
+  const [fx0, fy0, gp] = (c.face as number[]) ?? [0, -45, 12], fx = Math.floor(fx0 * g.u / G + 1e-6), fy = U(fy0), gap = Math.max(2, U(gp)); // kotwica leży na środku komórki (+½): floor, nie round
   const slot = grid(x, g, c, 0);
   const sprite = (rows: string[], cx: number, cy: number, col?: string, put = cell) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] !== '.') put(cx + i, cy + j, 1, 1, col && r[i] === 'c' ? col : PAL[r[i]]); });
   x.save(); x.globalAlpha = g.alpha;

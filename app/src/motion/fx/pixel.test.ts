@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createPet, setRng } from '../../renderer';
+import { createPet, drawPet, pen, setRng } from '../../renderer';
+import { gridPx } from '../../renderer/models/pixel';
 import { WORDS } from '../../renderer/dynamic/kit';
 import { PHYS, emit, fxState, word, type PKind } from '../../renderer/dynamic/state';
 import { recorder, seeded } from '../../renderer/testing';
@@ -62,5 +63,13 @@ describe('pixel dynamic effects', () => {
     const r = recorder(); pixelFront(r.ctx, c, G(1));
     const xs = r.log.filter(l => l.startsWith('fillRect(')).map(l => +l.slice(9).split(',')[0]);
     expect(Math.min(...xs)).toBeGreaterThan(58); expect(Math.max(...xs)).toBeLessThan(68);
+  });
+  it('effects sit on the same grid as the body, also when the pet is shifted (lx) at 125 %', () => {
+    const c = createPet('clawd', 'idle'); fxState(c); c.p.lx.x = 41.33; c.tg = { ...c.tg, _barrage: 1 }; c.hand = [[-31.4, -29.6], [29.2, -33.3]];
+    pen.dpr = 1.25; const body = recorder(); drawPet(body.ctx, c, 61.3, 40.2, 0.3, 1, { style: 'pixel', motion: 'dynamic' }); pen.dpr = 1;
+    const bx = +body.log.find(l => l.startsWith('fillRect('))!.slice(9).split(',')[0];
+    const r = recorder(); pixelFront(r.ctx, c, G(1.25));
+    const G_ = gridPx(0.3, 1.25) / 1.25;
+    for (const l of r.log.filter(v => v.startsWith('fillRect('))) { const k = (+l.slice(9).split(',')[0] - bx) / G_; expect(Math.abs(k - Math.round(k)), l).toBeLessThan(1e-3); }
   });
 });

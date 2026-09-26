@@ -44,7 +44,9 @@ export function flashGlow(s: FxState, now: number, env: FxEnv): number {
 export function shakeOffset(s: FxState, t: number, env: FxEnv, u: number, cell: number): [number, number] {
   const e = t - s.shakeAt;
   if (!env.shake || !(e >= 0 && e < 0.3)) return [0, 0];
-  const a = s.shakeAmp * u * Math.exp(-e * 14), dx = a * Math.sin(e * 90), dy = a * 0.5 * Math.cos(e * 70);
+  let a = s.shakeAmp * u * Math.exp(-e * 14);
+  if (cell > 0 && e < 0.15) a = Math.max(a, cell); // w pikselowym pasku co najmniej jedna komórka, inaczej zaokrągla się do zera
+  const dx = a * Math.sin(e * 90), dy = a * 0.5 * Math.cos(e * 70);
   return cell > 0 ? [Math.round(dx / cell) * cell, Math.round(dy / cell) * cell] : [dx, dy];
 }
 

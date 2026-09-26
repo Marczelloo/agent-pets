@@ -10,7 +10,9 @@ export function createPet(type: SkinId,st: string): Pet{const c: Pet={type,p:{},
 export function startAct(c: any,a: any){c.act=a;c.aT=0;c.pend=null;if(a[3])a[3](c);}
 export const sceneTable=(c: any)=>c.dynamic?SCENES_DYNAMIC:SCENES;
 /** Przełącza choreografię (Spokojny ↔ Dynamiczny) i restartuje bieżącą scenę w nowej tablicy; pozy przechodzą sprężynami. */
-export function setMotion(c: Pet,dynamic: boolean){if(!!c.dynamic===dynamic)return;c.dynamic=dynamic;c.parts=[];if(c.fx){c.fx.parts=[];c.fx.words=[];}setScene(c,c.st);
+export function setMotion(c: Pet,dynamic: boolean){if(!!c.dynamic===dynamic)return;c.dynamic=dynamic;c.parts=[];if(c.fx){c.fx.parts=[];c.fx.words=[];}
+// nowy zwierzak (jeszcze bez zegara) od razu w pozie nowej choreografii; pracujący przechodzi sprężynami
+setScene(c,c.st,c.clk==null);
 // rekwizyt albo przedmiot, którego nowa choreografia nie używa, znika od razu (inaczej wygasa w obcej pozie, np. siatka w uniesionej łapie)
 const tg=targets(c,0);if((tg._prop||null)!==c.prop){c.prop=null;c.p.propA.x=0;c.p.propA.v=0;}if((tg._hold||null)!==c.hold){c.hold=null;c.p.holdA.x=0;c.p.holdA.v=0;}}
 /** Krytycznie tłumiona sprężyna, rozwiązanie dokładne: bez przestrzelenia i stabilna przy każdym dt. */

@@ -68,4 +68,10 @@ describe('dynamic frame composition', () => {
     expect(flashGlow(s, 5.6, ENV)).toBe(0);
     expect(flashGlow(s, 5.05, { ...ENV, flash: false })).toBe(0);
   });
+  it('a hit visibly shakes pixel pets in the taskbar (at least one grid cell)', () => {
+    const s = fxState(createPet('clawd', 'edit'));
+    s.shakeAt = 1; s.shakeAmp = 3.5;
+    const moved = [1.005, 1.02, 1.04, 1.06].map(t => shakeOffset(s, t, ENV, 0.3, 2)).filter(([dx, dy]) => dx !== 0 || dy !== 0);
+    expect(moved.length).toBeGreaterThanOrEqual(2);
+  });
 });
