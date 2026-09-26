@@ -58,5 +58,12 @@ describe('sticker model', () => {
     const plain = draw('clawd', 'idle').log.filter(l => l.startsWith('arc(')).length;
     expect(plain).toBeGreaterThan(0); // uśmiech i błyski oczu
   });
+  it('the face anchor tilts with the body (overlays stay on the face)', () => {
+    const faceAt = (tilt: number) => { setRng(seeded(6).next); const c = createPet('clawd', 'idle'); c.p.tilt.x = tilt; c.p.wobW.x = 0;
+      drawPet(recorder().ctx, c, 150, 150, 1, 0, { style: 'sticker', motion: 'calm' }); return c.face as number[]; };
+    const flat = faceAt(0), tilted = faceAt(0.4);
+    // obrót bryły o rot·0,5 = 0,2 wokół podstawy: punkt na wysokości oczu (y ≈ −45u) przesuwa się w poziomie o ≈ 45·sin(0,2) ≈ 9u
+    expect(Math.abs(tilted[0] - flat[0])).toBeGreaterThan(5);
+  });
 });
 

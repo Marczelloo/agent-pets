@@ -45,4 +45,9 @@ describe('rig', () => {
     };
     expect(squashAt(1.6) - 1).toBeGreaterThan((squashAt(1) - 1) * 1.4);
   });
+  it('the face turns smoothly with the body (no jump around th = ±0.25)', () => {
+    const at = (th: number) => { const c = createPet('clawd', 'idle'); c.p.th.x = th; return rig(c, 0, 0, 1, 0, SIZE).faceX; };
+    for (const th of [-0.25, 0.25]) expect(Math.abs(at(th + 0.01) - at(th - 0.01))).toBeLessThan(0.1);
+    expect(at(1)).toBe(1); expect(at(-1)).toBe(-1); expect(at(0)).toBe(0);
+  });
 });

@@ -8,7 +8,7 @@ import { drawHeadFx, drawWorldFx } from '../draw/overlay';
 import { drawMug, drawPillow, drawProp } from '../draw/props';
 import { elP, pen, rrP, seg, shp } from '../pen';
 import type { Pet } from '../pet';
-import { rig } from './rig';
+import { rig, type Rig } from './rig';
 
 /** Kształty naklejki w jednostkach u (wzorzec: app-icon.png). */
 export const STICKER = {
@@ -41,14 +41,14 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
     const lift = Math.max(0, Math.sin(t * 10 + i * PI)) * 4 * u * r.walk;
     shp(x, rrP(lx * W - S.legW * u / 2, r.bot - 4 * u - lift, S.legW * u, legLen + 4 * u, S.legW * u * .45), cs, u);
   });
-  const fx = r.face * 6 * u + r.gaze[0] * u, ey = top + H * .45 + r.gaze[1] * u, e = r.eyes;
+  const fx = r.faceX * 6 * u + r.gaze[0] * u, ey = top + H * .45 + r.gaze[1] * u, e = r.eyes;
   if (skin === 'clawd') {
     const E = STICKER.clawd.ears;
     [-1, 1].forEach(s => shp(x, rrP(s > 0 ? W / 2 - E.w * u * .45 : -W / 2 - E.w * u * .55, top + H * E.y - E.h * u / 2, E.w * u, E.h * u, E.w * u * .4), cm, u));
     shp(x, rrP(-W / 2, top, W, H, S.r * u), cm, u);
     highlight(x, W, top, u);
     [-1, 1].forEach(s => clawdEye(x, fx + s * W * .18, ey, u, e, GA));
-    c.face = [fx * r.sx / u, (ey * r.sy + r.oy) / u, W * .18 * r.sx / u];
+    c.face = faceAnchor(r, fx, ey, W * .18, u);
     if (e.open > .3 && e.happy < .02) { x.save(); x.lineWidth = Math.max(1.2, 2.2 * u); x.beginPath(); x.arc(fx, ey + 6 * u, 4.5 * u, .15 * PI, .85 * PI); x.stroke(); x.restore(); }
     x.save(); x.globalAlpha = GA * .6; x.fillStyle = BLUSH;
     [-1, 1].forEach(s => { x.beginPath(); x.ellipse(fx + s * W * .3, ey + 8 * u, 6 * u, 3.2 * u, 0, 0, TAU); x.fill(); });
@@ -74,7 +74,7 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
     }
     const kEy = sy0 + sh * .45 + r.gaze[1] * u;
     [-1, 1].forEach(s => kodekEye(x, fx + s * W * .16, kEy, u, e, GA));
-    c.face = [fx * r.sx / u, (kEy * r.sy + r.oy) / u, W * .16 * r.sx / u];
+    c.face = faceAnchor(r, fx, kEy, W * .16, u);
   }
   x.restore();
 
@@ -102,6 +102,12 @@ function highlight(x: CanvasRenderingContext2D, W: number, top: number, u: numbe
 }
 
 type Eyes = { open: number; blink: number; sleep: number; happy: number; dizzy: number; squint: number };
+
+/** Kotwica twarzy w układzie świata jak `body()`: skala, przechył rot·0,5, skok (u, względem podstawy). */
+function faceAnchor(r: Rig, px: number, py: number, gap: number, u: number): number[] {
+  const a = r.rot * .5, X = px * r.sx, Yl = py * r.sy;
+  return [(X * Math.cos(a) - Yl * Math.sin(a)) / u, (X * Math.sin(a) + Yl * Math.cos(a) + r.oy) / u, gap * r.sx / u];
+}
 
 function clawdEye(x: CanvasRenderingContext2D, ex: number, ey: number, u: number, e: Eyes, GA: number) {
   x.save(); x.fillStyle = EYE; x.strokeStyle = EYE; x.lineWidth = Math.max(1.2, 2.4 * u);

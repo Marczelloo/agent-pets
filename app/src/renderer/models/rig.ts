@@ -21,6 +21,8 @@ export interface Rig {
   W: number; H: number; top: number; bot: number; legH: number; down: number; loaf: number; sit: number;
   /** zwrot z `th`: w lewo, przód, w prawo */
   face: -1 | 0 | 1;
+  /** płynny zwrot twarzy −1…1 (naklejka); `face` to wersja skokowa dla siatki pikselowej */
+  faceX: number;
   /** przesunięcie źrenic (ex, look) w jednostkach u */
   gaze: [number, number];
   eyes: { open: number; blink: number; sleep: number; happy: number; dizzy: number; squint: number };
@@ -57,7 +59,7 @@ export function rig(c: Pet, X: number, Y: number, u: number, t: number, size: { 
   c.aHand = arms.map(a => [a.ah[0] / u, a.ah[1] / u]);
   const bl = c.blink > 0 ? Math.sin(PI * (c.blink / .16)) : 0, sl = cl(P.sleep.x), hp = cl(P.happy.x), dz = cl(P.dizzy.x), sqn = cl(P.squint.x);
   return {
-    XX, Y, oy, sx, sy, rot, W, H, top, bot, legH, down, loaf, sit, face,
+    XX, Y, oy, sx, sy, rot, W, H, top, bot, legH, down, loaf, sit, face, faceX: cl(th / 0.5, -1, 1),
     gaze: [P.ex.x * 4, P.look.x * 4.5],
     eyes: { open: Math.max(0, 1 - Math.max(bl, sl, hp, dz, sqn)), blink: bl, sleep: sl, happy: hp, dizzy: dz, squint: sqn },
     grey: cl(P.grey.x), alpha: (1 - .22 * cl(P.dim.x)) * (c.alpha ?? 1), walk, hopH: h, arms,
