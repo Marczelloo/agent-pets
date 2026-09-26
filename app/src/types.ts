@@ -54,7 +54,30 @@ export interface Settings {
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;
   language: Language;
+  updates: Updates;
+  stage: StageSettings;
   [extra: string]: unknown;
+}
+export type Updates = 'notify' | 'auto' | 'off';
+export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
+export type StageAlign = 'left' | 'center' | 'right';
+export type StageOrder = 'start' | 'attention' | 'agent';
+export interface StageBackground { kind: 'none' | 'glass' | 'solid'; color?: string | null; opacity?: number | null; radius: number }
+/** Lustro `settings::Stage` z rdzenia (karta „Pasek”). */
+export interface StageSettings {
+  position: StagePosition;
+  /** kotwica w pasku jako ułamek szerokości paska (0–1) */
+  custom_at?: number | null;
+  /** kotwica okna pływającego (px CSS względem obszaru roboczego monitora) */
+  floating_at?: { x: number; y: number } | null;
+  monitor: string;
+  background: StageBackground;
+  size: number;
+  gap: number;
+  padding: number;
+  align: StageAlign;
+  order: StageOrder;
+  show: { progress: boolean; limits: boolean; badge: boolean };
 }
 export type Language = 'auto' | 'pl' | 'en';
 /** `lang`: język tekstów z Rusta (ustawienie albo język Windows), dla `auto` w UI. */

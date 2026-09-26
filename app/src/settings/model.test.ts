@@ -11,6 +11,14 @@ describe('settings model', () => {
     const s = defaultAppChoice([row('claude_code', true), row('codex', false), row('agent_router', true)], defaultSettings());
     expect(s.apps).toEqual({ claude_code: true, codex: false, agent_router: true });
   });
+  it('stage and update defaults mirror Settings::default() in the core', () => {
+    const s = defaultSettings();
+    expect(s.updates).toBe('notify');
+    expect(s.stage).toEqual({
+      position: 'right', monitor: 'primary', background: { kind: 'none', radius: 12 },
+      size: 100, gap: 0, padding: 2, align: 'right', order: 'start', show: { progress: true, limits: true, badge: true },
+    });
+  });
   it('asks nothing of the network by default', () => {
     expect(defaultSettings().claude_plan_usage).toBe(false);
   });

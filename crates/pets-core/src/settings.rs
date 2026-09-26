@@ -19,6 +19,11 @@ pub struct Settings {
     /// Język interfejsu: `auto` = polski przy polskim Windows, inaczej angielski.
     #[serde(deserialize_with = "or_default")]
     pub language: Language,
+    /// Aktualizacje z wydań na GitHubie: tylko powiadomienie, instalacja w spokojnym momencie albo wyłączone.
+    #[serde(deserialize_with = "or_default")]
+    pub updates: Updates,
+    /// Okno sceny: pozycja, monitor, tło, rozmiar i układ (karta „Pasek”).
+    pub stage: Stage,
     /// Pola z nowszych wersji, zachowywane przy zapisie.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -87,6 +92,110 @@ fn or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(d: 
 #[serde(rename_all = "snake_case")]
 pub enum PowerSaving { #[default] Auto, Always, Never }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Updates { #[default] Notify, Auto, Off }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Position { #[default] Right, Left, Custom, Floating }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BgKind { #[default] None, Glass, Solid }
+
+/// Kotwica okna: po której stronie stoją zwierzaki i w którą stronę okno rośnie.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Align { Left, Center, #[default] Right }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Order { #[default] Start, Attention, Agent }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct Background {
+    #[serde(deserialize_with = "or_default")]
+    pub kind: BgKind,
+    /// `#RRGGBB`; brak przy szkle = odcień według jasności paska
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    pub color: Option<String>,
+    /// 0–100; brak = domyślna dla rodzaju (szkło 12, pełny kolor 90)
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    pub opacity: Option<u8>,
+    pub radius: u8,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(default)]
+pub struct Show { pub progress: bool, pub limits: bool, pub badge: bool }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct Point { pub x: f64, pub y: f64 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct Stage {
+    #[serde(deserialize_with = "or_default")]
+    pub position: Position,
+    /// kotwica w pasku jako ułamek jego szerokości (0–1)
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    pub custom_at: Option<f64>,
+    /// kotwica okna pływającego w pikselach CSS względem obszaru roboczego monitora
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    pub floating_at: Option<Point>,
+    /// `primary` albo nazwa urządzenia (`\\.\DISPLAY2`)
+    pub monitor: String,
+    pub background: Background,
+    /// % rozmiaru zwierzaków: 70–300, w pasku efektywnie najwyżej `SIZE_TASKBAR_MAX`
+    pub size: u16,
+    pub gap: u8,
+    pub padding: u8,
+    #[serde(deserialize_with = "or_default")]
+    pub align: Align,
+    #[serde(deserialize_with = "or_default")]
+    pub order: Order,
+    pub show: Show,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+pub const SIZE: (u16, u16) = (70, 300);
+pub const SIZE_TASKBAR_MAX: u16 = 120;
+pub const PRIMARY: &str = "primary";
+
+impl Default for Background { fn default() -> Self { Background { kind: BgKind::None, color: None, opacity: None, radius: 12 } } }
+impl Default for Show { fn default() -> Self { Show { progress: true, limits: true, badge: true } } }
+impl Default for Stage {
+    fn default() -> Self {
+        Stage {
+            position: Position::Right, custom_at: None, floating_at: None, monitor: PRIMARY.into(),
+            background: Background::default(), size: 100, gap: 0, padding: 2, align: Align::Right,
+            order: Order::Start, show: Show::default(), extra: serde_json::Map::new(),
+        }
+    }
+}
+
+fn is_hex_color(c: &str) -> bool { c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|h| h.is_ascii_hexdigit()) }
+
+impl Stage {
+    /// Wartości w zakresach karty „Pasek”; zły kolor znika, pusty monitor to główny.
+    pub fn clamped(&self) -> Stage {
+        let mut s = self.clone();
+        s.size = s.size.clamp(SIZE.0, SIZE.1);
+        s.gap = s.gap.min(30);
+        s.padding = s.padding.min(24);
+        s.background.radius = s.background.radius.min(24);
+        s.background.opacity = s.background.opacity.map(|o| o.min(100));
+        s.background.color = s.background.color.filter(|c| is_hex_color(c));
+        s.custom_at = s.custom_at.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 1.0));
+        s.floating_at = s.floating_at.filter(|p| p.x.is_finite() && p.y.is_finite());
+        if s.monitor.trim().is_empty() { s.monitor = PRIMARY.into(); }
+        s
+    }
+}
+
 impl Default for Apps { fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true } } }
 impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
 impl Default for Pets {
@@ -98,7 +207,8 @@ impl Default for Settings {
         Settings {
             version: 1, apps: Apps::default(), claude_statusline: false, claude_plan_usage: false,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
-            autostart: true, language: Language::Auto, extra: serde_json::Map::new(),
+            autostart: true, language: Language::Auto, updates: Updates::Notify, stage: Stage::default(),
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -118,16 +228,17 @@ pub fn load(path: &Path) -> Loaded {
         Err(e) => return Loaded { settings: Settings::default(), first_run: false, error: Some(e.to_string()) },
     };
     match serde_json::from_slice::<Settings>(&bytes) {
-        Ok(s) => Loaded { settings: s, first_run: false, error: None },
+        Ok(mut s) => { s.stage = s.stage.clamped(); Loaded { settings: s, first_run: false, error: None } }
         Err(e) => Loaded { settings: Settings::default(), first_run: false,
             error: Some(format!("{}: {e}", path.display())) },
     }
 }
 
-/// Zapis atomowy (plik tymczasowy, potem `rename`); limit widocznych zwierzaków przycięty do 1–8.
+/// Zapis atomowy (plik tymczasowy, potem `rename`); limit widocznych zwierzaków przycięty do 1–8, scena do zakresów karty.
 pub fn save(path: &Path, s: &Settings) -> std::io::Result<()> {
     let mut s = s.clone();
     s.pets.max_visible = s.pets.max_visible.clamp(MAX_VISIBLE.0, MAX_VISIBLE.1);
+    s.stage = s.stage.clamped();
     if let Some(dir) = path.parent() { std::fs::create_dir_all(dir)?; }
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_vec_pretty(&s)?)?;
@@ -277,5 +388,65 @@ mod tests {
         let l = load_str("{bad");
         let e = l.error.unwrap();
         assert!(e.contains("settings.json") && !e.contains("uszkodzony"), "{e}");
+    }
+
+    #[test]
+    fn a_0_6_file_gets_todays_stage_and_notify_updates() {
+        let l = load_str(r#"{"version":1,"pets":{"style":"pixel","max_visible":4}}"#);
+        assert!(l.error.is_none());
+        let st = &l.settings.stage;
+        assert_eq!(l.settings.updates, Updates::Notify);
+        assert_eq!(*st, Stage::default());
+        assert_eq!((st.position, st.size, st.gap, st.padding, st.align, st.order), (Position::Right, 100, 0, 2, Align::Right, Order::Start));
+        assert_eq!(st.monitor, "primary");
+        assert_eq!((st.background.kind, st.background.radius, st.background.color.clone(), st.background.opacity), (BgKind::None, 12, None, None));
+        assert!(st.show.progress && st.show.limits && st.show.badge);
+        assert!(st.custom_at.is_none() && st.floating_at.is_none());
+    }
+
+    #[test]
+    fn unknown_stage_values_fall_back_field_by_field() {
+        let l = load_str(r#"{"version":1,"updates":"weekly","stage":{"position":"top","align":"diagonal","order":"random","size":110,"background":{"kind":"blur","radius":6}}}"#);
+        assert!(l.error.is_none(), "{:?}", l.error);
+        let st = &l.settings.stage;
+        assert_eq!(l.settings.updates, Updates::Notify);
+        assert_eq!((st.position, st.align, st.order, st.size), (Position::Right, Align::Right, Order::Start, 110));
+        assert_eq!((st.background.kind, st.background.radius), (BgKind::None, 6));
+    }
+
+    #[test]
+    fn save_clamps_stage_values() {
+        let (_d, p) = tmp();
+        let mut s = Settings::default();
+        s.stage.size = 999;
+        s.stage.gap = 99;
+        s.stage.padding = 99;
+        s.stage.background.radius = 99;
+        s.stage.background.opacity = Some(250);
+        s.stage.background.color = Some("red".into());
+        s.stage.custom_at = Some(1.7);
+        s.stage.monitor = String::new();
+        save(&p, &s).unwrap();
+        let st = load(&p).settings.stage;
+        assert_eq!((st.size, st.gap, st.padding, st.background.radius, st.background.opacity), (300, 30, 24, 24, Some(100)));
+        assert_eq!((st.background.color, st.custom_at, st.monitor.as_str()), (None, Some(1.0), "primary"));
+        let mut low = Stage::default();
+        low.size = 10;
+        low.custom_at = Some(-0.5);
+        low.background.color = Some("#A1b2C3".into());
+        let c = low.clamped();
+        assert_eq!((c.size, c.custom_at, c.background.color), (70, Some(0.0), Some("#A1b2C3".into())));
+    }
+
+    #[test]
+    fn unknown_stage_fields_survive_a_save() {
+        let (_d, p) = tmp();
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, r#"{"version":1,"stage":{"gap":4,"future":1}}"#).unwrap();
+        let s = load(&p).settings;
+        assert_eq!(s.stage.gap, 4);
+        save(&p, &s).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
+        assert_eq!((v["stage"]["future"].clone(), v["stage"]["gap"].clone(), v["updates"].clone()), (serde_json::json!(1), serde_json::json!(4), serde_json::json!("notify")));
     }
 }

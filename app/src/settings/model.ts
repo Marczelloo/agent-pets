@@ -1,4 +1,4 @@
-import { defaultPets } from '../look';
+import { defaultPets, defaultStage } from '../look';
 import { formatAgo } from '../tooltip/text';
 import type { AppId, AppRow, Diagnostics, Settings } from '../types';
 import { t } from '../i18n';
@@ -16,7 +16,7 @@ export function defaultSettings(): Settings {
   return {
     version: 1, apps: { claude_code: true, codex: true, agent_router: true }, claude_statusline: false, claude_plan_usage: false,
     notifications: { needs_you: true, done: true, limits: true }, pets: defaultPets(),
-    power_saving: 'auto', autostart: true, language: 'auto',
+    power_saving: 'auto', autostart: true, language: 'auto', updates: 'notify', stage: defaultStage(),
   };
 }
 

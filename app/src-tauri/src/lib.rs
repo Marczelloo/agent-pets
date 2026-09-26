@@ -8,6 +8,7 @@ mod system;
 mod tooltip;
 mod tray;
 mod usage;
+mod version;
 
 use tauri::{Manager, RunEvent};
 
