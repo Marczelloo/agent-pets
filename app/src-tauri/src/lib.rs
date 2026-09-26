@@ -1,3 +1,4 @@
+mod appstate;
 mod core;
 mod jump;
 mod notify;
@@ -7,6 +8,7 @@ mod shell;
 mod system;
 mod tooltip;
 mod tray;
+mod updater;
 mod usage;
 mod version;
 
@@ -90,6 +92,7 @@ pub fn run() {
     tauri::Builder::default()
         // musi być pierwszą wtyczką: drugie uruchomienie nie startuje drugiego rdzenia, tylko otwiera ustawienia
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| settings::open(app)))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let prefs = settings::SettingsState::load(settings::home());
             let first_run = *prefs.first_run.lock().unwrap();
@@ -109,6 +112,8 @@ pub fn run() {
             core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), apps_rx);
             app.manage(system::Power::default());
             system::watch_power(app.handle().clone());
+            app.manage(updater::Updater::default());
+            updater::start(app.handle().clone());
             if !first_run {
                 sync_autostart(app.state::<settings::SettingsState>().get().autostart);
                 repair_integrations(app.handle());
@@ -120,7 +125,8 @@ pub fn run() {
             snapshot, stage_hello, stage_set_width, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
-            settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get
+            settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,
+            updater::update_status, updater::update_check, updater::update_install
         ])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")

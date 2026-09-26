@@ -9,6 +9,19 @@ use tauri_winrt_notification::Toast;
 
 pub const AUMID: &str = "dev.agentpets.app";
 
+/// Identyfikator toastów ustalony przy starcie wątku powiadomień (AUMID albo zapasowy PowerShella).
+static APP_ID: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
+/// Toast spoza reguł sesji (aktualizacje). `button`: etykieta przycisku z akcją `install`.
+pub fn show_update(_app: &AppHandle, title: &str, body: &str, button: Option<&str>,
+                   on: impl Fn(Option<String>) + Send + Sync + 'static) {
+    let id = APP_ID.get().copied().unwrap_or(AUMID);
+    let mut toast = Toast::new(id).title(title);
+    if !body.is_empty() { toast = toast.text1(body); }
+    if let Some(b) = button { toast = toast.add_button(b, "install"); }
+    let _ = toast.on_activated(move |action| { on(action); Ok(()) }).show();
+}
+
 /// Rejestracja AUMID niezainstalowanej aplikacji (HKCU), żeby toasty były podpisane „Agent Pets”.
 fn register_aumid(icon: Option<&std::path::Path>) -> bool {
     use windows::core::HSTRING;
@@ -46,6 +59,7 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
     std::thread::spawn(move || {
         let icon = app.path().resource_dir().ok().map(|r| r.join("icons").join("128x128.png")).filter(|p| p.is_file());
         let app_id = if register_aumid(icon.as_deref()) { AUMID } else { Toast::POWERSHELL_APP_ID };
+        let _ = APP_ID.set(app_id);
         let mut rules = rules::Rules::new(rules::Settings::default());
         let mut last = Snapshot::default();
         let mut seen_first = false;

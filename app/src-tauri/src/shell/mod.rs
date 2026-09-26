@@ -49,6 +49,9 @@ impl Shell {
     }
 }
 
+/// Gra, film albo prezentacja na pełnym ekranie.
+pub fn fullscreen_app() -> bool { taskbar::fullscreen_app() }
+
 pub fn screen_size() -> (i32, i32) { let r = taskbar::screen_rect(); (r.right, r.bottom) }
 
 /// Prostokąt paska zadań, ekran i skala DPI paska (do ustawienia panelu nad paskiem).

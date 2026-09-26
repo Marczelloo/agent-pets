@@ -16,5 +16,6 @@ pub mod statusline_install;
 pub mod store;
 pub mod tail;
 pub mod time;
+pub mod update_gate;
 pub mod tools;
 pub mod watch;

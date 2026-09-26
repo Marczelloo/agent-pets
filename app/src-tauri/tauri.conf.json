@@ -36,13 +36,29 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["English", "Polish"],
+        "languages": [
+          "English",
+          "Polish"
+        ],
         "displayLanguageSelector": false,
-        "customLanguageFiles": { "Polish": "nsis/Polish.nsh" },
+        "customLanguageFiles": {
+          "Polish": "nsis/Polish.nsh"
+        },
         "installerHooks": "nsis/hooks.nsh",
         "installerIcon": "icons/icon.ico"
       }
     }
   },
-  "mainBinaryName": "agent-pets"
+  "mainBinaryName": "agent-pets",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5N0U0MDg2NEYzMTM2NTIKUldSU05qRlBoa0IrR2YweC8xZWZXa3lFc3o5YURReXN2RE4zbkl4M2hyTjFaRFRxUStzTkNmRWMK",
+      "endpoints": [
+        "https://github.com/Marczelloo/agent-pets/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }
