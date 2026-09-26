@@ -168,7 +168,12 @@ impl Runtime {
             let _ = writeln!(f, "{}", serde_json::to_string(&clean).unwrap_or_default());
         }
         let mut changed = !self.store.apply(&e).is_empty();
-        if let Some(task) = e.data.router_link.clone() { changed |= self.link(&task, &e.session_id, e.ts); }
+        if let Some(task) = e.data.router_link.clone() {
+            // zlecone z subagenta (albo wątku-dziecka Codexa): dzieckiem sesji głównej, bo wnuków nikt nie rysuje
+            let owner = e.data.parent.clone().or_else(|| self.store.session(&e.session_id).and_then(|s| s.parent.clone()))
+                .unwrap_or_else(|| e.session_id.clone());
+            changed |= self.link(&task, &owner, e.ts);
+        }
         changed
     }
 
@@ -498,5 +503,23 @@ mod tests {
         t.data.action = Some("npm test".into());
         rt.apply_external(t);
         rt.store().session("s2").and_then(|s| s.action.clone()).as_deref() == Some("npm test")
+    }
+
+    #[test]
+    fn a_router_task_delegated_inside_a_subagent_belongs_to_the_top_session() {
+        use crate::model::{Event, Kind, Source, SubInfo, SubKind};
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let now = crate::time::now_ms();
+        rt.apply_external(Event::new(Source::Claude, "p1", Kind::Prompt, now));
+        let mut post = Event::new(Source::Claude, "p1/a", Kind::ToolEnd, now);
+        post.data.parent = Some("p1".into());
+        post.data.sub = Some(SubInfo { kind: SubKind::Claude, agent_type: None, description: None, background: false });
+        post.data.router_link = Some("t1".into());
+        rt.apply_external(post);
+        router_status(&h, "th1", "running", now);
+        rt.step(now + 2_000);
+        assert_eq!(rt.store().session("th1").and_then(|s| s.parent.clone()).as_deref(), Some("p1"),
+            "wnuków nikt nie rysuje: zadanie trafia do sesji głównej");
     }
 }
