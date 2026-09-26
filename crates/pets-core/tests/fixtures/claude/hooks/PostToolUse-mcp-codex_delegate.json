@@ -1,0 +1,32 @@
+{
+  "session_id": "3746a003-5ba1-42b3-a085-009646ebcf00",
+  "transcript_path": "C:\\work\\project",
+  "cwd": "C:\\work\\project",
+  "scratchpad_dir": "C:\\work\\project",
+  "prompt_id": "f1d4e4b5-9dc5-4246-b264-8ab912d261bc",
+  "permission_mode": "bypassPermissions",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__agent-router__codex_delegate",
+  "tool_input": {
+    "task": "<redacted>",
+    "workingDirectory": "C:\\work\\project",
+    "model": "luna",
+    "reasoningEffort": "low",
+    "waitSeconds": 45
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"completed\",\n  \"taskId\": \"codex-20260926192354-00172e9\",\n  \"kind\": \"delegation\",\n  \"threadId\": \"01a0df2c-91f4-73e2-8a03-0d072bd166fc\",\n  \"model\": \"gpt-6-luna\",\n  \"reasoningEffort\": \"low\",\n  \"summary\": \"OK\",\n  \"workingDirectory\": \"C:\\\\work\\\\project\"\n}"
+    }
+  ],
+  "tool_use_id": "toolu_01BdUx9kURhp7K14RdV1HTq4",
+  "duration_ms": 7462,
+  "mcp_server": {
+    "name": "agent-router",
+    "source": "user"
+  }
+}
