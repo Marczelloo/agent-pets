@@ -1,7 +1,45 @@
-use serde_json::Value;
+use serde_json::{json, Value};
+use crate::action::{action_text, question_text};
+use crate::claude::hook::find_task_id;
+use crate::i18n::{tr, Lang};
 use crate::model::*;
 use crate::time::rfc3339_ms;
 use crate::tools::from_codex;
+
+/// Wartość tekstowa pola `key:` w kodzie JS (`command: "…"`, `cmd: '…'`), z odkodowanymi znakami ucieczki.
+pub fn js_string_field(src: &str, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        let mut from = 0;
+        while let Some(i) = src[from..].find(key) {
+            let at = from + i;
+            from = at + key.len();
+            let before_ok = src[..at].chars().next_back().map(|c| !(c.is_alphanumeric() || c == '_')).unwrap_or(true);
+            let rest = src[from..].trim_start();
+            let rest = rest.strip_prefix(':').or_else(|| rest.strip_prefix("\":")).map(str::trim_start);
+            let Some(rest) = rest.filter(|_| before_ok) else { continue };
+            let Some(q) = rest.chars().next().filter(|c| matches!(c, '"' | '\'' | '`')) else { continue };
+            let mut out = String::new();
+            let mut chars = rest[1..].chars();
+            while let Some(c) = chars.next() {
+                match c {
+                    '\\' => match chars.next() {
+                        Some('n') => out.push('\n'),
+                        Some('t') => out.push('\t'),
+                        Some(o) => out.push(o),
+                        None => break,
+                    },
+                    c if c == q => return Some(out),
+                    c => out.push(c),
+                }
+            }
+        }
+    }
+    None
+}
+
+const SHELLS: [&str; 4] = ["shell_command", "exec_command", "shell", "local_shell"];
+/// Narzędzia routera, których wynik wiąże zadanie z wątkiem, który je zlecił.
+const ROUTER_LINKING: [&str; 3] = ["codex_delegate", "codex_continue", "codex_review"];
 
 /// Nazwy narzędzi wywoływanych w kodzie JS narzędzia `exec`, np. `tools.exec_command(`.
 pub fn js_tool_calls(src: &str) -> Vec<String> {
@@ -34,8 +72,8 @@ fn limits_from(rl: &Value) -> Vec<Limit> {
     }).collect()
 }
 
-#[derive(Default)]
 pub struct RolloutParser {
+    lang: Lang,
     sid: Option<String>,
     parent: Option<String>,
     skip: bool,
@@ -45,8 +83,16 @@ pub struct RolloutParser {
     waiting: bool,
 }
 
+impl Default for RolloutParser {
+    fn default() -> Self { Self::with_lang(crate::i18n::system()) }
+}
+
 impl RolloutParser {
     pub fn new() -> Self { Self::default() }
+
+    pub fn with_lang(lang: Lang) -> Self {
+        RolloutParser { lang, sid: None, parent: None, skip: false, router: false, titled: false, waiting: false }
+    }
 
     fn ev(&self, kind: Kind, ts: i64) -> Option<Event> {
         let src = if self.router { Source::Router } else { Source::Codex };
@@ -57,8 +103,30 @@ impl RolloutParser {
         self.ev(kind, ts).map(|e| vec![e]).unwrap_or_default()
     }
 
-    fn tool_start(&self, tool: Tool, ts: i64) -> Vec<Event> {
-        self.ev(Kind::ToolStart, ts).map(|mut e| { e.tool = Some(tool); vec![e] }).unwrap_or_default()
+    fn tool_start(&self, tool: Tool, action: Option<String>, ts: i64) -> Vec<Event> {
+        self.ev(Kind::ToolStart, ts).map(|mut e| { e.tool = Some(tool); e.data.action = action; vec![e] }).unwrap_or_default()
+    }
+
+    fn ask(&mut self, name: &str, question: Option<String>, ts: i64) -> Vec<Event> {
+        self.waiting = name == ASYNC_ASK;
+        let question = if name == "request_permissions" { Some(tr(self.lang, "Zgoda?", "Allow?").to_string()) } else { question };
+        self.ev(Kind::NeedsInput, ts).map(|mut e| { e.data.question = question; vec![e] }).unwrap_or_default()
+    }
+
+    /// Tekst akcji narzędzia wywołanego z kodu JS narzędzia `exec`.
+    fn js_action(&self, call: &str, src: &str) -> Option<String> {
+        if SHELLS.contains(&call) {
+            let cmd = js_string_field(src, &["command", "cmd"])?;
+            return action_text("shell_command", &json!({"command": cmd}), self.lang);
+        }
+        if call == "apply_patch" { return action_text("apply_patch", &Value::String(src.replace("\\n", "\n")), self.lang); }
+        None
+    }
+
+    /// Koniec tury dziecka zdejmuje też pozę „deleguje” z rodzica.
+    fn with_parent_end(&self, mut out: Vec<Event>, ts: i64) -> Vec<Event> {
+        if let Some(par) = &self.parent { out.push(Event::new(Source::Codex, par.clone(), Kind::ToolEnd, ts)); }
+        out
     }
 
     pub fn parse_line(&mut self, line: &str) -> Vec<Event> {
@@ -73,16 +141,26 @@ impl RolloutParser {
         if ty == "session_meta" {
             let id = ps("id").or(ps("session_id")).unwrap_or("").to_string();
             if ps("thread_source") == Some("subagent") {
-                self.skip = true;
-                self.parent = p.pointer("/source/subagent/thread_spawn/parent_thread_id").and_then(|v| v.as_str()).map(String::from);
-                return match &self.parent {
-                    Some(par) => {
-                        let mut e = Event::new(Source::Codex, par.clone(), Kind::ToolStart, ts);
-                        e.tool = Some(Tool::Agent);
-                        vec![e]
-                    }
-                    None => vec![],
+                let spawn = p.pointer("/source/subagent/thread_spawn");
+                let sp = |k: &str| spawn.and_then(|s| s.get(k)).and_then(|v| v.as_str()).filter(|v| !v.is_empty()).map(String::from);
+                self.parent = sp("parent_thread_id");
+                let Some(par) = self.parent.clone() else {
+                    // wątki pomocnicze bez rodzica (np. guardian) pomijamy
+                    self.skip = true;
+                    return vec![];
                 };
+                self.sid = Some(id);
+                // nazwa dziecka pochodzi z metadanych; wiadomość od rodzica bywa zaszyfrowana
+                self.titled = true;
+                let sub = SubInfo { kind: SubKind::Codex, agent_type: sp("agent_role"), description: sp("agent_nickname"), background: false };
+                let mut e = self.ev(Kind::SessionStart, ts).unwrap();
+                e.data.cwd = ps("cwd").map(String::from);
+                e.data.parent = Some(par.clone());
+                e.data.title = sub.description.clone().or_else(|| sub.agent_type.clone());
+                e.data.sub = Some(sub);
+                let mut d = Event::new(Source::Codex, par, Kind::ToolStart, ts);
+                d.tool = Some(Tool::Agent);
+                return vec![e, d];
             }
             let originator = ps("originator").unwrap_or("");
             self.router = originator == "agent-router";
@@ -97,12 +175,7 @@ impl RolloutParser {
             return vec![e];
         }
 
-        if self.skip {
-            if ty == "event_msg" && (pt == "task_complete" || pt == "turn_aborted") {
-                if let Some(par) = &self.parent { return vec![Event::new(Source::Codex, par.clone(), Kind::ToolEnd, ts)]; }
-            }
-            return vec![];
-        }
+        if self.skip { return vec![]; }
         if self.sid.is_none() { return vec![]; }
         if self.waiting {
             match (ty, pt) {
@@ -115,7 +188,7 @@ impl RolloutParser {
 
         match (ty, pt) {
             ("event_msg", "task_started") => self.one(ts, Kind::Prompt),
-            ("event_msg", "task_complete") | ("event_msg", "turn_aborted") => self.one(ts, Kind::TurnEnd),
+            ("event_msg", "task_complete") | ("event_msg", "turn_aborted") => self.with_parent_end(self.one(ts, Kind::TurnEnd), ts),
             ("event_msg", "error") | ("event_msg", "stream_error") => self.one(ts, Kind::Error),
             ("event_msg", "token_count") => {
                 let mut e = self.ev(Kind::Meta, ts).unwrap();
@@ -136,19 +209,32 @@ impl RolloutParser {
                     vec![e]
                 }
                 Some("ContextCompaction") => self.one(ts, Kind::Compact),
+                Some("McpToolCall") if p.pointer("/item/server").and_then(|v| v.as_str()) == Some("agent-router")
+                    && p.pointer("/item/tool").and_then(|v| v.as_str()).map(|t| ROUTER_LINKING.contains(&t)).unwrap_or(false) => {
+                    let Some(task) = p.pointer("/item/result").and_then(find_task_id) else { return vec![] };
+                    let mut e = self.ev(Kind::Meta, ts).unwrap();
+                    e.data.router_link = Some(task);
+                    vec![e]
+                }
                 _ => vec![],
             },
             ("compacted", _) => self.one(ts, Kind::Compact),
             ("response_item", "custom_tool_call") => match ps("name") {
-                Some("apply_patch") => self.tool_start(Tool::Edit, ts),
+                Some("apply_patch") => {
+                    let action = action_text("apply_patch", &Value::String(ps("input").unwrap_or("").to_string()), self.lang);
+                    self.tool_start(Tool::Edit, action, ts)
+                }
                 Some("exec") => {
-                    let calls = js_tool_calls(ps("input").unwrap_or(""));
-                    if calls.iter().any(|c| ASK.contains(&c.as_str())) {
-                        self.waiting = calls.iter().any(|c| c == ASYNC_ASK);
-                        return self.one(ts, Kind::NeedsInput);
+                    let src = ps("input").unwrap_or("");
+                    let calls = js_tool_calls(src);
+                    if let Some(ask) = calls.iter().find(|c| ASK.contains(&c.as_str())) {
+                        let name = if calls.iter().any(|c| c == ASYNC_ASK) { ASYNC_ASK } else { ask.as_str() };
+                        let q = js_string_field(src, &["question", "title"])
+                            .and_then(|q| question_text(None, None, Some(&json!({"questions": [{"question": q}]})), self.lang));
+                        return self.ask(name, q, ts);
                     }
-                    match calls.iter().find_map(|c| from_codex(c)) {
-                        Some(t) => self.tool_start(t, ts),
+                    match calls.iter().find_map(|c| from_codex(c).map(|t| (c, t))) {
+                        Some((c, t)) => { let a = self.js_action(c, src); self.tool_start(t, a, ts) }
                         None => vec![],
                     }
                 }
@@ -157,22 +243,26 @@ impl RolloutParser {
             ("response_item", "function_call") => {
                 let name = ps("name").unwrap_or("");
                 let ns = ps("namespace").unwrap_or("");
+                let args: Value = serde_json::from_str(ps("arguments").unwrap_or("{}")).unwrap_or(Value::Null);
                 if ASK.contains(&name) {
-                    self.waiting = name == ASYNC_ASK;
-                    return self.one(ts, Kind::NeedsInput);
+                    let q = question_text(None, None, Some(&args), self.lang);
+                    return self.ask(name, q, ts);
                 }
                 if name == "update_plan" {
-                    let args: Value = serde_json::from_str(ps("arguments").unwrap_or("{}")).unwrap_or(Value::Null);
                     let Some(plan) = args.get("plan").and_then(|v| v.as_array()) else { return vec![] };
                     let done = plan.iter().filter(|s| s.get("status").and_then(|v| v.as_str()) == Some("completed")).count();
                     let mut e = self.ev(Kind::Meta, ts).unwrap();
                     e.data.progress = Some(Progress { done: done as u32, total: plan.len() as u32 });
                     return vec![e];
                 }
-                let tool = if ns.starts_with("mcp__") { Some(Tool::Mcp) } else { from_codex(name) };
-                tool.map(|t| self.tool_start(t, ts)).unwrap_or_default()
+                let (tool, action) = if ns.starts_with("mcp__") {
+                    (Some(Tool::Mcp), action_text(&format!("{ns}__{name}"), &args, self.lang))
+                } else {
+                    (from_codex(name), action_text(name, &args, self.lang))
+                };
+                tool.map(|t| self.tool_start(t, action, ts)).unwrap_or_default()
             }
-            ("response_item", "web_search_call") => self.tool_start(Tool::Web, ts),
+            ("response_item", "web_search_call") => self.tool_start(Tool::Web, None, ts),
             ("response_item", "custom_tool_call_output") | ("response_item", "function_call_output") => self.one(ts, Kind::ToolEnd),
             _ => vec![],
         }
@@ -211,15 +301,32 @@ mod tests {
         assert_eq!((e[0].data.origin, e[0].data.app), (Some(Origin::Cli), Some(App::Terminal)));
     }
 
+    fn child(p: &mut RolloutParser) -> Vec<Event> {
+        let src = json!({"subagent": {"thread_spawn": {"parent_thread_id": "parent1", "depth": 1, "agent_nickname": "Newton", "agent_role": "reviewer"}}});
+        p.parse_line(&meta("Codex Desktop", src, json!("subagent")))
+    }
+
     #[test]
-    fn subagent_is_agent_action_on_parent() {
+    fn a_subagent_thread_is_a_child_of_its_parent_and_the_parent_delegates() {
         let mut p = RolloutParser::new();
-        let src = json!({"subagent": {"thread_spawn": {"parent_thread_id": "parent1", "depth": 1}}});
-        let e = p.parse_line(&meta("Codex Desktop", src, json!("subagent")));
-        assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].tool), ("parent1", Kind::ToolStart, Some(Tool::Agent)));
-        assert!(p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "apply_patch", "input": ""}))).is_empty());
+        let e = child(&mut p);
+        let start = e.iter().find(|e| e.session_id == "t1").unwrap();
+        assert_eq!(start.kind, Kind::SessionStart);
+        assert_eq!(start.data.parent.as_deref(), Some("parent1"));
+        assert_eq!(start.data.sub, Some(SubInfo { kind: SubKind::Codex, agent_type: Some("reviewer".into()), description: Some("Newton".into()), background: false }));
+        assert_eq!(start.data.title.as_deref(), Some("Newton"));
+        let par = e.iter().find(|e| e.session_id == "parent1").unwrap();
+        assert_eq!((par.kind, par.tool), (Kind::ToolStart, Some(Tool::Agent)));
+        let e = p.parse_line(&l("event_msg", json!({"type": "task_started"})));
+        assert_eq!((e[0].session_id.as_str(), e[0].kind), ("t1", Kind::Prompt));
+        let patch = "*** Begin Patch\n*** Update File: src/a.rs\n*** End Patch";
+        let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "apply_patch", "input": patch})));
+        assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.action.as_deref()), ("t1", Kind::ToolStart, Some("Edytuje a.rs")));
+        let um = p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": {"type": "UserMessage", "content": [{"type": "text", "text": "zadanie od rodzica"}]}})));
+        assert!(um.is_empty(), "dziecko ma nazwę z metadanych, nie z wiadomości");
         let e = p.parse_line(&l("event_msg", json!({"type": "task_complete"})));
-        assert_eq!((e[0].session_id.as_str(), e[0].kind), ("parent1", Kind::ToolEnd));
+        let kinds: Vec<(&str, Kind)> = e.iter().map(|e| (e.session_id.as_str(), e.kind)).collect();
+        assert_eq!(kinds, vec![("t1", Kind::TurnEnd), ("parent1", Kind::ToolEnd)]);
     }
 
     #[test]
@@ -336,5 +443,59 @@ mod tests {
             assert!(evs.iter().any(|e| e.kind == Kind::SessionStart), "brak SessionStart w {:?}", f.path());
             assert!(evs.iter().any(|e| e.kind == Kind::Prompt), "brak Prompt w {:?}", f.path());
         }
+    }
+
+    #[test]
+    fn shell_calls_carry_the_command() {
+        let mut p = RolloutParser::new();
+        started(&mut p);
+        let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "shell",
+            "arguments": "{\"command\":[\"bash\",\"-lc\",\"ls -la\"]}"})));
+        assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Bash), Some("ls -la")));
+        let js = "const r = await tools.shell_command({ command: \"cargo test -p \\\"core\\\"\", workdir: \"x\" });";
+        let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "exec", "input": js})));
+        assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Bash), Some("cargo test -p \"core\"")));
+        let js = "await tools.exec_command({cmd: 'git status'})";
+        let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "exec", "input": js})));
+        assert_eq!(e[0].data.action.as_deref(), Some("git status"));
+    }
+
+    #[test]
+    fn patches_name_their_files() {
+        let mut p = RolloutParser::new();
+        started(&mut p);
+        let patch = "*** Begin Patch\n*** Update File: C:\\p\\a.ts\n@@\n*** Add File: b.ts\n+x\n*** End Patch";
+        let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "apply_patch", "input": patch})));
+        assert_eq!(e[0].data.action.as_deref(), Some("Edytuje a.ts +1"));
+        let js = "await tools.apply_patch(\"*** Begin Patch\\n*** Update File: src/x.rs\\n@@\\n*** End Patch\")";
+        let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "exec", "input": js})));
+        assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Edit), Some("Edytuje x.rs")));
+        let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "exec", "input": "await tools.view_image({path: 'a.png'})"})));
+        assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Read), None), "narzędzie bez tekstu");
+    }
+
+    #[test]
+    fn questions_from_codex() {
+        let mut p = RolloutParser::new();
+        started(&mut p);
+        let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "request_user_input",
+            "arguments": "{\"questions\":[{\"title\":\"Który wariant?\"}]}"})));
+        assert_eq!((e[0].kind, e[0].data.question.as_deref()), (Kind::NeedsInput, Some("Pytanie: Który wariant?")));
+        let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "request_permissions", "arguments": "{}"})));
+        assert_eq!((e[0].kind, e[0].data.question.as_deref()), (Kind::NeedsInput, Some("Zgoda?")));
+    }
+
+    #[test]
+    fn a_router_call_from_codex_links_the_task() {
+        let mut p = RolloutParser::new();
+        started(&mut p);
+        let item = json!({"type": "McpToolCall", "server": "agent-router", "tool": "codex_delegate", "arguments": {},
+            "result": {"content": [{"type": "text", "text": "{\"status\":\"running\",\"taskId\":\"codex-1\"}"}]}});
+        let e = p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": item})));
+        assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.router_link.as_deref()), ("t1", Kind::Meta, Some("codex-1")));
+        let other = json!({"type": "McpToolCall", "server": "cua_repl", "tool": "js", "result": {"content": [{"type": "text", "text": "{\"taskId\":\"x\"}"}]}});
+        assert!(p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": other}))).is_empty());
+        let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "codex_task_status", "namespace": "mcp__agent-router", "arguments": "{}"})));
+        assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Mcp), Some("agent-router: codex_task_status")));
     }
 }

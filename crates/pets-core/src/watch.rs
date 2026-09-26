@@ -46,7 +46,7 @@ impl Sources {
         let parser = match kind {
             FileKind::ClaudeTranscript => Parser::Claude(TranscriptParser::new()),
             FileKind::ClaudeSubagent => Parser::Subagent(SubagentParser::new(path, self.lang)),
-            FileKind::CodexRollout => Parser::Codex(RolloutParser::new()),
+            FileKind::CodexRollout => Parser::Codex(RolloutParser::with_lang(self.lang)),
         };
         self.tails.insert(path.to_path_buf(), (tail, parser));
         true
