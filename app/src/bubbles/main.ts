@@ -43,7 +43,7 @@ function refresh(): void {
   const keys = new Set(wants.map(keyOf));
   for (const w of wants) {
     const k = keyOf(w), l = live.get(k);
-    if (l) { l.want = w; l.gone = null; } else live.set(k, { want: w, box: measureBubble(ctx, w.text, w.look, at.zoom), born: now, gone: null });
+    if (l) { l.want = w; l.gone = null; } else live.set(k, { want: w, box: measureBubble(ctx, w.text, w.look, at.zoom, devicePixelRatio || 1), born: now, gone: null });
   }
   for (const [k, l] of live) if (!keys.has(k) && l.gone == null) l.gone = on ? now : now - FADE_MS;
   void paint();

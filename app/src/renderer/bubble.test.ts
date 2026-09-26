@@ -77,4 +77,15 @@ describe('speech bubbles', () => {
     const xs = log.filter(l => l.startsWith('lineTo(')).map(l => Number(l.slice(7, l.indexOf(','))));
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(100);
   });
+  it('a pixel bubble is measured at the screen scale it is drawn at', () => {
+    for (const dpr of [1, 1.25, 1.5, 2]) {
+      const { ctx, log } = measuring();
+      const box = measureBubble(ctx, 'Zgoda na Bash? npm test', look('pixel'), 1, dpr);
+      drawBubble(ctx, 0, 0, 'Zgoda na Bash? npm test', 'question', look('pixel'), 20, 1, dpr);
+      const rects = log.filter(l => l.startsWith('fillRect(')).map(l => l.slice(9, -1).split(',').map(Number));
+      const right = Math.max(...rects.map(([x, , w]) => x + w)), bottom = Math.max(...rects.map(([, y, , h]) => y + h));
+      expect(Math.abs(box.w - right), `w @${dpr}`).toBeLessThan(0.51);
+      expect(Math.abs(box.h - bottom), `h @${dpr}`).toBeLessThan(0.51);
+    }
+  });
 });

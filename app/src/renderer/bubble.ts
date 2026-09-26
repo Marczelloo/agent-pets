@@ -53,12 +53,21 @@ function fit(text: string, max: number, width: (s: string) => number): string {
   return chars.join('') + '…';
 }
 
-export function measureBubble(ctx: CanvasRenderingContext2D, text: string, look: Look, zoom: number): BubbleBox {
+/** Pikselowy dymek w całych komórkach ramki: to samo dla pomiaru i rysowania (przy skali ekranu `dpr`). */
+function pixelGeom(text: string, zoom: number, dpr: number) {
+  const { g, t } = pixelCells(zoom, dpr);
+  const pad = 3 * g, maxText = BUBBLE_MAX_W * zoom - 2 * pad;
+  const shown = fit(text, maxText, s => textWidth(s) * t);
+  const cw = Math.max(6, Math.ceil((textWidth(shown) * t + 2 * pad) / g)), chh = Math.ceil((FONT_ROWS * t + 2 * pad) / g);
+  return { g, t, shown, cw, chh };
+}
+
+/** `dpr`: skala ekranu; pikselowy dymek ma inną szerokość przy 125 % czy 150 %, a układ musi znać tę prawdziwą. */
+export function measureBubble(ctx: CanvasRenderingContext2D, text: string, look: Look, zoom: number, dpr = 1): BubbleBox {
   if (look.style === 'pixel') {
-    const { g, t } = pixelCells(zoom, 1);
-    const pad = 3 * g, maxText = BUBBLE_MAX_W * zoom - 2 * pad;
-    const tw = textWidth(fit(text, maxText, s => textWidth(s) * t)) * t;
-    return { w: Math.min(BUBBLE_MAX_W * zoom, tw + 2 * pad), h: FONT_ROWS * t + 2 * pad + 3 * g };
+    // ramka na `chh` komórek i dwa rzędy ogonka pod nią
+    const { g, cw, chh } = pixelGeom(text, zoom, dpr);
+    return { w: cw * g, h: (chh + 2) * g };
   }
   ctx.save();
   ctx.font = font(paint(look, 'action', ACCENT.clawd), zoom);
@@ -131,12 +140,8 @@ export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, 
 
 /** Pikselowy dymek: ramka o grubości jednej komórki `gridPx`, ścięte rogi, schodkowy ogonek, tekst z `pixelfont`. */
 function drawPixelBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, p: Paint, tailX: number, zoom: number, dpr: number): void {
-  const { g, t } = pixelCells(zoom, dpr);
+  const { g, t, shown, cw, chh } = pixelGeom(text, zoom, dpr);
   const snap = (v: number) => Math.round(v * dpr) / dpr;
-  const pad = 3 * g, maxText = BUBBLE_MAX_W * zoom - 2 * pad;
-  const shown = fit(text, maxText, s => textWidth(s) * t);
-  // szerokość i wysokość w całych komórkach ramki
-  const cw = Math.max(6, Math.ceil((textWidth(shown) * t + 2 * pad) / g)), chh = Math.ceil((FONT_ROWS * t + 2 * pad) / g);
   const X = snap(x), Y = snap(y);
   const rect = (cx: number, cy: number, w: number, h: number) => ctx.fillRect(X + cx * g, Y + cy * g, w * g, h * g);
   ctx.save();
