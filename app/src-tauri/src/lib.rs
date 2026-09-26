@@ -47,9 +47,30 @@ pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
     jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())), lang)
 }
 
+/// Wysyła polecenie ukrywania do wątku rdzenia i czeka (do 2 s) na listę ukrytych id.
+fn ask_core(app: &tauri::AppHandle, make: impl FnOnce(std::sync::mpsc::Sender<Vec<String>>) -> core::CoreMsg) -> Vec<String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if app.state::<core::Control>().0.lock().unwrap().send(make(tx)).is_err() { return Vec::new(); }
+    rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap_or_default()
+}
+
+/// Ukrywa sesje (✕ w panelu, „Usuń z paska”); wracają przy nowej aktywności.
+#[tauri::command]
+fn session_dismiss(app: tauri::AppHandle, ids: Vec<String>) -> Vec<String> { ask_core(&app, |tx| core::CoreMsg::Dismiss(ids, tx)) }
+
+/// „Usuń nieaktywne”: ukrywa sesje bezczynne, gotowe, uśpione i zakończone.
+#[tauri::command]
+fn sessions_dismiss_inactive(app: tauri::AppHandle) -> Vec<String> { ask_core(&app, core::CoreMsg::DismissInactive) }
+
+/// „Cofnij” po ukryciu.
+#[tauri::command]
+fn session_undismiss(app: tauri::AppHandle, ids: Vec<String>) {
+    let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Undismiss(ids));
+}
+
 /// Skutki zmiany ustawień. Powiadomienia i zgoda na limity Anthropic są czytane na bieżąco w swoich wątkach.
 pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings, new: &pets_core::settings::Settings) {
-    if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(new.apps); }
+    if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Apps(new.apps)); }
     if old.autostart != new.autostart { sync_autostart(new.autostart); }
     if old.power_saving != new.power_saving { system::refresh_power(app); }
     if old.language != new.language {
@@ -107,9 +128,9 @@ pub fn run() {
             panel::build(app.handle())?;
             tray::build(app.handle(), app.state::<settings::SettingsState>().lang())?;
             let snaps = notify::start(app.handle().clone());
-            let (apps_tx, apps_rx) = std::sync::mpsc::channel();
-            app.manage(core::Control(std::sync::Mutex::new(apps_tx)));
-            core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), apps_rx);
+            let (core_tx, core_rx) = std::sync::mpsc::channel();
+            app.manage(core::Control(std::sync::Mutex::new(core_tx)));
+            core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), core_rx);
             app.manage(system::Power::default());
             system::watch_power(app.handle().clone());
             app.manage(updater::Updater::default());
@@ -126,7 +147,8 @@ pub fn run() {
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,
-            updater::update_status, updater::update_check, updater::update_install
+            updater::update_status, updater::update_check, updater::update_install,
+            session_dismiss, sessions_dismiss_inactive, session_undismiss
         ])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")

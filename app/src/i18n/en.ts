@@ -56,6 +56,10 @@ export const en: Dict = {
     context: 'Context',
     open: 'Open',
     copiedCommand: id => `Command copied: claude --resume ${id}`,
+    remove: title => `Remove from taskbar: ${title}`,
+    removeInactive: 'Remove inactive',
+    removed: n => (n === 1 ? 'Removed' : `Removed ${n}`),
+    undo: 'Undo',
     update: {
       available: v => `Version ${v} is available`,
       downloading: v => `Downloading version ${v}…`,

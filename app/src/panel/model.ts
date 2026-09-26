@@ -11,6 +11,10 @@ export function panelSessions(sessions: Session[]): Session[] {
     Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
 }
 
+const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
+/** Jak `dismiss::inactive` w rdzeniu: to zdejmuje „Usuń nieaktywne”. */
+export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => INACTIVE.has(s.state));
+
 export interface UpdateBar { text: string; action: string | null; pct: number | null }
 
 /** Pasek nad listą sesji: tylko gdy jest coś do zrobienia z aktualizacją (albo błąd). */

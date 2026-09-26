@@ -63,6 +63,10 @@ export const pl = {
     context: 'Kontekst',
     open: 'Przejdź',
     copiedCommand: (id: string) => `Skopiowano komendę: claude --resume ${id}`,
+    remove: (title: string) => `Usuń z paska: ${title}`,
+    removeInactive: 'Usuń nieaktywne',
+    removed: (n: number) => (n === 1 ? 'Usunięto' : `Usunięto ${n}`),
+    undo: 'Cofnij',
     update: {
       available: (v: string) => `Dostępna wersja ${v}`,
       downloading: (v: string) => `Pobieram wersję ${v}…`,

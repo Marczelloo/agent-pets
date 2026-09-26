@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
+import { contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: 'C:\\work\\' + id, state, tool: null, progress: null, context: null,
@@ -31,5 +31,9 @@ describe('panel model', () => {
     expect(contextText(x)).toBe('25%');
     expect(progressText({ ...x, progress: { done: 0, total: 0 } })).toBeNull();
     expect(contextText({ ...x, context: { used: 1, max: 0 } })).toBeNull();
+  });
+  it('inactive means idle, done, asleep or ended, like the core', () => {
+    expect(hasInactive([s('a', 'working', 0), s('b', 'needs_you', 0), s('c', 'error', 0)])).toBe(false);
+    for (const st of ['idle', 'done', 'sleep', 'ended'] as State[]) expect(hasInactive([s('a', st, 0)])).toBe(true);
   });
 });

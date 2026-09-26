@@ -56,6 +56,14 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 button{font:inherit;font-size:12px;padding:5px 12px;border-radius:4px;border:1px solid var(--btnb);background:var(--btn);color:var(--txt);cursor:pointer}
 button:hover{background:var(--btnh)}
 button:focus-visible{outline:2px solid var(--txt);outline-offset:1px}
+.actions{display:flex;align-items:center;gap:4px}
+.remove{padding:5px 8px;opacity:0;transition:opacity .15s}
+.session:hover .remove,.session:focus-within .remove{opacity:1}
+.tools{display:flex;justify-content:flex-end;margin:0 0 2px}
+button.quiet{border-color:transparent;background:transparent;color:var(--mut)}
+button.quiet:hover:not(:disabled){background:var(--btnh);color:var(--txt)}
+button:disabled{opacity:.45;cursor:default}
+.undo{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 10px 6px 16px;border-top:1px solid var(--line);font-size:12px}
 .status{padding:8px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--mut);overflow-wrap:anywhere}
 </style>
 </head>

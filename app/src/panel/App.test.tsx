@@ -46,4 +46,21 @@ describe('PanelView', () => {
     expect(view({ state: 'ready', version: '0.7.1' })).toContain('Zainstaluj teraz');
     for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update');
   });
+  it('each session has a labelled remove button; "remove inactive" is off when nothing is inactive', () => {
+    const view = (sessions: Session[]) => renderToString(<PanelView snap={{ sessions, limits: [], now: 0 }} nowMs={0}
+      status={null} focusId={null} onJump={() => {}} onDismiss={() => {}} onDismissInactive={() => {}} />);
+    const busy = view([{ ...sess, title: 'Refaktor', state: 'working' }]);
+    expect(busy).toContain('aria-label="Usuń z paska: Refaktor"');
+    expect(busy).toMatch(/disabled=""[^>]*>Usuń nieaktywne/);
+    const idle = view([{ ...sess, state: 'idle' }]);
+    expect(idle).not.toMatch(/disabled=""[^>]*>Usuń nieaktywne/);
+  });
+  it('after removing, offers undo with the count', () => {
+    const view = (n: number) => renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0}
+      status={null} focusId={null} onJump={() => {}} undo={{ ids: Array.from({ length: n }, (_, i) => `s${i}`) }} onUndo={() => {}} />);
+    expect(view(1)).toContain('Usunięto');
+    expect(view(1)).toContain('Cofnij');
+    expect(view(3)).toContain('Usunięto 3');
+    expect(view(0)).not.toContain('Cofnij');
+  });
 });

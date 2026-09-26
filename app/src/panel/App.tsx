@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, petTooltip } from '../tooltip/text';
 import type { Pets, RouterTask, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { contextText, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
+import { contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
@@ -22,10 +22,15 @@ interface ViewProps {
   pets?: Pets;
   update?: UpdateStatus;
   onInstall?: () => void;
+  onDismiss?: (ids: string[]) => void;
+  onDismissInactive?: () => void;
+  /** ostatnio ukryte sesje, do „Cofnij” (znika po 6 s) */
+  undo?: { ids: string[] } | null;
+  onUndo?: () => void;
 }
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets(), update, onInstall }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
   return (
@@ -54,6 +59,9 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
         ))}
       </section>
       <section className="sessions" aria-label={t().panel.sessions}>
+        {onDismissInactive && sessions.length > 0 && <div className="tools">
+          <button type="button" className="quiet" disabled={!hasInactive(sessions)} onClick={onDismissInactive}>{t().panel.removeInactive}</button>
+        </div>}
         {sessions.length === 0 && <p className="empty">{t().panel.noSessions}</p>}
         {sessions.map(s => (
           <article key={s.id} id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
@@ -70,10 +78,18 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 <span>{formatAgo(nowMs - s.last_activity)}</span>
               </div>
             </div>
-            <button type="button" onClick={() => onJump(s.id)}>{t().panel.open}</button>
+            <div className="actions">
+              <button type="button" onClick={() => onJump(s.id)}>{t().panel.open}</button>
+              {onDismiss && <button type="button" className="remove" aria-label={t().panel.remove(petTooltip(s, nowMs).title)}
+                title={t().panel.remove(petTooltip(s, nowMs).title)} onClick={() => onDismiss([s.id])}>✕</button>}
+            </div>
           </article>
         ))}
       </section>
+      {undo && undo.ids.length > 0 && <footer className="undo" role="status">
+        <span>{t().panel.removed(undo.ids.length)}</span>
+        {onUndo && <button type="button" onClick={onUndo}>{t().panel.undo}</button>}
+      </footer>}
       {status && <footer className="status" role="status">{status}</footer>}
     </div>
   );
@@ -87,6 +103,13 @@ export default function App() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
+  const [undo, setUndo] = useState<{ ids: string[] } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const removed = (ids: string[]) => {
+    clearTimeout(undoTimer.current);
+    setUndo(ids.length ? { ids } : null);
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  };
   const [, tick] = useState(0);
   const take = useRef((s: Snapshot) => { setSnap(s); setOffset(s.now - Date.now()); });
 
@@ -129,5 +152,8 @@ export default function App() {
 
   return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} pets={pets}
     onSettings={() => void invoke('settings_open')} update={update}
-    onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))} />;
+    onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))}
+    onDismiss={ids => void invoke<string[]>('session_dismiss', { ids }).then(removed)}
+    onDismissInactive={() => void invoke<string[]>('sessions_dismiss_inactive').then(removed)}
+    undo={undo} onUndo={() => { if (undo) void invoke('session_undismiss', { ids: undo.ids }); clearTimeout(undoTimer.current); setUndo(null); }} />;
 }
