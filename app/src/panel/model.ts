@@ -5,15 +5,25 @@ import { t } from '../i18n';
 
 const URGENT = new Set(['needs_you', 'error']);
 
-/** Najpierw sesje, które czekają na Ciebie albo mają błąd, potem od ostatnio aktywnej. */
+/** Najpierw sesje, które czekają na Ciebie albo mają błąd, potem od ostatnio aktywnej. Dzieci są pod rodzicem. */
 export function panelSessions(sessions: Session[]): Session[] {
-  return [...sessions].sort((a, b) =>
+  return sessions.filter(s => !s.parent).sort((a, b) =>
     Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
 }
 
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
-/** Jak `dismiss::inactive` w rdzeniu: to zdejmuje „Usuń nieaktywne”. */
-export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => INACTIVE.has(s.state));
+/** Jak `dismiss::inactive` w rdzeniu: to zdejmuje „Usuń nieaktywne” (dzieci znikają z rodzicem, nie osobno). */
+export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
+
+/** Zakończone dziecko znika z panelu po tym czasie. */
+export const CHILD_DONE_MS = 10_000;
+const FINISHED = new Set(['done', 'error', 'ended']);
+
+/** Dzieci sesji (subagenci, zadania routera) od najstarszego; zakończone jeszcze przez 10 s. */
+export function childrenOf(sessions: Session[], id: string, nowMs: number): Session[] {
+  return sessions.filter(c => c.parent === id && !(FINISHED.has(c.state) && nowMs - c.state_since >= CHILD_DONE_MS))
+    .sort((a, b) => a.started_at - b.started_at || (a.id < b.id ? -1 : 1));
+}
 
 export interface UpdateBar { text: string; action: string | null; pct: number | null }
 

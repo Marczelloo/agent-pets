@@ -16,6 +16,12 @@ const AUTO_COLOR = { glass: '#FFFFFF', solid: '#202020' } as const;
 /** „Przywróć domyślne” w karcie „Pasek”: tylko ustawienia sceny (limit zwierzaków zostaje). */
 export const resetStage = (s: Settings): Settings => ({ ...s, stage: defaultStage() });
 
+/** Przełącznik z sekcji „Dymki i subagenci”. */
+export function withBubbles(s: Settings, key: 'questions' | 'actions' | 'minis', on: boolean): Settings {
+  const st = s.stage ?? defaultStage();
+  return key === 'minis' ? { ...s, stage: { ...st, minis: on } } : { ...s, stage: { ...st, bubbles: { ...st.bubbles, [key]: on } } };
+}
+
 function Segmented<T extends string>({ label, value, options, names, disabled, onPick }: {
   label: string; value: T; options: T[]; names: Record<T, string>; disabled?: boolean; onPick: (v: T) => void;
 }) {
@@ -146,6 +152,13 @@ export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove
         <Toggle label={x.progress} checked={st.show.progress} onChange={on => set({ show: { ...st.show, progress: on } })}>{x.progressDesc}</Toggle>
         <Toggle label={x.limits} checked={st.show.limits} onChange={on => set({ show: { ...st.show, limits: on } })}>{x.limitsDesc}</Toggle>
         <Toggle label={x.badge} checked={st.show.badge} onChange={on => set({ show: { ...st.show, badge: on } })}>{x.badgeDesc}</Toggle>
+      </section>
+
+      <h3>{x.bubblesTitle}</h3>
+      <section className="card">
+        <Toggle label={x.bubbleQuestions} checked={st.bubbles.questions} onChange={on => onChange(withBubbles(s, 'questions', on))}>{x.bubbleQuestionsDesc}</Toggle>
+        <Toggle label={x.bubbleActions} checked={st.bubbles.actions} onChange={on => onChange(withBubbles(s, 'actions', on))}>{x.bubbleActionsDesc}</Toggle>
+        <Toggle label={x.minis} checked={st.minis} onChange={on => onChange(withBubbles(s, 'minis', on))}>{x.minisDesc}</Toggle>
       </section>
       <button type="button" className="reset" onClick={() => onChange(resetStage(s))}>{x.reset}</button>
     </>

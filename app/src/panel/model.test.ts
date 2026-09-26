@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
+import { CHILD_DONE_MS, childrenOf, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: 'C:\\work\\' + id, state, tool: null, progress: null, context: null,
@@ -35,5 +35,13 @@ describe('panel model', () => {
   it('inactive means idle, done, asleep or ended, like the core', () => {
     expect(hasInactive([s('a', 'working', 0), s('b', 'needs_you', 0), s('c', 'error', 0)])).toBe(false);
     for (const st of ['idle', 'done', 'sleep', 'ended'] as State[]) expect(hasInactive([s('a', st, 0)])).toBe(true);
+  });
+  it('children stay under their parent, oldest first, and finished ones leave after 10 s', () => {
+    const kid = (id: string, started: number, over: Partial<Session> = {}): Session => ({ ...s(id, 'working', 5), parent: 'p', started_at: started, ...over });
+    const all = [s('p', 'working', 1), kid('b', 20), kid('a', 10), kid('gone', 5, { state: 'done', state_since: 1_000 }), s('q', 'idle', 2)];
+    expect(panelSessions(all).map(x => x.id)).toEqual(['q', 'p']);
+    expect(childrenOf(all, 'p', 1_000 + CHILD_DONE_MS - 1).map(x => x.id)).toEqual(['gone', 'a', 'b']);
+    expect(childrenOf(all, 'p', 1_000 + CHILD_DONE_MS).map(x => x.id)).toEqual(['a', 'b']);
+    expect(hasInactive([s('p', 'working', 1), kid('d', 1, { state: 'done' })]), 'dziecka nie ukrywa się osobno').toBe(false);
   });
 });

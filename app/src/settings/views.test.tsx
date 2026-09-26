@@ -5,7 +5,7 @@ import { PanelView } from '../panel/App';
 import type { AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
 import { defaultSettings } from './model';
 import { SettingsView } from './SettingsView';
-import { resetStage } from './StageTab';
+import { resetStage, withBubbles } from './StageTab';
 import { Wizard } from './Wizard';
 
 const rows: AppRow[] = [
@@ -156,5 +156,31 @@ describe('panel', () => {
     const html = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null}
       onJump={() => {}} onSettings={() => {}} />);
     expect(html).toContain('aria-label="Ustawienia"');
+  });
+  it('taskbar tab: bubbles and subagents section with three switches', () => {
+    const s = defaultSettings();
+    const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="stage" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} monitors={[]} leftFallback={false} onMove={() => {}} />);
+    for (const t of ['Dymki i subagenci', 'Dymki z pytaniami', 'Dymki z akcją', 'Mini-zwierzaki subagentów']) expect(html, t).toContain(t);
+    const off = withBubbles(withBubbles(withBubbles(s, 'questions', false), 'actions', false), 'minis', false);
+    expect([off.stage.bubbles, off.stage.minis]).toEqual([{ questions: false, actions: false }, false]);
+    expect(off.pets).toEqual(s.pets);
+  });
+  it('panel: subagents under their parent with descriptions, router health and a parent-only count', () => {
+    const base = { agent: 'claude' as const, origin: 'cli' as const, cwd: '', tool: 'bash' as const, progress: null, context: null,
+      last_activity: 50_000, state_since: 0, turn_started_at: null, question: null };
+    const parent = { ...base, id: 'p', title: 'Główna', state: 'working' as const, started_at: 0, jump: { pid: null, session_id: 'p', cwd: '', app: null } };
+    const kid = (id: string, kind: 'claude' | 'codex' | 'router', description: string, started: number) => ({
+      ...base, id, title: description, state: 'working' as const, started_at: started, parent: 'p', action: kind === 'claude' ? 'Czyta a.rs' : null,
+      agent: kind === 'claude' ? 'claude' as const : 'codex' as const, origin: kind === 'router' ? 'router' as const : 'cli' as const,
+      sub: { kind, agent_type: null, description, background: false }, jump: { pid: null, session_id: id, cwd: '', app: null },
+      router_task: kind === 'router' ? { task_id: 't', status: 'running', last_activity_at: 100_000, blocked: false, stall_ms: 180_000 } : null });
+    const snap = { sessions: [parent, kid('p/a', 'claude', 'Znajdź testy', 10_000), kid('c1', 'codex', 'Newton', 20_000), kid('th', 'router', 'Policz pliki', 30_000)], limits: [], now: 0 };
+    const html = renderToString(<PanelView snap={snap} nowMs={300_000} status={null} focusId="c1" onJump={() => {}} />);
+    expect(html).toContain('1 sesja');
+    for (const t of ['Znajdź testy', 'Newton', 'Policz pliki', 'Czyta a.rs', 'utknęło']) expect(html, t).toContain(t);
+    expect(html.match(/class="child[ "]/g)?.length).toBe(3);
+    expect(html).toMatch(/class="child[^"]*focus/);
+    expect(html.indexOf('Znajdź testy')).toBeLessThan(html.indexOf('Newton'));
   });
 });

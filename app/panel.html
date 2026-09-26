@@ -42,6 +42,16 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .empty{margin:32px 0;text-align:center;color:var(--mut)}
 .session{display:grid;grid-template-columns:96px 1fr auto;align-items:center;gap:10px;padding:4px 10px 4px 4px;background:var(--card);border:1px solid var(--line);border-radius:6px;transition:background .3s}
 .session.focus{background:var(--focus)}
+.group{display:flex;flex-direction:column;gap:2px}
+.child{display:flex;align-items:center;gap:8px;margin-left:28px;padding:3px 10px;font-size:12px;color:var(--mut);background:var(--card);border:1px solid var(--line);border-radius:6px;transition:background .3s;min-width:0}
+.child.focus{background:var(--focus)}
+.child .dot{flex:none;width:8px;height:8px;border-radius:50%;background:#D97757}
+.child .dot.codex{background:#5DCAA5}
+.child .title{color:var(--txt);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+.child .state{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.child .time{flex:none}
+.child.error .state{color:var(--hot);font-weight:600}
+.child.done,.child.ended{opacity:.6}
 .session.needs_you{box-shadow:inset 3px 0 0 var(--needs)}
 .session.error{box-shadow:inset 3px 0 0 var(--hot)}
 .pet{display:block;width:96px;height:72px}
