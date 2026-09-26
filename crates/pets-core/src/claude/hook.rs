@@ -39,6 +39,11 @@ pub fn transcript_path(env: &HookEnvelope) -> Option<PathBuf> {
 
 /// Zdarzenia z hooka. `last`: ostatnia akcja sesji (narzędzie, tekst) do pytania o zgodę.
 /// Hooki narzędzi wewnątrz subagenta (`agent_id`) należą do dziecka `"{sesja}/{agent_id}"`.
+/// Plik subagenta z `SubagentStop`: czytany przed końcem dziecka, żeby spóźnione linie go nie ożywiły.
+pub fn subagent_transcript_path(env: &HookEnvelope) -> Option<PathBuf> {
+    env.payload.get("agent_transcript_path")?.as_str().filter(|p| !p.is_empty()).map(PathBuf::from)
+}
+
 pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> Vec<Event> {
     let p = &env.payload;
     let Some(sid) = p.get("session_id").and_then(|v| v.as_str()) else { return vec![] };
@@ -415,5 +420,12 @@ mod tests {
             "tool_input": {"questions": [{"question": "Który?"}]}})));
         assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.question.as_deref(), e[0].data.from_child),
             ("s", Kind::NeedsInput, Some("Pytanie: Który?"), true));
+    }
+
+    #[test]
+    fn subagent_stop_names_the_child_transcript() {
+        let p = subagent_transcript_path(&fixture("SubagentStop.json")).unwrap();
+        assert!(p.to_string_lossy().ends_with("agent-ac80bccb9e5a3f6e0.jsonl"));
+        assert!(subagent_transcript_path(&env(json!({"hook_event_name": "Stop"}))).is_none());
     }
 }

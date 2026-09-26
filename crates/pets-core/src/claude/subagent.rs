@@ -14,6 +14,8 @@ pub struct SubagentParser {
     lang: Lang,
     started: bool,
     sent_meta: bool,
+    /// ostatnia linia to odpowiedź (tekst bez narzędzia): (id dziecka, czas linii)
+    answered: Option<(String, i64)>,
 }
 
 /// `agent-<id>.jsonl` → `agent-<id>.meta.json`.
@@ -37,7 +39,7 @@ impl SubagentParser {
     pub fn new(path: &Path, lang: Lang) -> Self {
         let meta_path = meta_path(path);
         let meta = read_meta(&meta_path);
-        SubagentParser { meta_path, meta, lang, started: false, sent_meta: false }
+        SubagentParser { meta_path, meta, lang, started: false, sent_meta: false, answered: None }
     }
 
     fn event(&self, sid: &str, parent: &str, kind: Kind, ts: i64) -> Event {
@@ -79,16 +81,26 @@ impl SubagentParser {
             Some("user") if has("tool_result") => out.push(self.event(&sid, parent, Kind::ToolEnd, ts)),
             _ => {}
         }
+        match s("type") {
+            Some("assistant") if has("text") && !has("tool_use") => self.answered = Some((sid.clone(), ts)),
+            Some("assistant") | Some("user") if !out.is_empty() => self.answered = None,
+            _ => {}
+        }
+        // każde zdarzenie niesie rodzaj dziecka: odtworzone po zniknięciu dalej podlega regułom subagentów
+        let sub = self.meta.clone().unwrap_or(SubInfo { kind: SubKind::Claude, agent_type: None, description: None, background: false });
         if let Some(first) = out.first_mut() {
             if !self.sent_meta {
-                let sub = self.meta.clone().unwrap_or(SubInfo { kind: SubKind::Claude, agent_type: None, description: None, background: false });
                 first.data.title = sub.description.clone().or_else(|| sub.agent_type.clone());
-                first.data.sub = Some(sub);
-                // bez pliku meta wysyłamy puste dane i czekamy, aż się pojawi
+                // bez pliku meta czekamy, aż się pojawi (wtedy przyjdzie opis)
                 self.sent_meta = self.meta.is_some();
             }
         }
+        for e in &mut out { e.data.sub = Some(sub.clone()); }
         out
+    }
+
+    /// Plik kończy się odpowiedzią subagenta: przy odtwarzaniu po starcie to dziecko już skończyło.
+    pub fn finished(&self) -> Option<(String, i64)> { self.answered.clone()
     }
 }
 
@@ -172,5 +184,27 @@ mod tests {
         assert_eq!(evs[0].kind, Kind::SessionStart);
         assert_eq!(evs[0].data.sub.as_ref().map(|s| (s.description.as_deref(), s.background)), Some((Some("List spike names"), true)));
         assert!(evs.iter().any(|e| e.kind == Kind::ToolStart && e.tool == Some(Tool::Bash) && e.data.action.as_deref() == Some("ls")));
+    }
+
+    #[test]
+    fn every_event_knows_it_is_a_claude_subagent() {
+        let d = tempfile::tempdir().unwrap();
+        let mut sp = SubagentParser::new(&with_meta(d.path(), Some(json!({"agentType": "Plan"}))), Lang::Pl);
+        sp.parse_line(&line("user", json!("x"), "2026-09-26T10:00:00.000Z"));
+        let e = sp.parse_line(&line("assistant", json!([{"type": "text", "text": "."}]), "2026-09-26T10:00:01.000Z"));
+        assert_eq!(e[0].data.sub.as_ref().map(|s| s.kind), Some(SubKind::Claude), "odtworzone dziecko nie traci rodzaju");
+    }
+
+    #[test]
+    fn a_file_ending_with_an_answer_is_a_finished_subagent() {
+        let d = tempfile::tempdir().unwrap();
+        let mut sp = SubagentParser::new(&with_meta(d.path(), None), Lang::Pl);
+        sp.parse_line(&line("user", json!("x"), "2026-09-26T10:00:00.000Z"));
+        sp.parse_line(&line("assistant", json!([{"type": "tool_use", "name": "Read", "input": {}}]), "2026-09-26T10:00:01.000Z"));
+        assert_eq!(sp.finished(), None);
+        sp.parse_line(&line("user", json!([{"type": "tool_result", "content": "x"}]), "2026-09-26T10:00:02.000Z"));
+        assert_eq!(sp.finished(), None);
+        sp.parse_line(&line("assistant", json!([{"type": "text", "text": "gotowe"}]), "2026-09-26T10:00:03.000Z"));
+        assert_eq!(sp.finished().map(|(id, _)| id), Some("p1/a1".to_string()));
     }
 }

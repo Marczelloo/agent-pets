@@ -63,6 +63,11 @@ impl Sources {
         }).collect()
     }
 
+    /// Subagenci, których plik kończy się odpowiedzią: (id dziecka, czas ostatniej linii).
+    pub fn finished_subagents(&self) -> Vec<(String, i64)> {
+        self.tails.values().filter_map(|(_, p)| match p { Parser::Subagent(s) => s.finished(), _ => None }).collect()
+    }
+
     pub fn poll_all(&mut self) -> Vec<Event> {
         let paths: Vec<PathBuf> = self.tails.keys().cloned().collect();
         paths.iter().flat_map(|p| self.poll(p)).collect()

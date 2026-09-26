@@ -33,6 +33,9 @@ pub struct Store {
     /// więc minimalny czas stanu liczymy od chwili, w której rdzeń go zobaczył, a nie od czasu w pliku.
     clock: i64,
     shown_at: BTreeMap<String, i64>,
+    /// dzieci, które już odeszły: id → czas końca. Starsze zdarzenia (spóźnione linie pliku, ten sam wpis
+    /// w status.json routera) ich nie ożywiają; nowsze (kolejna tura) tak.
+    tombs: BTreeMap<String, i64>,
 }
 
 /// Sesja cicha dłużej niż próg zakończenia plus tyle to stary wątek (np. dotknięty przez aplikację Codex),
@@ -45,6 +48,8 @@ pub const CHILD_QUIET_MS: i64 = 120_000;
 pub const CHILD_BACKGROUND_QUIET_MS: i64 = 600_000;
 /// Dziecko, które skończyło (albo ma błąd), znika po tym czasie.
 pub const CHILD_DONE_MS: i64 = 10_000;
+/// Jak długo pamiętamy koniec dziecka (router trzyma zakończone zadania 2 h).
+const TOMB_MS: i64 = 3 * 3_600_000;
 
 fn sub_kind(s: &Session) -> Option<SubKind> { s.sub.as_ref().map(|i| i.kind) }
 
@@ -129,7 +134,7 @@ impl Store {
     pub fn new(timing: Timing) -> Self {
         Store { timing, sessions: BTreeMap::new(), pending: BTreeMap::new(),
                 ended_at: BTreeMap::new(), limits: Vec::new(), limits_ts: Vec::new(),
-                clock: i64::MIN, shown_at: BTreeMap::new() }
+                clock: i64::MIN, shown_at: BTreeMap::new(), tombs: BTreeMap::new() }
     }
 
     pub fn session(&self, id: &str) -> Option<&Session> { self.sessions.get(id) }
@@ -192,8 +197,19 @@ impl Store {
             out.push(Change::Limits(self.limits.clone()));
         }
         if e.kind == Kind::Limits { return out; }
-        // koniec dziecka, którego nie znamy (np. `SubagentStop` krótkiego subagenta), nie tworzy zwierzaka
-        if e.kind == Kind::SessionEnd && e.data.parent.is_some() && !self.sessions.contains_key(&e.session_id) { return out; }
+        if !self.sessions.contains_key(&e.session_id) {
+            // koniec dziecka, którego nie znamy (np. `SubagentStop` przed pierwszą linią pliku), nie tworzy zwierzaka
+            if e.kind == Kind::SessionEnd && e.data.parent.is_some() {
+                let end = self.tombs.entry(e.session_id.clone()).or_insert(e.ts);
+                *end = (*end).max(e.ts);
+                return out;
+            }
+            match self.tombs.get(&e.session_id) {
+                Some(end) if e.ts <= *end => return out,
+                Some(_) => { self.tombs.remove(&e.session_id); }
+                None => {}
+            }
+        }
         let parent_gone = e.data.parent.as_ref()
             .map(|p| self.sessions.get(p).map(|x| x.state == State::Ended).unwrap_or(true)).unwrap_or(false);
 
@@ -384,7 +400,12 @@ impl Store {
             }
             if (s.state, s.tool, s.parent.is_some()) != before { out.push(Change::Upsert(s.clone())); }
         }
+        self.tombs.retain(|_, end| now - *end < TOMB_MS);
         for id in removed {
+            if let Some(s) = self.sessions.get(&id).filter(|s| s.parent.is_some()) {
+                let end = self.ended_at.get(&id).copied().unwrap_or(s.last_activity).max(s.last_activity);
+                self.tombs.insert(id.clone(), end);
+            }
             self.sessions.remove(&id);
             self.ended_at.remove(&id);
             self.pending.remove(&id);
@@ -908,5 +929,43 @@ mod tests {
         parent_asks(&mut s, 2_000, true);
         s.tick(200_000, &alive);
         assert_eq!(state_of(&s, "p/a"), Some(State::Working), "czeka na Twoją zgodę, nie jest przerwany");
+    }
+
+    fn router_meta(ts: i64, status: &str) -> Event {
+        let mut m = kid("th", "p", Kind::Meta, ts, sub(SubKind::Router, false));
+        m.data.router_task = Some(RouterTask { task_id: "t1".into(), status: status.into(), last_activity_at: Some(ts), blocked: false, stall_ms: 180_000 });
+        m
+    }
+
+    #[test]
+    fn a_finished_router_task_does_not_come_back_on_the_next_status_rewrite() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&router_meta(1_000, "running"));
+        s.apply(&kid("th", "p", Kind::TurnEnd, 5_000, sub(SubKind::Router, false)));
+        s.tick(15_000, &alive);
+        s.tick(17_000, &alive);
+        assert!(s.session("th").is_none());
+        s.apply(&router_meta(5_000, "completed"));
+        assert!(s.session("th").is_none(), "ten sam, zakończony wpis w status.json");
+        s.apply(&kid("th", "p", Kind::Prompt, 20_000, sub(SubKind::Router, false)));
+        assert_eq!(state_of(&s, "th"), Some(State::Thinking), "codex_continue: nowa tura wraca");
+    }
+
+    #[test]
+    fn late_lines_of_an_ended_subagent_do_not_bring_it_back() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        // SubagentStop przed pierwszą linią pliku: dziecka jeszcze nie ma
+        s.apply(&kid("p/a", "p", Kind::SessionEnd, 9_000, sub(SubKind::Claude, false)));
+        s.apply(&kid("p/a", "p", Kind::SessionStart, 1_000, sub(SubKind::Claude, false)));
+        s.apply(&kid("p/a", "p", Kind::ToolStart, 8_000, sub(SubKind::Claude, false)));
+        assert!(s.session("p/a").is_none());
+        s.apply(&kid("p/b", "p", Kind::Prompt, 1_000, sub(SubKind::Claude, false)));
+        s.apply(&kid("p/b", "p", Kind::SessionEnd, 9_000, sub(SubKind::Claude, false)));
+        s.tick(11_000, &alive);
+        assert!(s.session("p/b").is_none());
+        s.apply(&kid("p/b", "p", Kind::ToolEnd, 8_500, sub(SubKind::Claude, false)));
+        assert!(s.session("p/b").is_none(), "linia z pliku po zniknięciu dziecka");
     }
 }

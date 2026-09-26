@@ -88,6 +88,7 @@ impl Runtime {
         let live_ids = live.iter().map(|s| s.session_id.clone()).collect();
         let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
         for f in keep_for_rehydration(&recent, &live_ids) { rt.poll_file(&f); }
+        rt.end_answered_subagents(crate::time::now_ms());
         if let Some(claude::desktop_usage::Usage::Limits(e)) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
         rt.poll_router(crate::time::now_ms());
         // jeden takt przed pierwszą migawką: stare wątki z niedawno dotkniętych plików znikają, zanim się pokażą
@@ -220,10 +221,22 @@ impl Runtime {
         changed
     }
 
+    /// Po odtworzeniu: subagent, którego plik kończy się odpowiedzią sprzed chwili, już skończył (hooków nie odtwarzamy).
+    fn end_answered_subagents(&mut self, now: i64) {
+        for (id, ts) in self.sources.finished_subagents() {
+            if now - ts < 30_000 || self.store.session(&id).map(|s| s.state == crate::model::State::Ended).unwrap_or(true) { continue; }
+            let mut e = Event::new(crate::model::Source::Claude, id.clone(), crate::model::Kind::SessionEnd, ts);
+            e.data.parent = id.split('/').next().map(String::from);
+            self.apply(e);
+        }
+    }
+
     fn on_hook(&mut self, env: HookEnvelope) -> bool {
         if !self.apps.claude_code { return false; }
         let mut changed = false;
         if let Some(tp) = claude::hook::transcript_path(&env) { changed |= self.poll_file(&tp); }
+        // linie subagenta przed jego `SubagentStop`: spóźnione nie ożywią zakończonego dziecka
+        if let Some(sp) = claude::hook::subagent_transcript_path(&env) { changed |= self.poll_file(&sp); }
         for e in self.hook_state.events(&env, self.lang) { changed |= self.apply(e); }
         if let Some(e) = self.tasks.observe(&env) { changed |= self.apply(e); }
         changed
@@ -521,5 +534,25 @@ mod tests {
         rt.step(now + 2_000);
         assert_eq!(rt.store().session("th1").and_then(|s| s.parent.clone()).as_deref(), Some("p1"),
             "wnuków nikt nie rysuje: zadanie trafia do sesji głównej");
+    }
+
+    #[test]
+    fn a_subagent_that_already_answered_does_not_come_back_after_a_restart() {
+        let h = home();
+        let now = crate::time::now_ms();
+        std::fs::write(h.path().join(".claude/sessions/1.json"), serde_json::json!({"pid": std::process::id(), "sessionId": "p1",
+            "cwd": "C:\\w", "startedAt": now - 300_000, "entrypoint": "cli"}).to_string()).unwrap();
+        let dir = h.path().join(".claude/projects/proj/p1/subagents");
+        std::fs::create_dir_all(&dir).unwrap();
+        let line = |agent: &str, ty: &str, content: serde_json::Value, ago: i64| serde_json::json!({"isSidechain": true, "agentId": agent,
+            "sessionId": "p1", "type": ty, "timestamp": crate::time::rfc3339(now - ago), "message": {"content": content}}).to_string();
+        let running = |agent: &str, ago: i64| line(agent, "assistant", serde_json::json!([{"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}]), ago);
+        std::fs::write(dir.join("agent-a.jsonl"), [line("a", "user", serde_json::json!("x"), 200_000), running("a", 150_000),
+            line("a", "assistant", serde_json::json!([{"type": "text", "text": "gotowe"}]), 120_000)].join("\n") + "\n").unwrap();
+        std::fs::write(dir.join("agent-a.meta.json"), r#"{"agentType":"general-purpose","requestShape":"background"}"#).unwrap();
+        std::fs::write(dir.join("agent-b.jsonl"), [line("b", "user", serde_json::json!("y"), 60_000), running("b", 5_000)].join("\n") + "\n").unwrap();
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        assert!(rt.store().session("p1/a").map(|s| s.state == crate::model::State::Ended).unwrap_or(true), "skończony subagent w tle: {:?}", rt.store().session("p1/a").map(|s| (s.state, s.last_activity, s.parent.clone())));
+        assert_eq!(rt.store().session("p1/b").map(|s| s.state), Some(crate::model::State::Working), "pracujący zostaje");
     }
 }
