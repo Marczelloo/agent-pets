@@ -5,9 +5,9 @@ import type { AppId, Look, MotionId, Pets, StyleId } from '../../types';
 import { appLabel } from '../model';
 import { t } from '../../i18n';
 import { LookGallery } from './LookGallery';
+import { PreviewStage } from './PreviewStage';
 import { PetsCanvas } from './PetsCanvas';
 
-const SCENES = ['edit', 'needs', 'done', 'sleep', 'error'] as const satisfies readonly SceneKey[];
 const APPS: AppId[] = ['claude_code', 'codex', 'agent_router'];
 
 export function MotionSwitch({ motion, onPick }: { motion: MotionId; onPick: (m: MotionId) => void }) {
@@ -25,6 +25,7 @@ export function MotionSwitch({ motion, onPick }: { motion: MotionId; onPick: (m:
 /** Zakładka „Wygląd”: ruch, scena podglądu, galeria stylów, pasek w prawdziwym rozmiarze, nadpisania per agent. */
 export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) => void }) {
   const [scene, setScene] = useState<SceneKey>('edit');
+  const [cycle, setCycle] = useState(false);
   const pick = (app: AppId, field: keyof Look, v: string) =>
     onChange(withOverride(pets, app, field, v === '' ? null : v as StyleId | MotionId));
   return <>
@@ -34,11 +35,7 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
           <span className="desc">{t().look.motionDesc}</span></span>
         <MotionSwitch motion={pets.motion} onPick={m => onChange({ ...pets, motion: m })} />
       </div>
-      <div className="chips" role="radiogroup" aria-label={t().look.previewScene}>
-        {SCENES.map(k => (
-          <button type="button" key={k} role="radio" aria-checked={scene === k} className={scene === k ? 'on' : ''} onClick={() => setScene(k)}>{t().look.scene[k]}</button>
-        ))}
-      </div>
+      <PreviewStage look={{ style: pets.style, motion: pets.motion }} scene={scene} cycle={cycle} onScene={setScene} onCycle={setCycle} />
       <LookGallery style={pets.style} motion={pets.motion} scene={scene} onPick={s => onChange({ ...pets, style: s })} />
       <p className="label strip-label">{t().look.taskbar}</p>
       <PetsCanvas className="taskbar" scene={scene} u={0.3} width={330} height={48}

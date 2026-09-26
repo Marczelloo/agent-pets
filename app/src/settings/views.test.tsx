@@ -77,6 +77,12 @@ describe('SettingsView', () => {
     expect(html).toContain('Tak wygląda w pasku');
     expect(html).toContain('Najwięcej zwierzaków w pasku');
   });
+  it('look tab: a big preview and every animation to pick, grouped, plus all in order', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toContain('class="preview-stage"');
+    for (const name of ['Wszystkie po kolei', 'Praca', 'Stany', 'Komendy', 'Subagent', 'Kompaktuje', 'Pożegnanie', 'Śpi']) expect(html).toContain(name);
+  });
   it('lists the apps with their integration state', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);

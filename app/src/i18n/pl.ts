@@ -1,3 +1,4 @@
+import type { SceneKey } from '../stage/sceneFor';
 import type { AppId, MotionId, StyleId } from '../types';
 
 const noun = (n: number) => n === 1 ? 'sesja'
@@ -181,15 +182,30 @@ export const pl = {
       calm: 'Spokojny',
       anime: 'Anime',
     } as Record<MotionId, string>,
-    scene: {
-      edit: 'Pracuje',
+    sceneName: {
+      thinking: 'Myśli',
+      edit: 'Pisze',
+      bash: 'Komendy',
+      read: 'Czyta',
+      grep: 'Szuka',
+      web: 'Sieć',
+      agent: 'Subagent',
+      mcp: 'Narzędzie MCP',
+      compact: 'Kompaktuje',
       needs: 'Czeka',
-      done: 'Gotowe',
-      sleep: 'Śpi',
+      done: 'Skończył',
       error: 'Błąd',
+      idle: 'Bezczynny',
+      sleep: 'Śpi',
+      bye: 'Pożegnanie',
+    } as Record<SceneKey, string>,
+    allInOrder: 'Wszystkie po kolei',
+    groups: {
+      work: 'Praca',
+      states: 'Stany',
     },
     motionTitle: 'Ruch',
-    motionDesc: 'Anime: szybciej, sprężyście, ze smugami i efektami',
+    motionDesc: 'Anime: szybciej, ostrzej, z efektami i emotkami',
     previewScene: 'Scena podglądu',
     taskbar: 'Tak wygląda w pasku',
     perAgent: 'Osobno dla agentów',
