@@ -9,18 +9,20 @@ function rgb(hex: string | null | undefined): [number, number, number] | null {
 
 const rgba = ([r, g, b]: [number, number, number], a: number) => `rgba(${r},${g},${b},${+a.toFixed(3)})`;
 
+/** Czy tło jest rysowane (widoczność steruje klasą `on`, żeby ramka „Przesuń” działała także bez tła). */
+export const bgVisible = (bg: StageBackground): boolean => bg.kind !== 'none';
+
 /**
  * Styl tła za płótnem sceny. Szkło bez koloru: biały odcień na ciemnym pasku, czarny na jasnym,
  * z ramką 1 px o 1,5× większym kryciu. Pełny kolor bez wybranego koloru: karta w jasności paska.
  * WebView nie widzi okien pod sobą, więc prawdziwego rozmycia nie ma.
  */
 export function bgStyle(bg: StageBackground, lightBar: boolean): Record<string, string> {
-  if (bg.kind === 'none') return { display: 'none' };
+  if (bg.kind === 'none') return { background: 'transparent', border: 'none', borderRadius: `${bg.radius}px` };
   const a = (bg.opacity ?? DEFAULT_OPACITY[bg.kind]) / 100;
   const auto: [number, number, number] = bg.kind === 'glass' ? (lightBar ? [0, 0, 0] : [255, 255, 255]) : (lightBar ? [255, 255, 255] : [32, 32, 32]);
   const c = rgb(bg.color) ?? auto;
   return {
-    display: 'block',
     background: rgba(c, a),
     border: bg.kind === 'glass' ? `1px solid ${rgba(c, Math.min(1, a * 1.5))}` : 'none',
     borderRadius: `${bg.radius}px`,

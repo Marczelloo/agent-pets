@@ -38,6 +38,11 @@ pub fn updated_toast(seen: Option<&str>, current: &str) -> Option<String> {
     seen.filter(|s| *s != current).map(|_| current.to_string())
 }
 
+/// Kłopot z siecią (brak połączenia, przerwane pobieranie): tylko log i kolejna próba według harmonogramu.
+pub fn is_network(e: &tauri_plugin_updater::Error) -> bool {
+    matches!(e, tauri_plugin_updater::Error::Network(_) | tauri_plugin_updater::Error::Reqwest(_))
+}
+
 pub fn percent(done: u64, total: Option<u64>) -> Option<u8> {
     total.filter(|t| *t > 0).map(|t| ((done.min(t) * 100) / t) as u8)
 }
@@ -138,6 +143,12 @@ async fn download(app: &AppHandle) -> bool {
             *u.found.lock().unwrap() = Some((up, Some(bytes)));
             set(app, UpdateStatus::Ready { version });
             true
+        }
+        Err(e) if is_network(&e) => {
+            // przerwane pobieranie to nie zły podpis: wersja dalej czeka, następna próba według harmonogramu
+            eprintln!("agent-pets: pobieranie aktualizacji (sieć): {e}");
+            set(app, UpdateStatus::Available { version: up.version.clone(), notes: up.body.clone() });
+            false
         }
         Err(e) => {
             eprintln!("agent-pets: pobieranie aktualizacji: {e}");
@@ -256,6 +267,13 @@ mod tests {
         assert_eq!(serde_json::to_value(UpdateStatus::Latest).unwrap(), serde_json::json!({ "state": "latest" }));
         let d = serde_json::to_value(UpdateStatus::Downloading { version: "0.7.1".into(), pct: Some(40) }).unwrap();
         assert_eq!(d["pct"], 40);
+    }
+
+    #[test]
+    fn network_trouble_is_not_reported_as_a_bad_signature() {
+        assert!(is_network(&tauri_plugin_updater::Error::Network("timeout".into())));
+        assert!(!is_network(&tauri_plugin_updater::Error::ReleaseNotFound));
+        assert!(!is_network(&tauri_plugin_updater::Error::TargetNotFound("windows-x86_64".into())));
     }
 
     #[test]

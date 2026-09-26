@@ -62,6 +62,27 @@ impl Dragger {
 /// Okno pływające przepuszcza teraz kliknięcia (kursor nad pustym miejscem): wciśnięcia nie są nasze.
 pub static PASSTHROUGH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Kursor „w scenie”: okno widoczne i naprawdę pod kursorem (nie zasłonięte menu ani innym oknem).
+/// Gdy okno pływające przepuszcza kliknięcia, `WindowFromPoint` wskazuje okno pod spodem, więc liczy się
+/// prostokąt; wciśnięcia są wtedy i tak pomijane.
+pub fn inside_at(in_rect: bool, visible: bool, hit_ours: bool, by_rect: bool, passthrough: bool) -> bool {
+    in_rect && visible && (hit_ours || (by_rect && passthrough))
+}
+
+/// Krawędzie Enter/Esc w trybie „Przesuń”, liczone od wejścia w tryb: klawisz wciśnięty już wtedy
+/// (Enter na przycisku „Przesuń”) się nie liczy.
+#[derive(Default)]
+pub struct Keys { prev: Option<(bool, bool)> }
+
+impl Keys {
+    pub fn step(&mut self, active: bool, now: (bool, bool)) -> (bool, bool) {
+        if !active { self.prev = None; return (false, false); }
+        let p = self.prev.unwrap_or(now);
+        self.prev = Some(now);
+        (now.0 && !p.0, now.1 && !p.1)
+    }
+}
+
 /// Tryb wskaźnika ustawiany przez pętlę sceny.
 pub const NORMAL: u8 = 0;
 /// „Przesuń” w pasku: przeciąganie bez progu, Enter/klik obok zatwierdza, Esc cofa, bez kliknięć do UI.
@@ -73,7 +94,7 @@ pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: S
     std::thread::spawn(move || {
         let mut prev = Sample::default();
         let (mut moving, mut floating) = (Dragger::new(0), Dragger::new(4));
-        let mut keys = (false, false);
+        let mut keys = Keys::default();
         loop {
             std::thread::sleep(Duration::from_millis(30));
             let m = mode.load(Ordering::Relaxed);
@@ -82,12 +103,12 @@ pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: S
                 MOVING => {
                     for d in moving.step(&prev, &cur) { let _ = tx.send(super::Cmd::Drag(d)); }
                     if cur.left && !prev.left && !cur.inside { let _ = tx.send(super::Cmd::MoveDone(true)); }
-                    let now = (key_down(0x0D), key_down(0x1B));
-                    if now.0 && !keys.0 { let _ = tx.send(super::Cmd::MoveDone(true)); }
-                    if now.1 && !keys.1 { let _ = tx.send(super::Cmd::MoveDone(false)); }
-                    keys = now;
+                    let (enter, esc) = keys.step(true, (key_down(0x0D), key_down(0x1B)));
+                    if enter { let _ = tx.send(super::Cmd::MoveDone(true)); }
+                    if esc { let _ = tx.send(super::Cmd::MoveDone(false)); }
                 }
                 FLOATING => {
+                    keys.step(false, (false, false));
                     // kliknięcie w puste miejsce trafia do okna pod spodem, nie do sceny
                     let cur = if PASSTHROUGH.load(Ordering::Relaxed) { Sample { left: false, right: false, ..cur } } else { cur };
                     for e in diff(&prev, &cur) {
@@ -100,7 +121,10 @@ pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: S
                         }
                     }
                 }
-                _ => for e in diff(&prev, &cur) { let _ = app.emit("pets://pointer", e); },
+                _ => {
+                    keys.step(false, (false, false));
+                    for e in diff(&prev, &cur) { let _ = app.emit("pets://pointer", e); }
+                }
             }
             prev = cur;
         }
@@ -118,7 +142,7 @@ fn sample(raw: isize, by_rect: bool) -> Option<Sample> {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
     use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VIRTUAL_KEY, VK_LBUTTON, VK_RBUTTON};
-    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect, IsChild, WindowFromPoint};
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect, IsChild, IsWindowVisible, WindowFromPoint};
     if raw == 0 { return None; }
     let h = super::taskbar::hwnd(raw);
     unsafe {
@@ -127,7 +151,9 @@ fn sample(raw: isize, by_rect: bool) -> Option<Sample> {
         let mut p = POINT::default();
         GetCursorPos(&mut p).ok()?;
         let hit = WindowFromPoint(p);
-        let inside = p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom && (by_rect || hit == h || IsChild(h, hit).as_bool());
+        let in_rect = p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom;
+        let inside = inside_at(in_rect, IsWindowVisible(h).as_bool(), hit == h || IsChild(h, hit).as_bool(), by_rect,
+            PASSTHROUGH.load(Ordering::Relaxed));
         let dpi = GetDpiForWindow(h);
         let scale = if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 };
         let down = |vk: VIRTUAL_KEY| (GetAsyncKeyState(vk.0 as i32) as u16 & 0x8000) != 0;
@@ -203,6 +229,26 @@ mod tests {
         let out = Sample { inside: false, ..at(5.0, 5.0) };
         assert!(d.step(&out, &press(out)).is_empty());
         assert!(d.step(&press(out), &press(at(9.0, 5.0))).is_empty());
+    }
+
+    #[test]
+    fn inside_means_visible_and_really_under_the_cursor() {
+        assert!(inside_at(true, true, true, false, false));
+        assert!(!inside_at(true, false, true, true, false), "hidden (fullscreen game): not ours");
+        assert!(!inside_at(true, true, false, true, false), "covered by the menu or another window");
+        assert!(inside_at(true, true, false, true, true), "passing clicks through: tracked by the rectangle, presses masked");
+        assert!(!inside_at(false, true, true, true, true));
+    }
+
+    #[test]
+    fn the_enter_that_started_move_mode_does_not_commit_it() {
+        let mut k = Keys::default();
+        assert_eq!(k.step(false, (true, false)), (false, false));
+        assert_eq!(k.step(true, (true, false)), (false, false), "Enter still held from the button or menu");
+        assert_eq!(k.step(true, (false, false)), (false, false));
+        assert_eq!(k.step(true, (true, false)), (true, false));
+        assert_eq!(k.step(true, (true, true)), (false, true));
+        assert_eq!(k.step(false, (false, false)), (false, false));
     }
 
     #[test]

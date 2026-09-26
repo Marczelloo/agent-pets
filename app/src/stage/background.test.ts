@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { bgStyle } from './background';
+import { bgStyle, bgVisible } from './background';
 
 describe('stage background', () => {
-  it('none draws nothing', () => {
-    expect(bgStyle({ kind: 'none', radius: 12 }, false).display).toBe('none');
+  it('none draws nothing but leaves display to the classes (the Move frame must still show)', () => {
+    const s = bgStyle({ kind: 'none', radius: 12 }, false);
+    expect(s.display).toBeUndefined();
+    expect(s.background).toBe('transparent');
+    expect(s.border).toBe('none');
+    expect(bgVisible({ kind: 'none', radius: 12 })).toBe(false);
+    expect(bgVisible({ kind: 'glass', radius: 12 })).toBe(true);
   });
   it('glass follows the taskbar: white tint on a dark bar, black on a light one, border 1.5x stronger', () => {
     const dark = bgStyle({ kind: 'glass', radius: 10 }, false);
     expect(dark.background).toBe('rgba(255,255,255,0.12)');
+    expect(dark.display).toBeUndefined();
     expect(dark.border).toBe('1px solid rgba(255,255,255,0.18)');
     expect(dark.borderRadius).toBe('10px');
     expect(bgStyle({ kind: 'glass', radius: 10 }, true).background).toBe('rgba(0,0,0,0.12)');

@@ -47,9 +47,10 @@ impl Dismissed {
     }
 
     /// Zostawia sesje nieukryte; sesja aktywna po ukryciu wraca, a jej wpis znika.
+    /// Zamknięcie ukrytej sesji to nie powrót: jej pożegnanie zostaje ukryte, wpis wygaśnie sam.
     pub fn filter(&mut self, sessions: Vec<Session>) -> Vec<Session> {
         sessions.into_iter().filter(|s| match self.at.get(&s.id) {
-            Some(at) if s.last_activity <= *at => false,
+            Some(at) if s.last_activity <= *at || s.state == State::Ended => false,
             Some(_) => { self.at.remove(&s.id); self.dirty = true; true }
             None => true,
         }).collect()
@@ -87,6 +88,14 @@ mod tests {
         let back = d.filter(vec![sess("a", State::NeedsYou, 1_001)]);
         assert_eq!(ids(&back), vec!["a"]);
         assert!(d.is_empty(), "the entry goes away once the session is back");
+    }
+
+    #[test]
+    fn closing_a_hidden_session_does_not_bring_it_back_for_its_goodbye() {
+        let mut d = Dismissed::default();
+        d.dismiss(&["a".into()], 1_000);
+        assert!(d.filter(vec![sess("a", State::Ended, 5_000)]).is_empty());
+        assert!(!d.is_empty(), "kept until it expires");
     }
 
     #[test]

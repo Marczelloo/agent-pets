@@ -124,11 +124,12 @@ pub fn custom_at(m: &Metrics, anchor_x: i32) -> f64 {
 #[derive(serde::Serialize, Clone, Debug, PartialEq)]
 pub struct MonitorInfo { pub id: String, pub primary: bool, pub width: i32, pub height: i32, pub index: u32 }
 
-/// Który monitor: wybrany, jeśli jest podłączony i ma pasek; inaczej główny (ustawienie się nie zmienia).
-pub fn pick(monitors: &[(MonitorInfo, bool)], want: &str) -> usize {
+/// Który monitor: wybrany, jeśli jest podłączony i (w pasku) ma pasek; inaczej główny (ustawienie się nie zmienia).
+/// Okno pływające nie potrzebuje paska, tylko obszaru roboczego.
+pub fn pick(monitors: &[(MonitorInfo, bool)], want: &str, floating: bool) -> usize {
     let primary = monitors.iter().position(|(m, _)| m.primary).unwrap_or(0);
     if want == pets_core::settings::PRIMARY { return primary; }
-    monitors.iter().position(|(m, bar)| *bar && m.id == want).unwrap_or(primary)
+    monitors.iter().position(|(m, bar)| (*bar || floating) && m.id == want).unwrap_or(primary)
 }
 
 /// Odstęp okna pływającego od paska przy pozycji domyślnej (px CSS).
@@ -296,11 +297,12 @@ mod tests {
     #[test]
     fn picks_the_chosen_monitor_or_falls_back_to_the_primary() {
         let ms = [mon(r"\\.\DISPLAY2", false, true), mon(r"\\.\DISPLAY1", true, true), mon(r"\\.\DISPLAY3", false, false)];
-        assert_eq!(pick(&ms, "primary"), 1);
-        assert_eq!(pick(&ms, r"\\.\DISPLAY2"), 0);
-        assert_eq!(pick(&ms, r"\\.\DISPLAY3"), 1, "no taskbar on that monitor");
-        assert_eq!(pick(&ms, r"\\.\DISPLAY9"), 1, "unplugged");
-        assert_eq!(pick(&[], "primary"), 0);
+        assert_eq!(pick(&ms, "primary", false), 1);
+        assert_eq!(pick(&ms, r"\\.\DISPLAY2", false), 0);
+        assert_eq!(pick(&ms, r"\\.\DISPLAY3", false), 1, "no taskbar on that monitor");
+        assert_eq!(pick(&ms, r"\\.\DISPLAY3", true), 2, "the floating window does not need a taskbar");
+        assert_eq!(pick(&ms, r"\\.\DISPLAY9", true), 1, "unplugged");
+        assert_eq!(pick(&[], "primary", false), 0);
     }
 
     // obszar roboczy drugiego monitora ze spike'a S1: na lewo od głównego, przesunięty w pionie

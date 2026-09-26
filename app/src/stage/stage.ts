@@ -7,7 +7,7 @@ import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
 import { geometry, layout, zoomOf, type LayoutOut } from './layout';
 import { Orderer } from './order';
-import { bgStyle } from './background';
+import { bgStyle, bgVisible } from './background';
 import { Hover } from './hover';
 import { passthroughAt } from './hit';
 import { Roster, type Entry } from './roster';
@@ -48,6 +48,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   const paintBg = () => {
     if (!bg) return;
     Object.assign(bg.style, bgStyle(stage.background, !!lay.light));
+    bg.classList.toggle('on', bgVisible(stage.background));
     bg.classList.toggle('floating', lay.mode === 'floating');
   };
   const relayout = () => {
@@ -108,7 +109,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   }
 
   bridge.onSnapshot(take);
-  bridge.onLayout(l => { lay = l; paintBg(); relayout(); });
+  bridge.onLayout(l => { if (l.mode !== lay.mode) through = null; lay = l; paintBg(); relayout(); });
   bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
   bridge.onSettings(s => {

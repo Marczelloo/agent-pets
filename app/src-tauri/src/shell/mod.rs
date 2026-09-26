@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+#[derive(Debug)]
 pub enum Cmd {
     Width(f64),
     Hello,
@@ -51,6 +52,38 @@ pub fn mode_of(st: &Stage) -> Mode {
         (Position::Custom, Some(at)) => Mode::Custom { at, anchor: anchor_of(st.align) },
         _ => Mode::Right,
     }
+}
+
+/// Co zrobić z rodzicem okna sceny. `parent`: `None` przed pierwszym obrotem (stan okna nieznany),
+/// `Some(0)` okno najwyższego poziomu, `Some(pasek)` osadzone.
+#[derive(Debug, PartialEq)]
+pub enum Attach { Embed(isize), Detach, Keep }
+
+pub fn attach(parent: Option<isize>, bar: Option<isize>) -> Attach {
+    match (parent, bar) {
+        (p, Some(b)) if p != Some(b) => Attach::Embed(b),
+        (Some(0), None) => Attach::Keep,
+        (_, None) => Attach::Detach,
+        _ => Attach::Keep,
+    }
+}
+
+/// Okno pływające trzeba ustawić, gdy zmienił się cel albo Windows sam zmienił okno (np. `WM_DPICHANGED`
+/// po przejściu na monitor o innej skali przeskalował je od starego rozmiaru).
+pub fn needs_apply(target: Option<placement::Rect>, last: Option<placement::Rect>, actual: Option<placement::Rect>) -> bool {
+    target != last || (target.is_some() && actual != target)
+}
+
+/// Szerokość i „witaj” obsługujemy zawsze od razu (nie mogą zginąć przy chwilowym braku paska);
+/// reszta czeka w kolejce. Zwraca, czy strona prosi o ponowne wysłanie układu.
+pub fn take_basic(pending: &mut Vec<Cmd>, want: &mut f64) -> bool {
+    let mut hello = false;
+    pending.retain(|c| match c {
+        Cmd::Width(w) => { *want = *w; false }
+        Cmd::Hello => { hello = true; false }
+        _ => true,
+    });
+    hello
 }
 
 /// Trwające „Przesuń”: kotwica w chwili chwycenia (px ekranu) i bieżąca pozycja.
@@ -151,8 +184,9 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
     let uia = taskbar::Uia::new().ok();
     if uia.is_none() { eprintln!("agent-pets: UI Automation niedostępne, scena zostanie mała przy zasobniku"); }
     let (mut want, mut n) = (0.0f64, 1u32);
-    // rodzic okna sceny: uchwyt paska, w którym jest osadzone (0 = okno najwyższego poziomu)
-    let (mut parent, mut embed_failed) = (0isize, false);
+    // rodzic okna sceny: uchwyt paska (0 = okno najwyższego poziomu, None = jeszcze nieustalony)
+    let (mut parent, mut embed_failed): (Option<isize>, bool) = (None, false);
+    let mut pending: Vec<Cmd> = Vec::new();
     let mut last_layout: Option<Layout> = None;
     let mut last_visible: Option<bool> = None;
     let mut moving: Option<Moving> = None;
@@ -163,17 +197,17 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         if (old == pointer::MOVING) != (m == pointer::MOVING) { let _ = app.emit("pets://moving", m == pointer::MOVING); }
     };
     loop {
-        let mut msgs = Vec::new();
         match rx.recv_timeout(Duration::from_millis(1000)) {
-            Ok(c) => { msgs.push(c); msgs.extend(rx.try_iter()); }
+            Ok(c) => { pending.push(c); pending.extend(rx.try_iter()); }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
         }
+        if take_basic(&mut pending, &mut want) { last_layout = None; last_visible = None; }
         let st = app.state::<crate::settings::SettingsState>().get().stage;
         let mons = taskbar::monitors();
-        let chosen = placement::pick(&mons.iter().map(|m| (m.info.clone(), m.bar.is_some())).collect::<Vec<_>>(), &st.monitor);
-        let Some(mon) = mons.get(chosen) else { continue };
         let float = st.position == Position::Floating;
+        let chosen = placement::pick(&mons.iter().map(|m| (m.info.clone(), m.bar.is_some())).collect::<Vec<_>>(), &st.monitor, float);
+        let Some(mon) = mons.get(chosen) else { continue };
         let bar = if float { None } else { mon.bar.or_else(taskbar::tray) };
         if !float && bar.is_none() { continue; }
         let mut h = stage.load(Ordering::Relaxed);
@@ -183,28 +217,30 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             n += 1;
             h = nh;
             stage.store(nh, Ordering::Relaxed);
-            parent = 0;
+            parent = None;
             last_layout = None;
             last_visible = None;
+            last_rect = None;
         }
         let hw = taskbar::hwnd(h);
-        match bar {
-            Some(b) if b.0 as isize != parent => {
+        match attach(parent, bar.map(|b| b.0 as isize)) {
+            Attach::Embed(b) => {
                 // z okna pływającego: w pasku kliknięcia zawsze są nasze
                 pointer::PASSTHROUGH.store(false, Ordering::Relaxed);
                 taskbar::passthrough(hw, false);
-                embed_failed = taskbar::embed(hw, b).is_err();
+                embed_failed = taskbar::embed(hw, taskbar::hwnd(b)).is_err();
                 if embed_failed { eprintln!("agent-pets: osadzenie w pasku nie powiodło się, okno pływające"); }
-                parent = b.0 as isize;
+                parent = Some(b);
                 last_layout = None;
             }
-            None if parent != 0 => {
+            Attach::Detach => {
                 taskbar::detach(hw);
-                parent = 0;
+                parent = Some(0);
                 embed_failed = false;
                 last_layout = None;
+                last_rect = None;
             }
-            _ => {}
+            Attach::Keep => {}
         }
         if float {
             moving = None;
@@ -213,10 +249,8 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             let h_css = 48.0 * size / 100.0;
             let anchor = anchor_of(st.align);
             let saved = st.floating_at.map(|p| (p.x, p.y));
-            for c in msgs {
+            for c in std::mem::take(&mut pending) {
                 match c {
-                    Cmd::Width(w) => want = w,
-                    Cmd::Hello => { last_layout = None; last_visible = None; }
                     Cmd::Drag(Drag::Start) => if let Some(r) = last_rect {
                         dragging = Some(FloatDrag { from: r, at: placement::float_anchor(mon.work, r, anchor, mon.scale) });
                     },
@@ -231,7 +265,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                             eprintln!("agent-pets: {e}");
                         }
                     },
-                    _ => {}
+                    Cmd::Width(_) | Cmd::Hello | Cmd::Settings | Cmd::Move(_) | Cmd::MoveDone(_) | Cmd::Drag(_) => {}
                 }
             }
             let at = dragging.as_ref().map(|d| d.at).or(saved);
@@ -241,7 +275,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             let vis = !taskbar::fullscreen_app();
             if last_visible != Some(vis) { let _ = app.emit("pets://visibility", vis); last_visible = Some(vis); }
             let r = (want > 0.0 && vis).then(|| placement::float_rect(mon.work, at, anchor, want, h_css, mon.scale));
-            if r != last_rect { taskbar::apply_rect(hw, r); last_rect = r; }
+            if needs_apply(r, last_rect, taskbar::rect_of(hw)) { taskbar::apply_rect(hw, r); last_rect = r; }
             continue;
         }
         dragging = None;
@@ -251,11 +285,9 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         let Some(m) = taskbar::metrics(b, uia.as_ref()) else { continue };
         let width = (m.tray.right - m.tray.left).max(1) as f64;
         let px_of = |at: f64| m.tray.left + (at * width).round() as i32;
-        for c in msgs {
+        for c in std::mem::take(&mut pending) {
             match c {
-                Cmd::Width(w) => want = w,
-                Cmd::Hello => { last_layout = None; last_visible = None; }
-                Cmd::Settings => {}
+                Cmd::Width(_) | Cmd::Hello | Cmd::Settings => {}
                 Cmd::Move(true) if moving.is_none() => {
                     let mode = mode_of(&st);
                     let anchor = match mode { Mode::Left => Anchor::Left, Mode::Custom { anchor, .. } => anchor, Mode::Right => Anchor::Right };
@@ -294,5 +326,43 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         if embed_failed { taskbar::apply_floating(hw, &m, p) } else { taskbar::apply(hw, p) }
         let vis = placement::taskbar_visible(m.tray, mon.monitor) && !taskbar::fullscreen_app();
         if last_visible != Some(vis) { let _ = app.emit("pets://visibility", vis); last_visible = Some(vis); }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use placement::Rect;
+
+    #[test]
+    fn the_first_pass_always_normalizes_the_window() {
+        assert_eq!(attach(None, None), Attach::Detach, "floating at startup is detached (toolwindow, no focus)");
+        assert_eq!(attach(None, Some(7)), Attach::Embed(7));
+        assert_eq!(attach(Some(0), None), Attach::Keep);
+        assert_eq!(attach(Some(5), None), Attach::Detach);
+        assert_eq!(attach(Some(7), Some(7)), Attach::Keep);
+        assert_eq!(attach(Some(0), Some(7)), Attach::Embed(7));
+    }
+
+    #[test]
+    fn the_floating_rect_is_reapplied_when_windows_resized_the_window() {
+        let r = Rect { left: 0, top: 0, right: 200, bottom: 48 };
+        let dpi = Rect { left: 0, top: 0, right: 300, bottom: 72 };
+        assert!(!needs_apply(Some(r), Some(r), Some(r)));
+        assert!(needs_apply(Some(r), Some(r), Some(dpi)), "WM_DPICHANGED resized it behind our back");
+        assert!(needs_apply(Some(r), None, None));
+        assert!(needs_apply(None, Some(r), Some(r)));
+        assert!(!needs_apply(None, None, Some(r)));
+    }
+
+    #[test]
+    fn width_and_hello_are_never_lost_and_other_commands_wait() {
+        let mut pending = vec![Cmd::Width(5.0), Cmd::MoveDone(true), Cmd::Hello, Cmd::Width(9.0)];
+        let mut want = 0.0;
+        assert!(take_basic(&mut pending, &mut want));
+        assert_eq!(want, 9.0);
+        assert_eq!(pending.len(), 1);
+        assert!(matches!(pending[0], Cmd::MoveDone(true)));
+        assert!(!take_basic(&mut pending, &mut want));
     }
 }
