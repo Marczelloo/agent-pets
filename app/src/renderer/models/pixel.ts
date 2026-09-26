@@ -143,6 +143,11 @@ function build(c: Pet, X: number, Y: number, u: number, ts: number, g: number, k
   // nakładki (pozycje jak w modelu wektorowym: dymek przy top−20u, myślenie przy top−22u)
   if (c.p.bubble.x > .5) { const bh2 = n(SPRITES.bang.length * 4); blit(SPRITES.bang, U(-B.w * .31) - n(10), by + 1 - bh2, 4); } // oparty o głowę: mieści się w pasku przy skokach
   if (cl(c.p.think.x) > .3) for (let i = 0; i < 3; i++) { const a = ts * 4 + i * 2.1; cell(U(Math.cos(a) * 30), by - n(18) + Math.round(Math.sin(a) * 1.5), 1, 1, COL.clay); }
+  if (cl(c.phA || 0) > .5) { // słuchawki (scena `vibe`)
+    const cw = n(9, 2), ch = n(18, 3), cy = by + Math.round(bh * .1), lx = bx - (cw >> 1), rx = bx + bw + (cw >> 1) - 1, ac = skin === 'kodek' ? COL.teal : COL.clay;
+    cell(lx, by - 2, rx - lx + 1, 1, pal.k); cell(lx, by - 2, 1, cy - by + 2, pal.k); cell(rx, by - 2, 1, cy - by + 2, pal.k);
+    [bx - cw, bx + bw].forEach(cx => { cell(cx, cy, cw, ch, pal.k); if (cw > 2 && ch > 2) cell(cx + 1, cy + 1, cw - 2, ch - 2, ac); });
+  }
   if (e.dizzy > .3) for (let i = 0; i < 3; i++) { const a = ts * 6 + i * 2.1; blit(SPRITES.spark, U(Math.cos(a) * 34) - 1, by - n(8) + Math.round(Math.sin(a))); }
   for (const q of c.parts) {
     const px = U(q.x), py = U(q.y);
@@ -150,6 +155,7 @@ function build(c: Pet, X: number, Y: number, u: number, ts: number, g: number, k
     else if (q.k === 'imp') blit(SPRITES.spark, px - 1, py - 1);
     else if (q.k === 'plane' || q.k === 'page') cell(px, py, 2, 2, PROP_PAL.p);
     else if (q.k === 'drop') cell(px, py, 1, 2, PROP_PAL.b);
+    else if (q.k === 'phones') { const w = n(50, 5), h = n(16, 3), cw = n(9, 2); cell(px - (w >> 1), py, w, 1, pal.k); cell(px - (w >> 1) - cw + 1, py + 1, cw, h, pal.k); cell(px + (w >> 1), py + 1, cw, h, pal.k); }
     else cell(px, py, 1, 1, COL[q.col] || COL.clay);
   }
   return { key, ox: Math.round((r.XX - X) / g), ops };

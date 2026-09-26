@@ -76,6 +76,9 @@ export const pl = {
       progress: 'Postęp pobierania',
     },
   },
+  media: {
+    playing: (app: string | null) => app ? `gra ${app}` : 'gra muzyka',
+  },
   tooltip: {
     tasks: (done: number, total: number) => `Zadania: ${done}/${total}`,
     context: (pct: number) => `Kontekst: ${pct}%`,
@@ -263,6 +266,8 @@ export const pl = {
       error: 'Błąd',
       idle: 'Bezczynny',
       sleep: 'Śpi',
+      vibe: 'Muzyka',
+      doze: 'Drzemka ♪',
       bye: 'Pożegnanie',
     } as Record<SceneKey, string>,
     allInOrder: 'Wszystkie po kolei',
@@ -272,6 +277,8 @@ export const pl = {
     },
     motionTitle: 'Ruch',
     motionDesc: 'Dynamiczny: szybkie akcje jak z anime — serie ciosów, pieczęcie, błyski i cząsteczki',
+    mediaTitle: 'Słuchają muzyki',
+    mediaDesc: 'Gdy w Windows gra muzyka (Spotify, Apple Music, przeglądarka…), bezczynne i śpiące zwierzaki zakładają słuchawki i tańczą. Tytuły utworów nie są czytane.',
     previewScene: 'Scena podglądu',
     taskbar: 'Tak wygląda w pasku',
     perAgent: 'Osobno dla agentów',

@@ -43,7 +43,10 @@ export type AppId = 'claude_code' | 'codex' | 'agent_router';
 export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
 export type MotionId = 'calm' | 'dynamic';
 export interface Look { style: StyleId; motion: MotionId }
-export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number }
+/** `react_to_media` od 0.8 (brak = włączone): bezczynny zwierzak słucha muzyki grającej w systemie. */
+export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number; react_to_media?: boolean }
+/** Lustro `media::Media` (zdarzenie `pets://media`): czy coś gra w Windows (GSMTC) i w jakiej aplikacji. */
+export interface Media { playing: boolean; app: string | null }
 export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean }
 export interface Settings {
   version: number;

@@ -9,6 +9,9 @@ export type Scene = { base: Record<string, any>; acts: Act[]; seq?: Act[]; cycle
 export const pend=(c: any,t: any,fn: any)=>{c.pend={t,fn};};
 const dance=(a: any)=>{const b=Math.sin(a*TAU),w=Math.sin(a*PI);return {th:.4*w,lx:6*w,tilt:.06*b,armL:1.8+.85*b,armR:1.8-.85*b,hopW:.45,_hf:2,_notes:1};};
 const HIP={ikL:1,hxL:-47,hyL:-25};
+/** Tempo sceny `vibe` (uderzenia na sekundę, ~108 BPM): GSMTC nie podaje BPM, więc stałe. */
+export const BEAT=1.8;
+const sway=(t: any)=>Math.sin(t*PI*BEAT);
 const kb=(t: any,ph: any,x0: any)=>[x0+2.5*Math.sin(t*5.3+ph),-30-3.5*Math.max(0,Math.sin(t*18+ph))];
 const TYPE=(xl: any,xr: any)=>(_a: any,_c: any,t: any)=>{const L=kb(t,0,xl),R=kb(t,PI,xr);return {ikL:1,ikR:1,hxL:L[0],hyL:L[1],hxR:R[0],hyR:R[1],typeW:1};};
 const REST=(xl: any,xr: any,o: any)=>Object.assign({ikL:1,ikR:1,hxL:xl,hyL:-29,hxR:xr,hyR:-29},o);
@@ -66,6 +69,16 @@ sleep:{base:{loaf:1,sleep:1,dim:1,th:.3,_prop:'pillow',armL:.15,armR:.15},acts:[
 compact:{base:{th:.2,look:.3,squint:.5},acts:[
 ['ściska kontekst',2.4,(a: any,_c: any,t: any)=>{const p=.5+.5*Math.sin(a*TAU/1.2);return {ikL:1,ikR:1,hxL:-44+22*p,hyL:-40+2*Math.sin(t*14),hxR:44-22*p,hyR:-40+2*Math.sin(t*14+1),lean:.25*p,squint:.4+.5*p,tilt:.03*Math.sin(t*9)};}],
 ['ociera czoło',1.5,(a: any)=>({ikL:1,hxL:-26+34*ease(cl(a/1.1)),hyL:-64,ikR:1,hxR:30,hyR:-34,look:.1,ex:.2}),(c: any)=>pend(c,.5,()=>c.parts.push({k:'drop',x:-30,y:-62,vx:-25,vy:-20,g:160,life:0,max:.8}))]]},
+// Muzyka w systemie przy bezczynnym agencie: słuchawki, kiwanie w rytm, nutki.
+vibe:{base:{happy:.6,look:-.2,_phones:1,_notes:1,_hf:BEAT},acts:[
+['kiwa się w rytm',4,(_a: any,_c: any,t: any)=>{const s=sway(t);return {tilt:.07*s,lx:3*s,armL:.6+.25*s,armR:.6-.25*s,hopW:.3};}],
+['siedzi i buja nogami',4,(_a: any,_c: any,t: any)=>{const s=sway(t);return {sit:1,swing:1,tilt:.06*s,th:.1+.15*s,happy:.9};}],
+['gra na powietrznej gitarze',3,(_a: any,_c: any,t: any)=>{const k=Math.max(0,Math.sin(t*TAU*BEAT));return {ikL:1,hxL:-34,hyL:-46,ikR:1,hxR:12,hyR:-30+6*k,tilt:-.05+.05*k,th:.25,lean:.2*k,squint:.6,happy:0};}],
+['tańczy',2.4,dance]]},
+// Śpi przy muzyce: nadal śpi (przyciemniony, na poduszce), tylko w słuchawkach, buja się co dwa uderzenia; „z” na zmianę z nutkami.
+doze:{base:{loaf:1,sleep:1,dim:1,th:.3,_prop:'pillow',armL:.15,armR:.15,_phones:1,_notes:.35},acts:[
+['drzemie w słuchawkach',5,(_a: any,_c: any,t: any)=>({tilt:.04*Math.sin(t*PI*BEAT/2)})],
+['przewraca się na bok',3,(_a: any,_c: any,t: any)=>({th:-.9,tilt:.04*Math.sin(t*PI*BEAT/2)})]]},
 bye:{base:{},seq:[
 ['macha na pożegnanie',.7,()=>({th:0,look:0,happy:.8,armR:2.3,oscR:.55,_f:11})],
 ['odchodzi',.9,(a: any)=>({th:PI/2,lx:40*ease(cl(a/.9)),walkW:1,look:-.2})]],

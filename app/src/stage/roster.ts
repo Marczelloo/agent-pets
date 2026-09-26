@@ -1,6 +1,6 @@
-import { createPet, setScene, type Pet } from '../renderer';
+import { createPet, setScene, throwPhones, type Pet } from '../renderer';
 import type { Session } from '../types';
-import { sceneFor, skinFor, type SceneKey } from './sceneFor';
+import { MUSIC_SCENES, sceneFor, skinFor, type SceneKey } from './sceneFor';
 
 export interface Entry { session: Session; pet: Pet; scene: SceneKey; born: number; byeAt?: number; phase: number }
 
@@ -13,15 +13,23 @@ function phaseOf(id: string): number {
   return (Math.abs(h) % 1000) / 1000 * 3;
 }
 
+const CALM_EXIT: ReadonlySet<SceneKey> = new Set(['idle', 'sleep', 'bye']);
+
+/** Zmiana sceny; agent rusza do pracy (albo czeka na Ciebie) w słuchawkach → lecą w bok; koniec muzyki albo sesji → zdejmuje je spokojnie. */
+export function switchScene(pet: Pet, from: SceneKey, to: SceneKey): void {
+  if (MUSIC_SCENES.has(from) && !MUSIC_SCENES.has(to) && !CALM_EXIT.has(to)) throwPhones(pet);
+  setScene(pet, to);
+}
+
 export class Roster {
   private entries = new Map<string, Entry>();
 
   get(id: string): Entry | undefined { return this.entries.get(id); }
 
-  sync(sessions: Session[], t: number): void {
+  sync(sessions: Session[], t: number, music = false): void {
     const seen = new Set<string>();
     for (const s of sessions) {
-      const scene = sceneFor(s);
+      const scene = sceneFor(s, music);
       const e = this.entries.get(s.id);
       if (!e) {
         if (scene === 'bye') continue;
@@ -32,7 +40,7 @@ export class Roster {
       seen.add(s.id);
       e.session = s;
       if (e.scene !== scene) {
-        setScene(e.pet, scene);
+        switchScene(e.pet, e.scene, scene);
         e.scene = scene;
         e.byeAt = scene === 'bye' ? t : undefined;
       }

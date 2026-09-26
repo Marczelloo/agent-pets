@@ -1,10 +1,11 @@
 import { badgeTooltip, limitsTooltip, petTooltip } from '../tooltip/text';
-import type { PointerMsg, Session, Snapshot, TooltipContent } from '../types';
+import type { Media, PointerMsg, Session, Snapshot, TooltipContent } from '../types';
 import type { Bridge } from './bridge';
 import { clickAction, hitTest } from './hit';
 import type { LayoutOut } from './layout';
 
-interface View { out: LayoutOut; snap: Snapshot; height: number; nowMs: number }
+/** `media`: tylko gdy użytkownik pozwala zwierzakom reagować na muzykę */
+interface View { out: LayoutOut; snap: Snapshot; height: number; nowMs: number; media?: Media | null }
 
 /** Tooltip po najechaniu; treść odświeża się co sekundę (czas od ostatniej aktywności). */
 export class Hover {
@@ -34,7 +35,7 @@ export class Hover {
 
   refresh(force = false): void {
     if (this.x < 0) return;
-    const { out, snap, height, nowMs } = this.view();
+    const { out, snap, height, nowMs, media } = this.view();
     const t = hitTest(out, this.x, this.y, height);
     if (!t) { this.hide(); return; }
     const key = t.kind === 'pet' ? `pet:${t.id}` : t.kind;
@@ -43,7 +44,7 @@ export class Hover {
     if (t.kind === 'pet') {
       const s = snap.sessions.find(v => v.id === t.id);
       if (!s) { this.hide(); return; }
-      content = petTooltip(s, nowMs);
+      content = petTooltip(s, nowMs, media);
     } else if (t.kind === 'limits') {
       content = limitsTooltip(snap.limits, nowMs);
     } else {
