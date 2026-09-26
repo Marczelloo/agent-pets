@@ -15,3 +15,8 @@ const ORDER = PREVIEW_GROUPS.flatMap(g => g.scenes);
 export function nextScene(cur: SceneKey): SceneKey {
   return ORDER[(ORDER.indexOf(cur) + 1) % ORDER.length];
 }
+
+/** Krok „Wszystkie po kolei”: gdy okno jest ukryte, scena stoi (animacja też stoi). */
+export function cycleScene(cur: SceneKey, hidden: boolean): SceneKey {
+  return hidden ? cur : nextScene(cur);
+}

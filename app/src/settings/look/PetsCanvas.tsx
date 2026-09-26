@@ -4,7 +4,7 @@ import { PetPainter } from '../../renderer/painter';
 import { reducedMotion } from '../../stage/power';
 import { skinFor, type SceneKey } from '../../stage/sceneFor';
 import type { Agent, Look } from '../../types';
-import { subscribe } from './loop';
+import { backing, subscribe } from './loop';
 
 export interface PreviewPet { agent: Agent; look: Look }
 let saving = false;
@@ -32,7 +32,8 @@ export function PetsCanvas({ pets, scene, u, width, height, className }: Props) 
       while (painters.current.length < list.length) painters.current.push(new PetPainter(createPet(skinFor(list[painters.current.length].agent), sc)));
       T += dt;
       const d = devicePixelRatio || 1;
-      if (c.width !== Math.round(width * d)) { c.width = Math.round(width * d); c.height = Math.round(height * d); }
+      const bw = backing(width, d), bh = backing(height, d);
+      if (c.width !== bw.px || c.height !== bh.px) { c.width = bw.px; c.height = bh.px; c.style.width = `${bw.css}px`; c.style.height = `${bh.css}px`; }
       x.setTransform(d, 0, 0, d, 0, 0);
       x.clearRect(0, 0, width, height);
       pen.boil = Math.floor(T * 8);

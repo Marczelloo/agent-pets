@@ -21,3 +21,9 @@ export function subscribe(fn: Fn): () => void {
   if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
   return () => { subs.delete(fn); if (!subs.size) { cancelAnimationFrame(raf); raf = 0; } };
 }
+
+/** Rozmiar płótna w całych pikselach urządzenia i odpowiadający mu rozmiar CSS (ostre przy 125 %, 150 %). */
+export function backing(css: number, dpr: number): { px: number; css: number } {
+  const px = Math.round(css * dpr);
+  return { px, css: px / dpr };
+}

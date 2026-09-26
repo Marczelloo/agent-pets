@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import type { SceneKey } from '../../stage/sceneFor';
 import type { Look } from '../../types';
 import { PetsCanvas } from './PetsCanvas';
-import { CYCLE_MS, PREVIEW_GROUPS, nextScene } from './scenes';
+import { CYCLE_MS, PREVIEW_GROUPS, cycleScene } from './scenes';
 
 interface Props { look: Look; scene: SceneKey; cycle: boolean; onScene: (s: SceneKey) => void; onCycle: (on: boolean) => void }
 
@@ -11,7 +11,7 @@ interface Props { look: Look; scene: SceneKey; cycle: boolean; onScene: (s: Scen
 export function PreviewStage({ look, scene, cycle, onScene, onCycle }: Props) {
   useEffect(() => {
     if (!cycle) return;
-    const id = setInterval(() => onScene(nextScene(scene)), CYCLE_MS);
+    const id = setInterval(() => onScene(cycleScene(scene, document.hidden)), CYCLE_MS);
     return () => clearInterval(id);
   }, [cycle, scene, onScene]);
 
@@ -26,7 +26,7 @@ export function PreviewStage({ look, scene, cycle, onScene, onCycle }: Props) {
         <div className="chip-group" key={g.id}>
           <span className="desc">{t().look.groups[g.id]}</span>
           {g.scenes.map(k => (
-            <button type="button" key={k} role="radio" aria-checked={!cycle && scene === k} className={!cycle && scene === k ? 'on' : ''}
+            <button type="button" key={k} role="radio" aria-checked={!cycle && scene === k} className={scene === k ? (cycle ? 'playing' : 'on') : ''}
               onClick={() => { onCycle(false); onScene(k); }}>{t().look.sceneName[k]}</button>
           ))}
         </div>
