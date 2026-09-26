@@ -1,5 +1,9 @@
 // Model pikselowy (spec wyglądu v2, 6): zwierzak na siatce w całkowitych pikselach urządzenia, same prostokąty,
 // ruch skokowy co 0,1 s, mała paleta, pikselowe rekwizyty i znaczki. Mózg (sceny, sprężyny) wspólny.
+//
+// Wymiary liczone są w jednostkach mózgu (u), jak w modelu wektorowym, i dopiero potem zamieniane na komórki.
+// Komórka ma stałą liczbę pikseli urządzenia (2 w pasku), więc przy skali ekranu 150% komórek jest więcej,
+// a zwierzak ma ten sam rozmiar; rekwizyty, dłonie i nakładki trafiają tam, gdzie w innych stylach.
 import type { Look } from '../../types';
 import { COL } from '../palette';
 import { cl } from '../math';
@@ -8,8 +12,8 @@ import type { Pet } from '../pet';
 import { rig } from './rig';
 import { PROP_ANCHOR, PROP_PAL, SPRITES } from './sprites';
 
-/** Piksele urządzenia na komórkę siatki (komórka ≈ 5 jednostek u), co najmniej 1. */
-export const gridPx = (u: number, dpr: number) => Math.max(1, Math.round(5 * u * dpr));
+/** Piksele urządzenia na komórkę siatki: 2 w pasku (u = 0,3), więcej w dużym podglądzie. */
+export const gridPx = (u: number, _dpr: number) => Math.max(1, Math.round(6 * u));
 
 type Pal = { k: string; m: string; s: string; h: string; e: string; w: string; x: string };
 export const PIXEL_PAL: Record<'clawd' | 'kodek', Pal> = {
@@ -17,8 +21,10 @@ export const PIXEL_PAL: Record<'clawd' | 'kodek', Pal> = {
   kodek: { k: '#2B1D16', m: '#F1EFE8', s: '#CBC6B8', h: '#FFFFFF', e: '#5DCAA5', w: '#2C2C2A', x: '#C9C7C1' },
 };
 const GREY: Pal = { k: '#2B1D16', m: '#A8A49A', s: '#86837A', h: '#C9C6BD', e: '#1E1410', w: '#FFFFFF', x: '#A5A298' };
-/** Bryła w komórkach: szerokość, wysokość. */
-const BODY = { clawd: [20, 15], kodek: [18, 15] } as const;
+/** Bryła w jednostkach u (jak skórki modelu wektorowego). */
+const BODY = { clawd: { w: 98, h: 58 }, kodek: { w: 88, h: 64 } } as const;
+/** Rozmiar piksela sprite'a rekwizytu w jednostkach u. */
+const SPRITE_U = 5;
 
 type Op = [cx: number, cy: number, w: number, h: number, col: string];
 interface Frame { key: string; ox: number; ops: Op[] }
@@ -38,83 +44,106 @@ export function drawPixel(x: CanvasRenderingContext2D, c: Pet, X: number, Y: num
 
 /** Jedna klatka modelu jako lista komórek względem podstawy zwierzaka. */
 function build(c: Pet, X: number, Y: number, u: number, ts: number, g: number, key: string): Frame {
-  const skin = c.type, [bw, bh0] = BODY[skin];
-  const r = rig(c, X, Y, u, ts, { w: bw * 5, h: bh0 * 5, arm: 16 });
+  const skin = c.type, B = BODY[skin];
+  const r = rig(c, X, Y, u, ts, { w: B.w, h: B.h, arm: 16 });
   const pal = r.grey > .5 ? GREY : PIXEL_PAL[skin];
-  const C = (v: number) => Math.round(v / g), ops: Op[] = [];
-  const cell = (cx: number, cy: number, w: number, h: number, col: string) => { ops.push([cx, cy, w, h, col]); };
-  const blit = (rows: string[], cx: number, cy: number) => rows.forEach((row, j) => {
-    let i = 0;
-    while (i < row.length) {
-      const ch = row[i];
-      let n = 1;
-      while (i + n < row.length && row[i + n] === ch) n++;
-      if (ch !== '.') cell(cx + i, cy + j, n, 1, PROP_PAL[ch]);
-      i += n;
+  const C = (css: number) => Math.round(css / g), U = (units: number) => Math.round(units * u / g);
+  const n = (units: number, min = 1) => Math.max(min, U(units));
+  const ops: Op[] = [];
+  const cell = (cx: number, cy: number, w: number, h: number, col: string) => { if (w > 0 && h > 0) ops.push([cx, cy, w, h, col]); };
+  /** Sprite skalowany metodą najbliższego piksela do rozmiaru w u (piksel sprite'a = SPRITE_U jednostek). */
+  const blit = (rows: string[], cx: number, cy: number, pu = SPRITE_U) => {
+    const sw = rows[0].length, sh = rows.length, tw = n(sw * pu), th = n(sh * pu);
+    for (let j = 0; j < th; j++) {
+      const row = rows[Math.min(sh - 1, Math.floor(j * sh / th))];
+      let i = 0;
+      while (i < tw) {
+        const ch = row[Math.min(sw - 1, Math.floor(i * sw / tw))];
+        let k = 1;
+        while (i + k < tw && row[Math.min(sw - 1, Math.floor((i + k) * sw / tw))] === ch) k++;
+        if (ch !== '.') cell(cx + i, cy + j, k, 1, PROP_PAL[ch]);
+        i += k;
+      }
     }
-  });
+    return th;
+  };
   const tg = c.tg || {};
 
   // cień i poduszka
-  cell(-bw / 2, 0, bw, 1, 'rgba(0,0,0,0.16)');
-  if (c.prop === 'pillow' && cl(c.p.propA.x) > .5) { const a = PROP_ANCHOR.pillow; blit(SPRITES.pillow, C(a[0] * u), -SPRITES.pillow.length); }
+  const bw = 2 * Math.round(U(B.w) / 2), half = bw / 2;
+  cell(-half, 0, bw, 1, 'rgba(0,0,0,0.16)');
+  if (c.prop === 'pillow' && cl(c.p.propA.x) > .5) { const a = PROP_ANCHOR.pillow; blit(SPRITES.pillow, U(a[0]), -n(SPRITES.pillow.length * SPRITE_U)); }
 
-  // bryła
-  const bh = bh0 + Math.round((r.sy - 1) * bh0);
-  const lift = C(r.oy), legs = r.down > .5 ? 0 : 3;
-  const by = -legs - bh + lift - Math.round(r.down * 2), bx = -bw / 2;
-  if (legs) {
-    const lx = skin === 'clawd' ? [-7, -3, 1, 5] : [-6, 3];
+  // bryła: podstawa i szczyt jak w modelu wektorowym (bot = −12u na nóżkach, 0 na siedząco)
+  const bh = Math.max(4, Math.round(U(B.h) * r.sy)), lift = C(r.oy);
+  const bottom = C(r.bot) + lift, by = bottom - bh, bx = -half;
+  const legs = -C(r.bot);
+  if (legs > 0) {
+    const lx = skin === 'clawd' ? [-.33, -.12, .12, .33] : [-.25, .25], lw = n(skin === 'clawd' ? 10 : 16, 2);
     const walkUp = (i: number) => (r.walk > .3 && (Math.floor(ts * 10) + i) % 2 ? 1 : 0);
-    lx.forEach((l, i) => cell(l, -legs - walkUp(i) + lift, skin === 'clawd' ? 2 : 3, legs, pal.s));
+    lx.forEach((l, i) => cell(Math.round(l * bw) - (lw >> 1), bottom, lw, legs - walkUp(i), pal.s));
   }
-  if (skin === 'clawd') { cell(bx - 2, by + 6, 2, 4, pal.k); cell(bx + bw, by + 6, 2, 4, pal.k); cell(bx - 1, by + 7, 1, 2, pal.m); cell(bx + bw, by + 7, 1, 2, pal.m); }
+  if (skin === 'clawd') {
+    const ew = n(4, 1), eh = n(16, 2), ey = by + Math.round(bh * .4);
+    cell(bx - ew - 1, ey, ew + 1, eh, pal.k); cell(bx + bw, ey, ew + 1, eh, pal.k);
+    cell(bx - ew, ey + 1, ew, eh - 2, pal.m); cell(bx + bw, ey + 1, ew, eh - 2, pal.m);
+  }
   cell(bx + 1, by, bw - 2, bh, pal.k);
   cell(bx, by + 1, bw, bh - 2, pal.k);
   cell(bx + 1, by + 1, bw - 2, bh - 2, pal.m);
-  cell(bx + 1, by + bh - 3, bw - 2, 2, pal.s);
-  cell(bx + 2, by + 2, bw - 5, 1, pal.h);
+  cell(bx + 1, by + bh - 1 - n(6), bw - 2, n(6), pal.s);
+  cell(bx + 2, by + 2, Math.max(1, bw - 5), 1, pal.h);
 
   // twarz
-  const fx = r.face + C(r.gaze[0] * u), fy = by + (skin === 'clawd' ? 6 : 6) + C(r.gaze[1] * u), e = r.eyes;
+  const fx = r.face + U(r.gaze[0]), e = r.eyes;
   if (skin === 'kodek') {
-    cell(bx + 2, by + 3, bw - 4, bh - 6, pal.w);
-    cell(bx - 1, by + 5, 2, 5, pal.x); cell(bx + bw - 1, by + 5, 2, 5, pal.x);
-    const ax = Math.round(Math.sin(c.aa || 0) * 2);
-    cell(ax, by - 3, 1, 3, pal.k); cell(ax - 1, by - 5, 2, 2, pal.e);
+    const m = n(9, 2);
+    cell(bx + m, by + m, bw - 2 * m, bh - 2 * m - 1, pal.w);
+    const pw = n(6, 2), ph = Math.round(bh * .35);
+    cell(bx - pw + 1, by + Math.round(bh * .32), pw, ph, pal.x); cell(bx + bw - 1, by + Math.round(bh * .32), pw, ph, pal.x);
+    const ax = Math.round(Math.sin(c.aa || 0) * n(4)), al = n(12, 2), ab = n(6, 2);
+    cell(ax, by - al, 1, al, pal.k); cell(ax - (ab >> 1), by - al - ab, ab, ab, pal.e);
   }
+  const eW = n(6, 1), eH = n(12, 2), fy = by + Math.round(bh * (skin === 'clawd' ? .3 : .34)) + U(r.gaze[1]);
   const eye = (ex: number) => {
-    if (e.happy > .5) { cell(ex - 1, fy + 1, 1, 1, pal.e); cell(ex, fy, 1, 1, pal.e); cell(ex + 1, fy + 1, 1, 1, pal.e); return; }
-    if (e.dizzy > .5) { cell(ex - 1, fy, 1, 1, pal.e); cell(ex + 1, fy, 1, 1, pal.e); cell(ex, fy + 1, 1, 1, pal.e); cell(ex - 1, fy + 2, 1, 1, pal.e); cell(ex + 1, fy + 2, 1, 1, pal.e); return; }
-    if (e.open < .4) { cell(ex - 1, fy + 2, 3, 1, pal.e); return; }
-    cell(ex, fy, 2, 3, pal.e);
-    if (skin === 'clawd') cell(ex + 1, fy, 1, 1, pal.w);
+    if (e.happy > .5) { cell(ex - 1, fy + 1, 1, 1, pal.e); cell(ex, fy, eW, 1, pal.e); cell(ex + eW, fy + 1, 1, 1, pal.e); return; }
+    if (e.dizzy > .5) { cell(ex, fy, 1, 1, pal.e); cell(ex + eW, fy, 1, 1, pal.e); cell(ex, fy + 2, 1, 1, pal.e); cell(ex + eW, fy + 2, 1, 1, pal.e); return; }
+    if (e.open < .4) { cell(ex - 1, fy + (eH >> 1), eW + 2, 1, pal.e); return; }
+    cell(ex, fy, eW, eH, pal.e);
+    if (skin === 'clawd') cell(ex + eW - 1, fy, 1, 1, pal.w);
   };
-  const eo = skin === 'clawd' ? 4 : 4;
-  eye(fx - eo - 1); eye(fx + eo);
+  const eo = Math.round(bw * .2);
+  eye(fx - eo - eW + 1); eye(fx + eo);
   if (skin === 'clawd') {
-    if (e.open > .3 && e.happy < .5) { cell(fx - 1, fy + 5, 1, 1, pal.e); cell(fx, fy + 6, 2, 1, pal.e); cell(fx + 2, fy + 5, 1, 1, pal.e); }
-    cell(fx - eo - 4, fy + 4, 2, 1, pal.x); cell(fx + eo + 3, fy + 4, 2, 1, pal.x);
+    const my = fy + eH + 1;
+    if (e.open > .3 && e.happy < .5) { cell(fx - 1, my, 1, 1, pal.e); cell(fx, my + 1, 2, 1, pal.e); cell(fx + 2, my, 1, 1, pal.e); }
+    const bl = n(6, 2);
+    cell(fx - eo - eW - bl + 1, my - 1, bl, 1, pal.x); cell(fx + eo + eW, my - 1, bl, 1, pal.x);
   }
 
   // rekwizyt, łapki, przedmiot w dłoni
   const prop = c.prop && c.prop !== 'pillow' && cl(c.p.propA.x) > .5 ? c.prop : null;
-  if (prop && SPRITES[prop]) { const a = PROP_ANCHOR[prop] ?? [60, 0]; blit(SPRITES[prop], C(a[0] * u), C(a[1] * u) - SPRITES[prop].length); }
+  if (prop && SPRITES[prop]) { const a = PROP_ANCHOR[prop] ?? [60, 0]; blit(SPRITES[prop], U(a[0]), U(a[1]) - n(SPRITES[prop].length * SPRITE_U)); }
+  const brush = n(7, 1), hand = n(10, 2);
   r.arms.forEach(a => {
     const sx = C(a.sw[0]), sy = C(a.sw[1]), hx = C(a.hx), hy = C(a.hy);
-    line(sx, sy, hx, hy, (px, py) => cell(px - 1, py - 1, 2, 2, pal.m));
-    cell(hx - 1, hy - 1, 3, 3, pal.k); cell(hx, hy, 1, 1, pal.m);
+    line(sx, sy, hx, hy, (px, py) => cell(px - (brush >> 1), py - (brush >> 1), brush, brush, pal.m));
+    cell(hx - (hand >> 1), hy - (hand >> 1), hand, hand, pal.k);
+    cell(hx - (hand >> 1) + 1, hy - (hand >> 1) + 1, hand - 2, hand - 2, pal.m);
   });
   const hold = c.hold && cl(c.p.holdA.x) > .5 ? c.hold : null;
-  if (hold && SPRITES[hold]) { const R = r.arms[1], s = SPRITES[hold]; blit(s, C(R.hx) - (hold === 'net' ? 3 : 1), C(R.hy) - s.length + 1); }
-  if (tg._mug) { const R = r.arms[1]; blit(SPRITES.mug, C(R.hx) - 1, C(R.hy) - 2); }
+  if (hold && SPRITES[hold]) {
+    const R = r.arms[1], s = SPRITES[hold], w = n(s[0].length * SPRITE_U), h = n(s.length * SPRITE_U);
+    blit(s, C(R.hx) - (hold === 'net' ? w >> 1 : 1), C(R.hy) - h + 1);
+  }
+  if (tg._mug) { const R = r.arms[1]; blit(SPRITES.mug, C(R.hx) - 1, C(R.hy) - n(SPRITES.mug.length * SPRITE_U)); }
 
-  // nakładki: „!”, myślenie, zawroty, cząsteczki
-  if (c.p.bubble.x > .5) blit(SPRITES.bang, bx - 3, by - 10);
-  if (cl(c.p.think.x) > .3) for (let i = 0; i < 3; i++) { const a = ts * 4 + i * 2.1; cell(Math.round(Math.cos(a) * 6), by - 4 + Math.round(Math.sin(a) * 1.5), 1, 1, COL.clay); }
-  if (e.dizzy > .3) for (let i = 0; i < 3; i++) { const a = ts * 6 + i * 2.1; blit(SPRITES.spark, Math.round(Math.cos(a) * 7) - 1, by - 3 + Math.round(Math.sin(a))); }
+  // nakładki (pozycje jak w modelu wektorowym: dymek przy top−20u, myślenie przy top−22u)
+  if (c.p.bubble.x > .5) { const bh2 = n(SPRITES.bang.length * 4); blit(SPRITES.bang, U(-B.w * .31) - n(10), by + 1 - bh2, 4); } // oparty o głowę: mieści się w pasku przy skokach
+  if (cl(c.p.think.x) > .3) for (let i = 0; i < 3; i++) { const a = ts * 4 + i * 2.1; cell(U(Math.cos(a) * 30), by - n(18) + Math.round(Math.sin(a) * 1.5), 1, 1, COL.clay); }
+  if (e.dizzy > .3) for (let i = 0; i < 3; i++) { const a = ts * 6 + i * 2.1; blit(SPRITES.spark, U(Math.cos(a) * 34) - 1, by - n(8) + Math.round(Math.sin(a))); }
   for (const q of c.parts) {
-    const px = C(q.x * u), py = C(q.y * u);
+    const px = U(q.x), py = U(q.y);
     if (q.t === 'z') blit(SPRITES.z, px, py);
     else if (q.k === 'imp') blit(SPRITES.spark, px - 1, py - 1);
     else if (q.k === 'plane' || q.k === 'page') cell(px, py, 2, 2, PROP_PAL.p);
@@ -127,10 +156,10 @@ function build(c: Pet, X: number, Y: number, u: number, ts: number, g: number, k
 /** Linia Bresenhama po komórkach siatki. */
 function line(x0: number, y0: number, x1: number, y1: number, plot: (x: number, y: number) => void) {
   const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-  let err = dx + dy, n = 0;
+  let err = dx + dy, k = 0;
   for (;;) {
     plot(x0, y0);
-    if ((x0 === x1 && y0 === y1) || n++ > 200) return;
+    if ((x0 === x1 && y0 === y1) || k++ > 200) return;
     const e2 = 2 * err;
     if (e2 >= dy) { err += dy; x0 += sx; }
     if (e2 <= dx) { err += dx; y0 += sy; }

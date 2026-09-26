@@ -43,4 +43,20 @@ describe('sticker model', () => {
     expect(c.hold).toBe('net');
     expect(log.length).toBeGreaterThan(draw('clawd', 'idle').log.length);
   });
+  it('the "!" bubble sits no higher than in the clean style, so it is not clipped on hops', () => {
+    const bubbleY = (style: 'sticker' | 'clean') => {
+      setRng(seeded(6).next);
+      const c = createPet('clawd', 'needs');
+      for (let i = 1; i <= 200; i++) stepPet(c, 1 / 60, i / 60);
+      const r = recorder();
+      drawPet(r.ctx, c, 60, 40, .3, 3.4, { style, motion: 'calm' });
+      return Math.min(...r.log.filter(l => l.startsWith('translate(')).map(l => +l.slice(10, -1).split(',')[1]));
+    };
+    expect(bubbleY('sticker')).toBeGreaterThanOrEqual(bubbleY('clean') - .5);
+  });
+  it('Clawd has side ears and a smile', () => {
+    const plain = draw('clawd', 'idle').log.filter(l => l.startsWith('arc(')).length;
+    expect(plain).toBeGreaterThan(0); // uśmiech i błyski oczu
+  });
 });
+

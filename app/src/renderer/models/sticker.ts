@@ -86,7 +86,8 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
   x.restore();
 
   // nakładki nad głową i w świecie
-  body(); drawHeadFx(x, c, u, t, top, W / 2, GA); x.restore();
+  // dymek na tej wysokości co w modelu wektorowym: naklejka jest wyższa, a dymek przy skokach nie może wyjść z paska
+  body(); drawHeadFx(x, c, u, t, top + (S.h - sk.height) * u, W / 2, GA); x.restore();
   world(); drawWorldFx(x, c, r.arms, u, lw, GA); x.restore();
 }
 

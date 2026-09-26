@@ -52,4 +52,53 @@ describe('pixel model', () => {
       for (const r of rows) expect(/^[.klmsdtcpbywhg]+$/.test(r), `${name}: ${r}`).toBe(true);
     }
   });
+  // pasek: wysokość 48, podstawa zwierzaka Y = h − 8 = 40, u = 0,3 (stage.ts)
+  const frames = (scene: string, skin: 'clawd' | 'kodek', dpr: number, n = 240) => {
+    setRng(seeded(4).next);
+    const c = createPet(skin, scene);
+    const out: string[][] = [];
+    pen.dpr = dpr;
+    for (let i = 1; i <= n; i++) {
+      stepPet(c, 1 / 60, i / 60);
+      if (i % 3) continue;
+      const r = recorder();
+      drawPet(r.ctx, c, 60, 40, .3, i / 60, { style: 'pixel', motion: 'calm' });
+      out.push(r.log);
+    }
+    pen.dpr = 1;
+    return { c, out };
+  };
+  const rects = (log: string[]) => log.filter(l => l.startsWith('fillRect(')).map(l => l.slice(9, -1).split(',').map(Number));
+  it('status overlays stay inside the 48 px taskbar at 100/125/150 % (needs, thinking, Kodek antenna)', () => {
+    for (const dpr of [1, 1.25, 1.5]) for (const [scene, skin] of [['needs', 'clawd'], ['needs', 'kodek'], ['thinking', 'clawd'], ['idle', 'kodek']] as const) {
+      const top = Math.min(...frames(scene, skin, dpr).out.flatMap(l => rects(l).map(r => r[1])));
+      expect(top, `${skin}/${scene}@${dpr}`).toBeGreaterThanOrEqual(0);
+    }
+  });
+  it('the pet has the same size in the brain units at every screen scale', () => {
+    const width = (dpr: number) => { const rs = rects(frames('idle', 'clawd', dpr, 3).out[0]); return Math.max(...rs.map(r => r[0] + r[2])) - Math.min(...rs.map(r => r[0])); };
+    const w1 = width(1), w15 = width(1.5);
+    expect(Math.abs(w15 - w1) / w1).toBeLessThan(.15);
+  });
+  it('typing hands rest on the desk keyboard (edit scene)', () => {
+    const { c } = frames('edit', 'clawd', 1, 240);
+    const [[lx, ly], [rx, ry]] = c.hand as number[][];
+    // klawiatura pikselowego biurka: x −10…35 u, y ≈ −30 u (jak TYPE(-2, 18) w scenes.ts)
+    for (const [hx, hy] of [[lx, ly], [rx, ry]]) { expect(hx).toBeGreaterThan(-12); expect(hx).toBeLessThan(36); expect(Math.abs(hy + 30)).toBeLessThan(8); }
+    // prostokąty w kolorze klawiatury (#2C2C2A, u Clawda nieużywany) na wysokości dłoni
+    let col = '';
+    const keys: number[][] = [];
+    for (const l of frames('edit', 'clawd', 1, 3).out[0]) {
+      if (l.startsWith('fillStyle=')) col = l.slice(10);
+      else if (l.startsWith('fillRect(') && col === '#2C2C2A') keys.push(l.slice(9, -1).split(',').map(Number));
+    }
+    const deskLeft = Math.min(...keys.filter(r => r[1] >= 40 - 34 * .3 && r[1] <= 40 - 22 * .3).map(r => r[0]));
+    expect(deskLeft).toBeLessThanOrEqual(60 + lx * .3); // klawiatura zaczyna się pod lewą dłonią albo dalej w lewo
+  });
+  it('a sitting pet rests on its shadow (no gap)', () => {
+    const rs = rects(frames('idle', 'clawd', 1, 240).out.at(-1)!);
+    const bodyBottom = Math.max(...rs.filter(r => r[1] < 39).map(r => r[1] + r[3]));
+    expect(40 - bodyBottom).toBeLessThanOrEqual(2);
+  });
 });
+
