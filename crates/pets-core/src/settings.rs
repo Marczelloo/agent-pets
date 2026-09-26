@@ -113,37 +113,33 @@ pub enum Align { Left, Center, #[default] Right }
 #[serde(rename_all = "snake_case")]
 pub enum Order { #[default] Start, Attention, Agent }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(default)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Background {
-    #[serde(deserialize_with = "or_default")]
     pub kind: BgKind,
     /// `#RRGGBB`; brak przy szkle = odcień według jasności paska
-    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     /// 0–100; brak = domyślna dla rodzaju (szkło 12, pełny kolor 90)
-    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub opacity: Option<u8>,
     pub radius: u8,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[serde(default)]
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
 pub struct Show { pub progress: bool, pub limits: bool, pub badge: bool }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Point { pub x: f64, pub y: f64 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(default)]
+/// Ręcznie poprawiany plik: zła wartość jednego pola daje jego wartość domyślną, reszta zostaje.
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Stage {
-    #[serde(deserialize_with = "or_default")]
     pub position: Position,
     /// kotwica w pasku jako ułamek jego szerokości (0–1)
-    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_at: Option<f64>,
     /// kotwica okna pływającego w pikselach CSS względem obszaru roboczego monitora
-    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub floating_at: Option<Point>,
     /// `primary` albo nazwa urządzenia (`\\.\DISPLAY2`)
     pub monitor: String,
@@ -152,13 +148,72 @@ pub struct Stage {
     pub size: u16,
     pub gap: u8,
     pub padding: u8,
-    #[serde(deserialize_with = "or_default")]
     pub align: Align,
-    #[serde(deserialize_with = "or_default")]
     pub order: Order,
     pub show: Show,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Liczba z JSON-a w zakresie typu: ułamek zaokrąglony, poza zakresem przycięte, nie-liczba to `None`.
+fn num<T: TryFrom<i64>>(v: Option<&serde_json::Value>, lo: i64, hi: i64) -> Option<T> {
+    let f = v?.as_f64().filter(|f| f.is_finite())?;
+    T::try_from((f.round() as i64).clamp(lo, hi)).ok()
+}
+
+/// Wartość pola, jeśli da się ją odczytać; inaczej zostaje dotychczasowa (domyślna).
+fn field<T: serde::de::DeserializeOwned>(m: &serde_json::Map<String, serde_json::Value>, key: &str, slot: &mut T) {
+    if let Some(v) = m.get(key).and_then(|v| serde_json::from_value(v.clone()).ok()) { *slot = v; }
+}
+
+fn object<'de, D: serde::Deserializer<'de>>(d: D) -> Result<serde_json::Map<String, serde_json::Value>, D::Error> {
+    Ok(match serde_json::Value::deserialize(d)? { serde_json::Value::Object(m) => m, _ => serde_json::Map::new() })
+}
+
+impl<'de> Deserialize<'de> for Background {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let m = object(d)?;
+        let mut b = Background::default();
+        field(&m, "kind", &mut b.kind);
+        b.color = m.get("color").and_then(|v| v.as_str()).map(str::to_string);
+        b.opacity = num(m.get("opacity"), 0, 255);
+        if let Some(r) = num(m.get("radius"), 0, 255) { b.radius = r; }
+        Ok(b)
+    }
+}
+
+impl<'de> Deserialize<'de> for Show {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let m = object(d)?;
+        let mut s = Show::default();
+        field(&m, "progress", &mut s.progress);
+        field(&m, "limits", &mut s.limits);
+        field(&m, "badge", &mut s.badge);
+        Ok(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Stage {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let mut m = object(d)?;
+        let mut s = Stage::default();
+        field(&m, "position", &mut s.position);
+        s.custom_at = m.get("custom_at").and_then(|v| v.as_f64());
+        s.floating_at = m.get("floating_at").and_then(|v| serde_json::from_value(v.clone()).ok());
+        if let Some(v) = m.get("monitor").and_then(|v| v.as_str()) { s.monitor = v.to_string(); }
+        field(&m, "background", &mut s.background);
+        if let Some(v) = num(m.get("size"), 0, u16::MAX as i64) { s.size = v; }
+        if let Some(v) = num(m.get("gap"), 0, 255) { s.gap = v; }
+        if let Some(v) = num(m.get("padding"), 0, 255) { s.padding = v; }
+        field(&m, "align", &mut s.align);
+        field(&m, "order", &mut s.order);
+        field(&m, "show", &mut s.show);
+        for k in ["position", "custom_at", "floating_at", "monitor", "background", "size", "gap", "padding", "align", "order", "show"] {
+            m.remove(k);
+        }
+        s.extra = m;
+        Ok(s)
+    }
 }
 
 pub const SIZE: (u16, u16) = (70, 300);
@@ -437,6 +492,18 @@ mod tests {
         low.background.color = Some("#A1b2C3".into());
         let c = low.clamped();
         assert_eq!((c.size, c.custom_at, c.background.color), (70, Some(0.0), Some("#A1b2C3".into())));
+    }
+
+    #[test]
+    fn a_hand_edited_stage_value_of_the_wrong_type_only_resets_that_value() {
+        let l = load_str(r#"{"version":1,"autostart":false,"stage":{"gap":300,"size":110.5,"padding":-4,"monitor":5,
+            "show":{"badge":"yes","limits":false},"background":{"kind":"glass","radius":"round"}}}"#);
+        assert!(l.error.is_none(), "{:?}", l.error);
+        assert!(!l.settings.autostart, "the rest of the file is kept");
+        let st = &l.settings.stage;
+        assert_eq!((st.gap, st.size, st.padding, st.monitor.as_str()), (30, 111, 0, "primary"));
+        assert_eq!((st.show.badge, st.show.limits), (true, false));
+        assert_eq!((st.background.kind, st.background.radius), (BgKind::Glass, 12));
     }
 
     #[test]
