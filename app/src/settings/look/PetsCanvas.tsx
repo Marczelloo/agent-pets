@@ -36,7 +36,6 @@ export function PetsCanvas({ pets, scene, u, width, height, className }: Props) 
       if (c.width !== bw.px || c.height !== bh.px) { c.width = bw.px; c.height = bh.px; c.style.width = `${bw.css}px`; c.style.height = `${bh.css}px`; }
       x.setTransform(d, 0, 0, d, 0, 0);
       x.clearRect(0, 0, width, height);
-      pen.boil = Math.floor(T * 8);
       list.forEach((p, i) => painters.current[i].frame(x, {
         dt, t0: T + i * 0.7, X: width * (i + 0.5) / list.length - 8 * u, Y: height - 8, u,
         look: p.look, animate: true, saving, reduced: reducedMotion(), dpr: d,

@@ -52,7 +52,6 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     const dt = Math.min(.05, (now - last) / 1000);
     last = now;
     T += dt;
-    pen.boil = Math.floor(T * 8);
     const { w, h } = fit();
     x.clearRect(0, 0, w, h);
     const u = .3 * h / 48, Y = h - 8;

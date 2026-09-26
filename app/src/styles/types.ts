@@ -1,4 +1,3 @@
-import type { SkinId } from '../skins';
 import type { StyleId } from '../types';
 
 /** Styl rysowania: dane i flagi czytane przez `pen.ts` i `draw/body.ts`; geometria i animacja są wspólne. */
@@ -28,7 +27,5 @@ export interface StyleDef {
     /** wypełnienie kreskowaniem na lekkim tle zamiast płaskiej plamy */
     hatchFill: boolean;
   };
-  shape?: { radius?: Partial<Record<SkinId, number>>; flatSide?: boolean };
-  face?: { smile?: boolean; blush?: boolean; eyes?: 'accent' };
-  extras?: { ears?: boolean; phones?: boolean };
+  face?: { eyes?: 'accent' };
 }

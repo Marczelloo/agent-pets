@@ -42,7 +42,6 @@ export function PetCanvas({ session, look }: { session: Session; look: Look }) {
       if (c.width !== Math.round(W * d)) { c.width = Math.round(W * d); c.height = Math.round(H * d); }
       x.setTransform(d, 0, 0, d, 0, 0);
       x.clearRect(0, 0, W, H);
-      pen.boil = Math.floor(T * 8);
       painter.current!.frame(x, { dt: acc, t0: T, X, Y, u: U, look: lookRef.current, animate: true, saving, reduced: reducedMotion(), dpr: d });
       acc = 0;
     };
