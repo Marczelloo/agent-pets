@@ -77,7 +77,9 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
             rules.set_settings(rules::Settings { needs_you: n.needs_you, done: n.done, limits: n.limits });
             rules.set_lang(lang);
             let now = last.now.max(pets_core::time::now_ms());
-            for t in rules.observe(&last, now, &focused) {
+            // okno sesji na pierwszym planie albo widoczny dymek z pytaniem: toast niepotrzebny (wyjdzie później, jeśli dymek zniknie)
+            let bubbles = app.state::<crate::bubbles::Bubbles>();
+            for t in rules.observe(&last, now, &|s| focused(s) || bubbles.asking(&s.id)) {
                 let a = app.clone();
                 let sid = t.session_id.clone();
                 let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body);

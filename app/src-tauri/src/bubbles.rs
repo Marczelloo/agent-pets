@@ -44,6 +44,17 @@ pub struct Bubbles { inner: Mutex<Inner> }
 #[derive(Default)]
 struct Inner { hits: Vec<Hit>, shown: bool }
 
+impl Bubbles {
+    pub fn set_hits(&self, hits: Vec<Hit>) { self.inner.lock().unwrap().hits = hits; }
+
+    /// Nad zwierzakiem sesji widać teraz dymek z jej pytaniem (zastępuje toast „czeka na Ciebie”).
+    pub fn asking(&self, id: &str) -> bool {
+        let s = self.inner.lock().unwrap();
+        // schowanie okna czyści prostokąty, więc wystarczy spojrzeć na nie
+        s.hits.iter().any(|h| h.kind == Kind::Question && h.id == id)
+    }
+}
+
 /// Odpowiedź na `bubbles_place`: przesunięcie sceny w oknie (px CSS) i czy pas jest nad sceną.
 #[derive(Serialize, Clone, Copy, Debug)]
 pub struct Placed { pub offset: f64, pub above: bool }
@@ -98,7 +109,7 @@ pub fn hide(app: &AppHandle, state: &Bubbles) {
 
 /// Prostokąty dymków do kliknięcia (po każdym rysowaniu).
 #[tauri::command]
-pub fn bubbles_hits(state: State<Bubbles>, hits: Vec<Hit>) { state.inner.lock().unwrap().hits = hits; }
+pub fn bubbles_hits(state: State<Bubbles>, hits: Vec<Hit>) { state.set_hits(hits); }
 
 /// Klik w dymek z pytaniem przenosi do sesji, w dymek z akcją otwiera panel na tej sesji.
 fn click(app: &AppHandle, h: &Hit) {
@@ -193,5 +204,17 @@ mod tests {
         assert!(allowed(false, true));
         assert!(!allowed(true, true), "gra na pełnym ekranie");
         assert!(!allowed(false, false), "scena schowana (ukryty pasek, brak miejsca)");
+    }
+
+    #[test]
+    fn a_visible_question_bubble_stands_in_for_the_toast() {
+        let b = Bubbles::default();
+        assert!(!b.asking("a"));
+        b.set_hits(vec![Hit { id: "a".into(), kind: Kind::Question, x: 0.0, y: 0.0, w: 10.0, h: 10.0 },
+                        Hit { id: "b".into(), kind: Kind::Action, x: 20.0, y: 0.0, w: 10.0, h: 10.0 }]);
+        assert!(b.asking("a"));
+        assert!(!b.asking("b"), "dymek z akcją to nie pytanie");
+        b.set_hits(vec![]);
+        assert!(!b.asking("a"), "dymek zniknął (pełny ekran, „+N”): toast znowu potrzebny");
     }
 }
