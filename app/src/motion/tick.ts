@@ -4,7 +4,7 @@ import type { MotionDef } from './types';
 const STEP = 1 / 60;
 
 /**
- * Zegar zwierzaka biegnie z tempem ruchu (zmiana ruchu nie robi skoku fazy). Anime liczy sprężyny
+ * Zegar zwierzaka biegnie z tempem ruchu (zmiana ruchu nie robi skoku fazy). Dynamiczny liczy sprężyny
  * w podkrokach ≤ 1/60 s, żeby twardsze sprężyny nie rozjechały się przy 10 kl./s. Zwraca zegar.
  */
 export function tick(c: Pet, dt: number, t0: number, m: MotionDef, animate: boolean): number {

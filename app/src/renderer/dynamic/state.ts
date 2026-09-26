@@ -1,4 +1,4 @@
-// Stan efektów Anime liczony w mózgu (spec 8.2): cząsteczki z własną fizyką i limitem, prośby o klatkę uderzenia,
+// Stan efektów Dynamiczny liczony w mózgu (spec 8.2): cząsteczki z własną fizyką i limitem, prośby o klatkę uderzenia,
 // wstrząs, onomatopeje, ślad dłoni do smug. Rysuje `motion/fx`; tu nic nie dotyka płótna.
 import type { FxEnv } from '../../motion/types';
 import { PI } from '../math';

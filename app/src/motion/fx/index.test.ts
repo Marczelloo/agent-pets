@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createPet } from '../../renderer';
-import { fxState } from '../../renderer/anime/state';
+import { fxState } from '../../renderer/dynamic/state';
 import { FLASH_MAX, TRAIL_S, flashFrame, recordTrail, shakeOffset, stretchOf } from './index';
 
 const ENV = { fx: true, bg: true, flash: true, shake: true, parts: 1 };
 
-describe('anime frame composition', () => {
+describe('dynamic frame composition', () => {
   it('a flash lasts two frames and at most 3 start in any second', () => {
     const s = fxState(createPet('clawd', 'edit'));
     const starts: number[] = [];

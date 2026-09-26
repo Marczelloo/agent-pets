@@ -40,7 +40,7 @@ export interface TooltipContent { title: string; subtitle: string; lines: string
 
 export type AppId = 'claude_code' | 'codex' | 'agent_router';
 export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
-export type MotionId = 'calm' | 'anime';
+export type MotionId = 'calm' | 'dynamic';
 export interface Look { style: StyleId; motion: MotionId }
 export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number }
 export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean }

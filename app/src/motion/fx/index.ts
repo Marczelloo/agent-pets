@@ -1,6 +1,6 @@
-// Składanie klatki Anime (spec 8.1–8.2): klatka uderzenia z limitem, wstrząs, rozciągnięcie ciała, ślad dłoni,
+// Składanie klatki Dynamiczny (spec 8.1–8.2): klatka uderzenia z limitem, wstrząs, rozciągnięcie ciała, ślad dłoni,
 // rozdział rysowania efektów na model wektorowy i pikselowy.
-import type { FxState } from '../../renderer/anime/state';
+import type { FxState } from '../../renderer/dynamic/state';
 import { cl } from '../../renderer/math';
 import type { Pet } from '../../renderer/pet';
 import type { FxEnv } from '../types';

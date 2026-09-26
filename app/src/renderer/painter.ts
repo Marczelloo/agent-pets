@@ -3,7 +3,7 @@ import { drawFxBack, drawFxFront, flashFrame, recordTrail, shakeOffset, stretchO
 import { tick } from '../motion/tick';
 import { ACCENT, STYLES } from '../styles';
 import type { Look } from '../types';
-import { fxState } from './anime/state';
+import { fxState } from './dynamic/state';
 import { drawPet } from './draw/body';
 import { gridPx } from './models/pixel';
 import { pen } from './pen';
@@ -12,7 +12,7 @@ import { setMotion, type Pet } from './pet';
 export interface PaintFrame { dt: number; t0: number; X: number; Y: number; u: number; look: Look; animate: boolean; saving: boolean; reduced: boolean; dpr: number }
 
 /**
- * Jedno wejście rysowania zwierzaka: zegar ruchu, model stylu i efekty Anime. Zawsze wprost na scenę,
+ * Jedno wejście rysowania zwierzaka: zegar ruchu, model stylu i efekty Dynamiczny. Zawsze wprost na scenę,
  * bez warstwy poza ekranem i bez duchów (spec wyglądu v2, 3 i 8).
  */
 export class PetPainter {

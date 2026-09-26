@@ -7,7 +7,7 @@ import type { Look, Session } from '../types';
 
 const W = 96, H = 72;
 let fps = 30, saving = false;
-/** Tryb oszczędny panelu: 10 kl./s i Anime bez smug. */
+/** Tryb oszczędny panelu: 10 kl./s i Dynamiczny bez smug. */
 export function setPetSaving(s: boolean): void { saving = s; fps = frameBudget(s).fps; }
 // Skala zwierzaka ze sceny w pasku (u = 0,3 przy 48 px), przeniesiona na płótno wysokości 72 px.
 const U = 0.3 * H / 48, X = 36, Y = H - 10;

@@ -10,7 +10,7 @@ const flags = (skin: 'clawd' | 'kodek', scene: string, secs: number) => {
   return { c, seen, stats: c.fx?.stats ?? {} };
 };
 
-describe('anime work scenes', () => {
+describe('dynamic work scenes', () => {
   it('edit: ORA barrage into the keyboard with flying keys, sparks, ドドド and a final punch with an impact frame', () => {
     const { seen, stats } = flags('clawd', 'edit', 7);
     expect(seen.some(s => s._barrage)).toBe(true);

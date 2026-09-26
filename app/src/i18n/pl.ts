@@ -180,7 +180,7 @@ export const pl = {
     } as Record<StyleId, string>,
     motion: {
       calm: 'Spokojny',
-      anime: 'Anime',
+      dynamic: 'Dynamiczny',
     } as Record<MotionId, string>,
     sceneName: {
       thinking: 'Myśli',
@@ -205,7 +205,7 @@ export const pl = {
       states: 'Stany',
     },
     motionTitle: 'Ruch',
-    motionDesc: 'Anime: sceny jak z anime — serie ciosów, pieczęcie, błyski i cząsteczki',
+    motionDesc: 'Dynamiczny: szybkie akcje jak z anime — serie ciosów, pieczęcie, błyski i cząsteczki',
     previewScene: 'Scena podglądu',
     taskbar: 'Tak wygląda w pasku',
     perAgent: 'Osobno dla agentów',

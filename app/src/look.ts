@@ -2,7 +2,7 @@
 import type { AppId, Look, MotionId, Pets, Session, StyleId } from './types';
 
 export const STYLE_IDS: StyleId[] = ['sticker', 'sketch', 'clean', 'pixel', 'neon', 'ink', 'pastel'];
-export const MOTION_IDS: MotionId[] = ['calm', 'anime'];
+export const MOTION_IDS: MotionId[] = ['calm', 'dynamic'];
 /** Wygląd bez ustawień: dokładnie rysunek prototypu v6 (testy parytetu). */
 export const DEFAULT_LOOK: Look = { style: 'clean', motion: 'calm' };
 
@@ -14,9 +14,12 @@ export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId {
   return s.agent === 'codex' ? 'codex' : 'claude_code';
 }
 
+/** Ruch „anime” z wcześniejszych wersji to dziś „dynamic” (rdzeń też czyta stary identyfikator). */
+const motionOf = (m: MotionId | 'anime'): MotionId => (m === 'anime' ? 'dynamic' : m);
+
 export function lookFor(p: Pets, app: AppId): Look {
   const o = p.overrides?.[app] ?? {};
-  return { style: o.style ?? p.style, motion: o.motion ?? p.motion };
+  return { style: o.style ?? p.style, motion: motionOf(o.motion ?? p.motion) };
 }
 
 /** `null` = „Jak domyślny”: usuwa pole, a puste nadpisanie znika. */

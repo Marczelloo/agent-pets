@@ -1,9 +1,9 @@
-// Efekty Anime na siatce modelu pikselowego (spec 8.2 + 6): te same warstwy co wektorowe, ale każda figura to
+// Efekty Dynamiczny na siatce modelu pikselowego (spec 8.2 + 6): te same warstwy co wektorowe, ale każda figura to
 // komórki siatki — linie Bresenhamem, koła i elipsy na komórkach, cząsteczki i słowa jako bitmapy.
 import { PI, TAU, cl, hr } from '../../renderer/math';
 import { gridPx } from '../../renderer/models/pixel';
 import { pen } from '../../renderer/pen';
-import { WORD_RISE, type FxState, type Particle } from '../../renderer/anime/state';
+import { WORD_RISE, type FxState, type Particle } from '../../renderer/dynamic/state';
 import type { Pet } from '../../renderer/pet';
 import { GLYPHS, glyphWidth } from './glyphs';
 import type { FxCtx } from './index';

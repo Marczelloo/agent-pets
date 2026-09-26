@@ -6,7 +6,7 @@ import { CAP, PHYS, emit, fxState, impact, spray, stepFx, word, type Particle } 
 setRng(seeded(5).next);
 const pet = () => createPet('clawd', 'idle');
 
-describe('anime fx state', () => {
+describe('dynamic fx state', () => {
   it('caps particles per pet and drops the oldest first', () => {
     const c = pet();
     for (let i = 0; i < 100; i++) emit(c, 'spark', i, 0);

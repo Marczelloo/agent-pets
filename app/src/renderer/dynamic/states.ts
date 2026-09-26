@@ -1,4 +1,4 @@
-// Choreografie Anime scen stanów (spec 8.3). Współrzędne jak w scenes.ts.
+// Choreografie Dynamiczny scen stanów (spec 8.3). Współrzędne jak w scenes.ts.
 import { PI, TAU } from '../math';
 import { rng } from '../rng';
 import type { Pet } from '../pet';

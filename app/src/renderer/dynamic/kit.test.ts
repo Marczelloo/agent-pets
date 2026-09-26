@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { SCENES } from '../scenes';
-import { SCENES_ANIME } from './index';
+import { SCENES_DYNAMIC } from './index';
 import { at, every, keys, snapE } from './kit';
 
-describe('anime kit', () => {
-  it('SCENES_ANIME covers exactly the calm scene keys', () => {
-    expect(Object.keys(SCENES_ANIME).sort()).toEqual(Object.keys(SCENES).sort());
+describe('dynamic kit', () => {
+  it('SCENES_DYNAMIC covers exactly the calm scene keys', () => {
+    expect(Object.keys(SCENES_DYNAMIC).sort()).toEqual(Object.keys(SCENES).sort());
   });
   it('snapE covers most of the way early, then holds', () => {
     expect(snapE(0)).toBe(0);

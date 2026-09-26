@@ -1,4 +1,4 @@
-// Narzędzia choreografii Anime (spec 8.1): klatki kluczowe z szybką akcją i pauzą, zdarzenia w czasie akcji.
+// Narzędzia choreografii Dynamiczny (spec 8.1): klatki kluczowe z szybką akcją i pauzą, zdarzenia w czasie akcji.
 export type Pose = Record<string, number | string | null>;
 
 /** Szybka akcja: prawie cała droga w pierwszej ⅓ odcinka, potem zatrzymanie w pozie. */

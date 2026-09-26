@@ -8,7 +8,7 @@ import { subscribe } from './loop';
 
 export interface PreviewPet { agent: Agent; look: Look }
 let saving = false;
-/** Tryb oszczędny w podglądzie: Anime bez smug (fps ustawia `setLoopSaving`). */
+/** Tryb oszczędny w podglądzie: Dynamiczny bez smug (fps ustawia `setLoopSaving`). */
 export function setPreviewSaving(v: boolean): void { saving = v; }
 
 interface Props { pets: PreviewPet[]; scene: SceneKey; u: number; width: number; height: number; className?: string }

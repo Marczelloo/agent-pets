@@ -1,8 +1,8 @@
-// Efekty Anime dla modeli wektorowego i naklejki: tło akcji, krąg na ziemi, błysk za zwierzakiem (tył);
+// Efekty Dynamiczny dla modeli wektorowego i naklejki: tło akcji, krąg na ziemi, błysk za zwierzakiem (tył);
 // cząsteczki, smugi, wachlarz pięści, nakładki twarzy, kule, onomatopeje (przód). Tylko geometria bieżącej klatki.
 import { PI, TAU, cl, hr } from '../../renderer/math';
 import { pen } from '../../renderer/pen';
-import type { FxState, Particle } from '../../renderer/anime/state';
+import type { FxState, Particle } from '../../renderer/dynamic/state';
 import type { Pet } from '../../renderer/pet';
 import type { FxCtx } from './index';
 

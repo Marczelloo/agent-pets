@@ -1,16 +1,16 @@
 import { TAU } from "./math";
 import { K, DEF, SPR } from "./pose";
 import { SCENES } from "./scenes";
-import { SCENES_ANIME } from "./anime";
-import { fxState, stepFx } from "./anime/state";
+import { SCENES_DYNAMIC } from "./dynamic";
+import { fxState, stepFx } from "./dynamic/state";
 import { rng } from "./rng";
 import { SKINS, type SkinId } from "../skins";
 export interface Pet { type: SkinId; p: Record<string, { x: number; v: number }>; parts: any[]; /** mnożnik przezroczystości całego zwierzaka (pojawianie się, pożegnanie) */ alpha?: number; [key: string]: any }
 export function createPet(type: SkinId,st: string): Pet{const c: Pet={type,p:{},parts:[],spawn:0,blink:0,nb:1+rng()*2,aa:0,av:0,hp:rng(),f:20,hand:[[-30,-30],[30,-30]],aHand:[[-30,-30],[30,-30]],kph:0,prop:null,hold:null,boltAng:0,pageSeed:0};K.forEach((k: any)=>c.p[k]={x:0,v:0});setScene(c,st,true);return c;}
 export function startAct(c: any,a: any){c.act=a;c.aT=0;c.pend=null;if(a[3])a[3](c);}
-export const sceneTable=(c: any)=>c.anime?SCENES_ANIME:SCENES;
-/** Przełącza choreografię (Spokojny ↔ Anime) i restartuje bieżącą scenę w nowej tablicy; pozy przechodzą sprężynami. */
-export function setMotion(c: Pet,anime: boolean){if(!!c.anime===anime)return;c.anime=anime;c.parts=[];if(c.fx){c.fx.parts=[];c.fx.words=[];}setScene(c,c.st);
+export const sceneTable=(c: any)=>c.dynamic?SCENES_DYNAMIC:SCENES;
+/** Przełącza choreografię (Spokojny ↔ Dynamiczny) i restartuje bieżącą scenę w nowej tablicy; pozy przechodzą sprężynami. */
+export function setMotion(c: Pet,dynamic: boolean){if(!!c.dynamic===dynamic)return;c.dynamic=dynamic;c.parts=[];if(c.fx){c.fx.parts=[];c.fx.words=[];}setScene(c,c.st);
 // rekwizyt albo przedmiot, którego nowa choreografia nie używa, znika od razu (inaczej wygasa w obcej pozie, np. siatka w uniesionej łapie)
 const tg=targets(c,0);if((tg._prop||null)!==c.prop){c.prop=null;c.p.propA.x=0;c.p.propA.v=0;}if((tg._hold||null)!==c.hold){c.hold=null;c.p.holdA.x=0;c.p.holdA.v=0;}}
 /** Krytycznie tłumiona sprężyna, rozwiązanie dokładne: bez przestrzelenia i stabilna przy każdym dt. */
@@ -35,6 +35,6 @@ c.spawn-=dt;if(c.spawn<0){c.spawn=.3;const R=rng;
 if(P.loaf.x>.6&&R()<.35)c.parts.push({t:'z',x:20,y:-66,vx:14,vy:-22,life:0,max:2.2,s:13,grow:1,col:'mute'});
 if(P.typeW.x>.6&&tg._parts==='code')c.parts.push({t:['{','}',';','</>','=>','*'][Math.floor(R()*6)],x:80,y:-88,vx:6+R()*10,vy:-26,life:0,max:1.1,s:11,col:'clay'});
 if(P.typeW.x>.6&&tg._parts==='bash'&&R()<.7)c.parts.push({t:['$','>_','&&','|','~/','ls'][Math.floor(R()*6)],x:102,y:-108,vx:4+R()*10,vy:-26,life:0,max:1.1,s:11,col:'teal'});
-if(!c.anime&&P.squint.x>.4&&R()<.25)c.parts.push({k:'drop',x:-26+R()*8,y:-70,vx:-20,vy:-20,g:160,life:0,max:.7});
+if(!c.dynamic&&P.squint.x>.4&&R()<.25)c.parts.push({k:'drop',x:-26+R()*8,y:-70,vx:-20,vy:-20,g:160,life:0,max:.7});
 if(tg._notes&&R()<.6)c.parts.push({t:R()<.5?'♪':'♫',x:(R()-.5)*120,y:-60-R()*30,vx:(R()-.5)*20,vy:-35,life:0,max:1.3,s:14,col:'clay'});
-if(!c.anime&&P.happy.x>.6&&R()<.3)c.parts.push({t:'✦',x:(R()-.5)*110,y:-70-R()*40,vx:0,vy:-8,life:0,max:1.2,s:10+R()*6,col:'clay',tw:1});}}
+if(!c.dynamic&&P.happy.x>.6&&R()<.3)c.parts.push({t:'✦',x:(R()-.5)*110,y:-70-R()*40,vx:0,vy:-8,life:0,max:1.2,s:10+R()*6,col:'clay',tw:1});}}

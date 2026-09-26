@@ -173,7 +173,7 @@ export const en: Dict = {
     },
     motion: {
       calm: 'Calm',
-      anime: 'Anime',
+      dynamic: 'Dynamic',
     },
     sceneName: {
       thinking: 'Thinking',
@@ -198,7 +198,7 @@ export const en: Dict = {
       states: 'States',
     },
     motionTitle: 'Motion',
-    motionDesc: 'Anime: scenes straight out of anime — punch barrages, hand seals, impact flashes and particles',
+    motionDesc: 'Dynamic: snappy anime-style action — punch barrages, hand seals, impact flashes and particles',
     previewScene: 'Preview scene',
     taskbar: 'In the taskbar',
     perAgent: 'Per agent',

@@ -1,4 +1,4 @@
-// Choreografie Anime scen pracy (spec 8.3). Współrzędne w jednostkach mózgu jak w scenes.ts: podstawa (0, 0),
+// Choreografie Dynamiczny scen pracy (spec 8.3). Współrzędne w jednostkach mózgu jak w scenes.ts: podstawa (0, 0),
 // y w górę ujemny, klawiatura biurka ≈ (−2…18, −30), ekran terminala ≈ (70…100, −60).
 import { PI, hr } from '../math';
 import { rng } from '../rng';

@@ -79,12 +79,12 @@ export function loadPrototype(rng: () => number): ProtoApi {
   return sandbox.__p as ProtoApi;
 }
 
-/** Zwierzak w ruchu Anime liczony przez `tick` przy 60 kl./s przez `secs` sekund; `each` po każdym kroku. */
+/** Zwierzak w ruchu Dynamiczny liczony przez `tick` przy 60 kl./s przez `secs` sekund; `each` po każdym kroku. */
 export function simulate(skin: 'clawd' | 'kodek', scene: string, secs: number, each?: (c: Pet, T: number) => void): Pet {
   const c = createPet(skin, scene);
   setMotion(c, true);
   let T = 0;
-  for (let i = 0; i < Math.round(secs * 60); i++) { T += 1 / 60; tick(c, 1 / 60, T, MOTIONS.anime, true); each?.(c, T); }
+  for (let i = 0; i < Math.round(secs * 60); i++) { T += 1 / 60; tick(c, 1 / 60, T, MOTIONS.dynamic, true); each?.(c, T); }
   return c;
 }
 

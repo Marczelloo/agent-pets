@@ -22,7 +22,7 @@ describe('Wizard', () => {
     const html = renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} initialStep="look" />);
     expect(html).toContain('gallery compact');
     expect(html).toContain('Pixel-art');
-    expect(html).toContain('Anime');
+    expect(html).toContain('Dynami'); // Dynamiczny / Dynamic
   });
   it('starts with the apps it found; missing ones are greyed out with a hint', () => {
     const html = renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} />);
@@ -71,7 +71,7 @@ describe('SettingsView', () => {
     for (const name of ['Naklejka', 'Szkic', 'Czysty', 'Pixel-art', 'Neon', 'Tusz', 'Pastel']) expect(html).toContain(name);
     expect(html).toMatch(/<button[^>]*aria-checked="true"[^>]*look-card[^>]*><canvas[^>]*><\/canvas><span>Naklejka<\/span>/);
     expect(html).toContain('Spokojny');
-    expect(html).toContain('Anime');
+    expect(html).toContain('Dynami'); // Dynamiczny / Dynamic
     expect(html).toContain('Osobno dla agentów');
     expect(html).toContain('Jak domyślny');
     expect(html).toContain('Tak wygląda w pasku');

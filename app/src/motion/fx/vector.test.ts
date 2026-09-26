@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createPet, pen, setRng } from '../../renderer';
-import { PHYS, emit, fxState, word, type PKind } from '../../renderer/anime/state';
+import { PHYS, emit, fxState, word, type PKind } from '../../renderer/dynamic/state';
 import { recorder, seeded } from '../../renderer/testing';
 import type { FxCtx } from './index';
 import { SLOT, vectorBack, vectorFront } from './vector';
@@ -12,7 +12,7 @@ const G = (o: Partial<FxCtx> = {}): FxCtx => ({ X: 60, Y: 40, u: 0.3, t: 1, dpr:
 const pet = (tg: Record<string, unknown> = {}) => { const c = createPet('clawd', 'idle'); c.tg = { ...c.tg, ...tg }; c.face = [0, -45, 12]; c.hand = [[-30, -30], [30, -30]]; fxState(c); return c; };
 const ok = (log: string[]) => { expect(log.some(l => l.includes('NaN'))).toBe(false); expect(log.filter(l => l === 'save()').length).toBe(log.filter(l => l === 'restore()').length); };
 
-describe('vector anime effects', () => {
+describe('vector dynamic effects', () => {
   it('every particle kind draws finite and balanced', () => {
     for (const k of Object.keys(PHYS) as PKind[]) {
       const c = pet(); emit(c, k, 10, -40, { vx: 30, vy: -20, life: 0.1 });

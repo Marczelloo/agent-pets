@@ -3,7 +3,7 @@ import { foldHW } from "./fold";
 import { rng } from "./rng";
 import type { Pet } from "./pet";
 export type Act = [name: string, dur: number, fn: (a: number, c: Pet, t: number) => Record<string, any> | undefined, onStart?: (c: Pet) => void, onEnd?: (c: Pet) => void,
-  /** hak kroku (tylko Anime): cząsteczki, uderzenia, słowa; `a` = czas akcji po tym kroku */
+  /** hak kroku (tylko Dynamiczny): cząsteczki, uderzenia, słowa; `a` = czas akcji po tym kroku */
   hook?: (a: number, c: Pet, t: number, dt: number) => void];
 export type Scene = { base: Record<string, any>; acts: Act[]; seq?: Act[]; cycle?: number };
 export const pend=(c: any,t: any,fn: any)=>{c.pend={t,fn};};

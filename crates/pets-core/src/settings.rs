@@ -50,7 +50,7 @@ pub enum Style { Sketch, Clean, #[default] Sticker, Pixel, Neon, Ink, Pastel }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum Motion { #[default] Calm, Anime }
+pub enum Motion { #[default] Calm, #[serde(alias = "anime")] Dynamic }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -239,9 +239,18 @@ mod tests {
         let l = load_str(r#"{"version":1,"pets":{"overrides":{"codex":{"style":"x","motion":"anime"},"claude_code":{"style":"neon"}}}}"#);
         assert!(l.error.is_none());
         let o = l.settings.pets.overrides;
-        assert_eq!(o.codex, Some(LookOverride { style: None, motion: Some(Motion::Anime) }));
+        assert_eq!(o.codex, Some(LookOverride { style: None, motion: Some(Motion::Dynamic) }));
         assert_eq!(o.claude_code, Some(LookOverride { style: Some(Style::Neon), motion: None }));
         assert_eq!(o.agent_router, None);
+    }
+
+    #[test]
+    fn the_old_anime_motion_reads_as_dynamic_and_saves_as_dynamic() {
+        let l = load_str(r#"{"version":1,"pets":{"motion":"anime","overrides":{"codex":{"motion":"dynamic"}}}}"#);
+        assert!(l.error.is_none());
+        assert_eq!(l.settings.pets.motion, Motion::Dynamic);
+        assert_eq!(l.settings.pets.overrides.codex.and_then(|o| o.motion), Some(Motion::Dynamic));
+        assert_eq!(serde_json::to_string(&Motion::Dynamic).unwrap(), r#""dynamic""#);
     }
 
     #[test]

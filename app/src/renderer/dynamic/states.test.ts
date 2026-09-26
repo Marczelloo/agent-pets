@@ -10,7 +10,7 @@ const flags = (skin: 'clawd' | 'kodek', scene: string, secs: number) => {
   return { c, seen, stats: c.fx?.stats ?? {} };
 };
 
-describe('anime state scenes', () => {
+describe('dynamic state scenes', () => {
   it('thinking: shadow over the eyes, dramatic smile, a page falling in slow motion, ゴゴゴ', () => {
     const { seen, stats } = flags('clawd', 'thinking', 5);
     expect(seen.some(s => s._face === 'shadow')).toBe(true);

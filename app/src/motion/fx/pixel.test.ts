@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPet, setRng } from '../../renderer';
-import { WORDS } from '../../renderer/anime/kit';
-import { PHYS, emit, fxState, word, type PKind } from '../../renderer/anime/state';
+import { WORDS } from '../../renderer/dynamic/kit';
+import { PHYS, emit, fxState, word, type PKind } from '../../renderer/dynamic/state';
 import { recorder, seeded } from '../../renderer/testing';
 import { GLYPHS } from './glyphs';
 import type { FxCtx } from './index';
@@ -23,7 +23,7 @@ const pet = (tg: Record<string, unknown>) => {
   return c;
 };
 
-describe('pixel anime effects', () => {
+describe('pixel dynamic effects', () => {
   it('only integer device-pixel rectangles for every effect at 100/125/150 %', () => {
     for (const dpr of [1, 1.25, 1.5]) for (const tg of TGS) for (const flash of [false, true]) {
       const r = recorder(), c = pet(tg);
