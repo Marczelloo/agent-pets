@@ -1,6 +1,6 @@
 // Choreografie Dynamiczny scen pracy (spec 8.3). Współrzędne w jednostkach mózgu jak w scenes.ts: podstawa (0, 0),
 // y w górę ujemny, klawiatura biurka ≈ (−2…18, −30), ekran terminala ≈ (70…100, −60).
-import { PI, ease, hr } from '../math';
+import { PI, TAU, ease, hr } from '../math';
 import { rng } from '../rng';
 import type { Scene } from '../scenes';
 import { HIP, at, every, keys, snapE } from './kit';
@@ -71,10 +71,12 @@ export const WORK: Record<string, Scene> = {
       if (at(a, dt, 0.16)) for (let i = 0; i < 3; i++) emit(c, 'page', 34, -36, { vx: 80 + i * 20, vy: -90 + i * 20, vr: 8 });
     }],
   ] },
-  grep: { cycle: 1, base: { th: 0.45, tilt: 0.04, _prop: 'board' }, acts: [
-    ['Sharingan: skanuje', 2.6, (a) => ({ ...HIP, ikR: 1, hxR: 40, hyR: -40, ex: 0.9, look: -0.2, squint: 0.3, _face: 'sharingan', _faceK: snapE(a / 0.15), _scan: (a * 1.6) % 1, _bg: 'dark', _bgK: snapE(a / 0.3) })],
-    ['trafienie!', 1, keys([[0, { ...HIP, ikR: 1, hxR: 40, hyR: -40, armL: 0.35, hopW: 0, _face: 'sharingan', _faceK: 1, _stiff: 3 }], [0.06, { hxR: 74, hyR: -58, hopW: 0.8, lean: 0.4 }], [0.6, { hopW: 0 }], [1, { hxR: 40, hyR: -40, lean: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
-      if (at(a, dt, 0.06)) { impact(c, 2.5); word(c, '!', 30, -100, 40); spray(c, 'spark', 6, 74, -58, 120); }
+  // detektyw: chodzi wzdłuż tablicy z wielką lupą (w szkle powiększony kod), trafienie zatrzymuje wszystko
+  grep: { cycle: 1, base: { th: 0.3, _prop: 'board' }, acts: [
+    ['szuka z lupą', 3.6, (a) => { const w = Math.sin(a * TAU / 1.8); return { ...HIP, lx: 9 - 9 * Math.cos(a * TAU / 1.8), walkW: Math.abs(w) > 0.3 ? 1 : 0,
+      ikR: 1, hxR: 44 + 6 * Math.sin(a * 3), hyR: -62 + 10 * Math.sin(a * 1.7), ex: 0.8, look: -0.3, squint: 0.3, _lens: 1, _lensK: snapE(a / 0.3) }; }],
+    ['trafienie!', 1.4, keys([[0, { ...HIP, ikR: 1, hxR: 44, hyR: -62, lx: 0, _lens: 1, _stiff: 2 }], [0.1, { hxR: 54, hyR: -60, hopW: 0.8, lean: 0.4, ex: 0.9 }], [0.8, { hopW: 0 }], [1.4, { hxR: 44, hyR: -62, lean: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
+      if (at(a, dt, 0.1)) { impact(c, 2.5); hitStop(c, 0.1); word(c, '!', 40, -92, 40); spray(c, 'spark', 8, 62, -72, 120, -PI / 2, 2 * PI); }
     }],
   ] },
   web: { cycle: 1, base: {}, acts: [

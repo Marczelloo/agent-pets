@@ -28,7 +28,7 @@ describe('vector dynamic effects', () => {
     expect(Math.min(...px)).toBeGreaterThanOrEqual(9);
   });
   it('the action background is clipped to the pet slot and skipped in power saving', () => {
-    for (const bg of ['speed', 'rays', 'purple', 'wind', 'dark']) {
+    for (const bg of ['speed', 'rays', 'purple', 'wind']) {
       const r = recorder(); vectorBack(r.ctx, pet({ _bg: bg }), G());
       expect(SLOT).toEqual({ w: 150, h: 140 });
       expect(r.log, bg).toContain('rect(37.5,-0.5,45,42)'); // 150u × 140u wokół podstawy (60, 40) przy u = 0,3
@@ -53,9 +53,18 @@ describe('vector dynamic effects', () => {
     const fonts = r.log.filter(l => l.startsWith('font=')).map(l => parseFloat(l.split(' ')[1]));
     expect(Math.min(...fonts)).toBeGreaterThanOrEqual(9);
   });
+  it('the big magnifier sits at the right hand and shows magnified code inside its glass', () => {
+    const r = recorder(); vectorFront(r.ctx, pet({ _lens: 1 }), G());
+    const arcs = r.log.filter(l => l.startsWith('arc(')).map(l => l.slice(4, -1).split(',').map(Number));
+    const glass = arcs.find(a => a[2] >= 14 * 0.3 - 1e-6)!;
+    expect(glass).toBeDefined();
+    expect(Math.hypot(glass[0] - (60 + 30 * 0.3), glass[1] - (40 - 30 * 0.3))).toBeLessThan(25 * 0.3); // przy prawej dłoni (30, −30)
+    expect(r.log).toContain('clip()');
+    expect(r.log.filter(l => l.startsWith('fillRect(')).length).toBeGreaterThanOrEqual(3); // linie kodu w szkle
+  });
   it('face overlays sit at the face anchor', () => {
-    for (const face of ['glasses', 'sharingan', 'shadow', 'sparkle', 'teeth']) {
-      const r = recorder(); vectorFront(r.ctx, pet({ _face: face, _faceK: 1, _smile: 1 }), G());
+    for (const face of ['glasses', 'sparkle', 'teeth']) {
+      const r = recorder(); vectorFront(r.ctx, pet({ _face: face, _faceK: 1 }), G());
       const xs = r.log.filter(l => /^(arc|ellipse|moveTo|rect|fillRect)\(/.test(l)).map(l => +l.slice(l.indexOf('(') + 1).split(',')[0]);
       expect(xs.length, face).toBeGreaterThan(0);
       for (const v of xs) expect(Math.abs(v - 60), face).toBeLessThan(40 * 0.3 + 12);

@@ -54,7 +54,7 @@ export function pixelBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const rays = (n: number, r0: number, r1: number, col: string) => { for (let i = 0; i < n; i++) { const a = TAU * (i + hr(i + seed) * 0.6) / n;
     line(Math.round(Math.cos(a) * U(r0)), cy + Math.round(Math.sin(a) * U(r0) * 0.8), Math.round(Math.cos(a) * U(r1)), cy + Math.round(Math.sin(a) * U(r1) * 0.8), col); } };
   if (g.flash) { ring(0, cy, U(60), U(50), WHITE, true); rays(12, 36, 62, pen.ol); }
-  else if (bg === 'speed' || bg === 'purple' || bg === 'dark') { x.globalAlpha = g.alpha * 0.4; rays(14, 52, 72, bg === 'purple' ? PURPLE : bg === 'dark' ? '#3B2A4A' : pen.ol); }
+  else if (bg === 'speed' || bg === 'purple') { x.globalAlpha = g.alpha * 0.4; rays(14, 52, 72, bg === 'purple' ? PURPLE : pen.ol); }
   else if (bg === 'rays') { x.globalAlpha = g.alpha * 0.35; rays(10, 10, 75, AMBER); }
   else if (bg === 'wind') { x.globalAlpha = g.alpha * 0.45; for (let i = 0; i < 6; i++) { const off = Math.round(((g.t * 160 + i * 37) % 150) / 150 * U(150)); cell(U(-75) + off, cy + U(-40 + i * 14), U(22), 1, pen.ol); } }
   if (gr) { x.globalAlpha = g.alpha * cl(tg._groundK ?? 1); const col = gr === 'seal' ? RED : TEAL, gx = U(tg._groundX ?? 0);
@@ -91,13 +91,16 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
   const K = cl(tg._faceK ?? 1);
   if (K > 0.3) switch (tg._face) {
     case 'glasses': for (const sd of [-1, 1]) ring(fx + sd * gap, fy, 2, 2, pen.ol); if ((g.t * 1.2) % 1 < 0.3) for (const sd of [-1, 1]) cell(fx + sd * gap, fy - 1, 1, 1, WHITE); break;
-    case 'sharingan': { const r = Math.max(3, U(12)); ring(fx, fy - 1, Math.round(r * 1.4), r, WHITE, true); ring(fx, fy - 1, r - 1, r - 1, RED, true); cell(fx, fy - 1, 1, 1, pen.ol);
-      for (let i = 0; i < 3; i++) { const a = g.t * 6 + TAU * i / 3; cell(fx + Math.round(Math.cos(a) * r * 0.5), fy - 1 + Math.round(Math.sin(a) * r * 0.5), 1, 1, pen.ol); }
-      cell(fx - Math.round(r * 1.4), fy - 1 - r + Math.round(2 * r * cl(tg._scan ?? 0)), Math.round(r * 2.8), 1, RED); break; }
-    case 'shadow': cell(fx - gap * 2, fy - U(10), gap * 4, Math.max(2, U(13)), '#1A0E14'); for (const sd of [-1, 1]) cell(fx + sd * gap, fy - 1, 1, 1, RED);
-      if (tg._smile) { cell(fx - 3, fy + U(10), 7, 1, pen.ol); cell(fx - 4, fy + U(10) - 1, 1, 1, pen.ol); cell(fx + 4, fy + U(10) - 1, 1, 1, pen.ol); } break;
     case 'sparkle': for (const sd of [-1, 1]) { cell(fx + sd * gap - 1, fy - 2, 3, 4, '#1E1410'); cell(fx + sd * gap, fy - 2, 1, 1, WHITE); } break;
     case 'teeth': cell(fx - 2, fy + U(8), 5, Math.max(1, U(3)), WHITE); if (Math.floor(g.t * 9) % 2) sprite(SPR.spark!, fx + 4, fy + U(5)); break;
+  }
+  if (tg._lens && hands[1]) {
+    const r = Math.max(2, U(15 * cl(tg._lensK ?? 1))), hx = U(hands[1][0]), hy = U(hands[1][1]), cx = hx + U(8), cy = hy - U(10);
+    line(hx, hy, cx - Math.round(r * 0.7), cy + Math.round(r * 0.7), pen.ol);
+    ring(cx, cy, r, r, '#C8E6FF', true);
+    const off = Math.floor(g.t * 4) % 3;
+    for (let i = 0; i < r; i += 3) { const row = cy - r + 1 + i + off; if (row < cy + r - 1) cell(cx - r + 2, row, Math.max(1, Math.min(2 * r - 4, Math.round(r * (0.6 + 0.8 * hr(i + Math.floor(g.t * 2)))))), 1, ['#1D9E75', '#D97757', '#5B8DEF'][i % 3]); }
+    ring(cx, cy, r, r, pen.ol); cell(cx - Math.round(r / 2), cy - Math.round(r / 2), 1, 1, WHITE);
   }
   if (tg._orbit) {
     const k = cl(tg._orbitK ?? 1), idea = cl(tg._idea ?? 0);

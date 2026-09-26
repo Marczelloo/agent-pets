@@ -30,9 +30,9 @@ export function vectorBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
   if (g.flash) {
     x.fillStyle = WHITE; x.beginPath(); x.arc(cx, cy, 70 * u, 0, TAU); x.fill();
     x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 2 * u); rays(x, cx, cy, 34 * u, 78 * u, 14, seed);
-  } else if (bg === 'speed' || bg === 'purple' || bg === 'dark') {
-    x.globalAlpha = g.alpha * k * (bg === 'dark' ? 0.5 : 0.35);
-    x.strokeStyle = bg === 'purple' ? PURPLE : bg === 'dark' ? '#3B2A4A' : pen.ol; x.lineWidth = Math.max(1, 1.6 * u);
+  } else if (bg === 'speed' || bg === 'purple') {
+    x.globalAlpha = g.alpha * k * 0.35;
+    x.strokeStyle = bg === 'purple' ? PURPLE : pen.ol; x.lineWidth = Math.max(1, 1.6 * u);
     rays(x, cx, cy, 52 * u, 80 * u, 18, seed);
   } else if (bg === 'rays') {
     x.globalAlpha = g.alpha * k * 0.3; x.fillStyle = AMBER;
@@ -96,17 +96,6 @@ function face(x: CanvasRenderingContext2D, c: Pet, g: FxCtx, XX: number, Y: numb
     x.beginPath(); x.moveTo(fx - gap + 7 * u, fy); x.lineTo(fx + gap - 7 * u, fy); x.stroke();
     const gl = (g.t * 1.2) % 1;
     if (gl < 0.3) { x.strokeStyle = WHITE; x.lineWidth = Math.max(1, 2 * u); x.beginPath(); for (const s of [-1, 1]) { const o = (gl / 0.3 - 0.5) * 10 * u; x.moveTo(fx + s * gap + o - 3 * u, fy + 4 * u); x.lineTo(fx + s * gap + o + 3 * u, fy - 4 * u); } x.stroke(); }
-  } else if (kind === 'sharingan') {
-    const r = 14 * u * (0.5 + 0.5 * K), cy = fy - 4 * u;
-    x.fillStyle = WHITE; x.beginPath(); x.ellipse(fx, cy, r * 1.5, r, 0, 0, TAU); x.fill(); x.stroke();
-    x.fillStyle = RED; x.beginPath(); x.arc(fx, cy, r * 0.8, 0, TAU); x.fill(); x.stroke();
-    x.fillStyle = pen.ol; x.beginPath(); x.arc(fx, cy, r * 0.22, 0, TAU); x.fill();
-    for (let i = 0; i < 3; i++) { const a = g.t * 6 + TAU * i / 3; x.beginPath(); x.arc(fx + Math.cos(a) * r * 0.5, cy + Math.sin(a) * r * 0.5, r * 0.13, 0, TAU); x.fill(); }
-    x.strokeStyle = RED; x.globalAlpha *= 0.6; x.beginPath(); const sy = cy - r + 2 * r * cl(tg._scan ?? 0); x.moveTo(fx - r * 1.5, sy); x.lineTo(fx + r * 1.5, sy); x.stroke();
-  } else if (kind === 'shadow') {
-    x.fillStyle = 'rgba(24,14,20,0.85)'; x.fillRect(fx - gap * 2.2, fy - 10 * u, gap * 4.4, 13 * u);
-    x.fillStyle = RED; for (const s of [-1, 1]) x.fillRect(fx + s * gap - 1.5 * u, fy - 2 * u, 3 * u, 1.6 * u);
-    if (tg._smile) { x.lineWidth = Math.max(1.2, 2.2 * u); x.beginPath(); x.arc(fx, fy + 4 * u, 9 * u, 0.15 * PI, 0.85 * PI); x.stroke(); }
   } else if (kind === 'sparkle') {
     for (const s of [-1, 1]) {
       x.fillStyle = '#1E1410'; x.beginPath(); x.ellipse(fx + s * gap, fy, 6 * u, 8 * u, 0, 0, TAU); x.fill();
@@ -154,6 +143,21 @@ function bulb(x: CanvasRenderingContext2D, bx: number, by: number, r: number, li
   x.fillStyle = '#B4B2A9'; x.beginPath(); x.rect(bx - r * 0.45, by + r * 0.85, r * 0.9, r * 0.55); x.fill(); x.stroke();
 }
 
+/** Wielka lupa detektywa przy prawej dłoni: szkło z powiększonymi liniami kodu, obręcz, rączka, błysk. */
+function lens(x: CanvasRenderingContext2D, g: FxCtx, hx: number, hy: number, k: number) {
+  const u = g.u, r = 15 * u * k, cx = hx + 8 * u, cy = hy - 10 * u;
+  if (r < u) return;
+  x.save(); x.strokeStyle = pen.ol; x.lineWidth = Math.max(1.4, 2.6 * u);
+  x.beginPath(); x.moveTo(hx, hy); x.lineTo(cx - r * 0.7, cy + r * 0.7); x.stroke();
+  x.save(); x.beginPath(); x.arc(cx, cy, r, 0, TAU); x.fillStyle = 'rgba(200,230,255,0.55)'; x.fill(); x.clip();
+  const off = (g.t * 14 * u) % (7 * u), cols = ['#1D9E75', '#D97757', '#5B8DEF', '#7F77DD'];
+  for (let i = 0; i < 5; i++) { x.fillStyle = cols[i % 4]; x.fillRect(cx - r * 0.8, cy - r + i * 7 * u - off + 3 * u, r * (0.6 + 0.8 * hr(i + Math.floor(g.t * 2))), 3 * u); }
+  x.restore();
+  x.beginPath(); x.arc(cx, cy, r, 0, TAU); x.stroke();
+  x.strokeStyle = WHITE; x.lineWidth = Math.max(1, 1.8 * u); x.beginPath(); x.arc(cx, cy, r * 0.7, 1.1 * PI, 1.45 * PI); x.stroke();
+  x.restore();
+}
+
 export function vectorFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const tg = c.tg || {}, s: FxState | undefined = c.fx, u = g.u, XX = g.X + c.p.lx.x * u, Y = g.Y;
   if (!s) return;
@@ -180,6 +184,7 @@ export function vectorFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void
   if (tg._thumb && hands[1]) { const [hx, hy] = hands[1]; x.fillStyle = g.accent; x.strokeStyle = pen.ol; x.lineWidth = Math.max(0.8, 1.2 * u);
     x.beginPath(); x.rect(XX + (hx - 1.5) * u, Y + (hy - 12) * u, 3.5 * u, 8 * u); x.fill(); x.stroke(); }
   face(x, c, g, XX, Y);
+  if (tg._lens && hands[1]) lens(x, g, XX + hands[1][0] * u, Y + hands[1][1] * u, cl(tg._lensK ?? 1));
   if (tg._orbit) thinking(x, g, fx, fy, cl(tg._orbitK ?? 1), cl(tg._idea ?? 0));
   if (tg._snot != null) { const r = (2 + 8 * cl(tg._snot)) * u, bx = fx + 4 * u + r * 0.6, by = fy + 8 * u;
     x.fillStyle = 'rgba(170,220,255,0.5)'; x.strokeStyle = '#85B7EB'; x.lineWidth = Math.max(0.8, 1.2 * u);

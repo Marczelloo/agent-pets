@@ -59,16 +59,17 @@ describe('dynamic work scenes', () => {
     expect(stats.page).toBeGreaterThanOrEqual(3);
     expect(seen.some(s => s._hold === 'sheet')).toBe(true);
   });
-  it('grep: the Sharingan zooms in fast, scans, and a hit gets "!" and an impact frame', () => {
-    const { seen, stats } = flags('kodek', 'grep', 5);
-    const scan = seen.filter(s => s._face === 'sharingan');
-    expect(scan.length).toBeGreaterThan(0);
-    const firstFull = seen.findIndex(s => (s._faceK as number) >= 1);
-    expect(firstFull).toBeGreaterThanOrEqual(0);
-    expect(firstFull - seen.findIndex(s => s._face === 'sharingan')).toBeLessThanOrEqual(15); // ≤ 0,25 s
-    expect(new Set(scan.map(s => Math.round((s._scan as number) * 10))).size).toBeGreaterThan(3);
+  it('grep: a detective walks along the board with a big magnifier, a hit stops everything with "!" and an impact frame', () => {
+    const { seen, stats } = flags('kodek', 'grep', 6);
+    const look = seen.filter(s => s.act === 'szuka z lupą');
+    expect(look.every(s => s._lens === 1)).toBe(true);
+    const lx = look.map(s => s.lx as number);
+    expect(Math.max(...lx) - Math.min(...lx)).toBeGreaterThan(12);
+    expect(Math.max(...lx.map(Math.abs))).toBeLessThanOrEqual(25);
+    expect(seen.some(s => s._prop === 'board')).toBe(true);
     expect(stats['word:!']).toBeGreaterThanOrEqual(1);
     expect(stats.impact).toBeGreaterThanOrEqual(1);
+    expect(stats.stop).toBeGreaterThanOrEqual(1);
   });
   it('web: thunder-breathing zigzag dash with lightning, catches the page, comes back within the slot', () => {
     const { seen, stats } = flags('clawd', 'web', 4);
