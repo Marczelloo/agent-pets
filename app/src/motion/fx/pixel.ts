@@ -37,7 +37,13 @@ function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet, off = c.p.lx.x) {
     for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) pass(pen.ol, ox, oy);
     pass(col, 0, 0);
   };
-  return { G, U, cell, line, ring, text };
+  /** Mały obrazek z pikseli rozmiaru napisów (`P`), wyśrodkowany w (xu, yu); znaki wg palety `pal`. */
+  const icon = (rows: string[], xu: number, yu: number, pal: Record<string, string>) => {
+    const P = Math.max(Math.ceil(9 / 7 * g.dpr), Math.round(30 / 7 * g.u * g.dpr)) / g.dpr;
+    const gx = X0 + U(xu) * G - Math.round(rows[0].length / 2) * P, gy = Y0 + U(yu) * G - Math.round(rows.length / 2) * P;
+    rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (pal[r[i]]) { x.fillStyle = pal[r[i]]; x.fillRect(gx + i * P, gy + j * P, P, P); } });
+  };
+  return { G, U, cell, line, ring, text, icon };
 }
 
 export function pixelBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
@@ -56,6 +62,13 @@ export function pixelBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   x.restore();
 }
 
+/** Symbole myśli (w pikselach napisów): trybik, żarówka zgaszona i zapalona. */
+const ICON = {
+  gear: ['.g.g.', 'ggggg', '.gwg.', 'ggggg', '.g.g.'],
+  bulb: ['.www.', 'wwwww', 'wwwww', '.www.', '.ggg.'],
+  lit: ['.yyy.', 'yyyyy', 'yyyyy', '.yyy.', '.ggg.'],
+};
+const ICON_PAL: Record<string, string> = { g: GREY, w: '#F1EFE8', y: '#F5D547' };
 const SPR: Partial<Record<Particle['k'], string[]>> = {
   spark: ['.a.', 'aaa', '.a.'], dust: ['gg', 'gg'], key: ['kkk', 'klk', 'kkk'], page: ['www', 'wkw', 'www', 'wkw'],
   energy: ['pp', 'pp'], note: ['.kk', '.k.', 'kk.'], tear: ['.b', 'bb', 'bb'], soul: ['.ww.', 'wkkw', 'wwww', 'w.ww'], helper: ['.cc.', 'cccc', 'c..c'],
@@ -64,7 +77,7 @@ const PAL: Record<string, string> = { a: AMBER, g: GREY, k: '#2B1D16', l: '#F1EF
 
 export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const s: FxState | undefined = c.fx; if (!s) return;
-  const tg = c.tg || {}, { U, cell, line, ring, text } = grid(x, g, c), hands: number[][] = c.hand ?? [];
+  const tg = c.tg || {}, { U, cell, line, ring, text, icon } = grid(x, g, c), hands: number[][] = c.hand ?? [];
   const [fx0, fy0, gp] = (c.face as number[]) ?? [0, -45, 12], fx = U(fx0), fy = U(fy0), gap = Math.max(2, U(gp));
   const slot = grid(x, g, c, 0);
   const sprite = (rows: string[], cx: number, cy: number, col?: string, put = cell) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] !== '.') put(cx + i, cy + j, 1, 1, col && r[i] === 'c' ? col : PAL[r[i]]); });
@@ -85,6 +98,14 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
       if (tg._smile) { cell(fx - 3, fy + U(10), 7, 1, pen.ol); cell(fx - 4, fy + U(10) - 1, 1, 1, pen.ol); cell(fx + 4, fy + U(10) - 1, 1, 1, pen.ol); } break;
     case 'sparkle': for (const sd of [-1, 1]) { cell(fx + sd * gap - 1, fy - 2, 3, 4, '#1E1410'); cell(fx + sd * gap, fy - 2, 1, 1, WHITE); } break;
     case 'teeth': cell(fx - 2, fy + U(8), 5, Math.max(1, U(3)), WHITE); if (Math.floor(g.t * 9) % 2) sprite(SPR.spark!, fx + 4, fy + U(5)); break;
+  }
+  if (tg._orbit) {
+    const k = cl(tg._orbitK ?? 1), idea = cl(tg._idea ?? 0);
+    if (idea < 0.5) for (let i = 0; i < 3; i++) {
+      const a = Math.floor(g.t * 10) / 10 * 1.6 + i * TAU / 3, px = fx0 + Math.cos(a) * 38 * k, py = fy0 - 30 + Math.sin(a) * 9;
+      if (i === 0) text('?', px, py, AMBER); else icon(i === 1 ? ICON.gear : ICON.bulb, px, py, ICON_PAL);
+    }
+    else { icon(ICON.lit, fx0, fy0 - 58, ICON_PAL); for (let j = 0; j < 8; j++) { const a = j * TAU / 8; cell(fx + Math.round(Math.cos(a) * U(20)), U(fy0 - 58) + Math.round(Math.sin(a) * U(20)), 1, 1, AMBER); } }
   }
   if (tg._snot != null) { const r = Math.max(1, U(2 + 8 * cl(tg._snot))); ring(fx + 2 + r, fy + U(8), r, r, '#85B7EB'); }
   if (tg._dream != null) { const cx = U(38), cy = U(-104); ring(cx, cy, U(16), U(10), WHITE, true); ring(cx, cy, U(16), U(10), pen.ol);

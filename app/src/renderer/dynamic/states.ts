@@ -12,10 +12,12 @@ const faceOf = (c: Pet): number[] => { const f = (c.face as number[]) ?? [0, -45
 const THUMB = keys([[0, { ikR: 1, hxR: 20, hyR: -30, lean: -0.3, squint: 0.8, _stiff: 3 }], [0.12, { hxR: 36, hyR: -62, lean: 0.2, squint: 0, happy: 1 }], [1.6, {}]]);
 
 export const STATES: Record<string, Scene> = {
-  thinking: { cycle: 1, base: { th: 0, look: 0.3 }, acts: [
-    ['cień na oczach', 2.4, (a) => ({ ikL: 1, hxL: -8, hyL: -38, ikR: 1, hxR: 8, hyR: -38, _face: 'shadow', _faceK: snapE(a / 0.4), _bg: 'dark', _bgK: snapE(a / 0.6) })],
-    ['dramatyczny uśmiech', 1.6, () => ({ ikL: 1, hxL: -8, hyL: -38, ikR: 1, hxR: 8, hyR: -38, tilt: -0.08, _face: 'shadow', _faceK: 1, _smile: 1, _bg: 'dark' }), (c) => {
-      emit(c, 'page', 34, -118, { vx: 8, vy: 12, vr: 1.2, max: 1.6, s: 14 });
+  // Shikamaru: siedzi, dłonie złożone w kółko, oczy zamknięte, wokół głowy krążą „?”, trybik i żarówka; potem pomysł
+  thinking: { cycle: 1, base: { sit: 1, th: 0, look: 0 }, acts: [
+    ['medytuje', 4, (a) => ({ ikL: 1, hxL: -7, hyL: -27, ikR: 1, hxR: 7, hyR: -27, sleep: 0.9, _orbit: 1, _orbitK: snapE(a / 0.6) })],
+    ['wpada na pomysł', 1.4, keys([[0, { ikL: 1, hxL: -7, hyL: -27, ikR: 1, hxR: 7, hyR: -27, sleep: 0.9, _orbit: 1, _idea: 0, _stiff: 2 }],
+      [0.12, { sleep: 0, hyR: -80, hxR: 20, _idea: 1, happy: 0.4 }], [1.1, {}], [1.4, { hyR: -27, hxR: 7, _idea: 0, happy: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
+      if (at(a, dt, 0.12)) { const [fx, fy] = faceOf(c); spray(c, 'spark', 6, fx, fy - 58, 90, -Math.PI / 2, 2 * Math.PI); impact(c, 0.8, false); }
     }],
   ] },
   needs: { base: { th: 0, look: 0 }, acts: [

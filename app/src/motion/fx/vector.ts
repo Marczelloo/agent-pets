@@ -121,6 +121,39 @@ function face(x: CanvasRenderingContext2D, c: Pet, g: FxCtx, XX: number, Y: numb
   x.restore();
 }
 
+/** Myśli (Shikamaru): „?”, trybik i żarówka krążą wokół głowy; `idea` zapala nad głową dużą żarówkę z promieniami. */
+function thinking(x: CanvasRenderingContext2D, g: FxCtx, fx: number, fy: number, k: number, idea: number) {
+  const u = g.u, S = 24 * u, cy = fy - 30 * u;
+  x.save(); x.lineWidth = Math.max(1, 1.6 * u); x.strokeStyle = pen.ol;
+  for (let i = 0; i < 3; i++) {
+    const a = g.t * 1.6 + i * TAU / 3, px = fx + Math.cos(a) * 38 * u * k, py = cy + Math.sin(a) * 9 * u, front = Math.sin(a) > 0;
+    x.save(); x.globalAlpha *= k * (front ? 1 : 0.6) * (1 - 0.7 * idea); x.translate(px, py);
+    if (i === 0) {
+      x.font = `900 ${Math.max(9, S)}px ${pen.font}`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineWidth = Math.max(1.5, 2.5 * u);
+      x.strokeText('?', 0, 0); x.fillStyle = AMBER; x.fillText('?', 0, 0);
+    } else if (i === 1) {
+      x.rotate(g.t * 2); x.fillStyle = '#B4B2A9'; x.beginPath();
+      for (let j = 0; j < 6; j++) { x.save(); x.rotate(j * TAU / 6); x.rect(-S * 0.08, -S * 0.46, S * 0.16, S * 0.16); x.restore(); }
+      x.fill(); x.beginPath(); x.arc(0, 0, S * 0.33, 0, TAU); x.fill(); x.stroke();
+      x.fillStyle = WHITE; x.beginPath(); x.arc(0, 0, S * 0.12, 0, TAU); x.fill(); x.stroke();
+    } else bulb(x, 0, 0, S * 0.32, false);
+    x.restore();
+  }
+  if (idea > 0.02) {
+    const by = fy - 58 * u, r = 11 * u * idea;
+    x.save(); x.strokeStyle = AMBER; x.lineWidth = Math.max(1, 2 * u); x.beginPath();
+    for (let j = 0; j < 8; j++) { const a = j * TAU / 8; x.moveTo(fx + Math.cos(a) * r * 1.4, by + Math.sin(a) * r * 1.4); x.lineTo(fx + Math.cos(a) * r * 2, by + Math.sin(a) * r * 2); }
+    x.stroke(); x.restore();
+    bulb(x, fx, by, r, true);
+  }
+  x.restore();
+}
+
+function bulb(x: CanvasRenderingContext2D, bx: number, by: number, r: number, lit: boolean) {
+  x.fillStyle = lit ? '#F5D547' : '#F1EFE8'; x.beginPath(); x.arc(bx, by, r, 0, TAU); x.fill(); x.stroke();
+  x.fillStyle = '#B4B2A9'; x.beginPath(); x.rect(bx - r * 0.45, by + r * 0.85, r * 0.9, r * 0.55); x.fill(); x.stroke();
+}
+
 export function vectorFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const tg = c.tg || {}, s: FxState | undefined = c.fx, u = g.u, XX = g.X + c.p.lx.x * u, Y = g.Y;
   if (!s) return;
@@ -147,6 +180,7 @@ export function vectorFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void
   if (tg._thumb && hands[1]) { const [hx, hy] = hands[1]; x.fillStyle = g.accent; x.strokeStyle = pen.ol; x.lineWidth = Math.max(0.8, 1.2 * u);
     x.beginPath(); x.rect(XX + (hx - 1.5) * u, Y + (hy - 12) * u, 3.5 * u, 8 * u); x.fill(); x.stroke(); }
   face(x, c, g, XX, Y);
+  if (tg._orbit) thinking(x, g, fx, fy, cl(tg._orbitK ?? 1), cl(tg._idea ?? 0));
   if (tg._snot != null) { const r = (2 + 8 * cl(tg._snot)) * u, bx = fx + 4 * u + r * 0.6, by = fy + 8 * u;
     x.fillStyle = 'rgba(170,220,255,0.5)'; x.strokeStyle = '#85B7EB'; x.lineWidth = Math.max(0.8, 1.2 * u);
     x.beginPath(); x.arc(bx, by, r, 0, TAU); x.fill(); x.stroke(); x.fillStyle = WHITE; x.beginPath(); x.arc(bx - r * 0.35, by - r * 0.35, r * 0.2, 0, TAU); x.fill(); }

@@ -13,7 +13,7 @@ const G = (dpr: number, o: Partial<FxCtx> = {}): FxCtx => ({ X: 61.3, Y: 40.2, u
 const TGS: Record<string, unknown>[] = [
   { _bg: 'speed' }, { _bg: 'rays' }, { _bg: 'purple' }, { _bg: 'wind' }, { _bg: 'dark' }, { _ground: 'seal' }, { _ground: 'circle', _groundK: 0.6 },
   { _face: 'glasses' }, { _face: 'sharingan', _scan: 0.4 }, { _face: 'shadow', _smile: 1 }, { _face: 'sparkle' }, { _face: 'teeth' },
-  { _barrage: 1 }, { _orbs: 1 }, { _orbs: 2, _orbK: 0.4 }, { _thumb: 1 }, { _shock: 1 }, { _bang: 1 }, { _snot: 0.7 }, { _dream: 2 },
+  { _barrage: 1 }, { _orbit: 1 }, { _orbit: 1, _idea: 1 }, { _orbs: 1 }, { _orbs: 2, _orbK: 0.4 }, { _thumb: 1 }, { _shock: 1 }, { _bang: 1 }, { _snot: 0.7 }, { _dream: 2 },
 ];
 const pet = (tg: Record<string, unknown>) => {
   const c = createPet('clawd', 'idle'); c.tg = { ...c.tg, ...tg }; c.face = [1.3, -44.7, 12.2]; c.hand = [[-31.4, -29.6], [29.2, -33.3]]; fxState(c);

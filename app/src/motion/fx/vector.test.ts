@@ -46,6 +46,13 @@ describe('vector dynamic effects', () => {
     const r = recorder(); vectorBack(r.ctx, pet({ _ground: 'circle', _groundK: 1 }), G());
     expect(r.log.some(l => l.startsWith('ellipse('))).toBe(true); ok(r.log);
   });
+  it('the thinking orbit carries three symbols around the head, big enough for the taskbar', () => {
+    const r = recorder(); vectorFront(r.ctx, pet({ _orbit: 1 }), G());
+    expect(r.log.filter(l => l.startsWith('fillText(?')).length).toBe(1);
+    expect(r.log.filter(l => l.startsWith('arc(')).length).toBeGreaterThanOrEqual(3); // trybik (i otwór) + żarówka
+    const fonts = r.log.filter(l => l.startsWith('font=')).map(l => parseFloat(l.split(' ')[1]));
+    expect(Math.min(...fonts)).toBeGreaterThanOrEqual(9);
+  });
   it('face overlays sit at the face anchor', () => {
     for (const face of ['glasses', 'sharingan', 'shadow', 'sparkle', 'teeth']) {
       const r = recorder(); vectorFront(r.ctx, pet({ _face: face, _faceK: 1, _smile: 1 }), G());
@@ -67,8 +74,8 @@ describe('vector dynamic effects', () => {
     const r = recorder(); vectorFront(r.ctx, pet({ _barrage: 1 }), G());
     expect(r.log.filter(l => l.startsWith('arc(')).length).toBeGreaterThanOrEqual(8);
   });
-  it('orbs, thumb, shock lines, bouncing "!", snot bubble and dream bubble all draw', () => {
-    for (const tg of [{ _orbs: 1 }, { _orbs: 2, _orbK: 0.5 }, { _thumb: 1 }, { _shock: 1 }, { _bang: 1 }, { _snot: 0.8 }, { _dream: 1.2 }]) {
+  it('orbs, thumb, shock lines, bouncing "!", snot bubble, dream bubble, thinking orbit and idea bulb all draw', () => {
+    for (const tg of [{ _orbit: 1 }, { _orbit: 1, _idea: 1 }, { _orbs: 1 }, { _orbs: 2, _orbK: 0.5 }, { _thumb: 1 }, { _shock: 1 }, { _bang: 1 }, { _snot: 0.8 }, { _dream: 1.2 }]) {
       const r = recorder(); vectorFront(r.ctx, pet(tg), G());
       expect(r.log.length, JSON.stringify(tg)).toBeGreaterThan(3); ok(r.log);
     }

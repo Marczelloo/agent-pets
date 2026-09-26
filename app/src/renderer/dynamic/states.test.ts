@@ -6,18 +6,22 @@ import type { Particle } from './state';
 setRng(seeded(12).next);
 const flags = (skin: 'clawd' | 'kodek', scene: string, secs: number) => {
   const seen: Record<string, unknown>[] = [];
-  const c = simulate(skin, scene, secs, cc => seen.push({ ...cc.tg, th: cc.p.th.x, lx: cc.p.lx.x, sit: cc.p.sit.x, loaf: cc.p.loaf.x, act: cc.act[0], parts: cc.fx?.parts.map((p: Particle) => ({ ...p })) ?? [] }));
+  const c = simulate(skin, scene, secs, cc => seen.push({ ...cc.tg, aT: cc.aT, sleepX: cc.p.sleep.x, hxL: cc.p.hxL.x, hxR: cc.p.hxR.x, th: cc.p.th.x, lx: cc.p.lx.x, sit: cc.p.sit.x, loaf: cc.p.loaf.x, act: cc.act[0], parts: cc.fx?.parts.map((p: Particle) => ({ ...p })) ?? [] }));
   return { c, seen, stats: c.fx?.stats ?? {} };
 };
 
 describe('dynamic state scenes', () => {
-  it('thinking: shadow over the eyes, dramatic smile, a page falling in slow motion', () => {
-    const { seen } = flags('clawd', 'thinking', 5);
-    expect(seen.some(s => s._face === 'shadow')).toBe(true);
-    expect(seen.some(s => s._face === 'shadow' && s._smile)).toBe(true);
-    const pages = seen.flatMap(s => (s.parts as { k: string; vy: number }[]).filter(p => p.k === 'page'));
-    expect(pages.length).toBeGreaterThan(0);
-    expect(Math.max(...pages.map(p => Math.abs(p.vy)))).toBeLessThan(40); // zwolnione tempo
+  it('thinking: Shikamaru — sits with hands joined, eyes closed, symbols orbit the head, then the bulb lights up', () => {
+    const { seen, stats } = flags('clawd', 'thinking', 7);
+    const med = seen.filter(s => s.act === 'medytuje'), calm = med.filter(s => (s.aT as number) > 0.6); // po wejściu w pozę
+    expect(med.length).toBeGreaterThan(0);
+    expect(med.every(s => s._orbit === 1)).toBe(true);
+    expect(Math.min(...calm.map(s => s.sit as number))).toBeGreaterThan(0.8);
+    expect(calm.every(s => (s.sleepX as number) > 0.5)).toBe(true); // oczy zamknięte
+    expect(calm.every(s => Math.abs((s.hxR as number) - (s.hxL as number)) < 20)).toBe(true); // dłonie złożone przed sobą
+    const idea = seen.filter(s => s.act === 'wpada na pomysł');
+    expect(Math.max(...idea.map(s => s._idea as number))).toBe(1);
+    expect(stats.spark).toBeGreaterThanOrEqual(5);
   });
   it('needs: big sparkly eyes, bouncing "!" with shock lines, waving', () => {
     const { seen } = flags('kodek', 'needs', 3);
