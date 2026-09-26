@@ -8,11 +8,11 @@ const CYCLE: [State, Tool | null][] = [
 ];
 const BASE = Date.now() - 60_000;
 
-/** `count` sesji; każda co 6 s przechodzi do następnego stanu z `CYCLE`. */
-export function demoSessions(count: number, nowMs: number): Session[] {
+/** `count` sesji; każda co 6 s przechodzi do następnego stanu z `CYCLE`, chyba że `only` przypina wszystkie do jednego stanu. */
+export function demoSessions(count: number, nowMs: number, only?: [State, Tool | null] | null): Session[] {
   return Array.from({ length: count }, (_, i) => {
     const phase = Math.floor(nowMs / 6000) + i * 3;
-    const [state, tool] = CYCLE[phase % CYCLE.length];
+    const [state, tool] = only ?? CYCLE[phase % CYCLE.length];
     const id = `demo-${i + 1}`;
     return {
       id, agent: i % 2 ? 'codex' : 'claude', origin: i % 3 === 2 ? 'router' : i % 2 ? 'desktop' : 'cli',

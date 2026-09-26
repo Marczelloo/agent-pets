@@ -26,6 +26,23 @@ describe('Roster', () => {
     expect(r.get('a')!.scene).toBe('done');
     expect(r.get('a')!.pet).toBe(pet);
   });
+  it('a pet in headphones throws them off when work starts, but takes them off quietly when the music stops', () => {
+    const phones = (r: Roster) => r.get('a')!.pet.parts.filter((q: any) => q.k === 'phones').length;
+    const r = new Roster();
+    r.sync([s('a', 'idle')], 0, true);
+    expect(r.get('a')!.scene).toBe('vibe');
+    r.get('a')!.pet.phA = 1;
+    r.sync([s('a', 'idle')], 1, false);
+    expect(r.get('a')!.scene).toBe('idle');
+    expect(phones(r)).toBe(0);
+    r.sync([s('a', 'sleep')], 2, true);
+    expect(r.get('a')!.scene).toBe('doze');
+    r.get('a')!.pet.phA = 1;
+    r.sync([s('a', 'working', 'edit')], 3, true);
+    expect(r.get('a')!.scene).toBe('edit');
+    expect(phones(r)).toBe(1);
+    expect(r.get('a')!.pet.phA).toBe(0);
+  });
   it('removes pets whose sessions disappeared', () => {
     const r = new Roster();
     r.sync([s('a', 'idle')], 0);

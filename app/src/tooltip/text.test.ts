@@ -65,3 +65,14 @@ describe('formatting', () => {
     expect(t.lines).toEqual(['Widżet w pasku · Uruchamia komendy', 'Druga · Uruchamia komendy']);
   });
 });
+
+describe('actionLabel with music', () => {
+  it('says the pet is idle and what plays, so dancing never looks like work', () => {
+    const m = { playing: true, app: 'Spotify.exe' };
+    expect(actionLabel({ state: 'idle', tool: null }, m)).toBe('Bezczynny · gra Spotify');
+    expect(actionLabel({ state: 'sleep', tool: null }, { playing: true, app: '308046B0AF4A39CB' })).toBe('Śpi · gra muzyka');
+    expect(actionLabel({ state: 'idle', tool: null }, { playing: false, app: null })).toBe('Bezczynny');
+    expect(actionLabel({ state: 'working', tool: 'bash' }, m)).toBe(actionLabel({ state: 'working', tool: 'bash' }));
+    expect(actionLabel({ state: 'done', tool: null }, m)).toBe(actionLabel({ state: 'done', tool: null }));
+  });
+});

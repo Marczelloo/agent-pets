@@ -7,7 +7,7 @@ export const MOTION_IDS: MotionId[] = ['calm', 'dynamic'];
 export const DEFAULT_LOOK: Look = { style: 'clean', motion: 'calm' };
 
 /** Jak `Pets::default()` w rdzeniu. */
-export const defaultPets = (): Pets => ({ style: 'sticker', motion: 'calm', overrides: {}, max_visible: 5 });
+export const defaultPets = (): Pets => ({ style: 'sticker', motion: 'calm', overrides: {}, max_visible: 5, react_to_media: true });
 
 /** Jak `Stage::default()` w rdzeniu: scena przy zasobniku, bez tła, jak w 0.6. */
 export const defaultStage = (): StageSettings => ({

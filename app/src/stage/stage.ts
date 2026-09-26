@@ -2,7 +2,7 @@ import { pen } from '../renderer';
 import { PetPainter } from '../renderer/painter';
 import { appFor, defaultPets, defaultStage, lookFor } from '../look';
 import { resolveLang, setLang } from '../i18n';
-import type { Pets, PointerMsg, Snapshot, StageLayout, StageSettings } from '../types';
+import type { Media, Pets, PointerMsg, Snapshot, StageLayout, StageSettings } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
 import { geometry, layout, zoomOf, type LayoutOut } from './layout';
@@ -27,12 +27,14 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let clockOffset = 0;
   let maxPets: number | undefined;
   let pets: Pets = defaultPets();
+  let media: Media = { playing: false, app: null };
+  const music = () => media.playing && pets.react_to_media !== false;
   let stage: StageSettings = defaultStage();
   let orderer = new Orderer(stage.order);
   const bg = document.getElementById('bg');
   let budget = frameBudget(false), saving = false, reduced = reducedMotion();
   const painters = new WeakMap<Entry, PetPainter>();
-  const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
+  const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset, media: music() ? media : null }));
   let through: boolean | null = null;
   const handle: StageHandle = {
     hover: p => {
@@ -59,7 +61,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       order: v => orderer.display(v, now), priority: v => orderer.priority(v, now),
       showBadge: stage.show.badge, showLimits: stage.show.limits,
     });
-    roster.sync(snap.sessions, T);
+    roster.sync(snap.sessions, T, music());
     if (out.width !== sentWidth) { sentWidth = out.width; bridge.setWidth(out.width); }
     hover.refresh(true);
   };
@@ -92,7 +94,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
         saving, reduced, dpr: devicePixelRatio || 1 });
       // HUD w skali sceny: rysowany w układzie 1× i powiększony o `z`
       x.save(); x.translate(p.x, h - 4 * h / 48); x.scale(z, z);
-      if (stage.show.progress) drawProgress(x, 0, 0, e.session, T);
+      if (stage.show.progress) drawProgress(x, 0, 0, e.session, T, e.scene === 'vibe' ? 'dance' : e.scene === 'doze' ? 'doze' : null);
       x.restore();
       if (e.session.origin === 'router') { x.save(); x.translate(p.x, 8 * h / 48); x.scale(z, z); drawRouterBadge(x, 0, 0); x.restore(); }
     }
@@ -124,6 +126,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   });
   bridge.onMoving?.(on => bg?.classList.toggle('moving', on));
   bridge.onPower(s => { saving = s; budget = frameBudget(s); });
+  bridge.onMedia?.(m => { const was = music(), app = media.app; media = m; if (music() !== was) relayout(); else if (m.app !== app) hover.refresh(true); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;
 }

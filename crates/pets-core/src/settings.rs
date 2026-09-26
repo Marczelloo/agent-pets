@@ -47,6 +47,8 @@ pub struct Pets {
     pub motion: Motion,
     pub overrides: Overrides,
     pub max_visible: u8,
+    /// Bezczynny zwierzak słucha muzyki grającej w Windows (Spotify, Apple Music, przeglądarka…). Od 0.8.
+    pub react_to_media: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -255,7 +257,7 @@ impl Stage {
 impl Default for Apps { fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true } } }
 impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
 impl Default for Pets {
-    fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5 } }
+    fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5, react_to_media: true } }
 }
 
 impl Default for Settings {

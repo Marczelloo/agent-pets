@@ -1,4 +1,6 @@
-import type { Limit, Session, TooltipContent } from '../types';
+import type { Limit, Media, Session, TooltipContent } from '../types';
+import { mediaAppName } from '../stage/media';
+import { listens } from '../stage/sceneFor';
 import { clampPct, progressFraction } from '../stage/hud';
 import { routerLine } from '../stage/router';
 import { t, lang } from '../i18n';
@@ -7,9 +9,11 @@ const cut = (s: string, n: number) => ([...s].length <= n ? s : [...s].slice(0, 
 const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? '';
 const pad = (n: number) => String(n).padStart(2, '0');
 
-export function actionLabel(s: Pick<Session, 'state' | 'tool'>): string {
+/** `media`: gra muzyka i zwierzak jej słucha → „Bezczynny · gra Spotify”, żeby taniec nie wyglądał na pracę. */
+export function actionLabel(s: Pick<Session, 'state' | 'tool'>, media?: Media | null): string {
   if (s.state === 'working') return t().tool[s.tool ?? 'other'] ?? t().tool.other;
-  return t().state[s.state] ?? t().tool.other;
+  const base = t().state[s.state] ?? t().tool.other;
+  return media && listens(s, media.playing) ? `${base} · ${t().media.playing(mediaAppName(media.app))}` : base;
 }
 
 export function formatAgo(ms: number): string {
@@ -28,8 +32,8 @@ export function formatReset(resetsAt: number | null, nowMs: number): string {
   return resetsAt - nowMs < 86_400_000 ? t().time.resetAt(hm) : t().time.resetDay(t().time.days[d.getDay()], hm);
 }
 
-export function petTooltip(s: Session, nowMs: number): TooltipContent {
-  const lines = [actionLabel(s)];
+export function petTooltip(s: Session, nowMs: number, media?: Media | null): TooltipContent {
+  const lines = [actionLabel(s, media)];
   const f = progressFraction(s.progress);
   if (f != null && s.progress) lines.push(t().tooltip.tasks(s.progress.done, s.progress.total));
   if (s.context && s.context.max > 0) lines.push(t().tooltip.context(Math.round(clampPct(s.context.used * 100 / s.context.max))));

@@ -11,7 +11,7 @@ body{margin:0;background:var(--bg);color:var(--txt);font-family:"Segoe UI Variab
 .controls{display:flex;flex-wrap:wrap;gap:16px;padding:16px;font-size:13px;color:var(--mut)}
 .controls label{display:flex;align-items:center;gap:8px}
 .spacer{flex:1}
-.taskbar{position:relative;height:48px;background:var(--tb);border-top:1px solid var(--line);display:flex;justify-content:flex-end;padding-right:8px;overflow:hidden}
+.taskbar{transform-origin:bottom right;position:relative;height:48px;background:var(--tb);border-top:1px solid var(--line);display:flex;justify-content:flex-end;padding-right:8px;overflow:hidden}
 canvas{display:block;height:48px;width:0}
 .tip{position:fixed;background:var(--tip);border:1px solid var(--tipb);border-radius:8px;padding:8px 10px;font-size:12px;max-width:264px;box-shadow:0 4px 16px rgba(0,0,0,.18)}
 .tip .title{font-weight:600;font-size:13px;margin-bottom:2px}.tip .sub{color:var(--mut);margin-bottom:4px}
@@ -21,6 +21,15 @@ canvas{display:block;height:48px;width:0}
 <div class="controls">
   <label>Sesje <input type="range" id="count" min="0" max="9" value="7"><output id="countOut">7</output></label>
   <label>Wolne miejsce <input type="range" id="width" min="0" max="700" value="480"><output id="widthOut">480</output> px</label>
+  <label><input type="checkbox" id="music"> Gra muzyka (bezczynne i śpiące słuchają)</label>
+  <label>Stan <select id="only">
+    <option value="">cykl (co 6 s)</option>
+    <option value="idle">wszystkie bezczynne</option>
+    <option value="sleep">wszystkie śpią</option>
+    <option value="working:edit">wszystkie piszą</option>
+    <option value="needs_you">wszystkie czekają</option>
+  </select></label>
+  <label>Powiększenie <input type="range" id="zoom" min="1" max="4" step="0.5" value="1"><output id="zoomOut">1</output>×</label>
 </div>
 <div class="spacer"></div>
 <div class="tip" id="tip" hidden></div>

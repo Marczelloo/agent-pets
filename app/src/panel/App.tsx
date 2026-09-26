@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, petTooltip } from '../tooltip/text';
-import type { Pets, RouterTask, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
+import type { Media, Pets, RouterTask, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
 import { contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { appFor, defaultPets, lookFor } from '../look';
@@ -27,10 +27,12 @@ interface ViewProps {
   /** ostatnio ukryte sesje, do „Cofnij” (znika po 6 s) */
   undo?: { ids: string[] } | null;
   onUndo?: () => void;
+  /** co gra w Windows (`null`, gdy zwierzaki nie reagują na muzykę) */
+  media?: Media | null;
 }
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
   return (
@@ -65,12 +67,12 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
         {sessions.length === 0 && <p className="empty">{t().panel.noSessions}</p>}
         {sessions.map(s => (
           <article key={s.id} id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
-            {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} /> : <div className="pet" />}
+            {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} music={!!media?.playing} /> : <div className="pet" />}
             <div className="info">
               <div className="title">{petTooltip(s, nowMs).title}</div>
               <div className="sub">{sessionSubtitle(s)}</div>
               <div className="meta">
-                <span className="state">{actionLabel(s)}</span>
+                <span className="state">{actionLabel(s, media)}</span>
                 {progressText(s) && <span>{t().panel.tasks} {progressText(s)}</span>}
                 {contextText(s) && <span>{t().panel.context} {contextText(s)}</span>}
                 {s.router_task && <span className={routerHot(s.router_task, nowMs, s.last_activity) ? 'router-hot' : undefined}>
@@ -103,6 +105,7 @@ export default function App() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
+  const [media, setMedia] = useState<Media>({ playing: false, app: null });
   const [undo, setUndo] = useState<{ ids: string[] } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const removed = (ids: string[]) => {
@@ -122,6 +125,7 @@ export default function App() {
       listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); setPets(e.payload.pets); }),
       listen<boolean>('pets://power', e => setPetSaving(e.payload)),
       listen<UpdateStatus>('pets://update', e => setUpdate(e.payload)),
+      listen<Media>('pets://media', e => setMedia(e.payload)),
       listen<string>('panel://focus', e => {
         setStatus(null);
         setFocusId(e.payload);
@@ -138,6 +142,7 @@ export default function App() {
     });
     void invoke<boolean>('power_get').then(saving => setPetSaving(saving));
     void invoke<UpdateStatus>('update_status').then(setUpdate);
+    void invoke<Media>('media_get').then(setMedia);
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };
     addEventListener('keydown', esc);
@@ -150,7 +155,7 @@ export default function App() {
     setStatus(r.method === 'clipboard' || r.method === 'none' ? r.detail : null);
   };
 
-  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} pets={pets}
+  return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} pets={pets} media={pets.react_to_media !== false ? media : null}
     onSettings={() => void invoke('settings_open')} update={update}
     onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))}
     onDismiss={ids => void invoke<string[]>('session_dismiss', { ids }).then(removed)}

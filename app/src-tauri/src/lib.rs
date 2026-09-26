@@ -1,6 +1,7 @@
 mod appstate;
 mod core;
 mod jump;
+mod media;
 mod notify;
 mod panel;
 mod settings;
@@ -161,6 +162,8 @@ pub fn run() {
             core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), core_rx);
             app.manage(system::Power::default());
             system::watch_power(app.handle().clone());
+            app.manage(media::MediaState::default());
+            media::watch_media(app.handle().clone());
             app.manage(updater::Updater::default());
             app.manage(shell::menu::MenuTarget::default());
             app.on_menu_event(|app, e| shell::menu::on_event(app, e.id().as_ref()));
@@ -176,7 +179,7 @@ pub fn run() {
             snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, stage_layout, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
-            settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,
+            settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get, media::media_get,
             updater::update_status, updater::update_check, updater::update_install,
             session_dismiss, sessions_dismiss_inactive, session_undismiss
         ])

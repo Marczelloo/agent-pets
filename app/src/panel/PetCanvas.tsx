@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { createPet, pen, setScene } from '../renderer';
+import { createPet, pen } from '../renderer';
 import { PetPainter } from '../renderer/painter';
 import { frameBudget, reducedMotion } from '../stage/power';
 import { sceneFor, skinFor } from '../stage/sceneFor';
+import { switchScene } from '../stage/roster';
 import type { Look, Session } from '../types';
 
 const W = 96, H = 72;
@@ -13,22 +14,24 @@ export function setPetSaving(s: boolean): void { saving = s; fps = frameBudget(s
 const U = 0.3 * H / 48, X = 36, Y = H - 10;
 
 /** Ten sam zwierzak co w pasku, większy. Rysuje tylko w przeglądarce (efekt nie działa przy renderze na serwerze). */
-export function PetCanvas({ session, look }: { session: Session; look: Look }) {
+export function PetCanvas({ session, look, music = false }: { session: Session; look: Look; music?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const lookRef = useRef(look);
   lookRef.current = look;
   const painter = useRef<PetPainter | null>(null);
-  const scene = sceneFor(session);
+  const scene = sceneFor(session, music);
+  const shown = useRef(scene);
 
   useEffect(() => {
-    if (painter.current) setScene(painter.current.pet, scene);
+    if (painter.current && shown.current !== scene) switchScene(painter.current.pet, shown.current, scene);
+    shown.current = scene;
   }, [scene]);
 
   useEffect(() => {
     const c = ref.current;
     const x = c?.getContext('2d');
     if (!c || !x) return;
-    painter.current ??= new PetPainter(createPet(skinFor(session.agent), sceneFor(session)));
+    painter.current ??= new PetPainter(createPet(skinFor(session.agent), scene));
     pen.font = getComputedStyle(document.body).fontFamily || 'sans-serif';
     let raf = 0, last = performance.now(), T = Math.random() * 10, acc = 0;
     const frame = (now: number) => {

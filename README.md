@@ -27,6 +27,7 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
 - **Your taskbar, your layout.** Put the pets next to the tray, on the left, anywhere you drag them, or in a floating window on the desktop; pick the monitor, a glass or solid background, the pet size, spacing, order (by start, agent, or those that need you first) and which bars show. Settings → Taskbar.
 - **Tidy up by hand.** Remove a pet from the taskbar (right-click it) or a session from the panel (✕, or "Remove inactive"), with undo. It comes back on its own as soon as the agent does something new.
 - **Updates itself.** A notification when a new version is out, with an Install button, or silent installs at a quiet moment (no agent working, no full-screen game). Updates are signed and checked before they run.
+- **Music break.** When Spotify, Apple Music, a browser or any other player is playing in Windows, idle pets put on headphones and dance, and sleeping ones doze on in headphones. Grey EQ bars replace the progress bar and the tooltip says "Idle · Spotify playing", so a dance never looks like work; when the agent starts working, the headphones fly off. Track titles are never read; turn it off in Settings → Look.
 - **Windows notifications** when an agent waits for you, finishes a long turn, or passes 90% of a limit.
 - **Agent Router tasks** get the task's title, a router badge and live health (active, quiet, stalled, blocked).
 - **English and Polish.** Pets, panel, settings, notifications and the installer follow your Windows language, or pick one in Settings.

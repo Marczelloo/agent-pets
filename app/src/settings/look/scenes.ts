@@ -3,7 +3,7 @@ import type { SceneKey } from '../../stage/sceneFor';
 
 export const PREVIEW_GROUPS: { id: 'work' | 'states'; scenes: SceneKey[] }[] = [
   { id: 'work', scenes: ['thinking', 'edit', 'bash', 'read', 'grep', 'web', 'agent', 'mcp', 'compact'] },
-  { id: 'states', scenes: ['needs', 'done', 'error', 'idle', 'sleep', 'bye'] },
+  { id: 'states', scenes: ['needs', 'done', 'error', 'idle', 'vibe', 'sleep', 'doze', 'bye'] },
 ];
 
 /** Czas jednej sceny w trybie „Wszystkie po kolei”. */

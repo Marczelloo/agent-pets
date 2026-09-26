@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { PointerMsg, Settings, SettingsView, Snapshot, StageLayout, TooltipContent } from '../types';
+import type { Media, PointerMsg, Settings, State, Tool, SettingsView, Snapshot, StageLayout, TooltipContent } from '../types';
 import { demoLimits, demoSessions } from './demo';
 import { setSystemLang } from '../i18n';
 
@@ -15,6 +15,8 @@ export interface Bridge {
   onSettings(cb: (s: Settings) => void): void;
   /** Tryb oszczędny: od razu bieżący, potem każda zmiana. */
   onPower(cb: (saving: boolean) => void): void;
+  /** Muzyka w systemie (Spotify, Apple Music, przeglądarka…): od razu bieżąca, potem każda zmiana. */
+  onMedia?(cb: (m: Media) => void): void;
   /** Menu pod prawym klikiem: na zwierzaku (`id`) albo ogólne (`null`); x, y w pikselach CSS sceny. */
   openMenu?(id: string | null, x: number, y: number): void;
   /** Okno pływające: przepuszczanie kliknięć przez puste miejsca. */
@@ -43,6 +45,7 @@ export function tauriBridge(): Bridge {
     onPointer: cb => on('pets://pointer', cb),
     onSettings: cb => { on('pets://settings', cb); void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); cb(v.settings); }); },
     onPower: cb => { on<boolean>('pets://power', cb); void invoke<boolean>('power_get').then(cb); },
+    onMedia: cb => { on<Media>('pets://media', cb); void invoke<Media>('media_get').then(cb); },
     onMoving: cb => on('pets://moving', cb),
     setPassthrough: on => { void invoke('stage_passthrough', { on }); },
     openMenu: (target, x, y) => { void invoke('stage_menu', { target, x, y }); },
@@ -55,10 +58,10 @@ export function tauriBridge(): Bridge {
 
 /** Atrapa do dev.html: dane pokazowe, mysz z DOM, tooltip w zwykłym elemencie strony. */
 export function fakeBridge(canvas: HTMLCanvasElement, tip: HTMLElement,
-  opts: { count: () => number; maxWidth: () => number; render: (el: HTMLElement, c: TooltipContent) => void }): Bridge {
+  opts: { count: () => number; maxWidth: () => number; music?: () => boolean; only?: () => [State, Tool | null] | null; render: (el: HTMLElement, c: TooltipContent) => void }): Bridge {
   const snaps: ((s: Snapshot) => void)[] = [];
   const lays: ((l: StageLayout) => void)[] = [];
-  const snap = (): Snapshot => ({ sessions: demoSessions(opts.count(), Date.now()), limits: demoLimits(Date.now()), now: Date.now() });
+  const snap = (): Snapshot => ({ sessions: demoSessions(opts.count(), Date.now(), opts.only?.()), limits: demoLimits(Date.now()), now: Date.now() });
   let lastMax = -1;
   setInterval(() => snaps.forEach(cb => cb(snap())), 1000);
   setInterval(() => {
@@ -77,6 +80,13 @@ export function fakeBridge(canvas: HTMLCanvasElement, tip: HTMLElement,
     },
     onSettings: () => {},
     onPower: () => {},
+    onMedia: cb => {
+      let last: boolean | null = null;
+      setInterval(() => {
+        const on = !!opts.music?.();
+        if (on !== last) { last = on; cb({ playing: on, app: on ? 'Spotify.exe' : null }); }
+      }, 200);
+    },
     setWidth: w => { canvas.style.width = `${w}px`; },
     showTooltip: (x, content) => {
       opts.render(tip, content);

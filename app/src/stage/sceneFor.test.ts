@@ -18,6 +18,16 @@ describe('sceneFor', () => {
     expect(sceneFor({ state: 'paused' as never, tool: null })).toBe('thinking');
     expect(sceneFor({ state: 'working', tool: 'teleport' as never })).toBe('mcp');
   });
+  it('idle pets dance and sleeping ones doze in headphones; busy ones and those waiting for you do not listen', () => {
+    expect(sceneFor({ state: 'idle', tool: null }, true)).toBe('vibe');
+    expect(sceneFor({ state: 'sleep', tool: null }, true)).toBe('doze');
+    expect(sceneFor({ state: 'sleep', tool: null }, false)).toBe('sleep');
+    expect(sceneFor({ state: 'idle', tool: null }, false)).toBe('idle');
+    expect(sceneFor({ state: 'working', tool: 'bash' }, true)).toBe('bash');
+    expect(sceneFor({ state: 'needs_you', tool: null }, true)).toBe('needs');
+    expect(sceneFor({ state: 'done', tool: null }, true)).toBe('done');
+    expect(sceneFor({ state: 'error', tool: null }, true)).toBe('error');
+  });
   it('picks the skin by agent', () => {
     expect(skinFor('claude')).toBe('clawd');
     expect(skinFor('codex')).toBe('kodek');
