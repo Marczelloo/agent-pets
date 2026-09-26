@@ -205,7 +205,7 @@ export const pl = {
       states: 'Stany',
     },
     motionTitle: 'Ruch',
-    motionDesc: 'Anime: szybciej, ostrzej, z efektami i emotkami',
+    motionDesc: 'Anime: sceny jak z anime — serie ciosów, pieczęcie, błyski i cząsteczki',
     previewScene: 'Scena podglądu',
     taskbar: 'Tak wygląda w pasku',
     perAgent: 'Osobno dla agentów',

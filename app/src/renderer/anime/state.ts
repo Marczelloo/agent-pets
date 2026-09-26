@@ -21,6 +21,7 @@ export interface FxState {
 }
 
 export const CAP = 40;
+export const WORD_TOP = -92, WORD_RISE = 12;
 export const CONFETTI = ['#EF9F27', '#E24B4A', '#5DCAA5', '#85B7EB', '#7F77DD', '#F0997B'];
 /** g: grawitacja (u/s², ujemna = unosi się), drag: opór (1/s), life: domyślny czas życia (s), s: rozmiar (u), col: kolor */
 export const PHYS: Record<PKind, { g: number; drag: number; life: number; s: number; col: string }> = {
@@ -70,11 +71,12 @@ export function impact(c: Pet, amp: number, flash = true): void {
   if (flash) s.flashReq = 1;
 }
 
+/** Onomatopeja; startuje najwyżej na −92u, żeby z unoszeniem i powiększeniem zmieściła się w pasku 48 px. */
 export function word(c: Pet, text: string, x: number, y: number, s = 30): void {
   const f = fxState(c);
   count(f, 'word:' + text);
   f.words = f.words.filter(w => w.text !== text || w.life > 0.3).slice(-2);
-  f.words.push({ text, x, y, life: 0, max: 0.9, s });
+  f.words.push({ text, x, y: Math.max(y, WORD_TOP), life: 0, max: 0.9, s });
 }
 
 export function stepFx(c: Pet, dt: number, t: number): void {
@@ -88,6 +90,6 @@ export function stepFx(c: Pet, dt: number, t: number): void {
     p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
   }
   s.parts = s.parts.filter(p => p.life < p.max);
-  for (const w of s.words) { w.life += dt; w.y -= 18 * dt; }
+  for (const w of s.words) { w.life += dt; w.y -= WORD_RISE * dt; }
   s.words = s.words.filter(w => w.life < w.max);
 }

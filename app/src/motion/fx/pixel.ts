@@ -3,7 +3,7 @@
 import { PI, TAU, cl, hr } from '../../renderer/math';
 import { gridPx } from '../../renderer/models/pixel';
 import { pen } from '../../renderer/pen';
-import type { FxState, Particle } from '../../renderer/anime/state';
+import { WORD_RISE, type FxState, type Particle } from '../../renderer/anime/state';
 import type { Pet } from '../../renderer/pet';
 import { GLYPHS, glyphWidth } from './glyphs';
 import type { FxCtx } from './index';
@@ -98,7 +98,9 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
     else sprite(SPR[p.k]!, px - 1, py - 1, p.k === 'helper' ? g.accent : undefined);
     x.restore();
   }
-  if (tg._bang) text('!', fx0 + 34, fy0 - 38 - Math.round(Math.abs(Math.sin(g.t * 8)) * 3) * 3, AMBER);
-  for (const w of s.words) text(w.text, w.x, w.y, AMBER);
+  // „!” obok głowy: glif pikselowy jest wysoki (≥ 9 px), więc stoi niżej niż wektorowy, żeby przy skokach nie wyjść z paska
+  if (tg._bang) text('!', fx0 + 34, fy0 - 20 - Math.round(Math.abs(Math.sin(g.t * 8)) * 2) * 3, AMBER);
+  // słowa pikselowe stoją w miejscu: glif jest wyższy niż wektorowy i unosząc się wyszedłby ponad pasek
+  for (const w of s.words) text(w.text, w.x, w.y + w.life * WORD_RISE, AMBER);
   x.restore();
 }

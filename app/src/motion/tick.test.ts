@@ -73,6 +73,24 @@ describe('motion', () => {
     expect(sceneTable(c)).toBe(SCENES);
     expect(c.act).toBe(SCENES.edit.acts[0]);
   });
+  it('switching motion drops props and held items the new choreography does not use', () => {
+    const c = createPet('clawd', 'web'); // Spokojny: siatka w dłoni
+    expect(c.hold).toBe('net');
+    setMotion(c, true); // Anime: dash bez siatki
+    expect(c.hold).toBeNull();
+    expect(c.p.holdA.x).toBe(0);
+    const d = createPet('clawd', 'edit'); // biurko jest w obu choreografiach
+    setMotion(d, true);
+    expect(d.prop).toBe('desk');
+  });
+  it('anime pets skip the calm ambient sparkles and sweat drops (they have their own particles), calm pets keep them', () => {
+    const run = (m: typeof MOTIONS.calm) => { rng.reset(4); const c = createPet('clawd', 'done'); setMotion(c, m.fx); let T = 0;
+      const seen = new Set<string>(); for (let f = 0; f < 240; f++) { T += 1 / 60; tick(c, 1 / 60, T, m, true); c.parts.forEach((q: { t?: string; k?: string }) => seen.add(q.t ?? q.k ?? '')); } return seen; };
+    expect(run(MOTIONS.calm).has('✦')).toBe(true);
+    expect(run(MOTIONS.anime).has('✦')).toBe(false);
+    rng.reset(4); const e = createPet('clawd', 'edit'); setMotion(e, true); let T = 0;
+    for (let f = 0; f < 240; f++) { T += 1 / 60; tick(e, 1 / 60, T, MOTIONS.anime, true); expect(e.parts.some((q: { k?: string }) => q.k === 'drop')).toBe(false); }
+  });
   it('the step hook runs every step with the act time, pet clock and dt', () => {
     const seen: number[][] = [];
     const c = createPet('clawd', 'idle');

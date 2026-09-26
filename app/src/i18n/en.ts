@@ -198,7 +198,7 @@ export const en: Dict = {
       states: 'States',
     },
     motionTitle: 'Motion',
-    motionDesc: 'Anime: faster and snappier, with effects and emotes',
+    motionDesc: 'Anime: scenes straight out of anime — punch barrages, hand seals, impact flashes and particles',
     previewScene: 'Preview scene',
     taskbar: 'In the taskbar',
     perAgent: 'Per agent',

@@ -87,3 +87,31 @@ export function simulate(skin: 'clawd' | 'kodek', scene: string, secs: number, e
   for (let i = 0; i < Math.round(secs * 60); i++) { T += 1 / 60; tick(c, 1 / 60, T, MOTIONS.anime, true); each?.(c, T); }
   return c;
 }
+
+/** Kontekst 2D, który śledzi przekształcenia i zapamiętuje najwyższy punkt rysunku w układzie ekranu (`top()`). */
+export function extent() {
+  type M = [number, number, number, number, number, number];
+  let m: M = [1, 0, 0, 1, 0, 0], top = Infinity, where = '';
+  const stack: M[] = [];
+  const mul = (a: M, b: M): M => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+  const pt = (x: number, y: number, op: string) => { const Y = m[1] * x + m[3] * y + m[5]; if (Number.isFinite(Y) && Y < top) { top = Y; where = op; } };
+  const ops: Record<string, (...a: any[]) => void> = {
+    save: () => stack.push([...m] as M), restore: () => { m = stack.pop() ?? m; },
+    translate: (x, y) => { m = mul(m, [1, 0, 0, 1, x, y]); }, scale: (x, y) => { m = mul(m, [x, 0, 0, y, 0, 0]); },
+    rotate: (a) => { const c = Math.cos(a), s = Math.sin(a); m = mul(m, [c, s, -s, c, 0, 0]); },
+    setTransform: (a, b, c, d, e, f) => { m = [a, b, c, d, e, f]; }, resetTransform: () => { m = [1, 0, 0, 1, 0, 0]; },
+    moveTo: (x, y) => pt(x, y, 'moveTo'), lineTo: (x, y) => pt(x, y, 'lineTo'),
+    quadraticCurveTo: (cx, cy, x, y) => { pt(cx, cy, 'quad'); pt(x, y, 'quad'); },
+    bezierCurveTo: (a, b, c, d, x, y) => { pt(a, b, 'bez'); pt(c, d, 'bez'); pt(x, y, 'bez'); },
+    rect: (x, y, w, h) => { pt(x, y, 'rect'); pt(x + w, y + h, 'rect'); pt(x, y + h, 'rect'); pt(x + w, y, 'rect'); },
+    fillRect: (x, y, w, h) => { pt(x, y, 'fillRect'); pt(x + w, y, 'fillRect'); pt(x, y + h, 'fillRect'); },
+    arc: (x, y, r) => { for (let i = 0; i < 8; i++) pt(x + r * Math.cos(i * Math.PI / 4), y + r * Math.sin(i * Math.PI / 4), 'arc'); },
+    ellipse: (x, y, rx, ry, rot = 0) => { for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, px = rx * Math.cos(a), py = ry * Math.sin(a); pt(x + px * Math.cos(rot) - py * Math.sin(rot), y + px * Math.sin(rot) + py * Math.cos(rot), 'ellipse'); } },
+    fillText: (_t, x, y) => pt(x, y - 5, 'text'), strokeText: (_t, x, y) => pt(x, y - 5, 'text'),
+  };
+  const ctx = new Proxy({} as Record<string, unknown>, {
+    get: (_t, k: string) => k === 'measureText' ? () => ({ width: 1 }) : k === 'createLinearGradient' || k === 'createRadialGradient' ? () => ({ addColorStop: () => {} }) : ops[k] ?? (() => {}),
+    set: () => true,
+  });
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, top: () => top, where: () => where };
+}
