@@ -211,7 +211,14 @@ impl Store {
                 None => {}
             }
         }
-        let parent_gone = e.data.parent.as_ref()
+        // wnuk (subagent w zadaniu routera, subagent subagenta) stoi przy sesji głównej: wnuków nikt nie rysuje
+        let top = e.data.parent.as_ref().map(|p| self.top_of(p));
+        let lifted;
+        let data = match &top {
+            Some(t) if Some(t) != e.data.parent.as_ref() => { lifted = EventData { parent: Some(t.clone()), ..e.data.clone() }; &lifted }
+            _ => &e.data,
+        };
+        let parent_gone = top.as_ref()
             .map(|p| self.sessions.get(p).map(|x| x.state == State::Ended).unwrap_or(true)).unwrap_or(false);
 
         let dwell = self.timing.dwell_ms;
@@ -220,7 +227,7 @@ impl Store {
         // nowa sesja przyjmuje pierwszy stan od razu, bez czekania na minimalny czas
         let is_new = !self.sessions.contains_key(&e.session_id);
         let s = self.sessions.entry(e.session_id.clone()).or_insert_with(|| new_session(e));
-        merge(s, &e.data);
+        merge(s, data);
         if parent_gone && sub_kind(s) == Some(SubKind::Router) { orphan(s); }
         if e.ts < s.last_activity {
             out.push(Change::Upsert(s.clone()));
@@ -279,6 +286,18 @@ impl Store {
         if e.kind == Kind::SessionEnd { self.release_children(&e.session_id, e.ts, &mut out); }
         if e.data.sub_end { self.end_newest_child(&e.session_id, e.ts, &mut out); }
         out
+    }
+
+    /// Sesja główna nad `id` (idąc w górę po rodzicach; najwyżej kilka poziomów).
+    fn top_of(&self, id: &str) -> String {
+        let mut cur = id.to_string();
+        for _ in 0..8 {
+            match self.sessions.get(&cur).and_then(|s| s.parent.clone()) {
+                Some(p) if p != cur => cur = p,
+                _ => break,
+            }
+        }
+        cur
     }
 
     /// Dzieci sesji `id` (subagenci i zadania routera), od najstarszego.
@@ -977,5 +996,17 @@ mod tests {
         e.data.parent = Some("s1".into());
         s.apply(&e);
         assert_eq!(s.session("s1").unwrap().parent, None);
+    }
+
+    #[test]
+    fn a_grandchild_stands_with_the_top_session() {
+        // subagent Codexa w zadaniu routera, które zlecił Claude: wnuków nikt nie rysuje, więc stoi przy sesji głównej
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&kid("th", "p", Kind::Prompt, 10, sub(SubKind::Router, false)));
+        let mut g = kid("c1", "th", Kind::Prompt, 20, sub(SubKind::Codex, false));
+        g.data.parent = Some("th".into());
+        s.apply(&g);
+        assert_eq!(s.session("c1").unwrap().parent.as_deref(), Some("p"));
     }
 }
