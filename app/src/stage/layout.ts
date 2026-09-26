@@ -8,8 +8,8 @@ export const PAD = 2;
 export const BADGE_W = 24;
 export const LIMITS_W = 26;
 export const MAX_PETS = 5;
-/** Sufit rozmiaru w pasku (%): wyżej efekty ucinałyby się o górną krawędź paska. */
-export const SIZE_TASKBAR_MAX = 120;
+/** Sufit rozmiaru w pasku (%): przy 100% zwierzak z efektami zajmuje całą wysokość paska 48 px. */
+export const SIZE_TASKBAR_MAX = 100;
 
 /** Wymiary sceny po zastosowaniu rozmiaru (`zoom`), odstępu i marginesu z karty „Pasek”. */
 export interface Geo { zoom: number; slot: number; left: number; right: number; pad: number; badgeW: number; limitsW: number }
@@ -21,7 +21,7 @@ export function geometry(zoom: number, gap: number, padding: number): Geo {
 
 const BASE: Geo = geometry(1, 0, PAD);
 
-/** Skala sceny: w pasku rozmiar (≤ 120 %) × wysokość paska / 48; okno pływające ma już wysokość 48 × rozmiar. */
+/** Skala sceny: w pasku rozmiar (≤ 100 %) × wysokość paska / 48; okno pływające ma już wysokość 48 × rozmiar. */
 export function zoomOf(l: StageLayout, size: number): number {
   const h = l.height_css / 48;
   return l.mode === 'floating' ? h : Math.min(size, SIZE_TASKBAR_MAX) / 100 * h;

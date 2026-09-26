@@ -162,7 +162,8 @@ pub struct Stage {
 }
 
 pub const SIZE: (u16, u16) = (70, 300);
-pub const SIZE_TASKBAR_MAX: u16 = 120;
+/// W pasku 48 px zwierzak przy 100% zajmuje już całą wysokość; większe rozmiary tylko w oknie pływającym.
+pub const SIZE_TASKBAR_MAX: u16 = 100;
 pub const PRIMARY: &str = "primary";
 
 impl Default for Background { fn default() -> Self { Background { kind: BgKind::None, color: None, opacity: None, radius: 12 } } }

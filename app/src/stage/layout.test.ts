@@ -95,9 +95,10 @@ describe('stage settings in the layout', () => {
     expect(out.width).toBeCloseTo(8 * 2 + g.left + g.slot + g.right);
     expect(out.geo).toEqual(g);
   });
-  it('taskbar zoom is capped at 120 %, the floating window takes its size from its height', () => {
+  it('taskbar zoom is capped at 100 % (the pet already fills the bar), the floating window takes its size from its height', () => {
     expect(zoomOf({ max_css: 500, height_css: 48, scale: 1 }, 100)).toBe(1);
-    expect(zoomOf({ max_css: 500, height_css: 48, scale: 1, mode: 'taskbar' }, 150)).toBeCloseTo(1.2);
+    expect(zoomOf({ max_css: 500, height_css: 48, scale: 1, mode: 'taskbar' }, 150)).toBe(1);
+    expect(zoomOf({ max_css: 500, height_css: 48, scale: 1, mode: 'taskbar' }, 80)).toBeCloseTo(0.8);
     expect(zoomOf({ max_css: 500, height_css: 40, scale: 1, mode: 'taskbar' }, 100)).toBeCloseTo(40 / 48);
     expect(zoomOf({ max_css: 500, height_css: 96, scale: 1, mode: 'floating' }, 200)).toBeCloseTo(2);
   });

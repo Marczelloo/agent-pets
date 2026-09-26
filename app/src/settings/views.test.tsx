@@ -102,15 +102,15 @@ describe('SettingsView', () => {
     for (const s of ['Pozycja', 'Przy zasobniku', 'Po lewej', 'Własna', 'Pływające', 'Monitor', 'Ekran 2 · 1920×1080', '(główny)',
       'Tło', 'Brak', 'Szkło', 'Pełny kolor', 'Rozmiar zwierzaków', 'Odstęp', 'Margines', 'Najwięcej zwierzaków w pasku', 'Wyrównanie',
       'Kolejność', 'Paski postępu', 'Paski limitów', 'Plakietka „+N”', 'Przywróć domyślne']) expect(html, s).toContain(s);
-    expect(html).toMatch(/aria-label="Rozmiar zwierzaków"[^>]*max="120"|max="120"[^>]*aria-label="Rozmiar zwierzaków"/);
+    expect(html).toMatch(/aria-label="Rozmiar zwierzaków"[^>]*max="100"|max="100"[^>]*aria-label="Rozmiar zwierzaków"/);
     expect(html).toMatch(/role="radiogroup" aria-label="Wyrównanie"[^>]*aria-disabled="true"/);
     expect(html).not.toContain('Przesuń');
     const floating = view({ position: 'floating', size: 250 });
     expect(floating).toMatch(/max="300"/);
     expect(floating).not.toMatch(/role="radiogroup" aria-label="Wyrównanie"[^>]*aria-disabled="true"/);
     expect(view({ position: 'custom', custom_at: 0.3 })).toContain('Przesuń');
-    expect(view({ size: 110 })).toContain('najwyższe efekty');
-    expect(view({ size: 250 })).toMatch(/aria-valuetext="120%"/);
+    expect(view({ size: 250 })).toMatch(/aria-valuetext="100%"/);
+    expect(view({ size: 250 })).toContain('Większe tylko w oknie pływającym');
     expect(view({ position: 'left' }, true)).toContain('Ikony paska są wyrównane do lewej');
     expect(view({ background: { kind: 'glass', radius: 12 } })).toContain('Przezroczystość');
     expect(html).not.toContain('Przezroczystość');

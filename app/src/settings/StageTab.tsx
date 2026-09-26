@@ -9,7 +9,7 @@ const BACKGROUNDS: StageBackground['kind'][] = ['none', 'glass', 'solid'];
 const ALIGNS: StageAlign[] = ['left', 'center', 'right'];
 const ORDERS: StageOrder[] = ['start', 'attention', 'agent'];
 /** Jak `SIZE_TASKBAR_MAX` i `SIZE` w rdzeniu. */
-const SIZE_MIN = 70, SIZE_TASKBAR = 120, SIZE_FLOAT = 300;
+const SIZE_MIN = 70, SIZE_TASKBAR = 100, SIZE_FLOAT = 300;
 const DEFAULT_OPACITY = { none: 0, glass: 12, solid: 90 } as const;
 const AUTO_COLOR = { glass: '#FFFFFF', solid: '#202020' } as const;
 
@@ -114,7 +114,7 @@ export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove
       <h3>{x.pets}</h3>
       <section className="card">
         <Slider label={x.size} value={size} min={SIZE_MIN} max={sizeMax} text={pct} onChange={v => set({ size: v })}
-          desc={!floating && size > 100 ? x.sizeClip : x.sizeDesc} />
+          desc={!floating && st.size > SIZE_TASKBAR ? x.sizeFloatOnly : x.sizeDesc} />
         <Slider label={x.gap} value={st.gap} min={0} max={30} text={x.px} onChange={v => set({ gap: v })} />
         <Slider label={x.padding} value={st.padding} min={0} max={24} text={x.px} onChange={v => set({ padding: v })} />
         <div className="row">
