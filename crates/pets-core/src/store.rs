@@ -61,6 +61,10 @@ fn new_session(e: &Event) -> Session {
         turn_started_at: None,
         jump: JumpTarget { session_id: e.session_id.clone(), ..Default::default() },
         router_task: None,
+        parent: None,
+        sub: None,
+        action: None,
+        question: None,
     }
 }
 
@@ -73,6 +77,22 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(p) = d.pid { s.jump.pid = Some(p); }
     if let Some(a) = d.app { s.jump.app = Some(a); }
     if let Some(r) = &d.router_task { s.router_task = Some(r.clone()); }
+    if let Some(p) = &d.parent { s.parent = Some(p.clone()); }
+    if let Some(i) = &d.sub { s.sub = Some(i.clone()); }
+}
+
+/// Tekst akcji żyje od początku do końca narzędzia; pytanie, dopóki sesja czeka (meta go nie kończy).
+fn texts(s: &mut Session, e: &Event) {
+    match e.kind {
+        Kind::ToolStart => s.action = e.data.action.clone(),
+        Kind::Meta | Kind::Limits | Kind::NeedsInput => {}
+        _ => s.action = None,
+    }
+    match e.kind {
+        Kind::NeedsInput => s.question = e.data.question.clone(),
+        Kind::Meta | Kind::Limits => {}
+        _ => s.question = None,
+    }
 }
 
 fn set(s: &mut Session, st: State, tool: Option<Tool>, now: i64) {
@@ -161,6 +181,7 @@ impl Store {
             return out;
         }
         s.last_activity = e.ts;
+        texts(s, e);
 
         let target: Option<(State, Option<Tool>)> = match e.kind {
             Kind::Prompt => { s.turn_started_at = Some(e.ts); Some((State::Thinking, None)) }
@@ -514,5 +535,73 @@ mod tests {
         assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "to samo okno: reset ze statusline zostaje");
         s.apply(&at(20_000, lim(5.0, None)));
         assert_eq!(s.limits(), &[lim(5.0, None)], "reset minął: nie wiemy, kiedy następny");
+    }
+
+    fn action(s: &Store) -> Option<String> { s.session("s1").unwrap().action.clone() }
+    fn question(s: &Store) -> Option<String> { s.session("s1").unwrap().question.clone() }
+
+    #[test]
+    fn action_text_lives_from_tool_start_to_tool_end() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        let mut t = tool(Tool::Bash, 1000);
+        t.data.action = Some("npm test".into());
+        s.apply(&t);
+        assert_eq!(action(&s).as_deref(), Some("npm test"));
+        s.apply(&ev(Kind::Meta, 1500));
+        assert_eq!(action(&s).as_deref(), Some("npm test"), "meta nie czyści akcji");
+        s.apply(&ev(Kind::ToolEnd, 2000));
+        assert_eq!(action(&s), None);
+        s.apply(&t.clone());
+        s.apply(&tool(Tool::Other, 3000));
+        assert_eq!(action(&s), None, "nowe narzędzie bez tekstu czyści stary tekst");
+        let mut t2 = tool(Tool::Edit, 4000);
+        t2.data.action = Some("Edytuje a.ts".into());
+        s.apply(&t2);
+        s.apply(&ev(Kind::TurnEnd, 5000));
+        assert_eq!(action(&s), None);
+    }
+
+    #[test]
+    fn question_lives_while_the_session_waits() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        let mut n = ev(Kind::NeedsInput, 1000);
+        n.data.question = Some("Zgoda na Bash? npm test".into());
+        s.apply(&n);
+        assert_eq!(question(&s).as_deref(), Some("Zgoda na Bash? npm test"));
+        s.apply(&ev(Kind::Meta, 1500));
+        assert!(question(&s).is_some(), "meta (np. kontekst) nie kończy czekania");
+        s.apply(&ev(Kind::ToolEnd, 2000));
+        assert_eq!(question(&s), None);
+        s.apply(&n.clone());
+        let mut n2 = n.clone();
+        n2.ts = 3000;
+        s.apply(&n2);
+        s.apply(&ev(Kind::Prompt, 4000));
+        assert_eq!(question(&s), None);
+    }
+
+    #[test]
+    fn an_old_event_does_not_touch_action_or_question() {
+        let mut s = Store::new(Timing::default());
+        let mut t = tool(Tool::Bash, 5000);
+        t.data.action = Some("ls".into());
+        s.apply(&t);
+        s.apply(&ev(Kind::ToolEnd, 1000));
+        assert_eq!(action(&s).as_deref(), Some("ls"));
+    }
+
+    #[test]
+    fn parent_and_sub_info_are_kept() {
+        let mut s = Store::new(Timing::default());
+        let mut e = ev(Kind::SessionStart, 0);
+        e.data.parent = Some("p".into());
+        e.data.sub = Some(SubInfo { kind: SubKind::Claude, agent_type: Some("Explore".into()), description: None, background: false });
+        s.apply(&e);
+        s.apply(&ev(Kind::Prompt, 100));
+        let x = s.session("s1").unwrap();
+        assert_eq!(x.parent.as_deref(), Some("p"));
+        assert_eq!(x.sub.as_ref().unwrap().agent_type.as_deref(), Some("Explore"));
     }
 }

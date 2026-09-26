@@ -24,7 +24,18 @@ export interface Session {
   jump: { pid: number | null; session_id: string; cwd: string; app: string | null };
   /** zadanie Agent Routera powiązane z tym wątkiem Codexa */
   router_task?: RouterTask | null;
+  /** id sesji rodzica; brak = zwykła sesja */
+  parent?: string | null;
+  /** tylko u dzieci (subagentów) */
+  sub?: SubInfo | null;
+  /** bieżący tekst akcji (tylko w pamięci rdzenia i okien) */
+  action?: string | null;
+  /** tekst pytania, tylko w `needs_you` */
+  question?: string | null;
 }
+
+export type SubKind = 'claude' | 'codex' | 'router';
+export interface SubInfo { kind: SubKind; agent_type: string | null; description: string | null; background: boolean }
 
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
@@ -89,6 +100,9 @@ export interface StageSettings {
   align: StageAlign;
   order: StageOrder;
   show: { progress: boolean; limits: boolean; badge: boolean };
+  bubbles: { questions: boolean; actions: boolean };
+  /** mini-zwierzaki subagentów pracujących dłużej niż 20 s */
+  minis: boolean;
 }
 export type Language = 'auto' | 'pl' | 'en';
 /** `lang`: język tekstów z Rusta (ustawienie albo język Windows), dla `auto` w UI. */

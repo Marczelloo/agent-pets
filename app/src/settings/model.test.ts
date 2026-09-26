@@ -17,6 +17,7 @@ describe('settings model', () => {
     expect(s.stage).toEqual({
       position: 'right', monitor: 'primary', background: { kind: 'none', radius: 12 },
       size: 100, gap: 0, padding: 2, align: 'right', order: 'start', show: { progress: true, limits: true, badge: true },
+      bubbles: { questions: true, actions: true }, minis: true,
     });
   });
   it('asks nothing of the network by default', () => {
