@@ -34,3 +34,21 @@ Plan `2026-09-25-agent-pets-looks-v2-models.md`, spec `2026-09-25-agent-pets-loo
 | 7 | Testy automatyczne | `cargo test --workspace` (200), `pnpm --dir app test` (248), `typecheck` | ✅ | 2026-09-26 |
 
 Do sprawdzenia przez użytkownika na żywo: Szkic w ciemnym pasku, Naklejka i Pixel-art w prawdziwym pasku przy jego skali ekranu, podgląd animacji w ustawieniach.
+
+## Wygląd v2, plan 2 (Anime)
+
+Plan `2026-09-26-agent-pets-looks-v2-anime.md`, spec `2026-09-25-agent-pets-looks-v2-design.md` (sekcja 8).
+
+| # | Sprawdzenie | Jak | Wynik | Data |
+|---|---|---|---|---|
+| 1 | 15 choreografii | testy `work.test.ts` i `states.test.ts` sprawdzają, co widać: seria ORA do klawiatury z klawiszami, iskrami, ドドド i finałowym ciosem po zamachu; ≥ 4 pieczęcie rąk, dym i komenda w terminalu; błysk okularów i strony na wietrze; Sharingan ze skanem i trafieniem; zygzak z błyskawicami i powrotem; pieczęć na ziemi, dym i mini-pomocnik; klaśnięcie, krąg transmutacji i klucz z iskier; cień na oczach i kartka w zwolnionym tempie; błyszczące oczy i skaczące „!”; „NICE!” z kciukiem, zębami, promieniami i konfetti; dusza z ust i kropla potu; kręcenie z nuceniem oraz pompki i przysiady; bąbel z nosa i dymek snu; Hollow Purple z implozją; ucieczka z chmurą kurzu. Zrzuty klatek w trzech modelach | ✅ automatycznie i na zrzutach; ocena „czy to jest to” należy do użytkownika | 2026-09-26 |
+| 2 | Ruch: zamach → szybka akcja → pauza, bez bujania | sprężyny Anime krytycznie tłumione i liczone dokładnie (test: brak przestrzelenia dla każdej sprężyny przy 60 i 10 kl./s), `_stiff` na szybkie ciosy (90% drogi < 0,1 s), klatki kluczowe `keys()` z pauzą; test zamachu przed finałowym ciosem | ✅ | 2026-09-26 |
+| 3 | Smugi zamiast duchów | smuga za szybką dłonią, wachlarz pięści, rozciągnięcie ciała przy szybkim biegu (nie w pikselu); test: nadal żadnego `drawImage` | ✅ | 2026-09-26 |
+| 4 | Limity efektów | ≤ 40 cząsteczek na zwierzaka, ≤ 3 klatki uderzenia na sekundę; przegląd: każda scena × 7 stylów × 2 skórki | ✅ | 2026-09-26 |
+| 5 | Tryb oszczędny i wyłączone efekty animacji | oszczędny: 20 cząsteczek i bez tła akcji; `reduced`: bez `invert` i wstrząsu, choreografia zostaje | ✅ | 2026-09-26 |
+| 6 | Pasek 48 px | przegląd z kontekstem śledzącym przekształcenia: górna krawędź rysunku ≥ 0 we wszystkich scenach (Czysty, Naklejka, Pixel-art, obie skórki); zrzut paska przy DPI 150% | ✅ | 2026-09-26 |
+| 7 | Pixel-art z efektami | efekty i napisy (czcionka bitmapowa) tylko jako `fillRect` na całkowitych pikselach urządzenia przy dpr 1 / 1,25 / 1,5; napisy ≥ 9 px w pasku, w podglądzie wielkości jak wektorowe | ✅ | 2026-09-26 |
+| 8 | Spokojny bez zmian | test: po Anime klatka Spokojna identyczna z samym `drawPet`; parytet z prototypem v6 zielony | ✅ | 2026-09-26 |
+| 9 | Testy automatyczne | `cargo test --workspace` (200), `pnpm --dir app test` (311), `typecheck` | ✅ | 2026-09-26 |
+
+Do sprawdzenia przez użytkownika na żywo: czy choreografie mają ten „anime” charakter, o który chodziło; czytelność w prawdziwym pasku (Pixel-art i napisy); przełączenie Spokojny ↔ Anime w trakcie pracy.
