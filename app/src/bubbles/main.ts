@@ -61,7 +61,8 @@ async function paint(): Promise<void> {
   const rowH = Math.max(...list.map(l => l.box.h));
   const W = Math.ceil(at.width + 2 * MARGIN), H = Math.ceil(2 * rowH + ROW_GAP);
   const placed = await invoke<{ offset: number; above: boolean } | null>('bubbles_place', { w: W, h: H });
-  if (!placed) return;
+  // scena schowana albo gra na pełnym ekranie: Rust już schował okno; stan wraca przy następnym odświeżeniu
+  if (!placed) { lastHits = ''; return; }
   const d = devicePixelRatio || 1;
   const pw = Math.round(W * d), ph = Math.round(H * d);
   if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }

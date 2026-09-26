@@ -32,6 +32,9 @@ pub fn band(stage: Rect, monitor: Rect, pw: i32, ph: i32, margin: i32) -> Band {
     Band { rect: Rect { left, top, right: left + pw, bottom: top + ph }, offset: stage.left - left, above }
 }
 
+/// Dymki tylko przy widocznej scenie i bez aplikacji na pełnym ekranie (strona mogła przegapić `pets://visibility`).
+pub fn allowed(fullscreen: bool, stage_shown: bool) -> bool { !fullscreen && stage_shown }
+
 /// Zapas okna po obu stronach sceny (px CSS): dymek skrajnego zwierzaka może wystawać poza scenę.
 pub const MARGIN_CSS: f64 = 150.0;
 
@@ -70,6 +73,7 @@ pub fn stage_pets(app: AppHandle, pets: Vec<PetAt>, width: f64, zoom: f64) {
 
 #[tauri::command]
 pub fn bubbles_place(app: AppHandle, state: State<Bubbles>, shell: State<Shell>, w: f64, h: f64) -> Option<Placed> {
+    if !allowed(shell::fullscreen_app(), shell.stage_shown()) { hide(&app, &state); return None; }
     let (stage, monitor, scale) = shell.stage_geom()?;
     let win = app.get_webview_window("bubbles")?;
     let b = band(stage, monitor, (w * scale).round() as i32, (h * scale).round() as i32, (MARGIN_CSS * scale).round() as i32);
@@ -182,5 +186,12 @@ mod tests {
         assert_eq!(hit(&hits, 150.0, 69.0).map(|h| h.id.as_str()), Some("b"));
         assert!(hit(&hits, 115.0, 45.0).is_none(), "przerwa między dymkami przepuszcza klik");
         assert!(hit(&hits, 15.0, 10.0).is_none());
+    }
+
+    #[test]
+    fn no_bubbles_over_a_fullscreen_app_or_a_hidden_stage() {
+        assert!(allowed(false, true));
+        assert!(!allowed(true, true), "gra na pełnym ekranie");
+        assert!(!allowed(false, false), "scena schowana (ukryty pasek, brak miejsca)");
     }
 }

@@ -136,6 +136,9 @@ impl Shell {
         taskbar::passthrough(self.hwnd(), on);
     }
 
+    /// Okno sceny jest pokazane (nie schowane przy ukrytym pasku, pełnym ekranie albo braku miejsca).
+    pub fn stage_shown(&self) -> bool { taskbar::is_visible(self.hwnd()) }
+
     /// Scena, jej monitor i skala: do ustawienia tooltipa.
     pub fn stage_geom(&self) -> Option<(placement::Rect, placement::Rect, f64)> {
         let h = self.hwnd();

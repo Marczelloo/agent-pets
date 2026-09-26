@@ -241,6 +241,8 @@ pub fn parent_rect(h: HWND) -> Option<Rect> { unsafe { GetParent(h) }.ok().and_t
 
 pub fn hide(h: HWND) { unsafe { let _ = ShowWindow(h, SW_HIDE); } }
 
+pub fn is_visible(h: HWND) -> bool { unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(h).as_bool() } }
+
 pub fn no_activate(h: HWND) {
     unsafe {
         let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
