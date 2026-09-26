@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, SubKind } from '../types';
-import { delegating, MINI_AFTER_MS, miniScene, minisLeftOf, minisOf } from './minis';
+import { delegating, MINI_AFTER_MS, miniScene, minisLeftOf, minisOf, parentScene } from './minis';
 
 function s(id: string, over: Partial<Session> = {}): Session {
   return { id, agent: 'claude', origin: 'cli', title: id, cwd: '', state: 'working', tool: 'bash', progress: null, context: null,
@@ -67,5 +67,16 @@ describe('mini side', () => {
     expect(minisLeftOf({ position: 'custom', align: 'right' })).toBe(true);
     expect(minisLeftOf({ position: 'floating', align: 'left' })).toBe(false);
     expect(minisLeftOf({ position: 'floating', align: 'center' })).toBe(true);
+  });
+});
+
+describe('parent pose', () => {
+  it('delegating never hides waiting, an error or the goodbye', () => {
+    const young = kid('a', 50_000);
+    expect(parentScene(s('p', { state: 'thinking', tool: null }), [P, young], 60_000, true)).toBe('agent');
+    expect(parentScene(s('p', { state: 'needs_you', tool: null }), [P, young], 60_000, true)).toBe('needs');
+    expect(parentScene(s('p', { state: 'error', tool: null }), [P, young], 60_000, false)).toBe('error');
+    expect(parentScene(s('p', { state: 'ended', tool: null }), [P, young], 60_000, false)).toBe('bye');
+    expect(parentScene(s('p', { state: 'working', tool: 'edit' }), [P], 60_000, true)).toBe('edit');
   });
 });

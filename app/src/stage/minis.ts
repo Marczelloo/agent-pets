@@ -51,3 +51,10 @@ export function minisLeftOf(st: Pick<StageSettings, 'position' | 'align'>): bool
 export function delegating(parent: Session, all: Session[], now: number, on: boolean): boolean {
   return all.some(c => c.parent === parent.id && ACTIVE.has(c.state) && (!on || now - c.started_at < MINI_AFTER_MS));
 }
+
+/** Poza rodzica: „deleguje” tylko wtedy, gdy nie czeka na Ciebie, nie ma błędu i się nie żegna. */
+export function parentScene(s: Session, all: Session[], now: number, on: boolean): SceneKey {
+  const own = sceneFor(s);
+  if (own === 'needs' || own === 'error' || own === 'bye') return own;
+  return delegating(s, all, now, on) ? 'agent' : own;
+}

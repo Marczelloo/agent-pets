@@ -5,9 +5,8 @@ import { resolveLang, setLang } from '../i18n';
 import type { Pets, PointerMsg, Snapshot, StageLayout, StageSettings } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawMiniMore, drawProgress, drawRouterBadge, limitBars } from './hud';
-import { delegating, MINI_SCALE, miniAlpha, miniScene, minisLeftOf, minisOf } from './minis';
+import { MINI_SCALE, miniAlpha, miniScene, minisLeftOf, minisOf, parentScene } from './minis';
 import { routerHealth } from './router';
-import { sceneFor } from './sceneFor';
 import { drawSpawn, SPAWN_S } from './spawn';
 import { ACCENT, STYLES } from '../styles';
 import { geometry, layout, zoomOf, type LayoutOut } from './layout';
@@ -69,8 +68,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       minis: p => minisOf(p, snap.sessions, now, on), minisLeft: minisLeftOf(stage),
     });
     // rodzic z młodym dzieckiem (bez mini) ma pozę „deleguje”; mini żegna się po swojemu
-    roster.sync(snap.sessions, T, s => s.parent ? miniScene(s, now)
-      : delegating(s, snap.sessions, now, on) ? 'agent' : sceneFor(s));
+    roster.sync(snap.sessions, T, s => s.parent ? miniScene(s, now) : parentScene(s, snap.sessions, now, on));
     const shownMinis = new Set(out.pets.flatMap(p => p.minis.map(m => m.id)));
     for (const id of shownMinis) if (!miniBorn.has(id)) miniBorn.set(id, T);
     for (const id of [...miniBorn.keys()]) if (!shownMinis.has(id)) miniBorn.delete(id);
