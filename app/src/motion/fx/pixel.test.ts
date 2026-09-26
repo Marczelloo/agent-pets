@@ -45,6 +45,14 @@ describe('pixel anime effects', () => {
     const ys = r.log.filter(l => l.startsWith('fillRect(')).map(l => l.slice(9, -1).split(',').map(Number)).map(v => [v[1], v[1] + v[3]]);
     expect(Math.max(...ys.map(v => v[1])) - Math.min(...ys.map(v => v[0]))).toBeGreaterThanOrEqual(9);
   });
+  it('onomatopoeia keep the vector size in the big preview (glyph pixel follows u, not the grid cell)', () => {
+    const c = createPet('clawd', 'idle'); fxState(c); word(c, 'バン', 0, -90);
+    const r = recorder(); pixelFront(r.ctx, c, G(1, { u: 0.8 }));
+    const ys = r.log.filter(l => l.startsWith('fillRect(')).map(l => l.slice(9, -1).split(',').map(Number));
+    const h = Math.max(...ys.map(v => v[1] + v[3])) - Math.min(...ys.map(v => v[1]));
+    expect(h).toBeLessThanOrEqual(30 * 0.8 * 1.3);
+    expect(h).toBeGreaterThanOrEqual(30 * 0.8 * 0.7);
+  });
   it('power saving skips the action background on the grid too', () => {
     const r = recorder(); pixelBack(r.ctx, pet({ _bg: 'speed' }), G(1, { env: { ...ENV, bg: false } }));
     expect(r.log).toEqual([]);

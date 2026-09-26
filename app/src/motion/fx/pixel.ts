@@ -24,7 +24,19 @@ function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet) {
       if (fill) cell(cx - w, cy + j, 2 * w + 1, 1, col); else { cell(cx - w, cy + j, 1, 1, col); cell(cx + w, cy + j, 1, 1, col); } }
     if (!fill) for (let i = -rx; i <= rx; i++) { const h = Math.round(ry * Math.sqrt(Math.max(0, 1 - (i / (rx || 1)) ** 2))); cell(cx + i, cy - h, 1, 1, col); cell(cx + i, cy + h, 1, 1, col); }
   };
-  return { G, U, cell, line, ring };
+  /** Napis bitmapową czcionką: piksel glifu rośnie z u (jak czcionka wektorowa, ≈ 30u wysokości), co najmniej 9 px w pasku. */
+  const text = (str: string, xu: number, yu: number, col: string) => {
+    const P = Math.max(Math.ceil(9 / 7 * g.dpr), Math.round(30 / 7 * g.u * g.dpr)) / g.dpr, chars = [...str];
+    const width = chars.reduce((a, ch) => a + glyphWidth(ch) + 1, -1), gy = Y0 + U(yu) * G - 3 * P;
+    const pass = (c0: string, ox: number, oy: number) => {
+      x.fillStyle = c0;
+      let gx = X0 + U(xu) * G - Math.round(width / 2) * P;
+      for (const ch of chars) { (GLYPHS[ch] ?? GLYPHS['!']).forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] === '#') x.fillRect(gx + (i + ox) * P, gy + (j + oy) * P, P, P); }); gx += (glyphWidth(ch) + 1) * P; }
+    };
+    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) pass(pen.ol, ox, oy);
+    pass(col, 0, 0);
+  };
+  return { G, U, cell, line, ring, text };
 }
 
 export function pixelBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
@@ -51,7 +63,7 @@ const PAL: Record<string, string> = { a: AMBER, g: GREY, k: '#2B1D16', l: '#F1EF
 
 export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const s: FxState | undefined = c.fx; if (!s) return;
-  const tg = c.tg || {}, { U, cell, line, ring } = grid(x, g, c), hands: number[][] = c.hand ?? [];
+  const tg = c.tg || {}, { U, cell, line, ring, text } = grid(x, g, c), hands: number[][] = c.hand ?? [];
   const [fx0, fy0, gp] = (c.face as number[]) ?? [0, -45, 12], fx = U(fx0), fy = U(fy0), gap = Math.max(2, U(gp));
   const sprite = (rows: string[], cx: number, cy: number, col?: string) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] !== '.') cell(cx + i, cy + j, 1, 1, col && r[i] === 'c' ? col : PAL[r[i]]); });
   x.save(); x.globalAlpha = g.alpha;
@@ -86,13 +98,7 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
     else sprite(SPR[p.k]!, px - 1, py - 1, p.k === 'helper' ? g.accent : undefined);
     x.restore();
   }
-  if (tg._bang) sprite(GLYPHS['!'].map(r => r.replace(/#/g, 'a')), fx + U(34), fy - U(30) - Math.round(Math.abs(Math.sin(g.t * 8)) * 3) - 7);
-  for (const w of s.words) {
-    const chars = [...w.text], width = chars.reduce((a, ch) => a + glyphWidth(ch) + 1, -1);
-    let cx = U(w.x) - (width >> 1); const cy = U(w.y) - 3;
-    for (const ch of chars) { const rows = GLYPHS[ch] ?? GLYPHS['!'];
-      for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) sprite(rows.map(r => r.replace(/#/g, 'k')), cx + ox, cy + oy);
-      sprite(rows.map(r => r.replace(/#/g, 'a')), cx, cy); cx += glyphWidth(ch) + 1; }
-  }
+  if (tg._bang) text('!', fx0 + 34, fy0 - 38 - Math.round(Math.abs(Math.sin(g.t * 8)) * 3) * 3, AMBER);
+  for (const w of s.words) text(w.text, w.x, w.y, AMBER);
   x.restore();
 }
