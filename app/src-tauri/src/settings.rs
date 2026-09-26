@@ -97,6 +97,13 @@ fn store(app: &AppHandle, new: Settings) -> Result<(), String> {
     Ok(())
 }
 
+/// Zmiana ustawień z Rusta (np. pozycja po przesunięciu sceny): zapis, rozesłanie i skutki jak z okna.
+pub fn update(app: &AppHandle, f: impl FnOnce(&mut Settings)) -> Result<(), String> {
+    let mut s = app.state::<SettingsState>().get();
+    f(&mut s);
+    store(app, s)
+}
+
 /// Ustawienia z okna, bez listy aplikacji (tę zmieniają tylko integracje, żeby nie cofnąć instalacji hooków).
 pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings { Settings { apps: current.apps, ..incoming } }
 

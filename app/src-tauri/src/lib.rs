@@ -28,6 +28,10 @@ fn stage_hello(app: tauri::AppHandle, shell: tauri::State<shell::Shell>, tip: ta
 #[tauri::command]
 fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_width(width); }
 
+/// „Przesuń” (menu sceny, karta „Pasek”): scena w pasku da się przeciągnąć; Enter albo klik obok zapisuje, Esc cofa.
+#[tauri::command]
+fn stage_move(shell: tauri::State<shell::Shell>) { shell.start_move(); }
+
 /// „Przejdź” do sesji. Rejestr Claude'a czytamy teraz, bo `hostSessionId` sesji desktopowej nie ma w migawce.
 #[tauri::command]
 fn jump(app: tauri::AppHandle, session_id: String) -> jump::JumpResult {
@@ -72,6 +76,7 @@ fn session_undismiss(app: tauri::AppHandle, ids: Vec<String>) {
 pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings, new: &pets_core::settings::Settings) {
     if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Apps(new.apps)); }
     if old.autostart != new.autostart { sync_autostart(new.autostart); }
+    if old.stage != new.stage { app.state::<shell::Shell>().settings_changed(); }
     if old.power_saving != new.power_saving { system::refresh_power(app); }
     if old.language != new.language {
         let lang = pets_core::i18n::current(new.language);
@@ -143,7 +148,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            snapshot, stage_hello, stage_set_width, jump, panel::panel_open, panel::panel_hide,
+            snapshot, stage_hello, stage_set_width, stage_move, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,

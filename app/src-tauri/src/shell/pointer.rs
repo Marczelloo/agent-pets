@@ -1,13 +1,16 @@
 //! Natywna mysz: WebView2 osadzony w oknie innego procesu nie dostaje zdarzeń DOM (spike S1),
 //! więc co 30 ms czytamy kursor i przyciski i wysyłamy `pets://pointer` w pikselach CSS sceny.
+//! W trybie „Przesuń” i w oknie pływającym ten sam wątek rozpoznaje przeciąganie (`Dragger`).
 use serde::Serialize;
-use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+/// `x`, `y`: piksele CSS względem okna sceny; `sx`, `sy`: piksele fizyczne ekranu (do przeciągania).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Sample { pub inside: bool, pub x: f64, pub y: f64, pub left: bool, pub right: bool }
+pub struct Sample { pub inside: bool, pub x: f64, pub y: f64, pub sx: i32, pub sy: i32, pub left: bool, pub right: bool }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -25,19 +28,88 @@ pub fn diff(prev: &Sample, cur: &Sample) -> Vec<PointerEvent> {
     out
 }
 
-pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>) {
+/// Przeciąganie od wciśnięcia w oknie: `dx`, `dy` w pikselach ekranu od punktu wciśnięcia.
+/// `Click`: puszczenie bez ruchu ponad próg (okno pływające klika dopiero po puszczeniu).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Drag { Start, Move { dx: i32, dy: i32 }, End, Click { x: f64, y: f64 } }
+
+pub struct Dragger { threshold: i32, down: Option<(i32, i32)>, active: bool, last: (i32, i32) }
+
+impl Dragger {
+    pub fn new(threshold: i32) -> Dragger { Dragger { threshold, down: None, active: false, last: (0, 0) } }
+
+    pub fn step(&mut self, prev: &Sample, cur: &Sample) -> Vec<Drag> {
+        let mut out = Vec::new();
+        if cur.left && !prev.left {
+            if cur.inside { self.down = Some((cur.sx, cur.sy)); self.last = (0, 0); }
+            if cur.inside && self.threshold == 0 { self.active = true; out.push(Drag::Start); }
+            return out;
+        }
+        let Some((x0, y0)) = self.down else { return out };
+        if cur.left {
+            let (dx, dy) = (cur.sx - x0, cur.sy - y0);
+            if !self.active && (dx.abs() > self.threshold || dy.abs() > self.threshold) { self.active = true; out.push(Drag::Start); }
+            if self.active && (dx, dy) != self.last { self.last = (dx, dy); out.push(Drag::Move { dx, dy }); }
+        } else {
+            out.push(if self.active { Drag::End } else { Drag::Click { x: cur.x, y: cur.y } });
+            self.down = None;
+            self.active = false;
+        }
+        out
+    }
+}
+
+/// Tryb wskaźnika ustawiany przez pętlę sceny.
+pub const NORMAL: u8 = 0;
+/// „Przesuń” w pasku: przeciąganie bez progu, Enter/klik obok zatwierdza, Esc cofa, bez kliknięć do UI.
+pub const MOVING: u8 = 1;
+/// Okno pływające: przeciąganie po 4 px, krótki klik po puszczeniu.
+pub const FLOATING: u8 = 2;
+
+pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: Sender<super::Cmd>) {
     std::thread::spawn(move || {
         let mut prev = Sample::default();
+        let (mut moving, mut floating) = (Dragger::new(0), Dragger::new(4));
+        let mut keys = (false, false);
         loop {
             std::thread::sleep(Duration::from_millis(30));
-            let cur = sample(stage.load(Ordering::Relaxed)).unwrap_or_default();
-            for e in diff(&prev, &cur) { let _ = app.emit("pets://pointer", e); }
+            let m = mode.load(Ordering::Relaxed);
+            let cur = sample(stage.load(Ordering::Relaxed), m == FLOATING).unwrap_or_default();
+            match m {
+                MOVING => {
+                    for d in moving.step(&prev, &cur) { let _ = tx.send(super::Cmd::Drag(d)); }
+                    if cur.left && !prev.left && !cur.inside { let _ = tx.send(super::Cmd::MoveDone(true)); }
+                    let now = (key_down(0x0D), key_down(0x1B));
+                    if now.0 && !keys.0 { let _ = tx.send(super::Cmd::MoveDone(true)); }
+                    if now.1 && !keys.1 { let _ = tx.send(super::Cmd::MoveDone(false)); }
+                    keys = now;
+                }
+                FLOATING => {
+                    for e in diff(&prev, &cur) {
+                        if !matches!(e, PointerEvent::Click { .. }) { let _ = app.emit("pets://pointer", e); }
+                    }
+                    for d in floating.step(&prev, &cur) {
+                        match d {
+                            Drag::Click { x, y } => { let _ = app.emit("pets://pointer", PointerEvent::Click { x, y }); }
+                            d => { let _ = tx.send(super::Cmd::Drag(d)); }
+                        }
+                    }
+                }
+                _ => for e in diff(&prev, &cur) { let _ = app.emit("pets://pointer", e); },
+            }
             prev = cur;
         }
     });
 }
 
-fn sample(raw: isize) -> Option<Sample> {
+fn key_down(vk: i32) -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    (unsafe { GetAsyncKeyState(vk) } as u16 & 0x8000) != 0
+}
+
+/// `by_rect`: okno pływające może przepuszczać kursor (wtedy `WindowFromPoint` wskazuje okno pod spodem),
+/// więc „w środku” liczymy z samego prostokąta.
+fn sample(raw: isize, by_rect: bool) -> Option<Sample> {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
     use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VIRTUAL_KEY, VK_LBUTTON, VK_RBUTTON};
@@ -50,7 +122,7 @@ fn sample(raw: isize) -> Option<Sample> {
         let mut p = POINT::default();
         GetCursorPos(&mut p).ok()?;
         let hit = WindowFromPoint(p);
-        let inside = p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom && (hit == h || IsChild(h, hit).as_bool());
+        let inside = p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom && (by_rect || hit == h || IsChild(h, hit).as_bool());
         let dpi = GetDpiForWindow(h);
         let scale = if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 };
         let down = |vk: VIRTUAL_KEY| (GetAsyncKeyState(vk.0 as i32) as u16 & 0x8000) != 0;
@@ -58,6 +130,8 @@ fn sample(raw: isize) -> Option<Sample> {
             inside,
             x: ((p.x - r.left) as f64 / scale).round(),
             y: ((p.y - r.top) as f64 / scale).round(),
+            sx: p.x,
+            sy: p.y,
             left: down(VK_LBUTTON),
             right: down(VK_RBUTTON),
         })
@@ -68,7 +142,7 @@ fn sample(raw: isize) -> Option<Sample> {
 mod tests {
     use super::*;
 
-    fn at(x: f64, y: f64) -> Sample { Sample { inside: true, x, y, left: false, right: false } }
+    fn at(x: f64, y: f64) -> Sample { Sample { inside: true, x, y, sx: x as i32 + 1000, sy: y as i32 + 500, ..Sample::default() } }
 
     #[test]
     fn enter_move_and_leave() {
@@ -93,6 +167,37 @@ mod tests {
     fn right_button_is_a_context_click() {
         let r = Sample { right: true, ..at(3.0, 4.0) };
         assert_eq!(diff(&at(3.0, 4.0), &r), vec![PointerEvent::Context { x: 3.0, y: 4.0 }]);
+    }
+
+    fn press(s: Sample) -> Sample { Sample { left: true, ..s } }
+
+    #[test]
+    fn move_mode_drags_from_the_press_and_reports_the_offset_even_outside_the_window() {
+        let mut d = Dragger::new(0);
+        assert_eq!(d.step(&at(5.0, 5.0), &press(at(5.0, 5.0))), vec![Drag::Start]);
+        let moved = Sample { inside: false, ..press(at(45.0, 9.0)) };
+        assert_eq!(d.step(&press(at(5.0, 5.0)), &moved), vec![Drag::Move { dx: 40, dy: 4 }]);
+        assert!(d.step(&moved, &moved).is_empty(), "no repeat without movement");
+        assert_eq!(d.step(&moved, &Sample { left: false, ..moved }), vec![Drag::End]);
+    }
+
+    #[test]
+    fn floating_short_click_stays_a_click_and_a_real_move_becomes_a_drag() {
+        let mut d = Dragger::new(4);
+        assert!(d.step(&at(5.0, 5.0), &press(at(5.0, 5.0))).is_empty());
+        assert!(d.step(&press(at(5.0, 5.0)), &press(at(7.0, 6.0))).is_empty(), "3 px or less is not a drag");
+        assert_eq!(d.step(&press(at(7.0, 6.0)), &at(7.0, 6.0)), vec![Drag::Click { x: 7.0, y: 6.0 }]);
+        assert!(d.step(&at(5.0, 5.0), &press(at(5.0, 5.0))).is_empty());
+        assert_eq!(d.step(&press(at(5.0, 5.0)), &press(at(10.0, 5.0))), vec![Drag::Start, Drag::Move { dx: 5, dy: 0 }]);
+        assert_eq!(d.step(&press(at(10.0, 5.0)), &at(10.0, 5.0)), vec![Drag::End]);
+    }
+
+    #[test]
+    fn a_press_outside_the_window_starts_nothing() {
+        let mut d = Dragger::new(0);
+        let out = Sample { inside: false, ..at(5.0, 5.0) };
+        assert!(d.step(&out, &press(out)).is_empty());
+        assert!(d.step(&press(out), &press(at(9.0, 5.0))).is_empty());
     }
 
     #[test]

@@ -38,6 +38,17 @@ pub fn autostart_at(key: &str) -> bool {
     }
 }
 
+/// Jasny pasek zadań (Ustawienia → Personalizacja → Kolory → tryb Windows). Brak wartości = ciemny.
+pub fn light_taskbar() -> bool {
+    let mut v: u32 = 0;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    unsafe {
+        RegGetValueW(HKEY_CURRENT_USER, &HSTRING::from(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
+            &HSTRING::from("SystemUsesLightTheme"), RRF_RT_REG_DWORD, None, Some(&mut v as *mut u32 as *mut core::ffi::c_void), Some(&mut size))
+            .is_ok() && v == 1
+    }
+}
+
 /// Co zrobić z wpisem autostartu: porównujemy z rejestrem, nie z poprzednimi ustawieniami
 /// (kreator zapisuje domyślne `true`, a wpisu jeszcze nie ma).
 pub fn autostart_action(desired: bool, registered: bool) -> Option<bool> { (desired != registered).then_some(desired) }

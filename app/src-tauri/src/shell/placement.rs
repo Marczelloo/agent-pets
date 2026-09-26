@@ -10,10 +10,14 @@ impl Rect {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Metrics {
     pub tray: Rect,
-    /// lewa krawędź zasobnika (`TrayNotifyWnd`)
+    /// lewa krawędź zasobnika (`TrayNotifyWnd`) albo zegara drugiego paska
     pub notify_left: Option<i32>,
     /// prawa krawędź ostatniego elementu paska (Start, wyszukiwanie, ikony aplikacji) z UI Automation
     pub icons_right: Option<i32>,
+    /// lewa krawędź pierwszego elementu grupy ikon (`StartButton`) z UI Automation
+    pub first_left: Option<i32>,
+    /// prawa krawędź elementów przed Startem (przycisk Widżetów), jeśli są
+    pub widgets_right: Option<i32>,
     pub scale: f64,
 }
 
@@ -26,30 +30,94 @@ pub struct Placement {
     /// wolne miejsce w pikselach CSS; UI mieści w nim tylu zwierzaków, ilu się da
     pub max_css: f64,
     pub height_css: f64,
+    /// tryb „lewa” bez lewej strefy (ikony do lewej): scena stoi przy zasobniku
+    pub left_fallback: bool,
 }
 
 pub const GAP_CSS: f64 = 8.0;
 /// Gdy UI Automation nie powie, gdzie kończą się ikony (brak UIA, zmiana paska w nowym Windows),
 /// scena zostaje mała przy zasobniku (do 2 zwierzaków), zamiast ryzykować zasłonięcie ikon.
 pub const FALLBACK_MAX_CSS: f64 = 200.0;
+/// Najwęższa strefa, w której mieści się jeden zwierzak (sloty sceny przy u = 0,3 i marginesy).
+pub const MIN_ZONE_CSS: f64 = 70.0;
 
-/// Scena stoi przy zasobniku i ma szerokość treści (`want_css`), ale nigdy nie wchodzi na ikony aplikacji.
-/// `None`, gdy pomiar jest chwilowo niewiarygodny (w trakcie zmiany skali pasek ma wysokość 0).
-pub fn place(m: &Metrics, want_css: f64) -> Option<Placement> {
-    if m.tray.height() <= 0 || m.scale <= 0.0 { return None; }
+/// Wolny od ikon fragment paska w pikselach ekranu, już z odstępami `GAP_CSS`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Zone { pub left: i32, pub right: i32 }
+
+impl Zone {
+    pub fn width(&self) -> i32 { (self.right - self.left).max(0) }
+    fn distance(&self, x: i32) -> i32 { if x < self.left { self.left - x } else if x > self.right { x - self.right } else { 0 } }
+}
+
+/// Po której stronie okna jest kotwica, czyli w którą stronę okno rośnie.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Anchor { Left, Center, Right }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mode { Right, Left, Custom { at: f64, anchor: Anchor } }
+
+/// Strefy: lewa (od krawędzi paska albo za Widżetami do pierwszego elementu grupy ikon), jeśli mieści zwierzaka,
+/// i prawa (od ostatniej ikony do zasobnika).
+pub fn zones(m: &Metrics) -> (Option<Zone>, Zone) {
     let gap = (GAP_CSS * m.scale).round() as i32;
     let right = m.notify_left.filter(|l| *l > m.tray.left && *l <= m.tray.right).unwrap_or(m.tray.right) - gap;
     let left = m.icons_right.filter(|r| *r >= m.tray.left).map(|r| r + gap)
         .unwrap_or_else(|| (right - (FALLBACK_MAX_CSS * m.scale).round() as i32).max(m.tray.left));
-    let free = (right - left).max(0);
-    let w = ((want_css.max(0.0) * m.scale).round() as i32).min(free);
-    Some(Placement {
-        x: right - w - m.tray.left,
-        w,
-        h: m.tray.height(),
-        max_css: free as f64 / m.scale,
-        height_css: m.tray.height() as f64 / m.scale,
+    let lz = m.first_left.filter(|f| *f > m.tray.left).map(|f| Zone {
+        left: m.widgets_right.filter(|w| *w < f).unwrap_or(m.tray.left).max(m.tray.left) + gap,
+        right: f - gap,
+    }).filter(|z| z.width() as f64 >= MIN_ZONE_CSS * m.scale);
+    (lz, Zone { left, right })
+}
+
+/// Okno w strefie przy kotwicy `a`: szerokość treści przycięta do strefy, okno dosunięte do jej wnętrza.
+fn in_zone(m: &Metrics, z: Zone, a: i32, anchor: Anchor, want_css: f64, left_fallback: bool) -> Placement {
+    let w = ((want_css.max(0.0) * m.scale).round() as i32).min(z.width());
+    let x = match anchor { Anchor::Left => a, Anchor::Center => a - w / 2, Anchor::Right => a - w };
+    let x = x.clamp(z.left, (z.right - w).max(z.left));
+    Placement {
+        x: x - m.tray.left, w, h: m.tray.height(),
+        max_css: z.width() as f64 / m.scale, height_css: m.tray.height() as f64 / m.scale, left_fallback,
+    }
+}
+
+/// Strefa zawierająca punkt albo najbliższa (przy remisie prawa, jak domyślna pozycja).
+fn nearest(m: &Metrics, x: i32) -> Zone {
+    match zones(m) {
+        (Some(l), r) if l.distance(x) < r.distance(x) => l,
+        (_, r) => r,
+    }
+}
+
+/// Scena w wybranym trybie. Zawsze w wolnej strefie, nigdy na ikonach aplikacji.
+/// `None`, gdy pomiar jest chwilowo niewiarygodny (w trakcie zmiany skali pasek ma wysokość 0).
+pub fn place_mode(m: &Metrics, want_css: f64, mode: Mode) -> Option<Placement> {
+    if m.tray.height() <= 0 || m.scale <= 0.0 { return None; }
+    let (lz, rz) = zones(m);
+    Some(match mode {
+        Mode::Right => in_zone(m, rz, rz.right, Anchor::Right, want_css, false),
+        Mode::Left => match lz {
+            Some(z) => in_zone(m, z, z.left, Anchor::Left, want_css, false),
+            None => in_zone(m, rz, rz.right, Anchor::Right, want_css, true),
+        },
+        Mode::Custom { at, anchor } => {
+            let a = m.tray.left + (at.clamp(0.0, 1.0) * (m.tray.right - m.tray.left) as f64).round() as i32;
+            let z = nearest(m, a);
+            in_zone(m, z, a.clamp(z.left, z.right), anchor, want_css, false)
+        }
     })
+}
+
+/// Scena przy zasobniku (tryb „prawa”, zachowanie z 0.6); testy z 0.6 sprawdzają nim te same liczby.
+#[cfg(test)]
+pub fn place(m: &Metrics, want_css: f64) -> Option<Placement> { place_mode(m, want_css, Mode::Right) }
+
+/// Kotwica przeciągniętej sceny (px ekranu) → ułamek szerokości paska, przyciągnięty do najbliższej strefy.
+pub fn custom_at(m: &Metrics, anchor_x: i32) -> f64 {
+    let z = nearest(m, anchor_x);
+    let width = (m.tray.right - m.tray.left).max(1) as f64;
+    (anchor_x.clamp(z.left, z.right) - m.tray.left) as f64 / width
 }
 
 /// Autoukryty pasek chowa się za dolną krawędź ekranu, zostawiając ok. 2 px.
@@ -63,7 +131,75 @@ mod tests {
 
     const TRAY: Rect = Rect { left: 0, top: 1392, right: 2560, bottom: 1440 };
     const SCREEN: Rect = Rect { left: 0, top: 0, right: 2560, bottom: 1440 };
-    fn m(icons: Option<i32>, scale: f64) -> Metrics { Metrics { tray: TRAY, notify_left: Some(2291), icons_right: icons, scale } }
+    fn m(icons: Option<i32>, scale: f64) -> Metrics {
+        Metrics { tray: TRAY, notify_left: Some(2291), icons_right: icons, first_left: None, widgets_right: None, scale }
+    }
+    /// Ikony na środku jak na maszynie deweloperskiej (spike S2): Start od 882, ostatnia ikona do 1657.
+    fn centered() -> Metrics { Metrics { first_left: Some(882), ..m(Some(1657), 1.0) } }
+
+    #[test]
+    fn zones_with_centered_icons_left_aligned_icons_and_a_widgets_button() {
+        let (l, r) = zones(&centered());
+        assert_eq!(l, Some(Zone { left: 8, right: 874 }));
+        assert_eq!(r, Zone { left: 1665, right: 2283 });
+        let left_aligned = Metrics { first_left: Some(12), ..m(Some(700), 1.0) };
+        assert_eq!(zones(&left_aligned).0, None);
+        let widgets = Metrics { widgets_right: Some(160), ..centered() };
+        assert_eq!(zones(&widgets).0, Some(Zone { left: 168, right: 874 }));
+        assert_eq!(zones(&m(Some(1657), 1.0)).0, None, "without UIA edges there is no left zone");
+    }
+
+    #[test]
+    fn left_mode_grows_right_from_the_left_zone_and_falls_back_to_the_tray() {
+        let p = place_mode(&centered(), 300.0, Mode::Left).unwrap();
+        assert_eq!((p.x, p.w, p.left_fallback), (8, 300, false));
+        assert_eq!(p.max_css, 866.0);
+        let left_aligned = Metrics { first_left: Some(12), ..m(Some(700), 1.0) };
+        let f = place_mode(&left_aligned, 300.0, Mode::Left).unwrap();
+        assert!(f.left_fallback);
+        assert_eq!(Placement { left_fallback: false, ..f }, place(&left_aligned, 300.0).unwrap());
+    }
+
+    #[test]
+    fn custom_anchor_inside_the_icons_snaps_to_the_nearest_zone() {
+        // kotwica 1200 px leży w ikonach (882–1657): bliżej lewej strefy (koniec 874) niż prawej (początek 1665)
+        let p = place_mode(&centered(), 200.0, Mode::Custom { at: 1200.0 / 2560.0, anchor: Anchor::Right }).unwrap();
+        assert_eq!((p.x, p.w), (874 - 200, 200));
+        let q = place_mode(&centered(), 200.0, Mode::Custom { at: 1600.0 / 2560.0, anchor: Anchor::Left }).unwrap();
+        assert_eq!((q.x, q.w), (1665, 200));
+    }
+
+    #[test]
+    fn custom_window_is_pushed_back_when_icons_grow_and_never_covers_them() {
+        let at = 1700.0 / 2560.0;
+        let before = place_mode(&centered(), 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
+        assert_eq!(before.x, 1700);
+        // przybyło ikon: ostatnia kończy się teraz na 1900
+        let grown = Metrics { icons_right: Some(1900), ..centered() };
+        let after = place_mode(&grown, 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
+        assert!(after.x >= 1908, "{after:?}");
+        assert!(after.x + after.w <= 2283);
+        // strefa węższa niż treść: okno przycięte do strefy
+        let tight = Metrics { icons_right: Some(2100), ..centered() };
+        let t = place_mode(&tight, 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
+        assert_eq!((t.x, t.w), (2108, 2283 - 2108));
+    }
+
+    #[test]
+    fn custom_anchor_round_trips_and_keeps_its_zone_on_another_resolution() {
+        for (anchor, x) in [(Anchor::Left, 300), (Anchor::Center, 500), (Anchor::Right, 2000)] {
+            let at = custom_at(&centered(), x);
+            let p = place_mode(&centered(), 120.0, Mode::Custom { at, anchor }).unwrap();
+            let got = match anchor { Anchor::Left => p.x, Anchor::Center => p.x + p.w / 2, Anchor::Right => p.x + p.w };
+            assert!((got - x).abs() <= 1, "{anchor:?}: {got} vs {x}");
+        }
+        assert_eq!(custom_at(&centered(), 1200), 874.0 / 2560.0, "an anchor in the icons is stored snapped");
+        // ten sam ułamek na pasku 1920 px (ikony 662–1242) zostaje w lewej strefie
+        let small = Metrics { tray: Rect { left: 0, top: 1032, right: 1920, bottom: 1080 }, notify_left: Some(1700),
+            icons_right: Some(1242), first_left: Some(662), widgets_right: None, scale: 1.0 };
+        let p = place_mode(&small, 120.0, Mode::Custom { at: 300.0 / 2560.0, anchor: Anchor::Left }).unwrap();
+        assert!(p.x + p.w <= 654, "{p:?}");
+    }
 
     #[test]
     fn sits_left_of_the_tray_with_a_gap() {
