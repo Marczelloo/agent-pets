@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AppId, AppRow, Diagnostics, Settings, SettingsView as View } from '../types';
+import type { AppId, AppRow, Diagnostics, Settings, SettingsView as View, UpdateStatus } from '../types';
 import { defaultSettings } from './model';
 import { SettingsView, type Tab } from './SettingsView';
 import { Wizard } from './Wizard';
@@ -29,6 +29,7 @@ function Root() {
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [tab, setTab] = useState<Tab>('apps');
   const [message, setMessage] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
 
   const reload = useCallback(async () => {
     if (!inTauri) {
@@ -56,7 +57,9 @@ function Root() {
     const power = (s: boolean) => { setLoopSaving(s); setPreviewSaving(s); };
     const unPower = listen<boolean>('pets://power', e => power(e.payload));
     void invoke<boolean>('power_get').then(power);
-    return () => { void un.then(f => f()); void unPower.then(f => f()); };
+    const unUpdate = listen<UpdateStatus>('pets://update', e => setUpdate(e.payload));
+    void invoke<UpdateStatus>('update_status').then(setUpdate);
+    return () => { void un.then(f => f()); void unPower.then(f => f()); void unUpdate.then(f => f()); };
   }, [reload]);
 
   useEffect(() => { if (tab === 'diag' && inTauri) void invoke<Diagnostics>('diagnostics').then(setDiag); }, [tab]);
@@ -93,7 +96,8 @@ function Root() {
   };
 
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
-    onIntegration={onIntegration} message={message} />;
+    onIntegration={onIntegration} message={message} update={update}
+    onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;
 }
 
 createRoot(document.getElementById('root')!).render(<Root />);

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, petTooltip } from '../tooltip/text';
-import type { Pets, RouterTask, Settings, SettingsView, Snapshot } from '../types';
-import { contextText, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
+import type { Pets, RouterTask, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
+import { contextText, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
@@ -20,11 +20,14 @@ interface ViewProps {
   onSettings?: () => void;
   /** wygląd zwierzaków z ustawień (styl, ruch, nadpisania) */
   pets?: Pets;
+  update?: UpdateStatus;
+  onInstall?: () => void;
 }
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets() }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets(), update, onInstall }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
+  const bar = updateBar(update);
   return (
     <div className="panel">
       <header>
@@ -32,6 +35,12 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
         <span className="count">{t().sessions(sessions.length)}</span>
         {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}>⚙</button>}
       </header>
+      {bar && <div className="update" role="status">
+        <span className="text">{bar.text}</span>
+        {bar.pct != null && <span className="bar" role="progressbar" aria-label={t().panel.update.progress}
+          aria-valuemin={0} aria-valuemax={100} aria-valuenow={bar.pct}><i style={{ width: `${bar.pct}%` }} /></span>}
+        {bar.action && onInstall && <button type="button" onClick={onInstall}>{bar.action}</button>}
+      </div>}
       <section className="limits" aria-label={t().panel.limits}>
         {limitRows(snap.limits, nowMs).map(r => (
           <div className="limit" key={`${r.agent}-${r.window}`}>
@@ -77,6 +86,7 @@ export default function App() {
   const [status, setStatus] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
+  const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
   const [, tick] = useState(0);
   const take = useRef((s: Snapshot) => { setSnap(s); setOffset(s.now - Date.now()); });
 
@@ -88,6 +98,7 @@ export default function App() {
       listen<boolean>('panel://visible', e => setShown(e.payload)),
       listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); setPets(e.payload.pets); }),
       listen<boolean>('pets://power', e => setPetSaving(e.payload)),
+      listen<UpdateStatus>('pets://update', e => setUpdate(e.payload)),
       listen<string>('panel://focus', e => {
         setStatus(null);
         setFocusId(e.payload);
@@ -103,6 +114,7 @@ export default function App() {
       setPets(v.settings.pets);
     });
     void invoke<boolean>('power_get').then(saving => setPetSaving(saving));
+    void invoke<UpdateStatus>('update_status').then(setUpdate);
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };
     addEventListener('keydown', esc);
@@ -116,5 +128,6 @@ export default function App() {
   };
 
   return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} pets={pets}
-    onSettings={() => void invoke('settings_open')} />;
+    onSettings={() => void invoke('settings_open')} update={update}
+    onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))} />;
 }

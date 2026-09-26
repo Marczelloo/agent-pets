@@ -1,6 +1,6 @@
 import { clampPct, progressFraction } from '../stage/hud';
 import { formatReset } from '../tooltip/text';
-import type { Limit, Session } from '../types';
+import type { Limit, Session, UpdateStatus } from '../types';
 import { t } from '../i18n';
 
 const URGENT = new Set(['needs_you', 'error']);
@@ -9,6 +9,20 @@ const URGENT = new Set(['needs_you', 'error']);
 export function panelSessions(sessions: Session[]): Session[] {
   return [...sessions].sort((a, b) =>
     Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
+}
+
+export interface UpdateBar { text: string; action: string | null; pct: number | null }
+
+/** Pasek nad listą sesji: tylko gdy jest coś do zrobienia z aktualizacją (albo błąd). */
+export function updateBar(u: UpdateStatus | undefined): UpdateBar | null {
+  const x = t().panel.update;
+  switch (u?.state) {
+    case 'available': return { text: x.available(u.version), action: x.install, pct: null };
+    case 'downloading': return { text: x.downloading(u.version), action: null, pct: u.pct ?? 0 };
+    case 'ready': return { text: x.ready(u.version), action: x.installNow, pct: null };
+    case 'error': return { text: u.message, action: null, pct: null };
+    default: return null;
+  }
 }
 
 export interface LimitRow { agent: 'claude' | 'codex'; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string }

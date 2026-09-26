@@ -59,6 +59,13 @@ export interface Settings {
   [extra: string]: unknown;
 }
 export type Updates = 'notify' | 'auto' | 'off';
+/** Lustro `updater::UpdateStatus` (zdarzenie `pets://update`). */
+export type UpdateStatus =
+  | { state: 'idle' } | { state: 'checking' } | { state: 'latest' }
+  | { state: 'available'; version: string; notes: string | null }
+  | { state: 'downloading'; version: string; pct: number | null }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string };
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';
 export type StageOrder = 'start' | 'attention' | 'agent';

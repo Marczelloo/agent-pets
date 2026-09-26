@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AppId, AppRow, Diagnostics, Settings } from '../types';
+import type { AppId, AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
 import { LookTab } from './look/LookTab';
 import { appHint, appLabel, clampMaxVisible, reportText } from './model';
 import { Toggle } from './Toggle';
@@ -19,10 +19,24 @@ interface Props {
   onChange: (s: Settings) => void;
   onIntegration: (id: AppId, on: boolean) => Promise<string>;
   message: string | null;
+  /** stan aktualizacji (wynik „Sprawdź teraz”) */
+  update?: UpdateStatus;
+  onCheck?: () => void;
+}
+
+/** Wynik ręcznego sprawdzenia obok przycisku. */
+function checkResult(u: UpdateStatus | undefined): string | null {
+  switch (u?.state) {
+    case 'checking': return t().settings.checking;
+    case 'latest': return t().settings.latest;
+    case 'available': case 'downloading': case 'ready': return t().panel.update.available(u.version);
+    case 'error': return u.message;
+    default: return null;
+  }
 }
 
 /** Okno ustawień: zakładki po lewej jak w Ustawieniach Windows 11, zmiany działają od razu. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
 
@@ -97,6 +111,19 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
           <Toggle label={t().settings.autostart} checked={s.autostart} onChange={on => set({ autostart: on })}>
             {t().settings.autostartDesc}
           </Toggle>
+          <div className="row">
+            <span className="text"><span className="label">{t().settings.updates}</span>
+              <span className="desc">{t().settings.updatesDesc}</span></span>
+            <select aria-label={t().settings.updates} value={s.updates ?? 'notify'} onChange={e => set({ updates: e.target.value as Settings['updates'] })}>
+              <option value="notify">{t().settings.updateMode.notify}</option>
+              <option value="auto">{t().settings.updateMode.auto}</option>
+              <option value="off">{t().settings.updateMode.off}</option>
+            </select>
+          </div>
+          <div className="row">
+            <button type="button" disabled={update?.state === 'checking' || !onCheck} onClick={onCheck}>{t().settings.checkNow}</button>
+            <span className="desc" role="status">{checkResult(update)}</span>
+          </div>
           <p className="desc">{t().settings.version(diag?.version ?? '–')}</p>
         </section>}
 

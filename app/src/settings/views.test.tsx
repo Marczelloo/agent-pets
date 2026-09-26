@@ -2,7 +2,7 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLang } from '../i18n';
 import { PanelView } from '../panel/App';
-import type { AppRow, Diagnostics } from '../types';
+import type { AppRow, Diagnostics, UpdateStatus } from '../types';
 import { defaultSettings } from './model';
 import { SettingsView } from './SettingsView';
 import { Wizard } from './Wizard';
@@ -57,6 +57,21 @@ describe('language', () => {
 });
 
 describe('SettingsView', () => {
+  it('general tab: update mode select, check button with its result and the installed version', () => {
+    const s = { ...defaultSettings(), updates: 'auto' as const };
+    const view = (update?: UpdateStatus) => renderToString(<SettingsView settings={s} rows={rows} diag={{ ...diag, version: '0.7.0' }} tab="general"
+      onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} update={update} onCheck={() => {}} />);
+    const html = view();
+    expect(html).toContain('Aktualizacje');
+    expect(html).toMatch(/<option[^>]*value="auto"[^>]*selected|<option[^>]*selected[^>]*value="auto"/);
+    expect(html).toContain('Powiadamiaj');
+    expect(html).toContain('Instaluj automatycznie');
+    expect(html).toContain('Sprawdź teraz');
+    expect(html).toContain('Wersja 0.7.0');
+    expect(view({ state: 'latest' })).toContain('Masz najnowszą wersję');
+    expect(view({ state: 'available', version: '0.7.1', notes: null })).toContain('Dostępna wersja 0.7.1');
+    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji' })).toContain('Błąd sprawdzania aktualizacji');
+  });
   it('renders the look tab in English after switching', () => {
     setLang('en');
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}

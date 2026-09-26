@@ -1,7 +1,7 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PanelView } from './App';
-import type { Session } from '../types';
+import type { Session, UpdateStatus } from '../types';
 
 const sess: Session = {
   id: 'a', agent: 'claude', origin: 'cli', title: '<img src=x onerror=alert(1)>', cwd: 'C:\\work\\a', state: 'needs_you',
@@ -33,5 +33,17 @@ describe('PanelView', () => {
     const html = renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0}
       status="Skopiowano komendę: claude --resume a" focusId={null} onJump={() => {}} />);
     expect(html).toContain('Skopiowano komendę: claude --resume a');
+  });
+  it('shows an available update with an install button, and nothing when up to date', () => {
+    const view = (update: UpdateStatus) => renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0}
+      status={null} focusId={null} onJump={() => {}} update={update} onInstall={() => {}} />);
+    const av = view({ state: 'available', version: '0.7.1', notes: null });
+    expect(av).toContain('Dostępna wersja 0.7.1');
+    expect(av).toContain('Zainstaluj');
+    const dl = view({ state: 'downloading', version: '0.7.1', pct: 40 });
+    expect(dl).toContain('role="progressbar"');
+    expect(dl).toContain('aria-valuenow="40"');
+    expect(view({ state: 'ready', version: '0.7.1' })).toContain('Zainstaluj teraz');
+    for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update');
   });
 });
