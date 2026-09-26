@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPet, pen, setRng } from './index';
+import { createPet, drawPet, pen, setRng } from './index';
 import { PetPainter } from './painter';
 import { recorder, seeded } from './testing';
 import { STYLE_IDS } from '../look';
@@ -42,5 +42,49 @@ describe('PetPainter', () => {
       return r.log.join('\n');
     });
     for (let i = 0; i < logs.length; i++) for (let j = i + 1; j < logs.length; j++) expect(logs[i], `${STYLE_IDS[i]} vs ${STYLE_IDS[j]}`).not.toBe(logs[j]);
+  });
+  it('calm draws exactly like drawPet alone, even after anime', () => {
+    setRng(seeded(4).next);
+    const a = new PetPainter(createPet('clawd', 'edit'));
+    a.frame(recorder().ctx, { ...frame, look: { style: 'clean', motion: 'anime' } });
+    const n = a.pet.fx?.parts.length ?? 0;
+    const r = recorder();
+    a.frame(r.ctx, { ...frame, t0: 1.1, look: { style: 'clean', motion: 'calm' } });
+    const d = recorder();
+    drawPet(d.ctx, a.pet, frame.X, frame.Y, frame.u, a.pet.clk, { style: 'clean', motion: 'calm' });
+    expect(r.log).toEqual(d.log);
+    for (let f = 0; f < 60; f++) a.frame(recorder().ctx, { ...frame, t0: 1.2 + f / 30, look: { style: 'clean', motion: 'calm' } });
+    expect(a.pet.fx?.parts.length ?? 0).toBeLessThanOrEqual(n);
+  });
+  it('an impact inverts the pet for its frame; reduced motion never does', () => {
+    for (const reduced of [false, true]) {
+      const p = new PetPainter(createPet('clawd', 'idle'));
+      p.frame(recorder().ctx, { ...frame, look: { style: 'sticker', motion: 'anime' } });
+      p.pet.fx.flashReq = 1;
+      const r = recorder();
+      p.frame(r.ctx, { ...frame, t0: 1.05, reduced, look: { style: 'sticker', motion: 'anime' } });
+      expect(r.log.includes('filter=invert(1)'), `reduced ${reduced}`).toBe(!reduced);
+    }
+  });
+  it('fast horizontal motion stretches vector and sticker pets, never pixel ones', () => {
+    for (const style of ['clean', 'sticker', 'pixel'] as const) {
+      const p = new PetPainter(createPet('clawd', 'idle'));
+      p.frame(recorder().ctx, { ...frame, look: { style, motion: 'anime' } });
+      p.pet.p.lx.v = 800;
+      const r = recorder();
+      p.frame(r.ctx, { ...frame, t0: 1.05, animate: false, look: { style, motion: 'anime' } });
+      const sx = r.log.filter(l => l.startsWith('scale(')).map(l => +l.slice(6, -1).split(',')[0]);
+      expect(sx.some(v => v > 1.1), style).toBe(style !== 'pixel');
+    }
+  });
+  it('every model sets a finite face anchor at head height', () => {
+    for (const style of ['clean', 'sticker', 'pixel'] as const) for (const skin of ['clawd', 'kodek'] as const) {
+      const p = new PetPainter(createPet(skin, 'idle'));
+      p.frame(recorder().ctx, { ...frame, look: { style, motion: 'anime' } });
+      const [fx, fy, gap] = p.pet.face as number[];
+      expect([fx, fy, gap].every(Number.isFinite), `${style}/${skin}`).toBe(true);
+      expect(fy).toBeLessThan(-20); expect(fy).toBeGreaterThan(-90);
+      expect(gap).toBeGreaterThan(4); expect(gap).toBeLessThan(30);
+    }
   });
 });

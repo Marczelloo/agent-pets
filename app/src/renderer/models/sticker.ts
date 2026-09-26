@@ -48,6 +48,7 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
     shp(x, rrP(-W / 2, top, W, H, S.r * u), cm, u);
     highlight(x, W, top, u);
     [-1, 1].forEach(s => clawdEye(x, fx + s * W * .18, ey, u, e, GA));
+    c.face = [fx * r.sx / u, (ey * r.sy + r.oy) / u, W * .18 * r.sx / u];
     if (e.open > .3 && e.happy < .02) { x.save(); x.lineWidth = Math.max(1.2, 2.2 * u); x.beginPath(); x.arc(fx, ey + 6 * u, 4.5 * u, .15 * PI, .85 * PI); x.stroke(); x.restore(); }
     x.save(); x.globalAlpha = GA * .6; x.fillStyle = BLUSH;
     [-1, 1].forEach(s => { x.beginPath(); x.ellipse(fx + s * W * .3, ey + 8 * u, 6 * u, 3.2 * u, 0, 0, TAU); x.fill(); });
@@ -71,7 +72,9 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
       for (let i = 0; i < 3; i++) x.fillRect(-W / 2 + m + 6 * u, sy0 + sh - (6 + i * 5) * u, (W - 2 * m) * (.25 + .3 * (((i * 7 + Math.floor(t * 3)) % 5) / 5)), 2 * u);
       x.restore();
     }
-    [-1, 1].forEach(s => kodekEye(x, fx + s * W * .16, sy0 + sh * .45 + r.gaze[1] * u, u, e, GA));
+    const kEy = sy0 + sh * .45 + r.gaze[1] * u;
+    [-1, 1].forEach(s => kodekEye(x, fx + s * W * .16, kEy, u, e, GA));
+    c.face = [fx * r.sx / u, (kEy * r.sy + r.oy) / u, W * .16 * r.sx / u];
   }
   x.restore();
 

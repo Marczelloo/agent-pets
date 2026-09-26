@@ -114,6 +114,8 @@ function build(c: Pet, X: number, Y: number, u: number, ts: number, g: number, k
   };
   const eo = Math.round(bw * .2);
   eye(fx - eo - eW + 1); eye(fx + eo);
+  // kotwica twarzy dla efektów Anime: komórki → jednostki u
+  c.face = [(fx + .5) * g / u, (fy + eH / 2) * g / u, (eo + eW / 2) * g / u];
   if (skin === 'clawd') {
     const my = fy + eH + 1;
     if (e.open > .3 && e.happy < .5) { cell(fx - 1, my, 1, 1, pal.e); cell(fx, my + 1, 2, 1, pal.e); cell(fx + 2, my, 1, 1, pal.e); }

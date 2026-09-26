@@ -55,6 +55,7 @@ x.save();x.globalAlpha=GA*.55;shp(x,rrP(fcx-fwid/2+R*.7+3*u*Math.abs(co),top+4*u
 if(!front&&sk.backVents&&fwid>6*u){x.save();x.lineWidth=lw*.7;x.beginPath();for(let i=0;i<3;i++){const yy=top+H*(.35+.13*i);x.moveTo(fcx-fwid*.25,yy);x.lineTo(fcx+fwid*.25,yy);}x.stroke();x.restore();}}
 if(st.extras?.phones&&c.type==='kodek'){const yy=top+H*.45;[-1,1].forEach((s: number)=>{shp(x,elP(s*hW,yy,6*u,11*u),'#E8E6E0',u);shp(x,elP(s*hW,yy,3*u,7*u),'#B9B6AE',u,{noStroke:1});});}
 const ey=top+H*.42+P.look.x*4.5*u,exs=P.ex.x*4*u*co;
+{const q=toW(fcx+exs,ey);c.face=[q[0]/u,q[1]/u,Math.max(4,sk.eyeX*W*Math.abs(co)/u)];}
 const bl=c.blink>0?Math.sin(PI*(c.blink/.16)):0,sl=cl(P.sleep.x),hp=cl(P.happy.x),dz=cl(P.dizzy.x),sqn=cl(P.squint.x);
 const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFace&&loaf>.5;
 let ecol=st.face?.eyes==='accent'?pen.ol:'#1E1410';
