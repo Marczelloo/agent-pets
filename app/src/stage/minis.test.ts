@@ -12,17 +12,18 @@ const kid = (id: string, started: number, over: Partial<Session> = {}, kind: Sub
 const P = s('p');
 
 describe('mini pets', () => {
-  it('appear only after 20 s of work', () => {
+  it('appear after 5 s of work (short subagents do not flash)', () => {
     const all = [P, kid('a', 0)];
-    expect(minisOf(P, all, MINI_AFTER_MS - 1_000, true).shown).toEqual([]);
-    expect(minisOf(P, all, MINI_AFTER_MS, true).shown.map(c => c.id)).toEqual(['a']);
+    expect(minisOf(P, all, 4_000, true).shown).toEqual([]);
+    expect(minisOf(P, all, 5_000, true).shown.map(c => c.id)).toEqual(['a']);
+    expect(MINI_AFTER_MS).toBe(5_000);
   });
 
   it('a finished child leaves after its short goodbye', () => {
     const done = kid('a', 0, { state: 'done', state_since: 30_000 });
     expect(minisOf(P, [P, done], 30_500, true).shown.map(c => c.id)).toEqual(['a'], );
     expect(minisOf(P, [P, done], 31_000, true).shown).toEqual([]);
-    const young = kid('b', 25_000, { state: 'done', state_since: 30_000 });
+    const young = kid('b', 27_000, { state: 'done', state_since: 30_000 });
     expect(minisOf(P, [P, young], 30_100, true).shown, 'nigdy nie był mini: nie żegna się').toEqual([]);
   });
 
@@ -52,10 +53,10 @@ describe('mini pets', () => {
   });
 
   it('the parent delegates while a working child has no mini yet', () => {
-    expect(delegating(P, [P, kid('a', 50_000)], 60_000, true)).toBe(true);
+    expect(delegating(P, [P, kid('a', 57_000)], 60_000, true)).toBe(true);
     expect(delegating(P, [P, kid('a', 0)], 60_000, true), 'z samymi mini ma swój stan').toBe(false);
     expect(delegating(P, [P, kid('a', 0)], 60_000, false), 'mini wyłączone: poza „deleguje”').toBe(true);
-    expect(delegating(P, [P, kid('a', 50_000, { state: 'done' })], 60_000, true)).toBe(false);
+    expect(delegating(P, [P, kid('a', 57_000, { state: 'done' })], 60_000, true)).toBe(false);
     expect(delegating(P, [P], 60_000, true)).toBe(false);
   });
 });
@@ -72,7 +73,7 @@ describe('mini side', () => {
 
 describe('parent pose', () => {
   it('delegating never hides waiting, an error or the goodbye', () => {
-    const young = kid('a', 50_000);
+    const young = kid('a', 57_000);
     expect(parentScene(s('p', { state: 'thinking', tool: null }), [P, young], 60_000, true)).toBe('agent');
     expect(parentScene(s('p', { state: 'needs_you', tool: null }), [P, young], 60_000, true)).toBe('needs');
     expect(parentScene(s('p', { state: 'error', tool: null }), [P, young], 60_000, false)).toBe('error');

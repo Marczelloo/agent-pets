@@ -238,7 +238,7 @@ export const pl = {
     bubbleActions: 'Dymki z akcją',
     bubbleActionsDesc: 'Na 3 s przy zmianie tego, co robi agent (plik, komenda, wyszukiwanie)',
     minis: 'Mini-zwierzaki subagentów',
-    minisDesc: 'Subagent pracujący dłużej niż 20 s staje obok rodzica; wyłączone: tylko poza rodzica i panel',
+    minisDesc: 'Subagent pracujący dłużej niż 5 s staje obok rodzica; wyłączone: tylko poza rodzica i panel',
     reset: 'Przywróć domyślne',
     px: (n: number) => `${n} px`,
   },

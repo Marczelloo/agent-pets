@@ -49,7 +49,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     },
   };
   // co sekundę: czas w tooltipie, a przy kolejności „uwaga” przesunięcia po histerezie
-  // (mini-zwierzak pojawia się po 20 s pracy dziecka, także bez nowych zdarzeń)
+  // (mini-zwierzak pojawia się po 5 s pracy dziecka, także bez nowych zdarzeń)
   setInterval(() => { if (stage.order === 'attention' || snap.sessions.some(s => s.parent)) relayout(); hover.refresh(); reduced = reducedMotion(); }, 1000);
 
   const paintBg = () => {

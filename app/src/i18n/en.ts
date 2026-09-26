@@ -231,7 +231,7 @@ export const en: Dict = {
     bubbleActions: 'Action bubbles',
     bubbleActionsDesc: 'For 3 s when what the agent does changes (file, command, search)',
     minis: 'Subagent mini pets',
-    minisDesc: 'A subagent working for more than 20 s stands next to its parent; off: only the parent pose and the panel',
+    minisDesc: 'A subagent working for more than 5 s stands next to its parent; off: only the parent pose and the panel',
     reset: 'Restore defaults',
     px: n => `${n} px`,
   },

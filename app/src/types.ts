@@ -101,7 +101,7 @@ export interface StageSettings {
   order: StageOrder;
   show: { progress: boolean; limits: boolean; badge: boolean };
   bubbles: { questions: boolean; actions: boolean };
-  /** mini-zwierzaki subagentów pracujących dłużej niż 20 s */
+  /** mini-zwierzaki subagentów pracujących dłużej niż 5 s */
   minis: boolean;
 }
 export type Language = 'auto' | 'pl' | 'en';

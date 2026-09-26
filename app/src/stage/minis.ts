@@ -1,8 +1,9 @@
-// Mini-zwierzaki subagentów (spec 0.8, 3.3): dziecko pracujące od 20 s stoi obok rodzica w rozmiarze 55%.
+// Mini-zwierzaki subagentów (spec 0.8, 3.3): dziecko pracujące od 5 s stoi obok rodzica w rozmiarze 55%.
+// (Pierwotnie 20 s; w praktyce za późno. 5 s wystarcza, żeby krótkie wywołania nie migały w pasku.)
 import type { Session, StageSettings } from '../types';
 import { sceneFor, type SceneKey } from './sceneFor';
 
-export const MINI_AFTER_MS = 20_000, MINI_SCALE = 0.55, MINI_MAX = 3;
+export const MINI_AFTER_MS = 5_000, MINI_SCALE = 0.55, MINI_MAX = 3;
 /** Pożegnanie mini (machnięcie i zniknięcie); przy błędzie najpierw poza błędu. */
 export const MINI_BYE_MS = 1_000, MINI_ERROR_MS = 1_500;
 
@@ -47,7 +48,7 @@ export function minisLeftOf(st: Pick<StageSettings, 'position' | 'align'>): bool
   return st.align !== 'left';
 }
 
-/** Rodzic „deleguje”, gdy ma pracujące dziecko bez mini-zwierzaka (młodsze niż 20 s albo mini wyłączone). */
+/** Rodzic „deleguje”, gdy ma pracujące dziecko bez mini-zwierzaka (młodsze niż 5 s albo mini wyłączone). */
 export function delegating(parent: Session, all: Session[], now: number, on: boolean): boolean {
   return all.some(c => c.parent === parent.id && ACTIVE.has(c.state) && (!on || now - c.started_at < MINI_AFTER_MS));
 }
