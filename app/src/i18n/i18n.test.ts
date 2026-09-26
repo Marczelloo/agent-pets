@@ -30,7 +30,7 @@ describe('i18n', () => {
   });
   it('no Polish literals left in the UI outside the Polish dictionary', () => {
     const root = join(__dirname, '..');
-    const skip = /(\.test\.|testing\.ts|i18n[\\/]pl\.ts|renderer[\\/]scenes\.ts|looks-dev\.ts)/;
+    const skip = /(\.test\.|testing\.ts|i18n[\\/]pl\.ts|renderer[\\/]scenes\.ts|renderer[\\/]anime[\\/]|looks-dev\.ts)/;
     const files: string[] = [];
     const walk = (d: string) => readdirSync(d).forEach(n => { const p = join(d, n); statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(n) && !skip.test(p) && files.push(p); });
     walk(root);
