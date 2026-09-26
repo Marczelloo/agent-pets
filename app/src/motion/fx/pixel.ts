@@ -95,7 +95,7 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
     case 'teeth': cell(fx - 2, fy + U(8), 5, Math.max(1, U(3)), WHITE); if (Math.floor(g.t * 9) % 2) sprite(SPR.spark!, fx + 4, fy + U(5)); break;
   }
   if (tg._lens && hands[1]) {
-    const r = Math.max(2, U(15 * cl(tg._lensK ?? 1))), hx = U(hands[1][0]), hy = U(hands[1][1]), cx = hx + U(8), cy = hy - U(10);
+    const r = Math.max(2, U(20 * cl(tg._lensK ?? 1))), hx = U(hands[1][0]), hy = U(hands[1][1]), cx = hx + U(10), cy = hy - U(14);
     line(hx, hy, cx - Math.round(r * 0.7), cy + Math.round(r * 0.7), pen.ol);
     ring(cx, cy, r, r, '#C8E6FF', true);
     const off = Math.floor(g.t * 4) % 3;
@@ -105,7 +105,7 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
   if (tg._orbit) {
     const k = cl(tg._orbitK ?? 1), idea = cl(tg._idea ?? 0);
     if (idea < 0.5) for (let i = 0; i < 3; i++) {
-      const a = Math.floor(g.t * 10) / 10 * 1.6 + i * TAU / 3, px = fx0 + Math.cos(a) * 38 * k, py = fy0 - 30 + Math.sin(a) * 9;
+      const a = Math.floor(g.t * 10) / 10 * 1.6 + i * TAU / 3, px = fx0 + Math.cos(a) * 42 * k, py = fy0 - 40 + Math.sin(a) * 9;
       if (i === 0) text('?', px, py, AMBER); else icon(i === 1 ? ICON.gear : ICON.bulb, px, py, ICON_PAL);
     }
     else { icon(ICON.lit, fx0, fy0 - 58, ICON_PAL); for (let j = 0; j < 8; j++) { const a = j * TAU / 8; cell(fx + Math.round(Math.cos(a) * U(20)), U(fy0 - 58) + Math.round(Math.sin(a) * U(20)), 1, 1, AMBER); } }

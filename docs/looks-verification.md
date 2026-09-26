@@ -52,3 +52,15 @@ Plan `2026-09-26-agent-pets-looks-v2-anime.md`, spec `2026-09-25-agent-pets-look
 | 9 | Testy automatyczne | `cargo test --workspace` (200), `pnpm --dir app test` (311), `typecheck` | ✅ | 2026-09-26 |
 
 Do sprawdzenia przez użytkownika na żywo: czy choreografie mają ten „anime” charakter, o który chodziło; czytelność w prawdziwym pasku (Pixel-art i napisy); przełączenie Spokojny ↔ Anime w trakcie pracy.
+
+## Dynamiczny (poprawki po teście użytkownika)
+
+| # | Sprawdzenie | Jak | Wynik | Data |
+|---|---|---|---|---|
+| 1 | Nazwa „Dynamiczny” / „Dynamic” | stare `anime` w ustawieniach czytane jako `dynamic` (test rdzenia i `look.test.ts`), zapis `dynamic` | ✅ | 2026-09-26 |
+| 2 | Wolniejsze przejścia, szybkie ruchy | zegar jak w Spokojnym (testy czasu), przejścia między stanami miękką sprężyną, usztywnienie akcji dopiero po wejściu w stan (`stiffOf`), cios 90% drogi ≤ 0,12 s | ✅ | 2026-09-26 |
+| 3 | Czytelny finałowy cios | zamach ≥ 0,2 s, hit-stop 0,15 s, poza trzymana ≥ 0,6 s, BAM!; klatka uderzenia ≥ 120 ms także przy 10 kl./s; zrzuty klatek | ✅ | 2026-09-26 |
+| 4 | Myśli: Shikamaru | test sceny (siedzi, dłonie złożone, oczy zamknięte, orbita „?”/trybik/żarówka, zapalona żarówka); zrzuty trzech modeli | ✅ | 2026-09-26 |
+| 5 | Szuka: detektyw z lupą | test sceny (chodzi wzdłuż tablicy, lupa, trafienie z hit-stopem i „!”), lupa przy prawej dłoni z kodem w szkle; zrzuty | ✅ | 2026-09-26 |
+| 6 | Mniej napisów | sceny mówią tylko BAM!, POOF!, NICE!, „!” (test po wszystkich scenach), bez znaków japońskich; czcionka pikselowa ma te litery | ✅ | 2026-09-26 |
+| 7 | Testy | `pnpm --dir app test` (323), `cargo test --workspace`, `typecheck`; przegląd paska dla wszystkich scen | ✅ | 2026-09-26 |

@@ -27,7 +27,7 @@ export const WORD_TOP = -92, WORD_RISE = 12;
 export const CONFETTI = ['#EF9F27', '#E24B4A', '#5DCAA5', '#85B7EB', '#7F77DD', '#F0997B'];
 /** g: grawitacja (u/s², ujemna = unosi się), drag: opór (1/s), life: domyślny czas życia (s), s: rozmiar (u), col: kolor */
 export const PHYS: Record<PKind, { g: number; drag: number; life: number; s: number; col: string }> = {
-  spark: { g: 0, drag: 5, life: 0.35, s: 7, col: '#EF9F27' },
+  spark: { g: 0, drag: 4, life: 0.55, s: 7, col: '#EF9F27' },
   dust: { g: -20, drag: 3, life: 0.6, s: 6, col: '#D3CFC4' },
   key: { g: 520, drag: 0.5, life: 0.9, s: 7, col: '#F1EFE8' },
   page: { g: 30, drag: 1.2, life: 1.4, s: 12, col: '#FAF9F5' },
@@ -85,7 +85,7 @@ export function word(c: Pet, text: string, x: number, y: number, s = 30): void {
   const f = fxState(c);
   count(f, 'word:' + text);
   f.words = f.words.filter(w => w.text !== text || w.life > 0.3).slice(-2);
-  f.words.push({ text, x, y: Math.max(y, WORD_TOP), life: 0, max: 0.9, s });
+  f.words.push({ text, x, y: Math.max(y, WORD_TOP), life: 0, max: 1.3, s }); // napisy są tylko w kulminacjach: niech będzie je widać
 }
 
 export function stepFx(c: Pet, dt: number, t: number): void {

@@ -112,10 +112,10 @@ function face(x: CanvasRenderingContext2D, c: Pet, g: FxCtx, XX: number, Y: numb
 
 /** Myśli (Shikamaru): „?”, trybik i żarówka krążą wokół głowy; `idea` zapala nad głową dużą żarówkę z promieniami. */
 function thinking(x: CanvasRenderingContext2D, g: FxCtx, fx: number, fy: number, k: number, idea: number) {
-  const u = g.u, S = 24 * u, cy = fy - 30 * u;
+  const u = g.u, S = 24 * u, cy = fy - 40 * u;
   x.save(); x.lineWidth = Math.max(1, 1.6 * u); x.strokeStyle = pen.ol;
   for (let i = 0; i < 3; i++) {
-    const a = g.t * 1.6 + i * TAU / 3, px = fx + Math.cos(a) * 38 * u * k, py = cy + Math.sin(a) * 9 * u, front = Math.sin(a) > 0;
+    const a = g.t * 1.6 + i * TAU / 3, px = fx + Math.cos(a) * 42 * u * k, py = cy + Math.sin(a) * 9 * u, front = Math.sin(a) > 0;
     x.save(); x.globalAlpha *= k * (front ? 1 : 0.6) * (1 - 0.7 * idea); x.translate(px, py);
     if (i === 0) {
       x.font = `900 ${Math.max(9, S)}px ${pen.font}`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineWidth = Math.max(1.5, 2.5 * u);
@@ -145,7 +145,7 @@ function bulb(x: CanvasRenderingContext2D, bx: number, by: number, r: number, li
 
 /** Wielka lupa detektywa przy prawej dłoni: szkło z powiększonymi liniami kodu, obręcz, rączka, błysk. */
 function lens(x: CanvasRenderingContext2D, g: FxCtx, hx: number, hy: number, k: number) {
-  const u = g.u, r = 15 * u * k, cx = hx + 8 * u, cy = hy - 10 * u;
+  const u = g.u, r = 20 * u * k, cx = hx + 10 * u, cy = hy - 14 * u;
   if (r < u) return;
   x.save(); x.strokeStyle = pen.ol; x.lineWidth = Math.max(1.4, 2.6 * u);
   x.beginPath(); x.moveTo(hx, hy); x.lineTo(cx - r * 0.7, cy + r * 0.7); x.stroke();
