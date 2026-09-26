@@ -16,14 +16,14 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
   <img src="docs/images/taskbar.png" alt="Five pets in the taskbar: a knocked-out Codex robot after an error, a Codex robot presenting a web page, Clawd waving because it needs you, a Codex robot with the Agent Router badge, Clawd typing at a desk; a +2 badge and rate-limit bars" width="900">
 </p>
 
-> **Status: public beta (0.5).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
+> **Status: public beta (0.6).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
 
 ## Highlights
 
 - **One pet per session.** Clawd for Claude Code, Kodek for Codex. Their pose follows the session: thinking, editing, running commands, reading, searching, browsing, delegating to subagents, waiting for you, done, error, idle, asleep.
 - **Everything at a glance.** Task progress under each pet, 5-hour and weekly limits for Claude and Codex next to them, a "+N" badge when the taskbar runs out of room. Pets that wait for you never get hidden.
 - **Panel and "Przejdź" (Go).** Click a pet for all your sessions and limits with reset times; one click takes you back to the session: the Claude or Codex app, its terminal window, or a new terminal that resumes it.
-- **Seven looks and two ways to move.** Sticker (like the app icon), Sketch, Clean, Pixel art, Neon, Ink and Pastel, all readable at taskbar size, plus an Anime motion mode: snappier, springier, with swoosh trails, speed lines, impact bursts and manga emotes. Pick one look for everyone or a different one per agent, from a live gallery in Settings.
+- **Seven looks and two ways to move.** Sticker (like the app icon), Sketch, Clean, Pixel art, Neon, Ink and Pastel, all readable at taskbar size, plus a Dynamic motion mode with anime-inspired scenes: a punch barrage on the keyboard with a final BAM!, ninja hand seals before a command, a detective with a giant magnifier, Shikamaru-style thinking, a thunder dash for the web, a summoning seal for subagents, Hollow Purple while compacting, and particles, impact frames and speed lines. Pick one look for everyone or a different one per agent, and preview every animation in Settings.
 - **Windows notifications** when an agent waits for you, finishes a long turn, or passes 90% of a limit.
 - **Agent Router tasks** get the task's title, a router badge and live health (active, quiet, stalled, blocked).
 - **English and Polish.** Pets, panel, settings, notifications and the installer follow your Windows language, or pick one in Settings.
@@ -61,7 +61,7 @@ The interface is in English and Polish and follows the Windows display language;
    - which apps get pets. It shows the ones it found: Claude Code (`~/.claude`), Codex (`~/.codex`), Agent Router (`~/.agent-router`). For Claude Code it installs hooks in `~/.claude/settings.json` and keeps a backup;
    - whether to fetch Claude plan limits from Anthropic (off by default, see [Claude rate limits](#claude-rate-limits));
    - notifications and starting with Windows;
-   - the look: one of seven styles and calm or anime motion, from a live gallery.
+   - the look: one of seven styles and calm or dynamic motion, from a live gallery.
 4. Restart open Claude Code sessions so they pick up the hooks.
 
 Change anything later in **Settings**: right-click the tray icon, or the ⚙ button in the panel. Running Agent Pets again from the Start menu opens Settings too.
@@ -254,7 +254,8 @@ tools/              fixture anonymizer and its test, CPU measurement
 4. ~~Phase 3: panel with sessions and limits, "jump to session", Windows notifications, Claude rate limits~~
 5. ~~Phase 4: Agent Router task state file~~
 6. ~~Phase 5: installer, first-run wizard, settings, autostart, power-saving mode~~
-7. **Next:** more agents (opencode, t3code, zcode, Gemini CLI, Grok), speech bubbles, subagents, statistics
+7. ~~Looks: seven styles (sticker and pixel art as their own models), dynamic motion, preview of every animation, English UI~~
+8. **Next:** more agents (opencode, t3code, zcode, Gemini CLI, Grok), speech bubbles, subagents, statistics
 
 ## License
 
