@@ -91,7 +91,9 @@ export function simulate(skin: 'clawd' | 'kodek', scene: string, secs: number, e
 /** Kontekst 2D, który śledzi przekształcenia i zapamiętuje najwyższy punkt rysunku w układzie ekranu (`top()`). */
 export function extent() {
   type M = [number, number, number, number, number, number];
-  let m: M = [1, 0, 0, 1, 0, 0], top = Infinity, where = '';
+  let m: M = [1, 0, 0, 1, 0, 0], top = Infinity, where = '', font = 10, base = 'alphabetic';
+  /** górna krawędź napisu wg rozmiaru czcionki i linii bazowej */
+  const textTop = (y: number) => y - font * (base === 'top' ? 0 : base === 'middle' ? 0.5 : base === 'bottom' ? 1 : 0.8);
   const stack: M[] = [];
   const mul = (a: M, b: M): M => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
   const pt = (x: number, y: number, op: string) => { const Y = m[1] * x + m[3] * y + m[5]; if (Number.isFinite(Y) && Y < top) { top = Y; where = op; } };
@@ -107,11 +109,11 @@ export function extent() {
     fillRect: (x, y, w, h) => { pt(x, y, 'fillRect'); pt(x + w, y, 'fillRect'); pt(x, y + h, 'fillRect'); },
     arc: (x, y, r) => { for (let i = 0; i < 8; i++) pt(x + r * Math.cos(i * Math.PI / 4), y + r * Math.sin(i * Math.PI / 4), 'arc'); },
     ellipse: (x, y, rx, ry, rot = 0) => { for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, px = rx * Math.cos(a), py = ry * Math.sin(a); pt(x + px * Math.cos(rot) - py * Math.sin(rot), y + px * Math.sin(rot) + py * Math.cos(rot), 'ellipse'); } },
-    fillText: (_t, x, y) => pt(x, y - 5, 'text'), strokeText: (_t, x, y) => pt(x, y - 5, 'text'),
+    fillText: (t, x, y) => pt(x, textTop(y), `text ${t} ${font}px ${base}`), strokeText: (t, x, y) => pt(x, textTop(y), `text ${t} ${font}px ${base}`),
   };
   const ctx = new Proxy({} as Record<string, unknown>, {
     get: (_t, k: string) => k === 'measureText' ? () => ({ width: 1 }) : k === 'createLinearGradient' || k === 'createRadialGradient' ? () => ({ addColorStop: () => {} }) : ops[k] ?? (() => {}),
-    set: () => true,
+    set: (_t, k: string, v) => { if (k === 'font') font = parseFloat(String(v).match(/([\d.]+)px/)?.[1] ?? '10'); if (k === 'textBaseline') base = String(v); return true; },
   });
   return { ctx: ctx as unknown as CanvasRenderingContext2D, top: () => top, where: () => where };
 }

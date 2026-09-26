@@ -72,7 +72,7 @@ describe('PetPainter', () => {
       p.frame(recorder().ctx, { ...frame, look: { style, motion: 'anime' } });
       p.pet.p.lx.v = 800;
       const r = recorder();
-      p.frame(r.ctx, { ...frame, t0: 1.05, animate: false, look: { style, motion: 'anime' } });
+      p.frame(r.ctx, { ...frame, t0: 1.05, dt: 0.001, look: { style, motion: 'anime' } }); // krok prawie zerowy: prędkość zostaje
       const sx = r.log.filter(l => l.startsWith('scale(')).map(l => +l.slice(6, -1).split(',')[0]);
       expect(sx.some(v => v > 1.1), style).toBe(style !== 'pixel');
     }
@@ -86,5 +86,16 @@ describe('PetPainter', () => {
       expect(fy).toBeLessThan(-20); expect(fy).toBeGreaterThan(-90);
       expect(gap).toBeGreaterThan(4); expect(gap).toBeLessThan(30);
     }
+  });
+  it('a pet that stops animating (power saving) drops its anime particles, words and overlays', () => {
+    const p = new PetPainter(createPet('clawd', 'edit'));
+    for (let f = 0; f < 60; f++) p.frame(recorder().ctx, { ...frame, t0: 1 + f / 30, look: { style: 'clean', motion: 'anime' } });
+    expect(p.pet.fx.parts.length).toBeGreaterThan(0);
+    const r = recorder();
+    p.frame(r.ctx, { ...frame, t0: 3.1, animate: false, look: { style: 'clean', motion: 'anime' } });
+    expect(p.pet.fx.parts.length + p.pet.fx.words.length).toBe(0);
+    const d = recorder();
+    drawPet(d.ctx, p.pet, frame.X, frame.Y, frame.u, p.pet.clk, { style: 'clean', motion: 'anime' });
+    expect(r.log).toEqual(d.log);
   });
 });

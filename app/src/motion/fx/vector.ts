@@ -159,15 +159,16 @@ export function vectorFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void
   if (tg._shock) { x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 1.6 * u); x.beginPath();
     for (let i = 0; i < 6; i++) { const a = -PI * (0.1 + 0.8 * i / 5), j = Math.floor(g.t * 12) % 2 ? 2 : 0; x.moveTo(fx + Math.cos(a) * (24 + j) * u, fy - 14 * u + Math.sin(a) * (24 + j) * u); x.lineTo(fx + Math.cos(a) * (32 + j) * u, fy - 14 * u + Math.sin(a) * (32 + j) * u); }
     x.stroke(); }
-  for (const p of s.parts) particle(x, p, u, XX, Y);
-  if (tg._bang) { const yy = fy - 30 * u - Math.abs(Math.sin(g.t * 8)) * 8 * u;
-    x.fillStyle = AMBER; x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 2 * u); x.font = `900 ${Math.max(12, 34 * u)}px ${pen.font}`; x.textAlign = 'center'; x.textBaseline = 'bottom';
+  // cząsteczki i słowa żyją w miejscu zwierzaka (g.X), nie jadą z nim przy `lx` (np. kurz za uciekającym)
+  for (const p of s.parts) particle(x, p, u, g.X, Y);
+  if (tg._bang) { const yy = fy - 20 * u - Math.abs(Math.sin(g.t * 8)) * 6 * u; // środek „!”: mieści się w pasku także przy skokach
+    x.fillStyle = AMBER; x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 2 * u); x.font = `900 ${Math.max(12, 34 * u)}px ${pen.font}`; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.strokeText('!', fx + 34 * u, yy); x.fillText('!', fx + 34 * u, yy); }
   for (const w of s.words) {
     const pop = w.life < 0.08 ? 1.4 - w.life * 5 : 1, fade = w.life > w.max * 0.7 ? (w.max - w.life) / (w.max * 0.3) : 1;
     x.save(); x.globalAlpha *= fade; x.font = `900 ${Math.max(9, w.s * u * pop)}px ${pen.font}`; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.lineWidth = Math.max(1.5, 3 * u); x.strokeStyle = pen.ol; x.strokeText(w.text, XX + w.x * u, Y + w.y * u);
-    x.fillStyle = AMBER; x.fillText(w.text, XX + w.x * u, Y + w.y * u); x.restore();
+    x.lineWidth = Math.max(1.5, 3 * u); x.strokeStyle = pen.ol; x.strokeText(w.text, g.X + w.x * u, Y + w.y * u);
+    x.fillStyle = AMBER; x.fillText(w.text, g.X + w.x * u, Y + w.y * u); x.restore();
   }
   x.restore();
 }

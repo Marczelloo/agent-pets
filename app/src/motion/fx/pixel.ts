@@ -11,9 +11,10 @@ import type { FxCtx } from './index';
 const AMBER = '#EF9F27', WHITE = '#FFFFFF', RED = '#E24B4A', BLUE = '#5B8DEF', PURPLE = '#7F77DD', TEAL = '#5DCAA5', GREY = '#B4B2A9';
 
 /** Siatka: komórka `g` px (całkowite piksele urządzenia), początek przyciągnięty do piksela urządzenia. */
-function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet) {
+/** `off` = przesunięcie początku w u: `lx` zwierzaka dla nakładek na ciele, 0 dla cząsteczek i słów (żyją w miejscu zwierzaka). */
+function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet, off = c.p.lx.x) {
   const G = gridPx(g.u, g.dpr) / g.dpr, snap = (v: number) => Math.round(v * g.dpr) / g.dpr;
-  const X0 = snap(g.X + c.p.lx.x * g.u), Y0 = snap(g.Y), U = (v: number) => Math.round(v * g.u / G);
+  const X0 = snap(g.X + off * g.u), Y0 = snap(g.Y), U = (v: number) => Math.round(v * g.u / G);
   const cell = (cx: number, cy: number, w: number, h: number, col: string) => { if (w > 0 && h > 0) { x.fillStyle = col; x.fillRect(X0 + cx * G, Y0 + cy * G, w * G, h * G); } };
   const line = (x0: number, y0: number, x1: number, y1: number, col: string) => {
     let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), e = dx + dy, n = 0; const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -65,7 +66,8 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
   const s: FxState | undefined = c.fx; if (!s) return;
   const tg = c.tg || {}, { U, cell, line, ring, text } = grid(x, g, c), hands: number[][] = c.hand ?? [];
   const [fx0, fy0, gp] = (c.face as number[]) ?? [0, -45, 12], fx = U(fx0), fy = U(fy0), gap = Math.max(2, U(gp));
-  const sprite = (rows: string[], cx: number, cy: number, col?: string) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] !== '.') cell(cx + i, cy + j, 1, 1, col && r[i] === 'c' ? col : PAL[r[i]]); });
+  const slot = grid(x, g, c, 0);
+  const sprite = (rows: string[], cx: number, cy: number, col?: string, put = cell) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] !== '.') put(cx + i, cy + j, 1, 1, col && r[i] === 'c' ? col : PAL[r[i]]); });
   x.save(); x.globalAlpha = g.alpha;
   s.trail.forEach(tr => { if (tr.length < 2) return; const a = tr[0], b = tr[tr.length - 1];
     if (b[2] > a[2] && Math.hypot(b[0] - a[0], b[1] - a[1]) / (b[2] - a[2]) >= 150) { x.save(); x.globalAlpha *= 0.5; line(U(a[0]), U(a[1]), U(b[0]), U(b[1]), g.accent); x.restore(); } });
@@ -90,17 +92,17 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
   if (tg._shock && Math.floor(g.t * 12) % 2) for (let i = 0; i < 6; i++) { const a = -PI * (0.1 + 0.8 * i / 5);
     line(fx + Math.round(Math.cos(a) * U(24)), fy - U(14) + Math.round(Math.sin(a) * U(24)), fx + Math.round(Math.cos(a) * U(32)), fy - U(14) + Math.round(Math.sin(a) * U(32)), pen.ol); }
   for (const p of s.parts) {
-    const px = U(p.x), py = U(p.y), k = p.life / p.max;
+    const px = slot.U(p.x), py = slot.U(p.y), k = p.life / p.max;
     x.save(); x.globalAlpha *= 1 - k * k;
-    if (p.k === 'confetti') cell(px, py, 1, 2, p.col);
-    else if (p.k === 'bolt') { let ax = px, ay = py; for (let i = 1; i <= 4; i++) { const bx = px + Math.round(Math.cos(p.rot) * U(p.s) * i / 4), by = py + Math.round(Math.sin(p.rot) * U(p.s) * i / 4) + (i % 2 ? -1 : 1); line(ax, ay, bx, by, p.col); ax = bx; ay = by; } }
-    else if (p.k === 'smoke') ring(px, py, 1 + Math.round(k * 2), 1 + Math.round(k * 2), '#E8E6E0', true);
-    else sprite(SPR[p.k]!, px - 1, py - 1, p.k === 'helper' ? g.accent : undefined);
+    if (p.k === 'confetti') slot.cell(px, py, 1, 2, p.col);
+    else if (p.k === 'bolt') { let ax = px, ay = py; for (let i = 1; i <= 4; i++) { const bx = px + Math.round(Math.cos(p.rot) * slot.U(p.s) * i / 4), by = py + Math.round(Math.sin(p.rot) * slot.U(p.s) * i / 4) + (i % 2 ? -1 : 1); slot.line(ax, ay, bx, by, p.col); ax = bx; ay = by; } }
+    else if (p.k === 'smoke') slot.ring(px, py, 1 + Math.round(k * 2), 1 + Math.round(k * 2), '#E8E6E0', true);
+    else sprite(SPR[p.k]!, px - 1, py - 1, p.k === 'helper' ? g.accent : undefined, slot.cell);
     x.restore();
   }
   // „!” obok głowy: glif pikselowy jest wysoki (≥ 9 px), więc stoi niżej niż wektorowy, żeby przy skokach nie wyjść z paska
   if (tg._bang) text('!', fx0 + 34, fy0 - 20 - Math.round(Math.abs(Math.sin(g.t * 8)) * 2) * 3, AMBER);
   // słowa pikselowe stoją w miejscu: glif jest wyższy niż wektorowy i unosząc się wyszedłby ponad pasek
-  for (const w of s.words) text(w.text, w.x, w.y + w.life * WORD_RISE, AMBER);
+  for (const w of s.words) slot.text(w.text, w.x, w.y + w.life * WORD_RISE, AMBER);
   x.restore();
 }

@@ -57,4 +57,10 @@ describe('pixel anime effects', () => {
     const r = recorder(); pixelBack(r.ctx, pet({ _bg: 'speed' }), G(1, { env: { ...ENV, bg: false } }));
     expect(r.log).toEqual([]);
   });
+  it('particles stay where they were emitted in the slot, not dragged by the dashing pet', () => {
+    const c = createPet('clawd', 'idle'); fxState(c); c.p.lx.x = 40; emit(c, 'dust', 10, -40, { life: 0.01 });
+    const r = recorder(); pixelFront(r.ctx, c, G(1));
+    const xs = r.log.filter(l => l.startsWith('fillRect(')).map(l => +l.slice(9).split(',')[0]);
+    expect(Math.min(...xs)).toBeGreaterThan(58); expect(Math.max(...xs)).toBeLessThan(68);
+  });
 });

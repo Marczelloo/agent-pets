@@ -65,10 +65,10 @@ export const WORK: Record<string, Scene> = {
   ] },
   read: { cycle: 1, base: { th: 0.12, look: 0.85, tilt: -0.06, _hold: 'sheet' }, acts: [
     ['czyta z błyskiem okularów', 3, (a) => ({ ...SHEET, hyL: -19 + Math.sin(a * 1.7), hyR: -19 + Math.sin(a * 1.7 + 0.4), ex: -0.8 + 1.6 * ((a / 1.3) % 1), _face: 'glasses', _faceK: 1, _bg: 'wind' }), undefined, undefined, (a, c, _t, dt) => {
-      if (every(a, dt, 0.9, 0.3)) emit(c, 'page', 30, -30, { vx: 160 + rng() * 60, vy: -60 - rng() * 40, vr: 6 });
+      if (every(a, dt, 0.9, 0.3)) emit(c, 'page', 30, -30, { vx: 60 + rng() * 40, vy: -60 - rng() * 40, vr: 6 }); // x ≤ ≈ 100u: zostaje w miejscu zwierzaka
     }],
     ['przerzuca stronę', 0.6, (a) => ({ ...FLICK(a), _face: 'glasses', _faceK: 1, _bg: 'wind' }), undefined, undefined, (a, c, _t, dt) => {
-      if (at(a, dt, 0.16)) for (let i = 0; i < 3; i++) emit(c, 'page', 34, -36, { vx: 180 + i * 40, vy: -90 + i * 20, vr: 8 });
+      if (at(a, dt, 0.16)) for (let i = 0; i < 3; i++) emit(c, 'page', 34, -36, { vx: 80 + i * 20, vy: -90 + i * 20, vr: 8 });
     }],
   ] },
   grep: { cycle: 1, base: { th: 0.45, tilt: 0.04, _prop: 'board' }, acts: [

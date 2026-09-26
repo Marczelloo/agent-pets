@@ -7,7 +7,7 @@ import { at, every, keys, snapE } from './kit';
 import { emit, impact, spray, word } from './state';
 
 /** Twarz zwierzaka z ostatniej klatki modelu (albo środek głowy, gdy jeszcze nie rysowany). */
-const faceOf = (c: Pet): number[] => (c.face as number[]) ?? [0, -45, 12];
+const faceOf = (c: Pet): number[] => { const f = (c.face as number[]) ?? [0, -45, 12]; return [f[0] + c.p.lx.x, f[1], f[2]]; }; // w miejscu zwierzaka, jak cząsteczki
 
 const THUMB = keys([[0, { ikR: 1, hxR: 20, hyR: -30, lean: -0.3, squint: 0.8, _stiff: 3 }], [0.12, { hxR: 36, hyR: -62, lean: 0.2, squint: 0, happy: 1 }], [1.6, {}]]);
 
@@ -22,7 +22,7 @@ export const STATES: Record<string, Scene> = {
   ] },
   needs: { base: { th: 0, look: 0 }, acts: [
     ['błyszczące oczy', 2.2, () => ({ hopW: 0.6, armR: 2.3, oscR: 0.55, _f: 11, _face: 'sparkle', _faceK: 1, _bang: 1, _shock: 1 })],
-    ['puka w szybę', 1.6, (_a, _c, t) => ({ lean: 1, ikR: 1, hxR: 47 + 5 * Math.max(0, Math.sin(t * 16)), hyR: -44, _f: 16, _knock: 1, _big: 1, _face: 'sparkle', _faceK: 1, _bang: 1 })],
+    ['puka w szybę', 1.6, (a, _c, t) => ({ hopW: 0, lean: 1, ikR: 1, hxR: 47 + 5 * Math.max(0, Math.sin(t * 16)), hyR: -44, _f: 16, _knock: a > 0.25 ? 1 : 0, _big: 1, _face: 'sparkle', _faceK: 1, _bang: 1 })],
   ] },
   done: { base: { happy: 1, look: -0.3 }, seq: [
     ['Nice!', 1.6, (a) => ({ ...THUMB(a), _thumb: a > 0.1 ? 1 : 0, _face: a > 0.1 ? 'teeth' : null, _faceK: 1, _bg: 'rays', _bgK: snapE(a / 0.3) }), undefined, undefined, (a, c, _t, dt) => {

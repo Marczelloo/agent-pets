@@ -23,7 +23,8 @@ export class PetPainter {
     setMotion(pet, base.fx);
     const t = tick(pet, f.dt, f.t0, base, f.animate);
     pen.dpr = f.dpr;
-    if (!env.fx) { drawPet(x, pet, f.X, f.Y, f.u, t, f.look); return; }
+    // zwierzak zatrzymany (oszczędzanie): bez efektów — cząsteczki i nakładki zawisłyby w miejscu
+    if (!env.fx || !f.animate) { if (pet.fx) { pet.fx.parts = []; pet.fx.words = []; } drawPet(x, pet, f.X, f.Y, f.u, t, f.look); return; }
     const st = STYLES[f.look.style] ?? STYLES.clean, s = fxState(pet), pixel = st.model === 'pixel';
     s.env = env;
     const flash = flashFrame(s, f.t0, env);

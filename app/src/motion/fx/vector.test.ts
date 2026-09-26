@@ -73,4 +73,12 @@ describe('vector anime effects', () => {
       expect(r.log.length, JSON.stringify(tg)).toBeGreaterThan(3); ok(r.log);
     }
   });
+  it('particles and words stay where they were emitted in the slot: a dashing pet does not drag them along', () => {
+    const c = pet(); c.p.lx.x = 40; emit(c, 'spark', 10, -40, { life: 0.01 }); word(c, 'シュッ', 10, -80);
+    const r = recorder(); vectorFront(r.ctx, c, G());
+    const xs = r.log.filter(l => l.startsWith('translate(')).map(l => +l.slice(10).split(',')[0]); // cząsteczka rysowana po translate(px, py)
+    expect(xs).toEqual([63]);
+    const tx = r.log.filter(l => l.startsWith('fillText(')).map(l => +l.split(',')[1]);
+    expect(tx).toEqual([63]);
+  });
 });

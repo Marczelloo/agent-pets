@@ -89,4 +89,10 @@ describe('anime work scenes', () => {
     expect(stats.spark).toBeGreaterThanOrEqual(10);
     expect(stats.energy).toBeGreaterThanOrEqual(5);
   });
+  it('read: flying pages stay inside the pet slot (≤ 140u), not in the neighbour slot', () => {
+    let far = -Infinity;
+    simulate('clawd', 'read', 8, cc => { for (const p of (cc.fx?.parts ?? []) as Particle[]) if (p.k === 'page') far = Math.max(far, p.x); });
+    expect(far).toBeGreaterThan(60);
+    expect(far).toBeLessThanOrEqual(140);
+  });
 });
