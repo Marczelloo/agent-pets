@@ -13,7 +13,7 @@ export function path(x: any,p: any,j: any,seed: any){x.beginPath();p.forEach((q:
 export function bbox(p: any){let a=1e9,b=1e9,c=-1e9,d=-1e9;p.forEach((q: any)=>{a=Math.min(a,q[0]);b=Math.min(b,q[1]);c=Math.max(c,q[0]);d=Math.max(d,q[1]);});return [a,b,c,d];}
 export function shp(x: any,p: any,fill: any,u: any,o?: any){o=o||{};const st=pen.st,sk=st.sketch,id=++pen.sid,
 j=sk?Math.max(1.4*u,sk.jitterPx)*(o.j==null?1:o.j):0,s=pen.boil*977+id*131,f=fill&&st.fillFor&&!o.raw?st.fillFor(fill):fill;
-if(f&&sk&&sk.hatchFill&&!o.noStroke){path(x,p,j,s);x.save();x.globalAlpha*=.3;x.fillStyle=f;x.fill();x.restore();scribble(x,p,darken(f,.25),Math.max(4*u,sk.hatchGapPx),u,s);}
+if(f&&sk&&sk.hatchFill&&!o.noStroke){path(x,p,j,s);x.save();x.globalAlpha*=.55;x.fillStyle=f;x.fill();x.restore();scribble(x,p,darken(f,.25),Math.max(4*u,sk.hatchGapPx),u,s);}
 else if(f){path(x,p,j,s);if(sk){const ox=Math.max(.9*u,sk.offsetPx);x.save();x.translate(ox,ox*7/9);}x.fillStyle=st.fill==='gradient'?grad(x,p,f):f;x.fill();if(sk)x.restore();}
 if(o.hatch&&sk){x.save();path(x,p,0,0);x.clip();x.strokeStyle='rgba(43,29,22,0.3)';x.lineWidth=Math.max(.6,.9*u);x.beginPath();const bb=bbox(p),hh=bb[3]-bb[1],gap=Math.max(5*u,sk.hatchGapPx);for(let k=bb[0]-hh,g=0;k<bb[2]&&g<400;k+=gap,g++){x.moveTo(k,bb[3]);x.lineTo(k+hh,bb[1]);}x.stroke();x.restore();}
 if(o.noStroke)return;

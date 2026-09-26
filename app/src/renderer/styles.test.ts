@@ -41,7 +41,7 @@ describe('styles', () => {
     const log = trace('sketch'), clean = trace('clean');
     expect(log.filter(l => l === 'stroke()').length).toBeGreaterThan(clean.filter(l => l === 'stroke()').length * 2.5);
     expect(log).toContain(`strokeStyle=${STYLES.sketch.ink('#D97757')}`);
-    expect(log.some(l => /^globalAlpha=0\.[0-3]\d*$/.test(l))).toBe(true);
+    expect(log.some(l => /^globalAlpha=0\.[0-6]\d*$/.test(l))).toBe(true); // tło pod kreskowaniem, nie pełne
   });
   it('sketch v2 boils at 12 Hz on the pet clock', () => {
     // takt drgania bierze się z zegara zwierzaka, nie z tego, co ustawił wołający
