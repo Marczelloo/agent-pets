@@ -2,6 +2,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { createPet, setMotion, type Pet } from './pet';
+import { MOTIONS } from '../motion';
+import { tick } from '../motion/tick';
 
 /** LCG z trybu filmstrip prototypu (`prototype/pets.js`, linia 245). */
 export function seeded(seed: number) {
@@ -74,4 +77,13 @@ export function loadPrototype(rng: () => number): ProtoApi {
     ';globalThis.__p={S,mkC,stepC,drawC,setSK:v=>{SK=v},setBoil:v=>{BOIL=v}};';
   vm.runInNewContext(src, sandbox);
   return sandbox.__p as ProtoApi;
+}
+
+/** Zwierzak w ruchu Anime liczony przez `tick` przy 60 kl./s przez `secs` sekund; `each` po każdym kroku. */
+export function simulate(skin: 'clawd' | 'kodek', scene: string, secs: number, each?: (c: Pet, T: number) => void): Pet {
+  const c = createPet(skin, scene);
+  setMotion(c, true);
+  let T = 0;
+  for (let i = 0; i < Math.round(secs * 60); i++) { T += 1 / 60; tick(c, 1 / 60, T, MOTIONS.anime, true); each?.(c, T); }
+  return c;
 }

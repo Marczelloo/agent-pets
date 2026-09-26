@@ -2,6 +2,7 @@ import { TAU } from "./math";
 import { K, DEF, SPR } from "./pose";
 import { SCENES } from "./scenes";
 import { SCENES_ANIME } from "./anime";
+import { fxState, stepFx } from "./anime/state";
 import { rng } from "./rng";
 import { SKINS, type SkinId } from "../skins";
 export interface Pet { type: SkinId; p: Record<string, { x: number; v: number }>; parts: any[]; /** mnożnik przezroczystości całego zwierzaka (pojawianie się, pożegnanie) */ alpha?: number; [key: string]: any }
@@ -21,7 +22,7 @@ let a=acts[0];if(c.act===acts[0]&&acts.length>1&&rng()>.3)a=acts[1+Math.floor(rn
 export function targets(c: any,t: any){const o=Object.assign({},DEF,sceneTable(c)[c.st].base,c.act[2](c.aT,c,t)||{});['L','R'].forEach((k: any,i: any)=>{if(!o['ik'+k]){o['hx'+k]=c.aHand[i][0];o['hy'+k]=c.aHand[i][1];}});return o;}
 function slot(c: any,tg: any,key: any,ak: any){const nm=key.slice(1),want=tg[key]||null,P=c.p[ak];if(want&&want!==c[nm]){if(!c[nm]||P.x<.1)c[nm]=want;else{tg[ak]=0;return;}}tg[ak]=want?1:0;if(!want&&P.x<.03)c[nm]=null;}
 export function stepPet(c: any,dt: any,t: any,spr?: {k:number;d:number;crit?:boolean}){const sk=spr?.k??1,sd=spr?.d??1;c.aT+=dt;if(c.pend&&c.aT>=c.pend.t){const f=c.pend.fn;c.pend=null;f();}if(c.aT>c.act[1])nextAct(c);
-const tg=targets(c,t);c.tg=tg;c.f=tg._f||20;c.hp+=(tg._hf||.85)*dt;slot(c,tg,'_prop','propA');slot(c,tg,'_hold','holdA');if(c.act[5])c.act[5](c.aT,c,t,dt);const P=c.p;
+const tg=targets(c,t);c.tg=tg;c.f=tg._f||20;c.hp+=(tg._hf||.85)*dt;slot(c,tg,'_prop','propA');slot(c,tg,'_hold','holdA');if(c.act[5]){fxState(c).t=t;c.act[5](c.aT,c,t,dt);}if(c.fx)stepFx(c,dt,t);const P=c.p;
 K.forEach((k: any)=>{const s=P[k],sp=SPR[k]||[90,16];if(spr?.crit)critStep(s,tg[k],sp[0]*sk*(tg._stiff||1),dt);else{s.v+=((tg[k]-s.x)*sp[0]*sk-s.v*sp[1]*sd)*dt;s.x+=s.v*dt;}});
 if(tg._poleDirect){const nv=(tg.pole-P.pole.x)/dt;P.pole.v=P.pole.v*.6+nv*.4;P.pole.x=tg.pole;}
 c.nb-=dt;if(c.nb<0){c.blink=.16;c.nb=2.5+rng()*3;}c.blink=Math.max(0,c.blink-dt);
