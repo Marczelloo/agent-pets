@@ -1,5 +1,5 @@
 //! Rdzeń danych na żywo: ingest hooków, obserwacja plików, odtworzenie stanu po starcie i zegar.
-use crate::claude::{self, hook::TaskTracker, HookEnvelope};
+use crate::claude::{self, hook::{HookState, TaskTracker}, HookEnvelope};
 use crate::endpoint::Endpoint;
 use crate::ingest::{Incoming, Ingest};
 use crate::model::Event;
@@ -25,6 +25,8 @@ pub struct RuntimeConfig {
     pub router_status: Option<PathBuf>,
     /// Aplikacje, dla których są zwierzaki (ustawienia).
     pub apps: crate::settings::Apps,
+    /// Język tekstów akcji i pytań.
+    pub lang: crate::i18n::Lang,
 }
 
 impl RuntimeConfig {
@@ -37,6 +39,7 @@ impl RuntimeConfig {
                 &dirs::data_local_dir().unwrap_or_default(), &dirs::config_dir().unwrap_or_default()),
             router_status: dirs::home_dir().map(|h| h.join(".agent-router").join(crate::router::FILE)),
             apps: crate::settings::Apps::default(),
+            lang: crate::i18n::system(),
         })
     }
 }
@@ -45,6 +48,8 @@ pub struct Runtime {
     store: Store,
     sources: Sources,
     tasks: TaskTracker,
+    hook_state: HookState,
+    lang: crate::i18n::Lang,
     record: Option<File>,
     hooks: Receiver<Incoming>,
     files: Option<Receiver<PathBuf>>,
@@ -63,6 +68,7 @@ impl Runtime {
         ingest.endpoint().write(&cfg.endpoint_path).context("zapis endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
+            hook_state: HookState::default(), lang: cfg.lang,
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
             _ingest: ingest, _watcher: None,
@@ -100,6 +106,9 @@ impl Runtime {
         let removed = self.store.retain_sessions(|s| session_on(apps, s));
         removed | self.store.retain_limits(|l| agent_on(apps, l.agent))
     }
+
+    /// Język nowych tekstów akcji i pytań (zmiana w ustawieniach).
+    pub fn set_lang(&mut self, lang: crate::i18n::Lang) { self.lang = lang; }
 
     /// Czas ostatniego zdarzenia z każdego źródła (diagnostyka).
     pub fn last_seen(&self) -> std::collections::BTreeMap<&'static str, i64> { self.last_seen.clone() }
@@ -164,7 +173,7 @@ impl Runtime {
         if !self.apps.claude_code { return false; }
         let mut changed = false;
         if let Some(tp) = claude::hook::transcript_path(&env) { changed |= self.poll_file(&tp); }
-        for e in claude::hook::to_events(&env) { changed |= self.apply(e); }
+        for e in self.hook_state.events(&env, self.lang) { changed |= self.apply(e); }
         if let Some(e) = self.tasks.observe(&env) { changed |= self.apply(e); }
         changed
     }
@@ -219,7 +228,7 @@ mod tests {
         RuntimeConfig { home: h.path().into(), endpoint_path: h.path().join("endpoint.json"), record: None,
             claude_usage_files: vec![h.path().join("Claude").join(claude::desktop_usage::FILE)],
             router_status: Some(h.path().join(".agent-router").join(crate::router::FILE)),
-            apps: crate::settings::Apps::default() }
+            apps: crate::settings::Apps::default(), lang: crate::i18n::Lang::Pl }
     }
 
     #[test]

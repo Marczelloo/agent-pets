@@ -103,6 +103,7 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     if old.power_saving != new.power_saving { system::refresh_power(app); }
     if old.language != new.language {
         let lang = pets_core::i18n::current(new.language);
+        let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Lang(lang));
         tray::relabel(app, lang);
         if let Some(w) = app.get_webview_window("settings") { let _ = w.set_title(settings::window_title(lang)); }
     }

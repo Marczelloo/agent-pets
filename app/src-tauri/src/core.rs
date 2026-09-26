@@ -55,6 +55,7 @@ impl Mode {
 /// Ukrywanie odpowiada listą ukrytych id (do „Cofnij”).
 pub enum CoreMsg {
     Apps(pets_core::settings::Apps),
+    Lang(Lang),
     Dismiss(Vec<String>, Sender<Vec<String>>),
     DismissInactive(Sender<Vec<String>>),
     Undismiss(Vec<String>),
@@ -113,6 +114,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     hidden.prune(now_ms());
     let mut cfg = RuntimeConfig::from_env()?;
     cfg.apps = app.state::<crate::settings::SettingsState>().get().apps;
+    cfg.lang = pets_core::i18n::current(app.state::<crate::settings::SettingsState>().get().language);
     let mut rt = Runtime::start(cfg)?;
     // limity konta Claude z serwera Anthropic (dokładne czasy resetu, bez sesji CLI), tylko za zgodą
     let (usage_tx, usage) = std::sync::mpsc::channel();
@@ -130,6 +132,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         for m in msgs.try_iter() {
             match m {
                 CoreMsg::Apps(a) => changed |= rt.set_apps(a),
+                CoreMsg::Lang(l) => rt.set_lang(l),
                 CoreMsg::Dismiss(ids, reply) => { hidden.dismiss(&ids, now); let _ = reply.send(ids); changed = true; }
                 CoreMsg::DismissInactive(reply) => { let _ = reply.send(dismiss_inactive(rt.store(), &mut hidden, now)); changed = true; }
                 CoreMsg::Undismiss(ids) => { hidden.undismiss(&ids); changed = true; }

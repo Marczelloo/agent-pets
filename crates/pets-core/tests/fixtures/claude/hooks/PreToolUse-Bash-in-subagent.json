@@ -1,0 +1,17 @@
+{
+  "session_id": "3746a003-5ba1-42b3-a085-009646ebcf00",
+  "transcript_path": "C:\\work\\project",
+  "cwd": "C:\\work\\project",
+  "scratchpad_dir": "C:\\work\\project",
+  "prompt_id": "f1d4e4b5-9dc5-4246-b264-8ab912d261bc",
+  "permission_mode": "bypassPermissions",
+  "agent_id": "a78e678e3f4a4da31",
+  "agent_type": "general-purpose",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo spike-ok",
+    "description": "Echo"
+  },
+  "tool_use_id": "toolu_013uivxAPgREJbeUQbev8NAU"
+}
