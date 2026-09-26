@@ -4,6 +4,7 @@ import type { FxState } from '../../renderer/anime/state';
 import { cl } from '../../renderer/math';
 import type { Pet } from '../../renderer/pet';
 import type { FxEnv } from '../types';
+import { pixelBack, pixelFront } from './pixel';
 import { vectorBack, vectorFront } from './vector';
 
 export interface FxCtx { X: number; Y: number; u: number; t: number; dpr: number; env: FxEnv; model: 'vector' | 'sticker' | 'pixel'; flash: boolean; accent: string; alpha: number }
@@ -48,5 +49,5 @@ export function recordTrail(s: FxState, c: Pet, now: number): void {
   });
 }
 
-export function drawFxBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void { if (g.env.fx && g.model !== 'pixel') vectorBack(x, c, g); }
-export function drawFxFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void { if (g.env.fx && g.model !== 'pixel') vectorFront(x, c, g); }
+export function drawFxBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void { if (g.env.fx) (g.model === 'pixel' ? pixelBack : vectorBack)(x, c, g); }
+export function drawFxFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void { if (g.env.fx) (g.model === 'pixel' ? pixelFront : vectorFront)(x, c, g); }
