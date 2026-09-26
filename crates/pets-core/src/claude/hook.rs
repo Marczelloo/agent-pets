@@ -54,7 +54,9 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
             None => { let mut e = Event::new(Source::Claude, sid, Kind::Meta, env.ts); e.data.sub_end = true; e }
         }];
     }
-    let in_child = matches!(name, "PreToolUse" | "PostToolUse");
+    // pytanie subagenta (`AskUserQuestion`) czeka u rodzica, jak jego prośby o zgodę
+    let asks = name == "PreToolUse" && tool_name == "AskUserQuestion";
+    let in_child = matches!(name, "PreToolUse" | "PostToolUse") && !asks;
     let mut e = match agent_id {
         Some(a) if in_child => child(sid, a, p, Kind::Meta, env.ts),
         _ => {
@@ -79,6 +81,7 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
             } else if tool_name == "AskUserQuestion" {
                 e.kind = Kind::NeedsInput;
                 e.data.question = question_text(None, None, Some(tool_input), lang);
+                e.data.from_child = agent_id.is_some();
             } else {
                 e.kind = Kind::ToolStart;
                 e.tool = Some(from_claude(tool_name));
@@ -95,6 +98,7 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
         "Notification" => {
             e.kind = Kind::NeedsInput;
             e.data.question = question_text(p.get("message").and_then(|v| v.as_str()), last, None, lang);
+            e.data.from_child = agent_id.is_some();
         }
         "Stop" => e.kind = Kind::TurnEnd,
         "PreCompact" => e.kind = Kind::Compact,
@@ -395,5 +399,21 @@ mod tests {
         assert_eq!(find_task_id(&json!([{"type": "text", "text": "{\n  \"status\": \"running\",\n  \"taskId\": \"c\"\n}"}])).as_deref(), Some("c"));
         assert_eq!(find_task_id(&json!("Started. \"taskId\": \"d-1\", waiting")).as_deref(), Some("d-1"));
         assert_eq!(find_task_id(&json!({"content": [{"text": "no id here"}], "taskId": 5})), None);
+    }
+
+    #[test]
+    fn a_permission_request_inside_a_subagent_waits_at_the_parent_marked_as_the_child_s() {
+        let n = env(json!({"hook_event_name": "Notification", "session_id": "s", "agent_id": "a1",
+            "message": "Claude needs your permission to use Bash"}));
+        let e = to_events(&n, Lang::Pl, None);
+        assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.from_child), ("s", Kind::NeedsInput, true));
+    }
+
+    #[test]
+    fn ask_user_question_inside_a_subagent_is_asked_at_the_parent() {
+        let e = te(&env(json!({"hook_event_name": "PreToolUse", "session_id": "s", "agent_id": "a1", "tool_name": "AskUserQuestion",
+            "tool_input": {"questions": [{"question": "Który?"}]}})));
+        assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.question.as_deref(), e[0].data.from_child),
+            ("s", Kind::NeedsInput, Some("Pytanie: Który?"), true));
     }
 }

@@ -65,6 +65,9 @@ pub struct Session {
     /// tekst pytania (tylko w pamięci), tylko w `needs_you`
     #[serde(default)]
     pub question: Option<String>,
+    /// `needs_you` rodzica to prośba jego subagenta: dalsza praca dziecka znaczy, że już odpowiedziano
+    #[serde(skip)]
+    pub waits_on_child: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,6 +133,8 @@ pub struct EventData {
     pub router_link: Option<String>,
     /// `SubagentStop` bez `agent_id`: koniec najnowszego żyjącego dziecka tej sesji
     pub sub_end: bool,
+    /// prośba (`NeedsInput`) zgłoszona przez subagenta, czeka u rodzica
+    pub from_child: bool,
 }
 
 /// Zadanie Agent Routera powiązane z wątkiem Codexa (`~/.agent-router/status.json`).

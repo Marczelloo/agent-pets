@@ -77,6 +77,7 @@ fn new_session(e: &Event) -> Session {
         sub: None,
         action: None,
         question: None,
+        waits_on_child: false,
     }
 }
 
@@ -211,6 +212,12 @@ impl Store {
         s.last_activity = e.ts;
         texts(s, e);
         let child = s.parent.is_some();
+        if !child && !matches!(e.kind, Kind::Meta | Kind::Limits) {
+            // czekanie w trakcie delegowania (albo zgłoszone przez dziecko) to prośba subagenta
+            let delegating = (s.state, s.tool) == (State::Working, Some(Tool::Agent))
+                || self.pending.get(&e.session_id) == Some(&(State::Working, Some(Tool::Agent)));
+            s.waits_on_child = e.kind == Kind::NeedsInput && (e.data.from_child || delegating);
+        }
         // zgody dziecka czekają u rodzica: dziecko nigdy nie jest „czeka na Ciebie”
         if child { s.question = None; }
 
@@ -251,6 +258,7 @@ impl Store {
             }
         }
         out.push(Change::Upsert(s.clone()));
+        if child && !matches!(e.kind, Kind::Meta | Kind::Limits | Kind::SessionEnd) { self.answered_for_child(e, &mut out); }
         if e.kind == Kind::SessionEnd { self.release_children(&e.session_id, e.ts, &mut out); }
         if e.data.sub_end { self.end_newest_child(&e.session_id, e.ts, &mut out); }
         out
@@ -269,6 +277,19 @@ impl Store {
             self.pending.remove(id);
             self.ended_at.insert(id.to_string(), now);
         }
+    }
+
+    /// Dziecko pracuje dalej po prośbie, na którą czekał rodzic: odpowiedziano, rodzic znów deleguje.
+    fn answered_for_child(&mut self, e: &Event, out: &mut Vec<Change>) {
+        let Some(pid) = self.sessions.get(&e.session_id).and_then(|c| c.parent.clone()) else { return };
+        let Some(p) = self.sessions.get_mut(&pid) else { return };
+        if p.state != State::NeedsYou || !p.waits_on_child || e.ts <= p.state_since { return; }
+        set(p, State::Working, Some(Tool::Agent), e.ts);
+        p.question = None;
+        p.waits_on_child = false;
+        self.pending.remove(&pid);
+        self.shown_at.insert(pid, self.clock);
+        out.push(Change::Upsert(p.clone()));
     }
 
     /// Koniec rodzica kończy jego subagentów; zadania routera zostają jako zwykłe sesje.
@@ -303,8 +324,10 @@ impl Store {
         let mut removed = Vec::new();
         // rodzice, którzy wciąż czekają na subagenta (także w minimalnym czasie stanu), i rodzice, których już nie ma
         let agent = (State::Working, Some(Tool::Agent));
+        // rodzic czekający na Ciebie też: dziecko może czekać na zgodę, a nie być przerwane
         let delegating: std::collections::HashSet<String> = self.sessions.values()
-            .filter(|s| (s.state, s.tool) == agent || self.pending.get(&s.id) == Some(&agent)).map(|s| s.id.clone()).collect();
+            .filter(|s| (s.state, s.tool) == agent || s.state == State::NeedsYou || self.pending.get(&s.id) == Some(&agent))
+            .map(|s| s.id.clone()).collect();
         let gone: std::collections::HashSet<String> = self.sessions.values().filter_map(|s| s.parent.clone())
             .filter(|p| self.sessions.get(p).map(|x| x.state == State::Ended).unwrap_or(true)).collect();
         for (id, s) in self.sessions.iter_mut() {
@@ -831,5 +854,59 @@ mod tests {
         let ch = s.tick(10_000_000, &alive);
         assert!(ch.contains(&Change::Removed("p/a".into())));
         assert!(s.session("p/a").is_none());
+    }
+
+    fn parent_asks(s: &mut Store, ts: i64, from_child: bool) {
+        let mut n = Event::new(Source::Claude, "p", Kind::NeedsInput, ts);
+        n.data.question = Some("Zgoda na Bash? ls".into());
+        n.data.from_child = from_child;
+        s.apply(&n);
+    }
+
+    #[test]
+    fn approving_a_subagent_request_takes_the_parent_back_to_delegating() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        parent_working(&mut s, 1_000);
+        s.apply(&kid("p/a", "p", Kind::Prompt, 1_000, sub(SubKind::Claude, false)));
+        parent_asks(&mut s, 5_000, true);
+        assert_eq!(state_of(&s, "p"), Some(State::NeedsYou));
+        s.apply(&kid("p/a", "p", Kind::ToolStart, 9_000, sub(SubKind::Claude, false)));
+        let p = s.session("p").unwrap();
+        assert_eq!((p.state, p.tool, p.question.clone()), (State::Working, Some(Tool::Agent), None));
+    }
+
+    #[test]
+    fn a_wait_while_delegating_counts_as_the_subagent_s_request() {
+        // hook bez agent_id: rodzic pracował narzędziem Agent, więc prośba należy do dziecka
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        parent_working(&mut s, 1_000);
+        s.apply(&kid("p/a", "p", Kind::Prompt, 1_000, sub(SubKind::Claude, false)));
+        parent_asks(&mut s, 5_000, false);
+        s.apply(&kid("p/a", "p", Kind::ToolEnd, 9_000, sub(SubKind::Claude, false)));
+        assert_eq!(state_of(&s, "p"), Some(State::Working));
+    }
+
+    #[test]
+    fn the_parent_s_own_question_is_not_cleared_by_a_background_child() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&kid("p/b", "p", Kind::Prompt, 500, sub(SubKind::Claude, true)));
+        s.apply(&{ let mut e = Event::new(Source::Claude, "p", Kind::ToolStart, 1_000); e.tool = Some(Tool::Bash); e });
+        parent_asks(&mut s, 5_000, false);
+        s.apply(&kid("p/b", "p", Kind::ToolStart, 9_000, sub(SubKind::Claude, true)));
+        assert_eq!(state_of(&s, "p"), Some(State::NeedsYou));
+    }
+
+    #[test]
+    fn a_child_waiting_for_approval_is_not_ended_as_quiet() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        parent_working(&mut s, 1_000);
+        s.apply(&kid("p/a", "p", Kind::ToolStart, 1_000, sub(SubKind::Claude, false)));
+        parent_asks(&mut s, 2_000, true);
+        s.tick(200_000, &alive);
+        assert_eq!(state_of(&s, "p/a"), Some(State::Working), "czeka na Twoją zgodę, nie jest przerwany");
     }
 }
