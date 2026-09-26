@@ -50,6 +50,9 @@ pub struct Runtime {
     tasks: TaskTracker,
     hook_state: HookState,
     lang: crate::i18n::Lang,
+    /// zadania routera → sesje, które je zleciły (tylko id, `~/.agent-pets/links.json`)
+    links: crate::links::Links,
+    links_path: PathBuf,
     record: Option<File>,
     hooks: Receiver<Incoming>,
     files: Option<Receiver<PathBuf>>,
@@ -63,12 +66,15 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn start(cfg: RuntimeConfig) -> anyhow::Result<Runtime> {
+        let links_path = crate::links::path(&cfg.home);
+        let mut links = crate::links::Links::load(&links_path);
+        links.prune(crate::time::now_ms());
         let (tx, hooks) = channel();
         let ingest = Ingest::start(Endpoint::new_token(), tx)?;
         ingest.endpoint().write(&cfg.endpoint_path).context("zapis endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
-            hook_state: HookState::default(), lang: cfg.lang,
+            hook_state: HookState::default(), lang: cfg.lang, links, links_path,
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
             _ingest: ingest, _watcher: None,
@@ -153,8 +159,47 @@ impl Runtime {
         let key = source_key(&e);
         let seen = self.last_seen.entry(key).or_insert(e.ts);
         *seen = (*seen).max(e.ts);
-        if let Some(f) = &mut self.record { let _ = writeln!(f, "{}", serde_json::to_string(&e).unwrap_or_default()); }
-        !self.store.apply(&e).is_empty()
+        self.as_child_of_caller(&mut e);
+        if let Some(f) = &mut self.record {
+            // teksty akcji i pytań (nazwy plików, komendy) nigdy nie trafiają na dysk
+            let mut clean = e.clone();
+            clean.data.action = None;
+            clean.data.question = None;
+            let _ = writeln!(f, "{}", serde_json::to_string(&clean).unwrap_or_default());
+        }
+        let mut changed = !self.store.apply(&e).is_empty();
+        if let Some(task) = e.data.router_link.clone() { changed |= self.link(&task, &e.session_id, e.ts); }
+        changed
+    }
+
+    /// Zadanie routera zlecone przez śledzoną sesję jest jej dzieckiem (sklep robi z niego sierotę, gdy rodzica nie ma).
+    fn as_child_of_caller(&self, e: &mut Event) {
+        let Some(task) = e.data.router_task.as_ref() else { return };
+        let Some(parent) = self.links.parent_of(&task.task_id) else { return };
+        e.data.parent = Some(parent.to_string());
+        e.data.sub = Some(crate::model::SubInfo {
+            kind: crate::model::SubKind::Router, agent_type: None, description: e.data.title.clone(), background: false,
+        });
+    }
+
+    /// Zapisuje powiązanie i od razu dołącza do rodzica zadanie, które już jest na scenie.
+    fn link(&mut self, task: &str, parent: &str, ts: i64) -> bool {
+        self.links.link(task, parent, ts);
+        let _ = self.links.save_if_dirty(&self.links_path);
+        let known: Vec<(String, String, i64)> = self.store.sessions().iter()
+            .filter(|s| s.router_task.as_ref().map(|r| r.task_id.as_str()) == Some(task) && s.parent.as_deref() != Some(parent))
+            .map(|s| (s.id.clone(), s.title.clone(), s.last_activity)).collect();
+        let mut changed = false;
+        for (id, title, last) in known {
+            // czas sprzed ostatniej aktywności: dołączenie zmienia tylko dane, nie stan ani aktywność
+            let mut m = Event::new(crate::model::Source::Router, id, crate::model::Kind::Meta, last - 1);
+            m.data.parent = Some(parent.to_string());
+            m.data.sub = Some(crate::model::SubInfo {
+                kind: crate::model::SubKind::Router, agent_type: None, description: Some(title).filter(|t| !t.is_empty()), background: false,
+            });
+            changed |= !self.store.apply(&m).is_empty();
+        }
+        changed
     }
 
     fn poll_file(&mut self, p: &Path) -> bool {
@@ -372,5 +417,86 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(rt.store().session("hook-s1").is_some());
+    }
+
+    fn delegated(rt: &mut Runtime, parent: &str, task: &str, ts: i64) {
+        use crate::model::{Kind, Source};
+        rt.apply_external(crate::model::Event::new(Source::Claude, parent, Kind::Prompt, ts));
+        let mut post = crate::model::Event::new(Source::Claude, parent, Kind::ToolEnd, ts);
+        post.data.router_link = Some(task.into());
+        rt.apply_external(post);
+    }
+
+    #[test]
+    fn a_router_task_delegated_by_a_session_is_its_child() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let now = crate::time::now_ms();
+        delegated(&mut rt, "p1", "t1", now);
+        router_status(&h, "th1", "running", now);
+        rt.step(now + 2_000);
+        let s = rt.store().session("th1").expect("zadanie routera");
+        assert_eq!(s.parent.as_deref(), Some("p1"));
+        let sub = s.sub.clone().unwrap();
+        assert_eq!((sub.kind, sub.description.as_deref()), (crate::model::SubKind::Router, Some("Policz pliki")));
+        let saved = std::fs::read_to_string(crate::links::path(h.path())).unwrap();
+        assert!(saved.contains("t1") && saved.contains("p1") && !saved.contains("Policz"), "tylko id: {saved}");
+    }
+
+    #[test]
+    fn a_link_arriving_after_the_task_attaches_it_at_once() {
+        let h = home();
+        let now = crate::time::now_ms();
+        router_status(&h, "th1", "running", now);
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        assert_eq!(rt.store().session("th1").map(|s| s.parent.clone()), Some(None), "bez powiązania: zwykły zwierzak jak w 0.7");
+        delegated(&mut rt, "p1", "t1", now);
+        assert_eq!(rt.store().session("th1").and_then(|s| s.parent.clone()).as_deref(), Some("p1"));
+    }
+
+    #[test]
+    fn links_come_back_after_a_restart() {
+        let h = home();
+        let now = crate::time::now_ms();
+        {
+            let mut rt = Runtime::start(cfg(&h)).unwrap();
+            delegated(&mut rt, "p1", "t1", now);
+        }
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        rt.apply_external(crate::model::Event::new(crate::model::Source::Claude, "p1", crate::model::Kind::Prompt, now));
+        router_status(&h, "th1", "running", now);
+        rt.step(now + 2_000);
+        assert_eq!(rt.store().session("th1").and_then(|s| s.parent.clone()).as_deref(), Some("p1"));
+    }
+
+    #[test]
+    fn the_recording_never_holds_action_or_question_text() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let rec = h.path().join("rec.jsonl");
+        let mut c = cfg(&h);
+        c.record = Some(File::create(&rec).unwrap());
+        let mut rt = Runtime::start(c).unwrap();
+        let now = crate::time::now_ms();
+        let mut t = crate::model::Event::new(Source::Claude, "s1", Kind::ToolStart, now);
+        t.data.action = Some("curl -H \"Authorization: Bearer sekret-XYZ\"".into());
+        rt.apply_external(t);
+        let mut n = crate::model::Event::new(Source::Claude, "s1", Kind::NeedsInput, now + 1);
+        n.data.question = Some("Pytanie: sekret-QQ?".into());
+        rt.apply_external(n);
+        drop(rt);
+        let text = std::fs::read_to_string(&rec).unwrap();
+        assert_eq!(text.lines().count(), 2, "zdarzenia są nagrane");
+        assert!(!text.contains("sekret"), "{text}");
+        assert!(rt_store_kept_text(&h), "w pamięci tekst zostaje");
+    }
+
+    fn rt_store_kept_text(h: &tempfile::TempDir) -> bool {
+        use crate::model::{Kind, Source};
+        let mut rt = Runtime::start(cfg(h)).unwrap();
+        let mut t = crate::model::Event::new(Source::Claude, "s2", Kind::ToolStart, crate::time::now_ms());
+        t.data.action = Some("npm test".into());
+        rt.apply_external(t);
+        rt.store().session("s2").and_then(|s| s.action.clone()).as_deref() == Some("npm test")
     }
 }

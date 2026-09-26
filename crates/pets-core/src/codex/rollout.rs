@@ -96,7 +96,10 @@ impl RolloutParser {
 
     fn ev(&self, kind: Kind, ts: i64) -> Option<Event> {
         let src = if self.router { Source::Router } else { Source::Codex };
-        Some(Event::new(src, self.sid.clone()?, kind, ts))
+        let mut e = Event::new(src, self.sid.clone()?, kind, ts);
+        // dziecko zna rodzica w każdym zdarzeniu: po zniknięciu wraca przy kolejnej turze jako dziecko, nie osobny zwierzak
+        e.data.parent = self.parent.clone();
+        Some(e)
     }
 
     fn one(&self, ts: i64, kind: Kind) -> Vec<Event> {
@@ -319,6 +322,7 @@ mod tests {
         assert_eq!((par.kind, par.tool), (Kind::ToolStart, Some(Tool::Agent)));
         let e = p.parse_line(&l("event_msg", json!({"type": "task_started"})));
         assert_eq!((e[0].session_id.as_str(), e[0].kind), ("t1", Kind::Prompt));
+        assert_eq!(e[0].data.parent.as_deref(), Some("parent1"), "każde zdarzenie dziecka zna rodzica (np. po kolejnej turze)");
         let patch = "*** Begin Patch\n*** Update File: src/a.rs\n*** End Patch";
         let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "apply_patch", "input": patch})));
         assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.action.as_deref()), ("t1", Kind::ToolStart, Some("Edytuje a.rs")));

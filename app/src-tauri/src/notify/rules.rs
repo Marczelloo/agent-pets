@@ -61,7 +61,8 @@ impl Rules {
         let mut out = Vec::new();
         let priming = !self.primed;
         self.primed = true;
-        for s in &snap.sessions {
+        // dzieci (subagenci, zadania routera) nie wysyłają powiadomień: zgody i tak czekają u rodzica
+        for s in snap.sessions.iter().filter(|s| s.parent.is_none()) {
             match s.state {
                 State::NeedsYou => {
                     let key = format!("needs:{}:{}", s.id, s.state_since);
@@ -215,5 +216,16 @@ mod tests {
         let mut r = Rules::new(Settings { needs_you: false, done: true, limits: true });
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         assert!(r.observe(&snap(vec![sess("a", State::NeedsYou, 0, None)], vec![]), 60_000, &|_| false).is_empty());
+    }
+
+    #[test]
+    fn children_never_toast() {
+        let mut r = Rules::new(ALL);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let mut c = sess("c", State::Done, 200_000, Some(0));
+        c.parent = Some("p".into());
+        let mut n = sess("n", State::NeedsYou, 0, None);
+        n.parent = Some("p".into());
+        assert!(r.observe(&snap(vec![c, n], vec![]), 300_000, &|_| false).is_empty());
     }
 }

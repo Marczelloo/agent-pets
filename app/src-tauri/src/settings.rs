@@ -260,5 +260,6 @@ mod tests {
         let v = serde_json::to_value(Diagnostics::default()).unwrap();
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert!(keys.iter().all(|k| !k.contains("token") && !k.contains("title")), "{keys:?}");
+        assert!(keys.iter().all(|k| !k.contains("action") && !k.contains("question") && !k.contains("session")), "0.8: bez tekstów akcji {keys:?}");
     }
 }

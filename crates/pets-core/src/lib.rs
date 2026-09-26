@@ -6,6 +6,7 @@ pub mod endpoint;
 pub mod hooks_install;
 pub mod i18n;
 pub mod ingest;
+pub mod links;
 pub mod integrations;
 pub mod model;
 pub mod pid;

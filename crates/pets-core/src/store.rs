@@ -39,6 +39,18 @@ pub struct Store {
 /// a nie sesja, która właśnie ucichła: znika od razu, bez stanu „zakończył” i machania.
 const LONG_DEAD_MS: i64 = 60_000;
 
+/// Subagent Claude bez nowych linii tyle czasu (a rodzic już nie deleguje) został przerwany, np. przez Esc.
+pub const CHILD_QUIET_MS: i64 = 120_000;
+/// Subagent w tle kończy się tylko przez `SubagentStop` albo po tak długiej ciszy.
+pub const CHILD_BACKGROUND_QUIET_MS: i64 = 600_000;
+/// Dziecko, które skończyło (albo ma błąd), znika po tym czasie.
+pub const CHILD_DONE_MS: i64 = 10_000;
+
+fn sub_kind(s: &Session) -> Option<SubKind> { s.sub.as_ref().map(|i| i.kind) }
+
+/// Zadanie routera bez żywego rodzica jest zwykłą sesją z plakietką routera (jak w 0.7).
+fn orphan(s: &mut Session) { s.parent = None; s.sub = None; }
+
 fn new_session(e: &Event) -> Session {
     let origin = e.data.origin.unwrap_or(match e.source {
         Source::Claude => Origin::Cli,
@@ -179,6 +191,10 @@ impl Store {
             out.push(Change::Limits(self.limits.clone()));
         }
         if e.kind == Kind::Limits { return out; }
+        // koniec dziecka, którego nie znamy (np. `SubagentStop` krótkiego subagenta), nie tworzy zwierzaka
+        if e.kind == Kind::SessionEnd && e.data.parent.is_some() && !self.sessions.contains_key(&e.session_id) { return out; }
+        let parent_gone = e.data.parent.as_ref()
+            .map(|p| self.sessions.get(p).map(|x| x.state == State::Ended).unwrap_or(true)).unwrap_or(false);
 
         let dwell = self.timing.dwell_ms;
         let arrival = self.clock.max(e.ts);
@@ -187,18 +203,22 @@ impl Store {
         let is_new = !self.sessions.contains_key(&e.session_id);
         let s = self.sessions.entry(e.session_id.clone()).or_insert_with(|| new_session(e));
         merge(s, &e.data);
+        if parent_gone && sub_kind(s) == Some(SubKind::Router) { orphan(s); }
         if e.ts < s.last_activity {
             out.push(Change::Upsert(s.clone()));
             return out;
         }
         s.last_activity = e.ts;
         texts(s, e);
+        let child = s.parent.is_some();
+        // zgody dziecka czekają u rodzica: dziecko nigdy nie jest „czeka na Ciebie”
+        if child { s.question = None; }
 
         let target: Option<(State, Option<Tool>)> = match e.kind {
             Kind::Prompt => { s.turn_started_at = Some(e.ts); Some((State::Thinking, None)) }
             Kind::ToolStart => Some((State::Working, e.tool.or(Some(Tool::Other)))),
             Kind::ToolEnd => Some((State::Thinking, None)),
-            Kind::NeedsInput => Some((State::NeedsYou, None)),
+            Kind::NeedsInput => Some((if child { State::Thinking } else { State::NeedsYou }, None)),
             Kind::TurnEnd => Some((State::Done, None)),
             Kind::Error => Some((State::Error, None)),
             Kind::Compact => Some((State::Compacting, None)),
@@ -231,7 +251,45 @@ impl Store {
             }
         }
         out.push(Change::Upsert(s.clone()));
+        if e.kind == Kind::SessionEnd { self.release_children(&e.session_id, e.ts, &mut out); }
+        if e.data.sub_end { self.end_newest_child(&e.session_id, e.ts, &mut out); }
         out
+    }
+
+    /// Dzieci sesji `id` (subagenci i zadania routera), od najstarszego.
+    pub fn children_of(&self, id: &str) -> Vec<&Session> {
+        let mut v: Vec<&Session> = self.sessions.values().filter(|s| s.parent.as_deref() == Some(id)).collect();
+        v.sort_by_key(|s| (s.started_at, s.id.clone()));
+        v
+    }
+
+    fn end(&mut self, id: &str, now: i64) {
+        if let Some(s) = self.sessions.get_mut(id) {
+            set(s, State::Ended, None, now);
+            self.pending.remove(id);
+            self.ended_at.insert(id.to_string(), now);
+        }
+    }
+
+    /// Koniec rodzica kończy jego subagentów; zadania routera zostają jako zwykłe sesje.
+    fn release_children(&mut self, parent: &str, now: i64, out: &mut Vec<Change>) {
+        let ids: Vec<String> = self.children_of(parent).iter().map(|c| c.id.clone()).collect();
+        for id in ids {
+            let router = self.sessions.get(&id).and_then(sub_kind) == Some(SubKind::Router);
+            if router { if let Some(s) = self.sessions.get_mut(&id) { orphan(s); } }
+            else if self.sessions.get(&id).map(|s| s.state) != Some(State::Ended) { self.end(&id, now); }
+            if let Some(s) = self.sessions.get(&id) { out.push(Change::Upsert(s.clone())); }
+        }
+    }
+
+    /// `SubagentStop` bez `agent_id`: kończy najmłodszego żyjącego subagenta Claude tej sesji.
+    fn end_newest_child(&mut self, parent: &str, now: i64, out: &mut Vec<Change>) {
+        let newest = self.children_of(parent).into_iter()
+            .filter(|c| c.state != State::Ended && sub_kind(c) == Some(SubKind::Claude)).last().map(|c| c.id.clone());
+        if let Some(id) = newest {
+            self.end(&id, now);
+            if let Some(s) = self.sessions.get(&id) { out.push(Change::Upsert(s.clone())); }
+        }
     }
 
     pub fn tick(&mut self, now: i64, alive: &dyn Fn(u32) -> bool) -> Vec<Change> {
@@ -243,13 +301,19 @@ impl Store {
             out.push(Change::Limits(self.limits.clone()));
         }
         let mut removed = Vec::new();
+        // rodzice, którzy wciąż czekają na subagenta (także w minimalnym czasie stanu), i rodzice, których już nie ma
+        let agent = (State::Working, Some(Tool::Agent));
+        let delegating: std::collections::HashSet<String> = self.sessions.values()
+            .filter(|s| (s.state, s.tool) == agent || self.pending.get(&s.id) == Some(&agent)).map(|s| s.id.clone()).collect();
+        let gone: std::collections::HashSet<String> = self.sessions.values().filter_map(|s| s.parent.clone())
+            .filter(|p| self.sessions.get(p).map(|x| x.state == State::Ended).unwrap_or(true)).collect();
         for (id, s) in self.sessions.iter_mut() {
             if s.state == State::Ended {
                 let at = *self.ended_at.get(id).unwrap_or(&s.state_since);
                 if now - at >= t.exit_ms { removed.push(id.clone()); }
                 continue;
             }
-            let before = (s.state, s.tool);
+            let before = (s.state, s.tool, s.parent.is_some());
             if let Some((st, tool)) = self.pending.get(id).copied() {
                 if now - self.shown_at.get(id).copied().unwrap_or(s.state_since) >= t.dwell_ms {
                     set(s, st, tool, now);
@@ -258,6 +322,24 @@ impl Store {
                 }
             }
             let quiet = now - s.last_activity;
+            if let Some(parent) = s.parent.clone() {
+                let kind = sub_kind(s);
+                let background = s.sub.as_ref().map(|i| i.background).unwrap_or(false);
+                let end = if gone.contains(&parent) {
+                    if kind == Some(SubKind::Router) { orphan(s); false } else { true }
+                } else if kind == Some(SubKind::Claude) && (background || !delegating.contains(&parent)) {
+                    let limit = if background { CHILD_BACKGROUND_QUIET_MS } else { CHILD_QUIET_MS };
+                    if quiet >= limit + LONG_DEAD_MS { removed.push(id.clone()); continue; }
+                    quiet >= limit
+                } else { false };
+                let finished = matches!(s.state, State::Done | State::Error) && now - s.state_since >= CHILD_DONE_MS;
+                if (end || finished) && s.parent.is_some() {
+                    set(s, State::Ended, None, now);
+                    self.ended_at.insert(id.clone(), now);
+                    out.push(Change::Upsert(s.clone()));
+                    continue;
+                }
+            }
             let dead = s.jump.pid.map(|p| !alive(p)).unwrap_or(false);
             if quiet >= t.to_ended_ms + LONG_DEAD_MS {
                 removed.push(id.clone());
@@ -277,7 +359,7 @@ impl Store {
                     _ => {}
                 }
             }
-            if (s.state, s.tool) != before { out.push(Change::Upsert(s.clone())); }
+            if (s.state, s.tool, s.parent.is_some()) != before { out.push(Change::Upsert(s.clone())); }
         }
         for id in removed {
             self.sessions.remove(&id);
@@ -627,5 +709,127 @@ mod tests {
         s.apply(&h);
         let sub = s.session("s1").unwrap().sub.clone().unwrap();
         assert_eq!((sub.agent_type.as_deref(), sub.description.as_deref(), sub.background), (Some("Explore"), Some("Znajdź"), true));
+    }
+
+    fn sub(kind: SubKind, background: bool) -> SubInfo { SubInfo { kind, agent_type: None, description: None, background } }
+    fn kid(id: &str, parent: &str, kind: Kind, ts: i64, info: SubInfo) -> Event {
+        let src = match info.kind { SubKind::Claude => Source::Claude, SubKind::Codex => Source::Codex, SubKind::Router => Source::Router };
+        let mut e = Event::new(src, id, kind, ts);
+        e.data.parent = Some(parent.into());
+        e.data.sub = Some(info);
+        e
+    }
+    fn state_of(s: &Store, id: &str) -> Option<State> { s.session(id).map(|x| x.state) }
+    fn parent_working(s: &mut Store, ts: i64) {
+        let mut p = Event::new(Source::Claude, "p", Kind::ToolStart, ts);
+        p.tool = Some(Tool::Agent);
+        s.apply(&p);
+    }
+
+    #[test]
+    fn a_child_never_waits_for_the_user() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&kid("p/a", "p", Kind::Prompt, 0, sub(SubKind::Claude, false)));
+        let mut n = kid("p/a", "p", Kind::NeedsInput, 1_000, sub(SubKind::Claude, false));
+        n.data.question = Some("Zgoda na Bash?".into());
+        s.apply(&n);
+        s.tick(2_000, &alive);
+        let c = s.session("p/a").unwrap();
+        assert_eq!((c.state, c.question.clone()), (State::Thinking, None), "zgody dziecka czekają u rodzica");
+    }
+
+    #[test]
+    fn a_quiet_foreground_child_ends_after_120_s_unless_the_parent_still_delegates() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&kid("p/a", "p", Kind::Prompt, 0, sub(SubKind::Claude, false)));
+        parent_working(&mut s, 0);
+        s.tick(130_000, &alive);
+        assert_eq!(state_of(&s, "p/a"), Some(State::Thinking), "rodzic wciąż czeka na subagenta");
+        s.apply(&Event::new(Source::Claude, "p", Kind::ToolEnd, 131_000));
+        s.tick(132_000, &alive);
+        assert_eq!(state_of(&s, "p/a"), Some(State::Ended), "przerwany subagent (Esc) nie wisi");
+    }
+
+    #[test]
+    fn a_background_child_lives_10_min_without_news() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&kid("p/a", "p", Kind::Prompt, 0, sub(SubKind::Claude, true)));
+        s.tick(300_000, &alive);
+        assert_eq!(state_of(&s, "p/a"), Some(State::Thinking));
+        s.tick(600_000, &alive);
+        assert_eq!(state_of(&s, "p/a"), Some(State::Ended));
+    }
+
+    #[test]
+    fn subagent_stop_without_an_id_ends_the_newest_live_child() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&kid("p/a", "p", Kind::Prompt, 0, sub(SubKind::Claude, false)));
+        s.apply(&kid("p/b", "p", Kind::Prompt, 100, sub(SubKind::Claude, false)));
+        let mut stop = Event::new(Source::Claude, "p", Kind::Meta, 200);
+        stop.data.sub_end = true;
+        s.apply(&stop);
+        assert_eq!((state_of(&s, "p/a"), state_of(&s, "p/b")), (Some(State::Thinking), Some(State::Ended)));
+    }
+
+    #[test]
+    fn an_unknown_child_ended_by_subagent_stop_leaves_no_trace() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        assert!(s.apply(&kid("p/x", "p", Kind::SessionEnd, 10, sub(SubKind::Claude, false))).is_empty());
+        assert!(s.session("p/x").is_none(), "koniec dziecka, którego nie znamy, nie tworzy zwierzaka");
+    }
+
+    #[test]
+    fn a_finished_child_goes_away_after_10_s() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Codex, "p", Kind::Prompt, 0));
+        s.apply(&kid("c1", "p", Kind::Prompt, 0, sub(SubKind::Codex, false)));
+        s.apply(&kid("c1", "p", Kind::TurnEnd, 1_000, sub(SubKind::Codex, false)));
+        s.tick(10_000, &alive);
+        assert_eq!(state_of(&s, "c1"), Some(State::Done));
+        s.tick(11_000, &alive);
+        assert_eq!(state_of(&s, "c1"), Some(State::Ended));
+        s.tick(12_600, &alive);
+        assert!(s.session("c1").is_none());
+    }
+
+    #[test]
+    fn the_parent_ending_ends_its_children_and_frees_router_tasks() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+        s.apply(&kid("p/a", "p", Kind::Prompt, 0, sub(SubKind::Claude, false)));
+        let mut r = kid("th", "p", Kind::Prompt, 0, sub(SubKind::Router, false));
+        r.data.origin = Some(Origin::Router);
+        s.apply(&r);
+        assert_eq!(s.children_of("p").iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), vec!["p/a", "th"]);
+        s.apply(&Event::new(Source::Claude, "p", Kind::SessionEnd, 1_000));
+        assert_eq!(state_of(&s, "p/a"), Some(State::Ended));
+        let t = s.session("th").unwrap();
+        assert_eq!((t.state, t.parent.clone(), t.sub.clone()), (State::Thinking, None, None), "zadanie routera zostaje jako zwykły zwierzak");
+    }
+
+    #[test]
+    fn a_router_task_of_a_gone_parent_is_standalone_at_once() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&kid("th", "nie-ma", Kind::Prompt, 0, sub(SubKind::Router, false)));
+        let t = s.session("th").unwrap();
+        assert_eq!((t.parent.clone(), t.sub.clone()), (None, None));
+        s.apply(&Event::new(Source::Claude, "p", Kind::SessionEnd, 0));
+        s.apply(&kid("th2", "p", Kind::Prompt, 10, sub(SubKind::Router, false)));
+        assert_eq!(s.session("th2").unwrap().parent, None, "rodzic zakończony: też sierota");
+    }
+
+    #[test]
+    fn a_long_dead_child_at_startup_disappears_without_waving() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 10_000_000));
+        s.apply(&kid("p/a", "p", Kind::Prompt, 0, sub(SubKind::Claude, false)));
+        let ch = s.tick(10_000_000, &alive);
+        assert!(ch.contains(&Change::Removed("p/a".into())));
+        assert!(s.session("p/a").is_none());
     }
 }
