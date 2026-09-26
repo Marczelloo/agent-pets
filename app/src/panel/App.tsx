@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, formatDuration, petTooltip } from '../tooltip/text';
-import type { Pets, RouterTask, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { childrenOf, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
+import type { Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
+import { childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
@@ -63,7 +63,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           <button type="button" className="quiet" disabled={!hasInactive(sessions)} onClick={onDismissInactive}>{t().panel.removeInactive}</button>
         </div>}
         {sessions.length === 0 && <p className="empty">{t().panel.noSessions}</p>}
-        {sessions.map(s => (<div key={s.id} className="group">
+        {sessions.map(s => { const kids = childrenOf(snap.sessions, s.id, nowMs); return (<div key={s.id} className="group">
           <article id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
             {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} /> : <div className="pet" />}
             <div className="info">
@@ -71,6 +71,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
               <div className="sub">{sessionSubtitle(s)}</div>
               <div className="meta">
                 <span className="state">{actionLabel(s)}</span>
+                {kids.length > 0 && <span>{t().panel.subagents(kids.length)}</span>}
                 {progressText(s) && <span>{t().panel.tasks} {progressText(s)}</span>}
                 {contextText(s) && <span>{t().panel.context} {contextText(s)}</span>}
                 {s.router_task && <span className={routerHot(s.router_task, nowMs, s.last_activity) ? 'router-hot' : undefined}>
@@ -84,17 +85,10 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 title={t().panel.remove(petTooltip(s, nowMs).title)} onClick={() => onDismiss([s.id])}>✕</button>}
             </div>
           </article>
-          {childrenOf(snap.sessions, s.id, nowMs).map(c => (
-            <div key={c.id} id={`s-${c.id}`} className={`child ${c.state}${focusId === c.id ? ' focus' : ''}`}>
-              <span className={`dot ${c.agent}`} aria-hidden="true" />
-              <span className="title">{petTooltip(c, nowMs).title}</span>
-              <span className="state">{c.action || actionLabel(c)}</span>
-              {c.router_task && <span className={routerHot(c.router_task, nowMs, c.last_activity) ? 'router-hot' : undefined}>
-                {routerLine(c.router_task, nowMs, c.last_activity)}</span>}
-              <span className="time">{formatDuration(nowMs - c.started_at)}</span>
-            </div>
-          ))}
-        </div>))}
+          {kids.length > 0 && <ul className="kids" aria-label={t().panel.subagents(kids.length)}>
+            {kids.map(c => <SubagentRow key={c.id} c={c} nowMs={nowMs} focus={focusId === c.id} animate={animate} pets={pets} />)}
+          </ul>}
+        </div>); })}
       </section>
       {undo && undo.ids.length > 0 && <footer className="undo" role="status">
         <span>{t().panel.removed(undo.ids.length)}</span>
@@ -102,6 +96,25 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
       </footer>}
       {status && <footer className="status" role="status">{status}</footer>}
     </div>
+  );
+}
+
+/** Subagent w karcie rodzica: gałąź drzewka, mini-zwierzak, tytuł z etykietami, akcja i czas pracy. */
+function SubagentRow({ c, nowMs, focus, animate, pets }: { c: Session; nowMs: number; focus: boolean; animate: boolean; pets: Pets }) {
+  const mark = childMark(c);
+  return (
+    <li id={`s-${c.id}`} className={`kid ${c.state}${focus ? ' focus' : ''}`}>
+      <span className="branch" aria-hidden="true" />
+      {animate ? <PetCanvas session={c} look={lookFor(pets, appFor(c))} mini /> : <div className="pet mini" />}
+      <div className="body">
+        <div className="line1">
+          <span className="title">{petTooltip(c, nowMs).title}</span>
+          {childLabels(c, nowMs).map(l => <span key={l.kind} className={`chip ${l.kind}`}>{l.text}</span>)}
+        </div>
+        <div className={`act ${mark}`}><span className="mark" aria-hidden="true">{mark === 'ok' ? '✓' : mark === 'err' ? '!' : ''}</span>{childLine(c)}</div>
+      </div>
+      <span className="time" title={t().panel.child.runningFor(formatDuration(nowMs - c.started_at))}>{clock(nowMs - c.started_at)}</span>
+    </li>
   );
 }
 

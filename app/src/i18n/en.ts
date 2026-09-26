@@ -60,6 +60,8 @@ export const en: Dict = {
     removeInactive: 'Remove inactive',
     removed: n => (n === 1 ? 'Removed' : `Removed ${n}`),
     undo: 'Undo',
+    subagents: n => `${n} ${n === 1 ? 'subagent' : 'subagents'}`,
+    child: { router: 'Router', background: 'background', runningFor: d => `Running for ${d}` },
     update: {
       available: v => `Version ${v} is available`,
       downloading: v => `Downloading version ${v}…`,
@@ -286,6 +288,8 @@ export const en: Dict = {
       'Parser refactor', 'Test migration', 'UIA research', 'Router lint', 'Hook fix',
       'Release build', 'README', 'New skin', 'Tooltip',
     ],
+    subtasks: ['Find the bubble tests in app/src', 'Write pixel font tests', 'Review the changes'],
+    subActions: ['Searching: bubble', 'npm test'],
     hooksInstalled: 'Hooks: installed',
     nothingToInstall: 'Nothing to install',
   },

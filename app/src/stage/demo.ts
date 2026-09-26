@@ -28,6 +28,23 @@ export function demoSessions(count: number, nowMs: number): Session[] {
   });
 }
 
+/** Subagenci pierwszej sesji pokazowej (podgląd panelu): Explore, zadanie routera, które ucichło, i skończony w tle. */
+export function demoChildren(nowMs: number): Session[] {
+  const [a, b, c] = t().demo.subtasks, parent = 'demo-1';
+  const kid = (n: number, over: Partial<Session>): Session => ({
+    id: `${parent}/sub-${n}`, parent, agent: 'claude', origin: 'cli', title: '', cwd: 'C:\\work\\demo1', state: 'working', tool: 'grep',
+    progress: null, context: null, started_at: nowMs - 72_000, last_activity: nowMs, state_since: nowMs, turn_started_at: null,
+    jump: { pid: null, session_id: parent, cwd: '', app: null }, ...over,
+  });
+  return [
+    kid(1, { title: a, action: t().demo.subActions[0], sub: { kind: 'claude', agent_type: 'Explore', description: a, background: false } }),
+    kid(2, { title: b, agent: 'codex', tool: 'bash', action: t().demo.subActions[1], started_at: nowMs - 220_000, last_activity: nowMs - 200_000,
+      sub: { kind: 'router', agent_type: null, description: null, background: false },
+      router_task: { task_id: 'task-demo', status: 'running', last_activity_at: nowMs - 200_000, blocked: false, stall_ms: 180_000 } }),
+    kid(3, { title: c, state: 'done', tool: null, started_at: nowMs - 52_000, sub: { kind: 'claude', agent_type: 'code-reviewer', description: c, background: true } }),
+  ];
+}
+
 export function demoLimits(nowMs: number): Limit[] {
   return [
     { agent: 'claude', window: 'five_hour', used_pct: 34, resets_at: nowMs + 2 * 3_600_000 },

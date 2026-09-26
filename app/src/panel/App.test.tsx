@@ -58,6 +58,20 @@ describe('PanelView', () => {
     const idle = view([{ ...sess, state: 'idle' }]);
     expect(idle).not.toMatch(/disabled=""[^>]*>Usuń nieaktywne/);
   });
+  it('subagents sit in the parent card as a tree: title, labels, action and running time', () => {
+    const parent: Session = { ...sess, id: 'p', title: 'Rodzic', state: 'working' };
+    const kid: Session = { ...sess, id: 'p/a', parent: 'p', title: 'Znajdź testy', state: 'working', started_at: 0,
+      action: 'Szukanie: bubble', sub: { kind: 'claude', agent_type: 'Explore', description: 'Znajdź testy', background: true } };
+    const view = (animate: boolean) => renderToString(<PanelView snap={{ sessions: [parent, kid], limits: [], now: 0 }} nowMs={72_000}
+      status={null} focusId={null} onJump={() => {}} animate={animate} />);
+    const html = view(false);
+    expect(html).toMatch(/class="group"[\s\S]*class="session[\s\S]*class="kids"[\s\S]*id="s-p\/a"/);
+    expect(html).toContain('1 subagent');
+    for (const x of ['Znajdź testy', 'Explore', 'w tle', 'Szukanie: bubble', '1:12']) expect(html).toContain(x);
+    expect(html).not.toContain('<canvas');
+    expect(view(true).match(/<canvas/g)?.length, 'rodzic i mini-zwierzak dziecka').toBe(2);
+    expect(view(true)).toContain('class="pet mini"');
+  });
   it('after removing, offers undo with the count', () => {
     const view = (n: number) => renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0}
       status={null} focusId={null} onJump={() => {}} undo={{ ids: Array.from({ length: n }, (_, i) => `s${i}`) }} onUndo={() => {}} />);

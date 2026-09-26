@@ -67,6 +67,8 @@ export const pl = {
     removeInactive: 'Usuń nieaktywne',
     removed: (n: number) => (n === 1 ? 'Usunięto' : `Usunięto ${n}`),
     undo: 'Cofnij',
+    subagents: (n: number) => `${n} ${n === 1 ? 'subagent' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'subagenty' : 'subagentów'}`,
+    child: { router: 'Router', background: 'w tle', runningFor: (d: string) => `Pracuje od ${d}` },
     update: {
       available: (v: string) => `Dostępna wersja ${v}`,
       downloading: (v: string) => `Pobieram wersję ${v}…`,
@@ -293,6 +295,8 @@ export const pl = {
       'Refaktor parsera', 'Migracja testów', 'Research UIA', 'Lint w routerze', 'Poprawka hooków',
       'Build release', 'README', 'Nowa skórka', 'Tooltip',
     ],
+    subtasks: ['Znajdź testy dymków w app/src', 'Napisz testy czcionki pikselowej', 'Przegląd zmian'],
+    subActions: ['Szukanie: bubble', 'npm test'],
     hooksInstalled: 'Hooki: zainstalowane',
     nothingToInstall: 'Nic do instalowania',
   },

@@ -179,8 +179,8 @@ describe('panel', () => {
     const html = renderToString(<PanelView snap={snap} nowMs={300_000} status={null} focusId="c1" onJump={() => {}} />);
     expect(html).toContain('1 sesja');
     for (const t of ['Znajdź testy', 'Newton', 'Policz pliki', 'Czyta a.rs', 'utknęło']) expect(html, t).toContain(t);
-    expect(html.match(/class="child[ "]/g)?.length).toBe(3);
-    expect(html).toMatch(/class="child[^"]*focus/);
+    expect(html.match(/class="kid[ "]/g)?.length).toBe(3);
+    expect(html).toMatch(/class="kid[^"]*focus/);
     expect(html.indexOf('Znajdź testy')).toBeLessThan(html.indexOf('Newton'));
   });
 });
