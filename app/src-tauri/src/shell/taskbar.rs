@@ -195,7 +195,7 @@ pub fn monitors() -> Vec<Mon> {
         let (mut dx, mut dy) = (0u32, 0u32);
         let scale = unsafe { GetDpiForMonitor(*h, MDT_EFFECTIVE_DPI, &mut dx, &mut dy) }.ok().map(|_| dx as f64 / 96.0).filter(|s| *s > 0.0).unwrap_or(1.0);
         let bar = bars.iter().find(|(_, m)| *m == h.0 as isize).map(|(b, _)| *b);
-        Some(Mon { info: MonitorInfo { id, primary, width: monitor.right - monitor.left, height: monitor.bottom - monitor.top, index: i as u32 + 1 },
+        Some(Mon { info: MonitorInfo { id, primary, width: monitor.right - monitor.left, height: monitor.bottom - monitor.top, index: i as u32 + 1, has_bar: bar.is_some() },
             monitor, work, scale, bar })
     }).collect()
 }

@@ -69,6 +69,7 @@ function Root() {
     void invoke<UpdateStatus>('update_status').then(setUpdate);
     const unTab = listen<string>('settings://tab', e => { const t = tabFrom(e.payload); if (t) setTab(t); });
     const unLayout = listen<StageLayout & { left_fallback?: boolean }>('pets://layout', e => setLeftFallback(!!e.payload.left_fallback));
+    void invoke<(StageLayout & { left_fallback?: boolean }) | null>('stage_layout').then(l => setLeftFallback(!!l?.left_fallback));
     return () => [un, unPower, unUpdate, unTab, unLayout].forEach(p => void p.then(f => f()));
   }, [reload]);
 
@@ -76,7 +77,7 @@ function Root() {
   useEffect(() => {
     if (tab !== 'stage') return;
     if (inTauri) void invoke<MonitorInfo[]>('monitors_list').then(setMonitors);
-    else setMonitors([{ id: 'demo-1', primary: true, width: 2560, height: 1440, index: 1 }, { id: 'demo-2', primary: false, width: 1920, height: 1080, index: 2 }]);
+    else setMonitors([{ id: 'demo-1', primary: true, width: 2560, height: 1440, index: 1, has_bar: true }, { id: 'demo-2', primary: false, width: 1920, height: 1080, index: 2, has_bar: false }]);
   }, [tab]);
 
   if (!view) return null;

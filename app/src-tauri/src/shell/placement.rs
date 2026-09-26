@@ -122,7 +122,7 @@ pub fn custom_at(m: &Metrics, anchor_x: i32) -> f64 {
 
 /// Monitor dla karty „Pasek”: `id` to nazwa urządzenia (`szDevice`), `index` od 1 w kolejności Windows.
 #[derive(serde::Serialize, Clone, Debug, PartialEq)]
-pub struct MonitorInfo { pub id: String, pub primary: bool, pub width: i32, pub height: i32, pub index: u32 }
+pub struct MonitorInfo { pub id: String, pub primary: bool, pub width: i32, pub height: i32, pub index: u32, pub has_bar: bool }
 
 /// Który monitor: wybrany, jeśli jest podłączony i (w pasku) ma pasek; inaczej główny (ustawienie się nie zmienia).
 /// Okno pływające nie potrzebuje paska, tylko obszaru roboczego.
@@ -291,7 +291,7 @@ mod tests {
     }
 
     fn mon(id: &str, primary: bool, has_bar: bool) -> (MonitorInfo, bool) {
-        (MonitorInfo { id: id.into(), primary, width: 1920, height: 1080, index: 0 }, has_bar)
+        (MonitorInfo { id: id.into(), primary, width: 1920, height: 1080, index: 0, has_bar }, has_bar)
     }
 
     #[test]

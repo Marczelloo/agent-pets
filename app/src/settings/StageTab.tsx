@@ -65,7 +65,8 @@ export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove
   const alignFixed = st.position === 'right' || st.position === 'left';
   const bg = st.background;
   const pct = (v: number) => `${v}%`;
-  const known = monitors.some(m => m.id === st.monitor);
+  const chosen = monitors.find(m => m.id === st.monitor);
+  const unplugged = st.monitor !== 'primary' && !chosen;
 
   return (
     <>
@@ -83,11 +84,14 @@ export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove
         {st.position === 'left' && leftFallback && <p className="desc" role="status">{x.leftFallback}</p>}
         <div className="row">
           <span className="text"><span className="label">{x.monitor}</span></span>
-          <select aria-label={x.monitor} value={known ? st.monitor : 'primary'} onChange={e => set({ monitor: e.target.value })}>
+          <select aria-label={x.monitor} value={st.monitor} onChange={e => set({ monitor: e.target.value })}>
             <option value="primary">{x.primary}</option>
             {monitors.map(m => <option key={m.id} value={m.id}>{x.monitorName(m.index, m.width, m.height, m.primary)}</option>)}
+            {unplugged && <option value={st.monitor}>{x.unplugged}</option>}
           </select>
         </div>
+        {unplugged && <p className="desc" role="status">{x.unpluggedDesc}</p>}
+        {chosen && !chosen.has_bar && !floating && <p className="desc" role="status">{x.noBar}</p>}
       </section>
 
       <h3>{x.window}</h3>

@@ -39,7 +39,8 @@ pub struct Layout {
     pub left_fallback: bool,
 }
 
-pub struct Shell { tx: Sender<Cmd>, pub stage: Arc<AtomicIsize>, mode: Arc<AtomicU8> }
+/// `layout`: ostatnio wysłany układ (okno ustawień otwarte później też zna notkę o ikonach po lewej).
+pub struct Shell { tx: Sender<Cmd>, pub stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, layout: Arc<std::sync::Mutex<Option<Layout>>> }
 
 /// Kotwica okna według wyrównania z ustawień.
 pub fn anchor_of(a: Align) -> Anchor { match a { Align::Left => Anchor::Left, Align::Center => Anchor::Center, Align::Right => Anchor::Right } }
@@ -105,10 +106,11 @@ impl Shell {
         let (tx, rx) = channel();
         let (a, s) = (app.clone(), stage.clone());
         let mode = Arc::new(AtomicU8::new(pointer::NORMAL));
-        let m = mode.clone();
-        std::thread::spawn(move || run(a, rx, s, m));
+        let layout = Arc::new(std::sync::Mutex::new(None));
+        let (m, l) = (mode.clone(), layout.clone());
+        std::thread::spawn(move || run(a, rx, s, m, l));
         pointer::spawn(app.clone(), stage.clone(), mode.clone(), tx.clone());
-        Ok(Shell { tx, stage, mode })
+        Ok(Shell { tx, stage, mode, layout })
     }
 
     pub fn set_width(&self, css: f64) { let _ = self.tx.send(Cmd::Width(css)); }
@@ -118,6 +120,7 @@ impl Shell {
     pub fn start_move(&self) { let _ = self.tx.send(Cmd::Move(true)); }
     fn hwnd(&self) -> windows::Win32::Foundation::HWND { taskbar::hwnd(self.stage.load(Ordering::Relaxed)) }
     pub fn floating(&self) -> bool { self.mode.load(Ordering::Relaxed) == pointer::FLOATING }
+    pub fn layout(&self) -> Option<Layout> { *self.layout.lock().unwrap() }
 
     /// Przepuszczanie kliknięć przez przezroczyste miejsca okna pływającego (w pasku nic nie robi).
     pub fn passthrough(&self, on: bool) {
@@ -179,7 +182,7 @@ fn recreate(app: &AppHandle, n: u32) -> Option<isize> {
 /// Przeciąganie okna pływającego: prostokąt w chwili chwycenia i bieżąca kotwica.
 struct FloatDrag { from: placement::Rect, at: (f64, f64) }
 
-fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<AtomicU8>) {
+fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<AtomicU8>, shared: Arc<std::sync::Mutex<Option<Layout>>>) {
     use tauri::Manager;
     let uia = taskbar::Uia::new().ok();
     if uia.is_none() { eprintln!("agent-pets: UI Automation niedostępne, scena zostanie mała przy zasobniku"); }
@@ -271,7 +274,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             let at = dragging.as_ref().map(|d| d.at).or(saved);
             let l = Layout { max_css: ((mon.work.right - mon.work.left) as f64 / mon.scale - 16.0).floor(), height_css: h_css,
                 scale: mon.scale, mode: "floating", light: crate::system::light_taskbar(), left_fallback: false };
-            if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); }
+            if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); *shared.lock().unwrap() = Some(l); }
             let vis = !taskbar::fullscreen_app();
             if last_visible != Some(vis) { let _ = app.emit("pets://visibility", vis); last_visible = Some(vis); }
             let r = (want > 0.0 && vis).then(|| placement::float_rect(mon.work, at, anchor, want, h_css, mon.scale));
@@ -321,7 +324,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         if let Some(p) = p {
             let l = Layout { max_css: p.max_css.floor(), height_css: p.height_css, scale: m.scale, mode: "taskbar",
                 light: crate::system::light_taskbar(), left_fallback: p.left_fallback && st.position == Position::Left };
-            if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); }
+            if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); *shared.lock().unwrap() = Some(l); }
         }
         if embed_failed { taskbar::apply_floating(hw, &m, p) } else { taskbar::apply(hw, p) }
         let vis = placement::taskbar_visible(m.tray, mon.monitor) && !taskbar::fullscreen_app();

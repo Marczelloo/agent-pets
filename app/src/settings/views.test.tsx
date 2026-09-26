@@ -94,7 +94,7 @@ describe('SettingsView', () => {
     expect(html).not.toContain('Najwięcej zwierzaków w pasku'); // przeniesione do karty „Pasek”
   });
   it('taskbar tab: position, monitor, background, size, spacing, pet limit, alignment, order, elements and reset', () => {
-    const monitors = [{ id: 'primary-dev', primary: true, width: 2560, height: 1440, index: 1 }, { id: 'second', primary: false, width: 1920, height: 1080, index: 2 }];
+    const monitors = [{ id: 'primary-dev', primary: true, width: 2560, height: 1440, index: 1, has_bar: true }, { id: 'second', primary: false, width: 1920, height: 1080, index: 2, has_bar: true }];
     const view = (stage: Partial<Settings['stage']>, leftFallback = false) => renderToString(<SettingsView
       settings={{ ...defaultSettings(), stage: { ...defaultSettings().stage, ...stage } }} rows={rows} diag={diag} tab="stage" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} monitors={monitors} leftFallback={leftFallback} onMove={() => {}} />);
@@ -114,6 +114,17 @@ describe('SettingsView', () => {
     expect(view({ position: 'left' }, true)).toContain('Ikony paska są wyrównane do lewej');
     expect(view({ background: { kind: 'glass', radius: 12 } })).toContain('Przezroczystość');
     expect(html).not.toContain('Przezroczystość');
+  });
+  it('taskbar tab: an unplugged saved monitor stays selected, a monitor without a taskbar gets a hint', () => {
+    const monitors = [{ id: 'one', primary: true, width: 2560, height: 1440, index: 1, has_bar: true },
+      { id: 'two', primary: false, width: 1920, height: 1080, index: 2, has_bar: false }];
+    const view = (stage: Partial<Settings['stage']>) => renderToString(<SettingsView
+      settings={{ ...defaultSettings(), stage: { ...defaultSettings().stage, ...stage } }} rows={rows} diag={diag} tab="stage" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} monitors={monitors} />);
+    expect(view({ monitor: 'gone' })).toMatch(/<option value="gone" selected="">[^<]*odłączony/);
+    expect(view({ monitor: 'two' })).toContain('Na tym monitorze nie ma paska zadań');
+    expect(view({ monitor: 'two', position: 'floating' })).not.toContain('Na tym monitorze nie ma paska zadań');
+    expect(view({ monitor: 'one' })).not.toContain('odłączony');
   });
   it('taskbar tab reset keeps the pet limit and everything outside the stage', () => {
     const s = { ...defaultSettings(), pets: { ...defaultSettings().pets, max_visible: 3 }, stage: { ...defaultSettings().stage, gap: 20, position: 'floating' as const } };

@@ -28,6 +28,10 @@ fn stage_hello(app: tauri::AppHandle, shell: tauri::State<shell::Shell>, tip: ta
 #[tauri::command]
 fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_width(width); }
 
+/// Ostatni układ sceny (tryb, notka o ikonach po lewej) dla okna ustawień otwartego później.
+#[tauri::command]
+fn stage_layout(shell: tauri::State<shell::Shell>) -> Option<shell::Layout> { shell.layout() }
+
 /// Monitory do wyboru w karcie „Pasek”.
 #[tauri::command]
 fn monitors_list() -> Vec<shell::placement::MonitorInfo> { shell::monitors() }
@@ -169,7 +173,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, jump, panel::panel_open, panel::panel_hide,
+            snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, stage_layout, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,
