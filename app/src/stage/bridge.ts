@@ -15,6 +15,8 @@ export interface Bridge {
   onSettings(cb: (s: Settings) => void): void;
   /** Tryb oszczędny: od razu bieżący, potem każda zmiana. */
   onPower(cb: (saving: boolean) => void): void;
+  /** Tryb „Przesuń” w pasku: scena pokazuje przerywaną ramkę. */
+  onMoving?(cb: (on: boolean) => void): void;
   setWidth(css: number): void;
   showTooltip(anchorX: number, content: TooltipContent): void;
   hideTooltip(): void;
@@ -37,6 +39,7 @@ export function tauriBridge(): Bridge {
     onPointer: cb => on('pets://pointer', cb),
     onSettings: cb => { on('pets://settings', cb); void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); cb(v.settings); }); },
     onPower: cb => { on<boolean>('pets://power', cb); void invoke<boolean>('power_get').then(cb); },
+    onMoving: cb => on('pets://moving', cb),
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
     showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },
     hideTooltip: () => { void invoke('tooltip_hide'); },

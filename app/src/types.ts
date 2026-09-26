@@ -30,7 +30,8 @@ export interface RouterTask { task_id: string; status: string; last_activity_at:
 
 export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null }
 export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number }
-export interface StageLayout { max_css: number; height_css: number; scale: number }
+/** Układ od Rusta; `mode` i `light` od 0.7 (brak = pasek, ciemny). */
+export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean }
 export type PointerMsg =
   | { kind: 'move'; x: number; y: number }
   | { kind: 'leave' }

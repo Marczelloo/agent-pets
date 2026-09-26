@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { BADGE_W, LEFT_REACH, LIMITS_W, RIGHT_REACH, SLOT, capacity, contentWidth, layout, pickVisible } from './layout';
+import { BADGE_W, LEFT_REACH, LIMITS_W, PAD, RIGHT_REACH, SLOT, capacity, contentWidth, geometry, layout, pickVisible, zoomOf } from './layout';
 
 const mk = (id: string, started_at: number, state: State = 'working'): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: '', state, tool: 'edit', progress: null, context: null,
@@ -78,5 +78,46 @@ describe('layout', () => {
     const none = layout({ sessions: s, hasLimits: false, maxWidth: 10 });
     expect(none.width).toBe(0);
     expect(none.badgeX).toBeNull();
+  });
+});
+
+describe('stage settings in the layout', () => {
+  it('zoom 1, no gap, padding 2 is exactly the 0.6 geometry', () => {
+    expect(geometry(1, 0, 2)).toEqual({ zoom: 1, slot: SLOT, left: LEFT_REACH, right: RIGHT_REACH, pad: PAD, badgeW: BADGE_W, limitsW: LIMITS_W });
+  });
+  it('size and spacing scale the slots', () => {
+    const g = geometry(1.2, 10, 8);
+    expect(g.slot).toBeCloseTo(SLOT * 1.2 + 10);
+    expect([g.left, g.right, g.badgeW, g.limitsW, g.pad]).toEqual([LEFT_REACH * 1.2, RIGHT_REACH * 1.2, BADGE_W * 1.2, LIMITS_W * 1.2, 8]);
+    const out = layout({ sessions: [mk('a', 1), mk('b', 2)], hasLimits: false, maxWidth: 2000, geo: g });
+    expect(out.pets[1].x - out.pets[0].x).toBeCloseTo(g.slot);
+    expect(out.pets[0].x).toBeCloseTo(8 + g.left);
+    expect(out.width).toBeCloseTo(8 * 2 + g.left + g.slot + g.right);
+    expect(out.geo).toEqual(g);
+  });
+  it('taskbar zoom is capped at 120 %, the floating window takes its size from its height', () => {
+    expect(zoomOf({ max_css: 500, height_css: 48, scale: 1 }, 100)).toBe(1);
+    expect(zoomOf({ max_css: 500, height_css: 48, scale: 1, mode: 'taskbar' }, 150)).toBeCloseTo(1.2);
+    expect(zoomOf({ max_css: 500, height_css: 40, scale: 1, mode: 'taskbar' }, 100)).toBeCloseTo(40 / 48);
+    expect(zoomOf({ max_css: 500, height_css: 96, scale: 1, mode: 'floating' }, 200)).toBeCloseTo(2);
+  });
+  it('limits and the badge can be switched off', () => {
+    const sessions = Array.from({ length: 7 }, (_, i) => mk(`s${i}`, i));
+    const on = layout({ sessions, hasLimits: true, maxWidth: 2000 });
+    const noLimits = layout({ sessions, hasLimits: true, maxWidth: 2000, showLimits: false });
+    expect(noLimits.limitsX).toBeNull();
+    expect(noLimits.width).toBe(on.width - LIMITS_W);
+    const noBadge = layout({ sessions, hasLimits: false, maxWidth: 2000, showBadge: false });
+    expect(noBadge.badgeX).toBeNull();
+    expect(noBadge.hidden).toBe(2);
+    expect(noBadge.pets[0].x).toBe(PAD + LEFT_REACH);
+  });
+  it('display order and who collapses into +N are separate: attention order still hides the sleepy ones', () => {
+    const sessions = [mk('work', 1, 'working'), mk('sleep1', 2, 'sleep'), mk('sleep2', 3, 'sleep'), mk('needs', 4, 'needs_you')];
+    const rank: Record<string, number> = { needs: 0, work: 1, sleep1: 3, sleep2: 3 };
+    const display = (v: Session[]) => [...v].sort((a, b) => rank[a.id] - rank[b.id] || a.started_at - b.started_at);
+    const out = layout({ sessions, hasLimits: false, maxWidth: 2000, maxPets: 2, order: display, priority: v => [...display(v)].reverse() });
+    expect(out.pets.map(p => p.id)).toEqual(['needs', 'work']);
+    expect([...out.hiddenIds].sort()).toEqual(['sleep1', 'sleep2']);
   });
 });

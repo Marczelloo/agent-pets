@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { clickAction, hitTest } from './hit';
-import { LEFT_REACH, SLOT, type LayoutOut } from './layout';
+import { LEFT_REACH, SLOT, geometry, layout, type LayoutOut } from './layout';
+import type { Session } from '../types';
 
 const out: LayoutOut = { width: 250, pets: [{ id: 'a', x: 50 }, { id: 'b', x: 124 }], hidden: 1, hiddenIds: ['z'],
   badgeX: 2, limitsX: 222 };
@@ -19,6 +20,18 @@ describe('hitTest', () => {
     expect(hitTest(out, -1, 24, 48)).toBeNull();
     expect(hitTest(out, 251, 24, 48)).toBeNull();
     expect(hitTest(out, 100, 49, 48)).toBeNull();
+  });
+});
+
+describe('hitTest with stage settings', () => {
+  it('hits the middle of every pet at 120 % with a 10 px gap', () => {
+    const geo = geometry(1.2, 10, 6);
+    const sessions: Session[] = ['a', 'b', 'c'].map((id, i) => ({ id, agent: 'claude', origin: 'cli', title: id, cwd: '', state: 'working',
+      tool: null, progress: null, context: null, started_at: i, last_activity: i, state_since: i, turn_started_at: null,
+      jump: { pid: null, session_id: id, cwd: '', app: null } }));
+    const o = layout({ sessions, hasLimits: true, maxWidth: 2000, geo });
+    for (const p of o.pets) expect(hitTest(o, p.x + 5, 30, 48)).toEqual({ kind: 'pet', id: p.id, x: p.x });
+    expect(hitTest(o, o.limitsX! + 2, 30, 48)?.kind).toBe('limits');
   });
 });
 

@@ -1,11 +1,13 @@
 import { pen } from '../renderer';
 import { PetPainter } from '../renderer/painter';
-import { appFor, defaultPets, lookFor } from '../look';
+import { appFor, defaultPets, defaultStage, lookFor } from '../look';
 import { resolveLang, setLang } from '../i18n';
-import type { Pets, PointerMsg, Snapshot, StageLayout } from '../types';
+import type { Pets, PointerMsg, Snapshot, StageLayout, StageSettings } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
-import { layout, type LayoutOut } from './layout';
+import { geometry, layout, zoomOf, type LayoutOut } from './layout';
+import { Orderer } from './order';
+import { bgStyle } from './background';
 import { Hover } from './hover';
 import { Roster, type Entry } from './roster';
 import { frameBudget, reducedMotion } from './power';
@@ -24,14 +26,29 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let clockOffset = 0;
   let maxPets: number | undefined;
   let pets: Pets = defaultPets();
+  let stage: StageSettings = defaultStage();
+  let orderer = new Orderer(stage.order);
+  const bg = document.getElementById('bg');
   let budget = frameBudget(false), saving = false, reduced = reducedMotion();
   const painters = new WeakMap<Entry, PetPainter>();
   const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
   const handle: StageHandle = { hover: p => hover.pointer(p) };
-  setInterval(() => { hover.refresh(); reduced = reducedMotion(); }, 1000);
+  // co sekundę: czas w tooltipie, a przy kolejności „uwaga” przesunięcia po histerezie
+  setInterval(() => { if (stage.order === 'attention') relayout(); hover.refresh(); reduced = reducedMotion(); }, 1000);
 
+  const paintBg = () => {
+    if (!bg) return;
+    Object.assign(bg.style, bgStyle(stage.background, !!lay.light));
+    bg.classList.toggle('floating', lay.mode === 'floating');
+  };
   const relayout = () => {
-    out = layout({ sessions: snap.sessions, hasLimits: limitBars(snap.limits).length > 0, maxWidth: lay.max_css, maxPets });
+    const now = Date.now() + clockOffset;
+    out = layout({
+      sessions: snap.sessions, hasLimits: limitBars(snap.limits).length > 0, maxWidth: lay.max_css, maxPets,
+      geo: geometry(zoomOf(lay, stage.size), stage.gap, stage.padding),
+      order: v => orderer.display(v, now), priority: v => orderer.priority(v, now),
+      showBadge: stage.show.badge, showLimits: stage.show.limits,
+    });
     roster.sync(snap.sessions, T);
     if (out.width !== sentWidth) { sentWidth = out.width; bridge.setWidth(out.width); }
     hover.refresh(true);
@@ -54,7 +71,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     T += dt;
     const { w, h } = fit();
     x.clearRect(0, 0, w, h);
-    const u = .3 * h / 48, Y = h - 8;
+    const z = out.geo?.zoom ?? h / 48, u = .3 * z, Y = h - 8 * h / 48, hz = h / z;
     for (const p of out.pets) {
       const e = roster.get(p.id);
       if (!e) continue;
@@ -63,11 +80,14 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       e.pet.alpha = roster.alpha(e, T);
       painter.frame(x, { dt, t0: T + e.phase, X: p.x, Y, u, look: lookFor(pets, appFor(e.session)), animate: budget.animate(e.session.state),
         saving, reduced, dpr: devicePixelRatio || 1 });
-      drawProgress(x, p.x, h - 4, e.session, T);
-      if (e.session.origin === 'router') drawRouterBadge(x, p.x, 8);
+      // HUD w skali sceny: rysowany w układzie 1× i powiększony o `z`
+      x.save(); x.translate(p.x, h - 4 * h / 48); x.scale(z, z);
+      if (stage.show.progress) drawProgress(x, 0, 0, e.session, T);
+      x.restore();
+      if (e.session.origin === 'router') { x.save(); x.translate(p.x, 8 * h / 48); x.scale(z, z); drawRouterBadge(x, 0, 0); x.restore(); }
     }
-    if (out.badgeX != null) drawBadge(x, out.badgeX, h, out.hidden, pen.font);
-    if (out.limitsX != null) drawLimits(x, out.limitsX, h, limitBars(snap.limits));
+    if (out.badgeX != null) { x.save(); x.translate(out.badgeX, 0); x.scale(z, z); drawBadge(x, 0, hz, out.hidden, pen.font); x.restore(); }
+    if (out.limitsX != null) { x.save(); x.translate(out.limitsX, 0); x.scale(z, z); drawLimits(x, 0, hz, limitBars(snap.limits)); x.restore(); }
     setTimeout(frame, Math.max(0, 1000 / budget.fps - (performance.now() - now)));
   }
 
@@ -79,10 +99,20 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   }
 
   bridge.onSnapshot(take);
-  bridge.onLayout(l => { lay = l; relayout(); });
+  bridge.onLayout(l => { lay = l; paintBg(); relayout(); });
   bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
-  bridge.onSettings(s => { setLang(resolveLang(s.language ?? 'auto')); pets = s.pets; maxPets = s.pets.max_visible; relayout(); });
+  bridge.onSettings(s => {
+    setLang(resolveLang(s.language ?? 'auto'));
+    pets = s.pets;
+    maxPets = s.pets.max_visible;
+    const st = s.stage ?? defaultStage();
+    if (st.order !== stage.order) orderer = new Orderer(st.order);
+    stage = st;
+    paintBg();
+    relayout();
+  });
+  bridge.onMoving?.(on => bg?.classList.toggle('moving', on));
   bridge.onPower(s => { saving = s; budget = frameBudget(s); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;

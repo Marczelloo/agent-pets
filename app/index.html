@@ -6,10 +6,14 @@
 <style>
 html,body{margin:0;padding:0;background:transparent;overflow:hidden;width:100%;height:100%;
   font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
-canvas{display:block;width:100%;height:100%}
+canvas{display:block;position:relative;width:100%;height:100%}
+#bg{position:absolute;left:0;right:0;top:5px;bottom:5px;box-sizing:border-box;pointer-events:none;display:none}
+#bg.floating{top:0;bottom:0}
+#bg.moving{display:block;outline:1.5px dashed rgba(128,128,128,.9);outline-offset:-1.5px}
 </style>
 </head>
 <body>
+<div id="bg"></div>
 <canvas id="stage"></canvas>
 <script type="module" src="/src/main.ts"></script>
 </body>
