@@ -58,8 +58,9 @@ pub fn on_event(app: &AppHandle, id: &str) {
             if r.needs_attention() { crate::panel::open_with_status(app, Some(s), r.detail); }
         }
         ("panel", s) => crate::panel::open(app, s),
-        ("dismiss", Some(s)) => { crate::dismiss(app, vec![s]); }
-        ("dismiss_inactive", _) => { crate::dismiss_inactive(app); }
+        // czeka na obrót rdzenia: poza wątkiem głównym, na którym przychodzą zdarzenia menu
+        ("dismiss", Some(s)) => { let a = app.clone(); std::thread::spawn(move || crate::dismiss(&a, vec![s])); }
+        ("dismiss_inactive", _) => { let a = app.clone(); std::thread::spawn(move || crate::dismiss_inactive(&a)); }
         ("move", _) => app.state::<super::Shell>().start_move(),
         ("settings", _) => crate::settings::open_tab(app, "stage"),
         _ => {}

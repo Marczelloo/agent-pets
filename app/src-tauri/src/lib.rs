@@ -61,20 +61,20 @@ pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
 
 /// Wysyła polecenie ukrywania do wątku rdzenia i czeka (do 2 s) na listę ukrytych id.
 fn ask_core(app: &tauri::AppHandle, make: impl FnOnce(std::sync::mpsc::Sender<Vec<String>>) -> core::CoreMsg) -> Vec<String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    if app.state::<core::Control>().0.lock().unwrap().send(make(tx)).is_err() { return Vec::new(); }
-    rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap_or_default()
+    let tx = app.state::<core::Control>().0.lock().unwrap().clone();
+    core::ask(&tx, make)
 }
 
 pub fn dismiss(app: &tauri::AppHandle, ids: Vec<String>) -> Vec<String> { ask_core(app, |tx| core::CoreMsg::Dismiss(ids, tx)) }
 pub fn dismiss_inactive(app: &tauri::AppHandle) -> Vec<String> { ask_core(app, core::CoreMsg::DismissInactive) }
 
 /// Ukrywa sesje (✕ w panelu, „Usuń z paska”); wracają przy nowej aktywności.
-#[tauri::command]
+/// `async`: czeka na obrót rdzenia (do 250 ms), więc nie na wątku głównym.
+#[tauri::command(async)]
 fn session_dismiss(app: tauri::AppHandle, ids: Vec<String>) -> Vec<String> { dismiss(&app, ids) }
 
 /// „Usuń nieaktywne”: ukrywa sesje bezczynne, gotowe, uśpione i zakończone.
-#[tauri::command]
+#[tauri::command(async)]
 fn sessions_dismiss_inactive(app: tauri::AppHandle) -> Vec<String> { dismiss_inactive(&app) }
 
 /// Prawy klik na scenie: `target` to id zwierzaka albo nic (plakietka, limity, puste tło).

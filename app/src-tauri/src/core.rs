@@ -62,6 +62,13 @@ pub enum CoreMsg {
 
 pub struct Control(pub std::sync::Mutex<Sender<CoreMsg>>);
 
+/// Polecenie z odpowiedzią (ukryte id). Rdzeń, który nie słucha (tryb odtwarzania), odpowiada od razu pustą listą.
+pub fn ask(control: &Sender<CoreMsg>, make: impl FnOnce(Sender<Vec<String>>) -> CoreMsg) -> Vec<String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if control.send(make(tx)).is_err() { return Vec::new(); }
+    rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default()
+}
+
 /// `snaps`: każda publikowana migawka trafia też do tego kanału (powiadomienia).
 pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Snapshot>>,
              msgs: std::sync::mpsc::Receiver<CoreMsg>) {
@@ -74,7 +81,8 @@ pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Sn
         };
         let result = match mode {
             Mode::Live => live(&app, msgs, &publish),
-            Mode::Replay { path, speed } => replay(&path, speed, &publish),
+            // odtwarzanie nie obsługuje poleceń: zamknięty kanał daje natychmiastową odpowiedź zamiast czekania 2 s
+            Mode::Replay { path, speed } => { drop(msgs); replay(&path, speed, &publish) }
         };
         if let Err(e) = result {
             eprintln!("agent-pets: rdzeń danych zatrzymany: {e:#}");
@@ -210,6 +218,22 @@ mod tests {
         assert!(!gone.contains(&"d5".to_string()) && !gone.contains(&"d6".to_string()));
         let left: Vec<_> = snapshot_of(&store, rp.clock(), &mut hidden).sessions.into_iter().map(|s| s.id).collect();
         assert!(left.contains(&"d5".to_string()) && left.contains(&"d6".to_string()) && !left.contains(&"d7".to_string()));
+    }
+
+    #[test]
+    fn asking_a_core_that_does_not_listen_answers_at_once() {
+        let (tx, rx) = std::sync::mpsc::channel::<CoreMsg>();
+        drop(rx); // tryb odtwarzania nie czyta poleceń
+        let t = std::time::Instant::now();
+        assert!(ask(&tx, |r| CoreMsg::Dismiss(vec!["a".into()], r)).is_empty());
+        assert!(t.elapsed() < std::time::Duration::from_millis(100));
+    }
+
+    #[test]
+    fn asking_the_core_returns_its_answer() {
+        let (tx, rx) = std::sync::mpsc::channel::<CoreMsg>();
+        std::thread::spawn(move || if let Ok(CoreMsg::Dismiss(ids, r)) = rx.recv() { let _ = r.send(ids); });
+        assert_eq!(ask(&tx, |r| CoreMsg::Dismiss(vec!["a".into()], r)), vec!["a".to_string()]);
     }
 
     #[test]
