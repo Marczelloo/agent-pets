@@ -60,6 +60,8 @@ export interface Settings {
   [extra: string]: unknown;
 }
 export type Updates = 'notify' | 'auto' | 'off';
+/** Lustro `placement::MonitorInfo` (komenda `monitors_list`). */
+export interface MonitorInfo { id: string; primary: boolean; width: number; height: number; index: number }
 /** Lustro `updater::UpdateStatus` (zdarzenie `pets://update`). */
 export type UpdateStatus =
   | { state: 'idle' } | { state: 'checking' } | { state: 'latest' }

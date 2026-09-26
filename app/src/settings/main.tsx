@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AppId, AppRow, Diagnostics, Settings, SettingsView as View, UpdateStatus } from '../types';
+import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, SettingsView as View, StageLayout, UpdateStatus } from '../types';
 import { defaultSettings } from './model';
-import { SettingsView, type Tab } from './SettingsView';
+import { SettingsView, TABS, type Tab } from './SettingsView';
 import { Wizard } from './Wizard';
 import { setLoopSaving } from './look/loop';
 import { setPreviewSaving } from './look/PetsCanvas';
@@ -23,13 +23,21 @@ const demoDiag: Diagnostics = { version: '0.5.0', endpoint_port: 61234, settings
   hook_exe: 'C:/Users/ja/.agent-pets/hook.exe', autostart_registered: true, last_seen: { claude_code: Date.now() - 20_000, codex: Date.now() - 300_000 },
   apps: [['claude_code', true, ''], ['codex', true, ''], ['agent_router', true, '']] };
 
+/** Karta z adresu (`settings.html#stage` z menu sceny). */
+const tabFrom = (hash: string): Tab | null => {
+  const t = hash.replace(/^#/, '') as Tab;
+  return TABS.includes(t) ? t : null;
+};
+
 function Root() {
   const [view, setView] = useState<View | null>(null);
   const [rows, setRows] = useState<AppRow[]>([]);
   const [diag, setDiag] = useState<Diagnostics | null>(null);
-  const [tab, setTab] = useState<Tab>('apps');
+  const [tab, setTab] = useState<Tab>(() => tabFrom(location.hash) ?? 'apps');
   const [message, setMessage] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
+  const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
+  const [leftFallback, setLeftFallback] = useState(false);
 
   const reload = useCallback(async () => {
     if (!inTauri) {
@@ -59,10 +67,17 @@ function Root() {
     void invoke<boolean>('power_get').then(power);
     const unUpdate = listen<UpdateStatus>('pets://update', e => setUpdate(e.payload));
     void invoke<UpdateStatus>('update_status').then(setUpdate);
-    return () => { void un.then(f => f()); void unPower.then(f => f()); void unUpdate.then(f => f()); };
+    const unTab = listen<string>('settings://tab', e => { const t = tabFrom(e.payload); if (t) setTab(t); });
+    const unLayout = listen<StageLayout & { left_fallback?: boolean }>('pets://layout', e => setLeftFallback(!!e.payload.left_fallback));
+    return () => [un, unPower, unUpdate, unTab, unLayout].forEach(p => void p.then(f => f()));
   }, [reload]);
 
   useEffect(() => { if (tab === 'diag' && inTauri) void invoke<Diagnostics>('diagnostics').then(setDiag); }, [tab]);
+  useEffect(() => {
+    if (tab !== 'stage') return;
+    if (inTauri) void invoke<MonitorInfo[]>('monitors_list').then(setMonitors);
+    else setMonitors([{ id: 'demo-1', primary: true, width: 2560, height: 1440, index: 1 }, { id: 'demo-2', primary: false, width: 1920, height: 1080, index: 2 }]);
+  }, [tab]);
 
   if (!view) return null;
 
@@ -96,7 +111,8 @@ function Root() {
   };
 
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
-    onIntegration={onIntegration} message={message} update={update}
+    onIntegration={onIntegration} message={message} update={update} monitors={monitors} leftFallback={leftFallback}
+    onMove={() => { if (inTauri) void invoke('stage_move'); }}
     onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;
 }
 

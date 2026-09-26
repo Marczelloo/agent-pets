@@ -2,9 +2,10 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLang } from '../i18n';
 import { PanelView } from '../panel/App';
-import type { AppRow, Diagnostics, UpdateStatus } from '../types';
+import type { AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
 import { defaultSettings } from './model';
 import { SettingsView } from './SettingsView';
+import { resetStage } from './StageTab';
 import { Wizard } from './Wizard';
 
 const rows: AppRow[] = [
@@ -90,7 +91,35 @@ describe('SettingsView', () => {
     expect(html).toContain('Osobno dla agentów');
     expect(html).toContain('Jak domyślny');
     expect(html).toContain('Tak wygląda w pasku');
-    expect(html).toContain('Najwięcej zwierzaków w pasku');
+    expect(html).not.toContain('Najwięcej zwierzaków w pasku'); // przeniesione do karty „Pasek”
+  });
+  it('taskbar tab: position, monitor, background, size, spacing, pet limit, alignment, order, elements and reset', () => {
+    const monitors = [{ id: 'primary-dev', primary: true, width: 2560, height: 1440, index: 1 }, { id: 'second', primary: false, width: 1920, height: 1080, index: 2 }];
+    const view = (stage: Partial<Settings['stage']>, leftFallback = false) => renderToString(<SettingsView
+      settings={{ ...defaultSettings(), stage: { ...defaultSettings().stage, ...stage } }} rows={rows} diag={diag} tab="stage" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} monitors={monitors} leftFallback={leftFallback} onMove={() => {}} />);
+    const html = view({});
+    for (const s of ['Pozycja', 'Przy zasobniku', 'Po lewej', 'Własna', 'Pływające', 'Monitor', 'Ekran 2 · 1920×1080', '(główny)',
+      'Tło', 'Brak', 'Szkło', 'Pełny kolor', 'Rozmiar zwierzaków', 'Odstęp', 'Margines', 'Najwięcej zwierzaków w pasku', 'Wyrównanie',
+      'Kolejność', 'Paski postępu', 'Paski limitów', 'Plakietka „+N”', 'Przywróć domyślne']) expect(html, s).toContain(s);
+    expect(html).toMatch(/aria-label="Rozmiar zwierzaków"[^>]*max="120"|max="120"[^>]*aria-label="Rozmiar zwierzaków"/);
+    expect(html).toMatch(/role="radiogroup" aria-label="Wyrównanie"[^>]*aria-disabled="true"/);
+    expect(html).not.toContain('Przesuń');
+    const floating = view({ position: 'floating', size: 250 });
+    expect(floating).toMatch(/max="300"/);
+    expect(floating).not.toMatch(/role="radiogroup" aria-label="Wyrównanie"[^>]*aria-disabled="true"/);
+    expect(view({ position: 'custom', custom_at: 0.3 })).toContain('Przesuń');
+    expect(view({ size: 110 })).toContain('najwyższe efekty');
+    expect(view({ size: 250 })).toMatch(/aria-valuetext="120%"/);
+    expect(view({ position: 'left' }, true)).toContain('Ikony paska są wyrównane do lewej');
+    expect(view({ background: { kind: 'glass', radius: 12 } })).toContain('Przezroczystość');
+    expect(html).not.toContain('Przezroczystość');
+  });
+  it('taskbar tab reset keeps the pet limit and everything outside the stage', () => {
+    const s = { ...defaultSettings(), pets: { ...defaultSettings().pets, max_visible: 3 }, stage: { ...defaultSettings().stage, gap: 20, position: 'floating' as const } };
+    const r = resetStage(s);
+    expect(r.stage).toEqual(defaultSettings().stage);
+    expect(r.pets.max_visible).toBe(3);
   });
   it('look tab: a big preview and every animation to pick, grouped, plus all in order', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}

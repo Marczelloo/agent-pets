@@ -49,6 +49,17 @@ p.desc{margin:10px 0}
 .notice{background:var(--notice);border-radius:6px;padding:8px 12px;margin:0 0 12px}
 .report{white-space:pre-wrap;font-family:"Cascadia Code",Consolas,monospace;font-size:12px;margin:12px 0}
 .card > button{align-self:flex-start;margin:4px 0 14px}
+.settings main h3{font-size:14px;font-weight:600;margin:18px 0 8px}
+.settings main h3:first-of-type{margin-top:0}
+.slider{display:flex;align-items:center;gap:10px;flex:none}
+.slider input[type=range]{width:180px;accent-color:var(--accent)}
+.slider output{min-width:48px;text-align:right;font-variant-numeric:tabular-nums;color:var(--mut)}
+.color{display:flex;align-items:center;gap:12px}
+.color input[type=color]{width:40px;height:28px;padding:2px;border:1px solid var(--line);border-radius:4px;background:transparent}
+.color input[type=color]:disabled{opacity:.45}
+label.check{display:flex;align-items:center;gap:6px;font-size:12px}
+.segmented[aria-disabled=true] button{cursor:default}
+button.reset{margin:16px 0 4px}
 
 /* przełącznik Windows 11 z pola wyboru */
 input.switch{appearance:none;flex:none;width:40px;height:20px;border-radius:10px;border:1px solid var(--track);background:transparent;position:relative;cursor:pointer;margin:0}

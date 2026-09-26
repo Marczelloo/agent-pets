@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import type { AppId, AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
+import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, UpdateStatus } from '../types';
 import { LookTab } from './look/LookTab';
-import { appHint, appLabel, clampMaxVisible, reportText } from './model';
+import { StageTab } from './StageTab';
+import { appHint, appLabel, reportText } from './model';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
 import { LanguageSelect } from './LanguageSelect';
 
-export type Tab = 'apps' | 'look' | 'notify' | 'limits' | 'general' | 'diag';
-const TABS: Tab[] = ['apps', 'look', 'notify', 'limits', 'general', 'diag'];
+export type Tab = 'apps' | 'look' | 'stage' | 'notify' | 'limits' | 'general' | 'diag';
+export const TABS: Tab[] = ['apps', 'look', 'stage', 'notify', 'limits', 'general', 'diag'];
 
 interface Props {
   settings: Settings;
@@ -22,6 +23,10 @@ interface Props {
   /** stan aktualizacji (wynik „Sprawdź teraz”) */
   update?: UpdateStatus;
   onCheck?: () => void;
+  /** karta „Pasek” */
+  monitors?: MonitorInfo[];
+  leftFallback?: boolean;
+  onMove?: () => void;
 }
 
 /** Wynik ręcznego sprawdzenia obok przycisku. */
@@ -36,7 +41,7 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Okno ustawień: zakładki po lewej jak w Ustawieniach Windows 11, zmiany działają od razu. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, monitors = [], leftFallback = false, onMove = () => {} }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
 
@@ -71,12 +76,6 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         {tab === 'look' && <LookTab pets={s.pets} onChange={p => set({ pets: p })} />}
         {tab === 'look' && <section className="card">
           <div className="row">
-            <span className="text"><span className="label">{t().settings.maxVisible}</span>
-              <span className="desc">{t().settings.maxVisibleDesc}</span></span>
-            <input type="number" min={1} max={8} aria-label={t().settings.maxVisible} value={s.pets.max_visible}
-              onChange={e => set({ pets: { ...s.pets, max_visible: clampMaxVisible(Number(e.target.value)) } })} />
-          </div>
-          <div className="row">
             <span className="text"><span className="label">{t().settings.powerSaving}</span>
               <span className="desc">{t().settings.powerSavingDesc}</span></span>
             <select aria-label={t().settings.powerSaving} value={s.power_saving} onChange={e => set({ power_saving: e.target.value as Settings['power_saving'] })}>
@@ -86,6 +85,8 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
             </select>
           </div>
         </section>}
+
+        {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} onChange={onChange} onMove={onMove} />}
 
         {tab === 'notify' && <section className="card">
           <Toggle label={t().state.needs_you} checked={s.notifications.needs_you}
