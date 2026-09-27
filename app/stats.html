@@ -41,9 +41,12 @@ header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
 .ct{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--mut);margin:0 0 6px}
 .ct .seg{margin-left:auto}
-.podium{height:190px;position:relative;display:flex;align-items:flex-end;justify-content:center;gap:6px;overflow:hidden}
+.podium{height:210px;position:relative;display:flex;align-items:flex-end;justify-content:center;gap:6px;overflow:hidden}
 .step{width:31%;max-width:120px;display:flex;flex-direction:column;align-items:center;min-width:0}
-.step .pet-slot{width:72px;height:56px}
+.step .pet-slot{width:96px;height:80px;display:flex;justify-content:center;align-items:flex-end}
+.podium .confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+canvas.enter{animation:enter .45s cubic-bezier(.2,.8,.3,1.2) both}
+@keyframes enter{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
 .blk{width:100%;border-radius:4px 4px 0 0;display:flex;justify-content:center;padding-top:5px;font:700 19px "Segoe UI Variable Display","Segoe UI";color:rgba(0,0,0,.55)}
 .s1 .blk{height:70px;background:var(--gold)}.s2 .blk{height:48px;background:var(--silver)}.s3 .blk{height:32px;background:var(--bronze)}
 .nm{font-weight:600;font-size:12.5px;margin-top:4px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -57,24 +60,23 @@ header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .race{margin-bottom:10px}
 .lane{display:grid;grid-template-columns:130px 1fr 80px;align-items:center;gap:8px;font-size:12px;margin-top:6px}
 .lane .nm{margin:0;font-weight:400;font-size:12px}
-.trk{height:26px;position:relative;border-bottom:1px dashed var(--edge)}
+.trk{height:30px;position:relative;border-bottom:1px dashed var(--edge)}
 .trk .bar{position:absolute;left:0;bottom:3px;height:8px;border-radius:4px;background:var(--mut)}
 .bar.claude{background:var(--claude)}.bar.codex{background:var(--codex)}.bar.router{background:var(--router)}
-.runner{position:absolute;bottom:1px;width:28px;height:24px}
+.runner{position:absolute;bottom:0;width:36px;height:30px}
 .lane .t{text-align:right;color:var(--mut);font-variant-numeric:tabular-nums}
-.cal{display:grid;grid-template-rows:repeat(7,11px);grid-auto-flow:column;grid-auto-columns:11px;gap:3px}
+.cal{display:grid;grid-template-rows:repeat(7,10px);grid-auto-flow:column;grid-auto-columns:10px;gap:2px}
 .day{border-radius:2px;background:var(--cal0)}
 .lv1{background:var(--cal1)}.lv2{background:var(--cal2)}.lv3{background:var(--cal3)}.lv4{background:var(--cal4)}
 .badges{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .bd{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
-.bd .pet-slot{width:40px;height:34px;flex:none}
-.bd b{display:block;font-size:12px}
+.bd .badge-pet{flex:none}
+.bd b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bd span{font-size:11px;color:var(--mut);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bd>div:last-child{min-width:0}
 .none{margin:6px 0;color:var(--mut);font-size:12px}
 .empty{display:flex;flex-direction:column;align-items:center;gap:8px;margin:64px 0;color:var(--mut)}
-.empty .pet-slot{width:96px;height:72px}
-@media (prefers-reduced-motion: reduce){.rec{animation:none}.scan .bar i{transition:none}}
+@media (prefers-reduced-motion: reduce){.rec{animation:none}.scan .bar i{transition:none}canvas.enter{animation:none}}
 </style>
 </head>
 <body>

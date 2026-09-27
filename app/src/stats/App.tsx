@@ -3,11 +3,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { resolveLang, setLang, setSystemLang, t } from '../i18n';
 import { reducedMotion } from '../stage/power';
-import type { Settings, SettingsView, StatsBadge, StatsMetric, StatsPeriod, StatsProgress, StatsRace, StatsView } from '../types';
+import { defaultPets } from '../look';
+import type { Pets, Settings, SettingsView, StatsMetric, StatsPeriod, StatsProgress, StatsRace, StatsView } from '../types';
+import { Badges } from './Badges';
+import { Podium } from './Podium';
+import { Race } from './Race';
+import { StatPet } from './StatPet';
 import { Calendar } from './Calendar';
 import { COUNT_MS, countUp } from './count';
 import { demoStats } from './demo';
-import { agentName, badgeText, formatChange, formatHours, formatPct, formatTokens, scanPct } from './model';
+import { formatChange, formatHours, formatPct, formatTokens, scanPct } from './model';
 
 export const PERIODS: StatsPeriod[] = ['today', 'week', 'month', 'all'];
 
@@ -16,6 +21,8 @@ export interface PageProps {
   /** liczniki i paski rosną od zera (w testach i przy ograniczonym ruchu: od razu wartości) */
   animate: boolean;
   onPeriod: (p: StatsPeriod) => void; onMetric: (m: StatsMetric) => void; onRace: (r: StatsRace) => void;
+  /** wygląd zwierzaków z ustawień */
+  pets?: Pets;
 }
 
 /** Czas od ostatniej zmiany `key` (ms), do końca animacji liczników; bez animacji od razu „koniec”. */
@@ -43,17 +50,8 @@ function Seg<T extends string>({ items, value, label, onPick, text, small }: {
   );
 }
 
-function badgeDetail(b: StatsBadge): string {
-  switch (b.kind) {
-    case 'glutton': return `${b.project ?? ''} · ${formatTokens(b.value)}`;
-    case 'cache_master': return `${b.project ?? ''} · ${formatPct(b.value)}`;
-    case 'night_owl': return t().stats.nightOwl(formatHours(b.value));
-    case 'marathon': return `${b.project ?? ''} · ${formatHours(b.value)}`;
-  }
-}
-
 /** Okno „Statystyki” (spec 0.9, 3.2). Zwierzaki dorysowują płótna w miejscach `.pet-slot`. */
-export function StatsPage({ view, period, metric, race, progress, animate, onPeriod, onMetric, onRace }: PageProps) {
+export function StatsPage({ view, period, metric, race, progress, animate, onPeriod, onMetric, onRace, pets = defaultPets() }: PageProps) {
   const el = useElapsed(animate, `${period}|${metric}|${race}`);
   const reduced = reducedMotion();
   const n = (v: number) => countUp(v, el, COUNT_MS, reduced);
@@ -61,7 +59,6 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
   const x = t().stats;
   const tl = view.tiles;
   const change = formatChange(tl.tokens_change);
-  const max = Math.max(1, ...view.race.map(l => l.value));
   return (
     <div className="stats">
       <header>
@@ -73,22 +70,12 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
         <span>{x.loading(scanPct(progress))}</span>
         <span className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={scanPct(progress)}><i style={{ width: `${scanPct(progress)}%` }} /></span>
       </div>}
-      {view.empty ? <div className="empty"><div className="pet-slot" data-slot="empty" /><p>{x.empty}</p></div> : <>
+      {view.empty ? <div className="empty"><StatPet agent="claude" scene="sleep" w={96} h={72} u={0.45} pets={pets} animate={animate} /><p>{x.empty}</p></div> : <>
         <div className="row top">
           <section className="card">
             <div className="ct"><span>{x.podium[period]}</span>
               <Seg small items={['time', 'tokens'] as StatsMetric[]} value={metric} label={x.metricLabel} onPick={onMetric} text={m => x.metric[m]} /></div>
-            <div className="podium">
-              {[1, 0, 2].map(i => {
-                const p = view.podium[i];
-                return <div key={i} className={`step s${i + 1}`}>
-                  <div className="pet-slot" data-slot="podium" data-rank={i + 1} data-agent={p?.agent ?? ''} />
-                  <div className="blk">{i + 1}</div>
-                  <div className="nm">{p?.project ?? x.emptyStep}</div>
-                  <div className="vl">{p ? byMetric(p.value) : ''}</div>
-                </div>;
-              })}
-            </div>
+            <Podium places={view.podium} format={byMetric} pets={pets} animate={animate} replay={`${period}|${metric}`} />
           </section>
           <div className="tiles">
             <div className="tile"><div className="k">{x.tiles.tokens}</div><div className="v">{formatTokens(n(tl.tokens))}</div>
@@ -104,25 +91,12 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
         <section className="card race">
           <div className="ct"><span>{x.race.title}</span>
             <Seg small items={['agents', 'projects'] as StatsRace[]} value={race} label={x.race.title} onPick={onRace} text={r => x.race[r]} /></div>
-          {view.race.map(l => {
-            const w = (countUp(l.value, el, COUNT_MS, reduced) / max) * 100;
-            return <div className="lane" key={l.key}>
-              <span className="nm">{race === 'agents' && l.agent ? agentName(l.agent) : l.key}</span>
-              <div className="trk"><i className={`bar ${l.agent ?? ''}`} style={{ width: `${w}%` }} />
-                <div className="pet-slot runner" data-slot="run" data-agent={l.agent ?? ''} style={{ left: `calc(${w}% - 12px)` }} /></div>
-              <span className="t">{byMetric(l.value)}</span>
-            </div>;
-          })}
+          <Race lanes={view.race} race={race} format={byMetric} pets={pets} elapsed={el} animate={animate} />
         </section>
         <div className="row bottom">
           <section className="card"><div className="ct"><span>{x.activity}</span></div><Calendar days={view.calendar} /></section>
           <section className="card"><div className="ct"><span>{x.badges}</span></div>
-            {view.badges.length === 0 ? <p className="none">{x.noBadges}</p> : <div className="badges">
-              {view.badges.map(b => <div className="bd" key={b.kind}>
-                <div className="pet-slot" data-slot="badge" data-badge={b.kind} data-agent={b.agent ?? ''} />
-                <div><b>{badgeText(b.kind)}</b><span>{badgeDetail(b)}</span></div>
-              </div>)}
-            </div>}
+            <Badges badges={view.badges} pets={pets} animate={animate} />
           </section>
         </div>
       </>}
@@ -144,6 +118,7 @@ export default function Root({ tauri }: { tauri: boolean }) {
   const [view, setView] = useState<StatsView | null>(tauri ? null : demoStats());
   const [progress, setProgress] = useState<StatsProgress | null>(null);
   const [, relang] = useState(0);
+  const [pets, setPets] = useState<Pets>(defaultPets);
   const lang = (l: Parameters<typeof resolveLang>[0]) => { setLang(resolveLang(l)); relang(n => n + 1); };
   const pick = (c: Partial<Choice>) => setChoice(o => { const n = { ...o, ...c }; saveChoice(n); return n; });
   const refresh = useCallback(() => {
@@ -156,14 +131,14 @@ export default function Root({ tauri }: { tauri: boolean }) {
     const every = setInterval(() => { if (!document.hidden) refresh(); }, 30_000);
     const un = [
       listen<StatsProgress>('stats://progress', e => { setProgress(e.payload); if (e.payload.done) refresh(); }),
-      listen<Settings>('pets://settings', e => lang(e.payload.language ?? 'auto')),
+      listen<Settings>('pets://settings', e => { lang(e.payload.language ?? 'auto'); setPets(e.payload.pets); }),
     ];
     void invoke<StatsProgress>('stats_progress').then(setProgress);
-    void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); lang(v.settings.language ?? 'auto'); });
+    void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); lang(v.settings.language ?? 'auto'); setPets(v.settings.pets); });
     return () => { clearInterval(every); un.forEach(p => void p.then(f => f())); };
   }, [tauri, refresh]);
 
   if (!view) return null;
-  return <StatsPage view={view} {...choice} progress={progress} animate onPeriod={period => pick({ period })}
+  return <StatsPage view={view} {...choice} progress={progress} animate pets={pets} onPeriod={period => pick({ period })}
     onMetric={metric => pick({ metric })} onRace={race => pick({ race })} />;
 }
