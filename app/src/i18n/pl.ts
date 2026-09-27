@@ -320,6 +320,8 @@ export const pl = {
     motionDesc: 'Dynamiczny: szybkie akcje jak z anime — serie ciosów, pieczęcie, błyski i cząsteczki',
     mediaTitle: 'Słuchają muzyki',
     mediaDesc: 'Gdy w Windows gra muzyka, bezczynne i śpiące zwierzaki zakładają słuchawki. Tytuły utworów nie są czytane.',
+    previewPet: 'Zwierzak w podglądzie',
+    otherPet: 'Inny agent',
     previewScene: 'Scena podglądu',
     taskbar: 'Tak wygląda w pasku',
     perAgent: 'Osobno dla agentów',

@@ -178,6 +178,13 @@ describe('panel', () => {
     expect(html).toContain('&lt;img');
     expect(html).toMatch(/<svg[^>]*class="host-icon"/);
   });
+  it('look tab: pick which pet the previews show', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toContain('aria-label="Zwierzak w podglądzie"');
+    for (const name of ['Claude Code', 'Codex', 'opencode', 'Inny agent']) expect(html).toContain(`>${name}</button>`);
+    expect(html).toMatch(/aria-checked="true"[^>]*>Claude Code<\/button>/);
+  });
   it('taskbar tab: bubbles and subagents section with three switches', () => {
     const s = defaultSettings();
     const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="stage" onTab={() => {}}

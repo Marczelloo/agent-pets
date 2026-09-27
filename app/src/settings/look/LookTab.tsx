@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MOTION_IDS, STYLE_IDS, lookFor, withOverride } from '../../look';
 import type { SceneKey } from '../../stage/sceneFor';
-import type { AppId, Look, MotionId, Pets, StyleId } from '../../types';
+import type { Agent, AppId, Look, MotionId, Pets, StyleId } from '../../types';
 import { appLabel } from '../model';
 import { t } from '../../i18n';
 import { LookGallery } from './LookGallery';
@@ -10,6 +10,19 @@ import { PetsCanvas } from './PetsCanvas';
 import { Toggle } from '../Toggle';
 
 const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode'];
+/** Zwierzaki do wyboru w podglądzie: każda maskotka i blob agenta bez własnej. */
+const PREVIEW_AGENTS: Agent[] = ['claude', 'codex', 'opencode', 'other'];
+const petName = (a: Agent) => (a === 'other' ? t().look.otherPet : t().agent[a]);
+
+export function PetPicker({ agent, onPick }: { agent: Agent; onPick: (a: Agent) => void }) {
+  return (
+    <div className="segmented" role="radiogroup" aria-label={t().look.previewPet}>
+      {PREVIEW_AGENTS.map(a => (
+        <button type="button" key={a} role="radio" aria-checked={agent === a} className={agent === a ? 'on' : ''} onClick={() => onPick(a)}>{petName(a)}</button>
+      ))}
+    </div>
+  );
+}
 
 export function MotionSwitch({ motion, onPick }: { motion: MotionId; onPick: (m: MotionId) => void }) {
   return (
@@ -27,6 +40,7 @@ export function MotionSwitch({ motion, onPick }: { motion: MotionId; onPick: (m:
 export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) => void }) {
   const [scene, setScene] = useState<SceneKey>('edit');
   const [cycle, setCycle] = useState(false);
+  const [agent, setAgent] = useState<Agent>('claude');
   const pick = (app: AppId, field: keyof Look, v: string) =>
     onChange(withOverride(pets, app, field, v === '' ? null : v as StyleId | MotionId));
   return <>
@@ -36,8 +50,12 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
           <span className="desc">{t().look.motionDesc}</span></span>
         <MotionSwitch motion={pets.motion} onPick={m => onChange({ ...pets, motion: m })} />
       </div>
-      <PreviewStage look={{ style: pets.style, motion: pets.motion }} scene={scene} cycle={cycle} onScene={setScene} onCycle={setCycle} />
-      <LookGallery style={pets.style} motion={pets.motion} scene={scene} onPick={s => onChange({ ...pets, style: s })} />
+      <div className="row">
+        <span className="text"><span className="label">{t().look.previewPet}</span></span>
+        <PetPicker agent={agent} onPick={setAgent} />
+      </div>
+      <PreviewStage look={{ style: pets.style, motion: pets.motion }} agent={agent} scene={scene} cycle={cycle} onScene={setScene} onCycle={setCycle} />
+      <LookGallery style={pets.style} motion={pets.motion} scene={scene} agent={agent} onPick={s => onChange({ ...pets, style: s })} />
       <p className="label strip-label">{t().look.taskbar}</p>
       <PetsCanvas className="taskbar" scene={scene} u={0.3} width={330} height={48}
         pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : a === 'opencode' ? 'opencode' : 'codex', look: lookFor(pets, a) }))} />

@@ -1,19 +1,19 @@
 import { STYLE_IDS } from '../../look';
 import { t } from '../../i18n';
 import type { SceneKey } from '../../stage/sceneFor';
-import type { MotionId, StyleId } from '../../types';
+import type { Agent, MotionId, StyleId } from '../../types';
 import { PetsCanvas } from './PetsCanvas';
 
-interface Props { style: StyleId; motion: MotionId; scene: SceneKey; compact?: boolean; onPick: (s: StyleId) => void }
+interface Props { style: StyleId; motion: MotionId; scene: SceneKey; agent?: Agent; compact?: boolean; onPick: (s: StyleId) => void }
 
-/** Karty stylów z żywym Clawdem i Kodkiem; kliknięcie wybiera styl. */
-export function LookGallery({ style, motion, scene, compact, onPick }: Props) {
-  const [w, h, u] = compact ? [124, 60, 0.3] : [140, 72, 0.34];
+/** Karty stylów z wybranym zwierzakiem; kliknięcie wybiera styl. Jeden zwierzak na kartę mieści się w najwęższej karcie. */
+export function LookGallery({ style, motion, scene, agent = 'claude', compact, onPick }: Props) {
+  const [w, h, u] = compact ? [96, 60, 0.3] : [96, 72, 0.34];
   return (
     <div className={`gallery${compact ? ' compact' : ''}`} role="radiogroup" aria-label={t().look.styleTitle}>
       {STYLE_IDS.map(id => (
         <button type="button" key={id} role="radio" aria-checked={style === id} className={`look-card${style === id ? ' on' : ''}`} onClick={() => onPick(id)}>
-          <PetsCanvas pets={[{ agent: 'claude', look: { style: id, motion } }, { agent: 'codex', look: { style: id, motion } }]} scene={scene} u={u} width={w} height={h} />
+          <PetsCanvas key={agent} pets={[{ agent, look: { style: id, motion } }]} scene={scene} u={u} width={w} height={h} />
           <span>{t().look.style[id]}</span>
         </button>
       ))}

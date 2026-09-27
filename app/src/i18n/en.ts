@@ -309,6 +309,8 @@ export const en: Dict = {
     motionDesc: 'Dynamic: snappy anime-style action — punch barrages, hand seals, impact flashes and particles',
     mediaTitle: 'Listen to music',
     mediaDesc: 'Idle and sleeping pets put on headphones when music plays in Windows. Track titles are never read.',
+    previewPet: 'Pet in the preview',
+    otherPet: 'Other agent',
     previewScene: 'Preview scene',
     taskbar: 'In the taskbar',
     perAgent: 'Per agent',
