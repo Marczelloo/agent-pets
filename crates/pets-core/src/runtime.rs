@@ -65,6 +65,11 @@ pub struct Runtime {
     doors: std::sync::Arc<crate::ingest::Doors>,
     /// program-gospodarz sesji opencode, liczony raz na sesję (jeden zrzut procesów)
     opencode_hosts: std::collections::HashMap<String, Option<crate::host::Host>>,
+    /// katalog domowy (baza opencode)
+    home: PathBuf,
+    /// ostatni odczyt zużycia opencode i prośba o odczyt od razu (koniec tury)
+    usage_at: Option<i64>,
+    usage_due: bool,
     _watcher: Option<notify::RecommendedWatcher>,
 }
 
@@ -83,6 +88,7 @@ impl Runtime {
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
             _ingest: ingest, doors, opencode_hosts: Default::default(), _watcher: None,
+            home: cfg.home.clone(), usage_at: None, usage_due: false,
         };
         rt.sources.lang = rt.lang;
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
@@ -117,7 +123,8 @@ impl Runtime {
         }
         self.apps = apps;
         self.doors.set(&apps);
-        let removed = self.store.retain_sessions(|s| session_on(apps, s));
+        let removed = self.store.retain_sessions(|s| session_on(apps, s))
+            | (!apps.opencode && self.store.set_agent_usage(Vec::new()));
         removed | self.store.retain_limits(|l| agent_on(apps, l.agent))
     }
 
@@ -145,6 +152,7 @@ impl Runtime {
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
         for p in paths { changed |= self.poll_file(&p); }
         changed |= self.poll_router(now);
+        changed |= self.poll_opencode_usage(now);
         match self.usage.poll(now) {
             Some(claude::desktop_usage::Usage::Limits(e)) => changed |= self.apply(e),
             Some(claude::desktop_usage::Usage::Stale) => changed |= self.store.drop_limits_without_reset(crate::model::Agent::Claude),
@@ -259,10 +267,37 @@ impl Runtime {
                 }
             }
             if e.kind == crate::model::Kind::SessionEnd { self.opencode_hosts.remove(&e.session_id); }
+            // koniec tury: nowe tokeny w bazie, odczyt przy najbliższym kroku
+            if e.kind == crate::model::Kind::TurnEnd { self.usage_due = true; }
             changed |= self.apply(e);
         }
         changed
     }
+
+    /// Zużycie opencode z jego bazy (spec 0.11 §4.2–4.3): tylko przy włączonej integracji i żywym zwierzaku opencode,
+    /// co 30 s albo zaraz po końcu tury.
+    #[cfg(feature = "opencode-db")]
+    fn poll_opencode_usage(&mut self, now: i64) -> bool {
+        use crate::opencode_db as db;
+        if !self.apps.opencode { return false; }
+        let ids: Vec<String> = self.store.sessions().iter().filter(|s| s.agent == crate::model::Agent::Opencode).map(|s| s.id.clone()).collect();
+        if ids.is_empty() { return false; }
+        if !self.usage_due && self.usage_at.is_some_and(|t| now - t < 30_000) { return false; }
+        self.usage_due = false;
+        self.usage_at = Some(now);
+        let Some(c) = db::open(&db::db_path(&self.home)) else { return false };
+        let raw: Vec<&str> = ids.iter().map(|i| i.strip_prefix("opencode:").unwrap_or(i)).collect();
+        let mut changed = false;
+        for u in db::session_usage(&c, &raw) {
+            let usage = crate::model::Usage { tokens: u.tokens, cost: u.cost, account: db::account_for(&u) };
+            changed |= self.store.set_usage(&format!("opencode:{}", u.id), Some(usage));
+        }
+        let (tokens_today, cost_today) = db::today(&c, crate::time::local_midnight(now));
+        changed | self.store.set_agent_usage(vec![crate::model::AgentUsage { agent: crate::model::Agent::Opencode, tokens_today, cost_today }])
+    }
+
+    #[cfg(not(feature = "opencode-db"))]
+    fn poll_opencode_usage(&mut self, _now: i64) -> bool { false }
 
     fn on_hook(&mut self, env: HookEnvelope) -> bool {
         if !self.apps.claude_code { return false; }
@@ -523,6 +558,55 @@ mod tests {
         while rt.store().session("antigravity:d5f1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("antigravity:d5f1").expect("sesja Antigravity");
         assert_eq!((s.agent, s.state, s.model.as_deref()), (Agent::Antigravity, crate::model::State::Thinking, Some("gemini-3.5-pro")));
+    }
+
+    #[cfg(feature = "opencode-db")]
+    fn opencode_db_in(h: &tempfile::TempDir, now: i64) {
+        use crate::opencode_db::fixture::*;
+        let p = db(&crate::opencode_db::db_path(h.path()).parent().unwrap().to_path_buf());
+        let w = rusqlite::Connection::open(&p).unwrap();
+        session(&w, "ses_1", None, now, 0.0, [100, 20, 5, 1000, 50]);
+        message(&w, "m1", "ses_1", now - 1000, reply("openai", now - 1000, [10, 20, 3, 400, 5], 0.0));
+    }
+
+    #[cfg(feature = "opencode-db")]
+    #[test]
+    fn opencode_usage_reaches_its_pet_and_the_day_total() {
+        use crate::model::{AgentUsage, Kind, Source, Usage};
+        let h = home();
+        let now = crate::time::now_ms();
+        opencode_db_in(&h, now);
+        let mut c = cfg(&h);
+        c.apps.opencode = true;
+        let mut rt = Runtime::start(c).unwrap();
+        rt.apply_external(event(Source::Opencode, "opencode:ses_1", Kind::Prompt));
+        assert!(rt.step(now));
+        let s = rt.store().session("opencode:ses_1").unwrap();
+        assert_eq!(s.usage, Some(Usage { tokens: 1175, cost: 0.0, account: Some(Agent::Codex) }));
+        assert_eq!(rt.store().agent_usage(), &[AgentUsage { agent: Agent::Opencode, tokens_today: 438, cost_today: 0.0 }]);
+        assert!(rt.set_apps(crate::settings::Apps { opencode: false, ..Default::default() }));
+        assert!(rt.store().agent_usage().is_empty(), "wyłączony opencode bez sumy dnia");
+    }
+
+    #[cfg(feature = "opencode-db")]
+    #[test]
+    fn the_opencode_database_is_opened_only_when_opencode_is_on_and_has_a_pet() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let now = crate::time::now_ms();
+        opencode_db_in(&h, now);
+        let opens = || crate::opencode_db::OPENS.with(|n| n.get());
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        rt.apply_external(event(Source::Opencode, "opencode:ses_1", Kind::Prompt));
+        let before = opens();
+        for i in 0..40 { rt.step(now + i * 1000); }
+        assert_eq!(opens(), before, "opencode wyłączony");
+        rt.set_apps(crate::settings::Apps { opencode: true, ..Default::default() });
+        for i in 0..40 { rt.step(now + i * 1000); }
+        assert_eq!(opens(), before, "bez zwierzaka opencode");
+        rt.apply_external(event(Source::Opencode, "opencode:ses_1", Kind::Prompt));
+        for i in 0..40 { rt.step(now + i * 1000); }
+        assert_eq!(opens(), before + 2, "od razu, potem co 30 s");
     }
 
     #[test]

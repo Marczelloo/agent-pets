@@ -75,7 +75,7 @@ mod tests {
             id: id.into(), agent: Agent::Claude, origin: Origin::Cli, title: id.into(), cwd: String::new(), state,
             tool: None, progress: None, context: None, started_at: 0, last_activity: last, state_since: 0,
             turn_started_at: None, jump: JumpTarget { session_id: id.into(), ..Default::default() }, router_task: None,
-            parent: None, sub: None, action: None, question: None, waits_on_child: false, model: None, agent_name: None,
+            parent: None, sub: None, action: None, question: None, waits_on_child: false, model: None, agent_name: None, usage: None,
         }
     }
     fn ids(v: &[Session]) -> Vec<&str> { v.iter().map(|s| s.id.as_str()).collect() }

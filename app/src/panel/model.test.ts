@@ -1,10 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { CHILD_DONE_MS, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle } from './model';
+import { CHILD_DONE_MS, accountRows, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: 'C:\\work\\' + id, state, tool: null, progress: null, context: null,
   started_at: 0, last_activity: last, state_since: 0, turn_started_at: null, jump: { pid: null, session_id: id, cwd: '', app: null },
+});
+
+describe('opencode usage on its card', () => {
+  const oc = { ...s('o', 'working', 0), agent: 'opencode' as const };
+  const today = { agent: 'opencode' as const, tokens_today: 4_800_000, cost_today: 0 };
+  it('shows session and day tokens, and the cost only when there is one', () => {
+    expect(usageLine({ ...oc, usage: { tokens: 1_200_000, cost: 0, account: null } }, today)).toBe('sesja: 1,2 mln tok. · dziś: 4,8 mln tok.');
+    expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0.42, account: null } }, { ...today, cost_today: 1.5 }))
+      .toBe('sesja: 950 tok. · dziś: 4,8 mln tok. · $0.42');
+    expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0, account: null } }, undefined)).toBe('sesja: 950 tok.');
+  });
+  it('has no line without usage', () => {
+    expect(usageLine(oc, today)).toBeNull();
+    expect(usageLine({ ...s('c', 'working', 0), usage: null }, today)).toBeNull();
+  });
+  it('shows the bars of the account the session runs on, never an invented 0%', () => {
+    const now = new Date(2026, 8, 24, 12, 0).getTime();
+    const limits = [{ agent: 'codex' as const, window: 'five_hour' as const, used_pct: 30, resets_at: null },
+                    { agent: 'claude' as const, window: 'weekly' as const, used_pct: 70, resets_at: null }];
+    const rows = accountRows({ ...oc, usage: { tokens: 1, cost: 0, account: 'codex' } }, limits, now);
+    expect(rows.map(r => `${r.agent}/${r.window}/${r.pct}`)).toEqual(['codex/five_hour/30']);
+    expect(accountRows({ ...oc, usage: { tokens: 1, cost: 0, account: null } }, limits, now)).toEqual([]);
+    expect(accountRows(oc, limits, now)).toEqual([]);
+  });
 });
 
 describe('panel model', () => {

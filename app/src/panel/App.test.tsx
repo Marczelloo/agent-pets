@@ -17,6 +17,18 @@ describe('PanelView', () => {
     expect(html).toContain('Przejdź');
     expect(html).toContain('Czeka na Ciebie');
   });
+  it('an opencode card shows its tokens and the bars of its account; a Claude card has neither', () => {
+    const oc: Session = { ...sess, id: 'opencode:o', agent: 'opencode', state: 'working', title: 'oc',
+      usage: { tokens: 1_200_000, cost: 0, account: 'codex' } };
+    const snap = { sessions: [oc, { ...sess, id: 'c', title: 'cl' }], now: 0,
+      limits: [{ agent: 'codex' as const, window: 'weekly' as const, used_pct: 64, resets_at: null }],
+      agent_usage: [{ agent: 'opencode' as const, tokens_today: 4_800_000, cost_today: 0 }] };
+    const html = renderToString(<PanelView snap={snap} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
+    expect(html).toContain('sesja: 1,2 mln tok. · dziś: 4,8 mln tok.');
+    expect(html.match(/class="usage"/g)?.length).toBe(1);
+    expect(html).toMatch(/class="account"[\s\S]*64%/);
+    expect(html.match(/class="account"/g)?.length).toBe(1);
+  });
   it('has an empty state and says when limits are unknown', () => {
     const html = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
     expect(html).toContain('Brak aktywnych sesji');

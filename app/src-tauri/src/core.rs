@@ -17,6 +17,8 @@ use tauri::{AppHandle, Emitter};
 pub struct Snapshot {
     pub sessions: Vec<Session>,
     pub limits: Vec<Limit>,
+    /// sumy dnia agentów z własną bazą (opencode, spec 0.11 §4.2)
+    pub agent_usage: Vec<pets_core::model::AgentUsage>,
     /// zegar rdzenia (ms); w trybie odtwarzania różni się od zegara ściennego
     pub now: i64,
 }
@@ -27,7 +29,7 @@ pub type Shared = Arc<Mutex<Snapshot>>;
 /// Dziecko (subagent) jest widoczne tylko z widocznym rodzicem: ukrycie rodzica ukrywa jego dzieci.
 pub fn snapshot_of(store: &Store, now: i64, hidden: &mut Dismissed) -> Snapshot {
     let sessions = with_parents(hidden.filter(store.sessions().into_iter().cloned().collect()));
-    Snapshot { sessions, limits: store.limits().to_vec(), now }
+    Snapshot { sessions, limits: store.limits().to_vec(), agent_usage: store.agent_usage().to_vec(), now }
 }
 
 fn with_parents(mut v: Vec<Session>) -> Vec<Session> {

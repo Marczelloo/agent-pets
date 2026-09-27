@@ -1,7 +1,8 @@
 import { clampPct, progressFraction } from '../stage/hud';
 import { actionLabel, formatReset } from '../tooltip/text';
 import { isLive, routerHealth } from '../stage/router';
-import type { Limit, Session, UpdateStatus } from '../types';
+import type { AgentUsage, Limit, Session, UpdateStatus } from '../types';
+import { formatTokens } from '../stats/model';
 import { t } from '../i18n';
 import { agentLabel, hostLabel, modelLabel } from '../model-label';
 
@@ -39,6 +40,23 @@ export function updateBar(u: UpdateStatus | undefined): UpdateBar | null {
     case 'error': return u.verify ? { text: u.message, action: null, pct: null } : null;
     default: return null;
   }
+}
+
+/** Linia zużycia na karcie: tokeny sesji i dnia, koszt sesji tylko gdy większy od 0 (spec 0.11 §4.2). */
+export function usageLine(s: Session, today: AgentUsage | undefined): string | null {
+  if (!s.usage) return null;
+  const u = t().panel.usage;
+  const parts = [u.session(formatTokens(s.usage.tokens))];
+  if (today) parts.push(u.today(formatTokens(today.tokens_today)));
+  if (s.usage.cost > 0) parts.push(`$${s.usage.cost.toFixed(2)}`);
+  return parts.join(' · ');
+}
+
+/** Paski konta, na którym działa sesja (subskrypcja Claude'a albo ChatGPT); tylko te z danymi. */
+export function accountRows(s: Session, limits: Limit[], nowMs: number): LimitRow[] {
+  const acct = s.usage?.account;
+  if (acct !== 'claude' && acct !== 'codex') return [];
+  return limitRows(limits, nowMs).filter(r => r.agent === acct && r.pct != null);
 }
 
 export interface LimitRow { agent: 'claude' | 'codex'; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string }

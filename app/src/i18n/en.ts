@@ -68,6 +68,7 @@ export const en: Dict = {
     settings: 'Settings',
     limits: 'Limits',
     noData: 'No data',
+    usage: { session: (v: string) => `session: ${v} tokens`, today: (v: string) => `today: ${v} tokens` },
     sessions: 'Sessions',
     noSessions: 'No active sessions',
     tasks: 'Tasks',

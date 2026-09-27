@@ -80,7 +80,18 @@ pub struct Session {
     /// nazwa do wyświetlenia agenta `Other` (z furtki)
     #[serde(default)]
     pub agent_name: Option<String>,
+    /// zużycie sesji z bazy agenta (od 0.11 tylko opencode)
+    #[serde(default)]
+    pub usage: Option<Usage>,
 }
+
+/// Tokeny i koszt jednej sesji; `account` = konto, którego limity dotyczą sesji (subskrypcja Claude'a albo ChatGPT).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct Usage { pub tokens: u64, pub cost: f64, pub account: Option<Agent> }
+
+/// Suma dnia (od lokalnej północy) dla agenta ze wszystkich jego sesji.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct AgentUsage { pub agent: Agent, pub tokens_today: u64, pub cost_today: f64 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -203,6 +214,17 @@ mod tests {
             "turn_started_at": null, "jump": {"pid": null, "session_id": "s", "cwd": "", "app": null}});
         let s: Session = serde_json::from_value(v).unwrap();
         assert_eq!((s.parent, s.sub, s.action, s.question), (None, None, None, None));
+    }
+
+    #[test]
+    fn a_0_10_session_has_no_usage() {
+        let v = serde_json::json!({"id": "s", "agent": "opencode", "origin": "cli", "title": "", "cwd": "", "state": "thinking",
+            "tool": null, "progress": null, "context": null, "started_at": 1, "last_activity": 2, "state_since": 2,
+            "turn_started_at": null, "jump": {"pid": null, "session_id": "s", "cwd": "", "app": null}, "model": "gpt-6-sol"});
+        let s: Session = serde_json::from_value(v).unwrap();
+        assert_eq!(s.usage, None);
+        let u = Usage { tokens: 3, cost: 0.25, account: Some(Agent::Claude) };
+        assert_eq!(serde_json::to_value(u).unwrap(), serde_json::json!({"tokens": 3, "cost": 0.25, "account": "claude"}));
     }
 
     #[test]

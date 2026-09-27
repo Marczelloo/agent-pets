@@ -24,6 +24,8 @@ export interface Session {
   state_since: number;
   turn_started_at: number | null;
   jump: { pid: number | null; session_id: string; cwd: string; app: App | null; app_name?: string | null; host_pid?: number | null };
+  /** zużycie z bazy agenta (od 0.11, tylko opencode) */
+  usage?: Usage | null;
   /** zadanie Agent Routera powiązane z tym wątkiem Codexa */
   router_task?: RouterTask | null;
   /** id sesji rodzica; brak = zwykła sesja */
@@ -46,7 +48,11 @@ export interface SubInfo { kind: SubKind; agent_type: string | null; description
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
 export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null }
-export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number }
+/** Tokeny i koszt sesji z bazy agenta (od 0.11 tylko opencode); `account` = konto, którego limity dotyczą sesji. */
+export interface Usage { tokens: number; cost: number; account: Agent | null }
+/** Suma dnia (od lokalnej północy) dla agenta. */
+export interface AgentUsage { agent: Agent; tokens_today: number; cost_today: number }
+export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[] }
 /** Układ od Rusta; `mode` i `light` od 0.7 (brak = pasek, ciemny). */
 export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean }
 export type PointerMsg =

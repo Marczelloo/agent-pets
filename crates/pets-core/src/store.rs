@@ -36,6 +36,8 @@ pub struct Store {
     /// dzieci, które już odeszły: id → czas końca. Starsze zdarzenia (spóźnione linie pliku, ten sam wpis
     /// w status.json routera) ich nie ożywiają; nowsze (kolejna tura) tak.
     tombs: BTreeMap<String, i64>,
+    /// sumy dnia agentów z własną bazą (opencode)
+    agent_usage: Vec<AgentUsage>,
 }
 
 /// Sesja cicha dłużej niż próg zakończenia plus tyle to stary wątek (np. dotknięty przez aplikację Codex),
@@ -87,6 +89,7 @@ fn new_session(e: &Event) -> Session {
         model: None,
         // sesja z furtki (`generic:<agent>:<sesja>`): do czasu zgłoszenia nazwy pokazujemy id agenta
         agent_name: (e.source == Source::Generic).then(|| e.session_id.split(':').nth(1).map(String::from)).flatten(),
+        usage: None,
     }
 }
 
@@ -155,7 +158,7 @@ impl Store {
     pub fn new(timing: Timing) -> Self {
         Store { timing, sessions: BTreeMap::new(), pending: BTreeMap::new(),
                 ended_at: BTreeMap::new(), limits: Vec::new(), limits_ts: Vec::new(),
-                clock: i64::MIN, shown_at: BTreeMap::new(), tombs: BTreeMap::new() }
+                clock: i64::MIN, shown_at: BTreeMap::new(), tombs: BTreeMap::new(), agent_usage: Vec::new() }
     }
 
     pub fn session(&self, id: &str) -> Option<&Session> { self.sessions.get(id) }
@@ -167,6 +170,22 @@ impl Store {
     }
 
     pub fn limits(&self) -> &[Limit] { &self.limits }
+
+    pub fn agent_usage(&self) -> &[AgentUsage] { &self.agent_usage }
+
+    /// Zużycie sesji z bazy agenta. Zwraca, czy coś się zmieniło (brak sesji albo ta sama wartość: nie).
+    pub fn set_usage(&mut self, id: &str, u: Option<Usage>) -> bool {
+        match self.sessions.get_mut(id) {
+            Some(s) if s.usage != u => { s.usage = u; true }
+            _ => false,
+        }
+    }
+
+    pub fn set_agent_usage(&mut self, v: Vec<AgentUsage>) -> bool {
+        if self.agent_usage == v { return false; }
+        self.agent_usage = v;
+        true
+    }
 
     /// Zostawia sesje spełniające `keep` (np. po wyłączeniu aplikacji w ustawieniach). Zwraca, czy coś usunięto.
     pub fn retain_sessions(&mut self, keep: impl Fn(&Session) -> bool) -> bool {
@@ -464,6 +483,24 @@ mod tests {
     fn tool(t: Tool, ts: i64) -> Event { let mut e = ev(Kind::ToolStart, ts); e.tool = Some(t); e }
     fn alive(_: u32) -> bool { true }
     fn st(s: &Store) -> (State, Option<Tool>) { let x = s.session("s1").unwrap(); (x.state, x.tool) }
+
+    #[test]
+    fn usage_is_set_only_on_its_session_and_reports_real_changes() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 1));
+        s.apply(&Event::new(Source::Opencode, "opencode:a", Kind::Prompt, 1));
+        let u = Usage { tokens: 10, cost: 0.0, account: Some(Agent::Codex) };
+        assert!(s.set_usage("opencode:a", Some(u)));
+        assert!(!s.set_usage("opencode:a", Some(u)), "ta sama wartość");
+        assert!(!s.set_usage("nope", Some(u)), "brak sesji");
+        assert_eq!((s.session("opencode:a").unwrap().usage, s.session("s1").unwrap().usage), (Some(u), None));
+        s.apply(&Event::new(Source::Opencode, "opencode:a", Kind::TurnEnd, 2));
+        assert_eq!(s.session("opencode:a").unwrap().usage, Some(u), "kolejne zdarzenia nie zerują zużycia");
+        let day = vec![AgentUsage { agent: Agent::Opencode, tokens_today: 5, cost_today: 0.5 }];
+        assert!(s.set_agent_usage(day.clone()));
+        assert!(!s.set_agent_usage(day.clone()));
+        assert_eq!(s.agent_usage(), day.as_slice());
+    }
 
     #[test]
     fn empty_model_or_name_does_not_erase_what_we_know() {

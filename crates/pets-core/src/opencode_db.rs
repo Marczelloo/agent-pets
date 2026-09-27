@@ -29,14 +29,17 @@ pub const QUERIES: &[&str] = &[SESSION_USAGE, LAST_PROVIDER, TODAY, SESSIONS, ME
 
 pub fn db_path(home: &Path) -> PathBuf { home.join(".local").join("share").join("opencode").join("opencode.db") }
 
-/// Liczba otwarć bazy (test: przy wyłączonej integracji nie otwieramy jej wcale).
 #[cfg(test)]
-pub static OPENS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+thread_local! {
+    /// Liczba otwarć bazy w tym wątku (test: przy wyłączonej integracji nie otwieramy jej wcale). Na wątek, bo testy
+    /// działają równolegle.
+    pub static OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 /// Połączenie tylko do odczytu na jedno odczytanie; blokada dłuższa niż 200 ms kończy zapytanie błędem.
 pub fn open(path: &Path) -> Option<Connection> {
     #[cfg(test)]
-    OPENS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    OPENS.with(|n| n.set(n.get() + 1));
     if !path.is_file() { return None; }
     let c = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX).ok()?;
     c.busy_timeout(std::time::Duration::from_millis(200)).ok()?;
@@ -116,13 +119,14 @@ pub fn tools(c: &Connection, session: &str) -> Vec<(i64, String)> {
         .map(|rows| rows.flatten().filter(|(_, n)| !n.is_empty()).collect()).unwrap_or_default()
 }
 
+/// Bazy testowe ze schemą opencode (spike S3), wspólne dla testów tego modułu, runtime i statystyk.
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) mod fixture {
     use rusqlite::params;
 
     /// Baza jak u użytkownika (spike S3), z tabelą tokenów logowania, której nie wolno czytać.
-    fn db(dir: &std::path::Path) -> std::path::PathBuf {
+    pub fn db(dir: &std::path::Path) -> std::path::PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
         let p = dir.join("opencode.db");
         let c = rusqlite::Connection::open(&p).unwrap();
         c.execute_batch("
@@ -139,21 +143,28 @@ mod tests {
         p
     }
 
-    fn session(c: &rusqlite::Connection, id: &str, parent: Option<&str>, updated: i64, cost: f64, t: [i64; 5]) {
+    pub fn session(c: &rusqlite::Connection, id: &str, parent: Option<&str>, updated: i64, cost: f64, t: [i64; 5]) {
         c.execute("INSERT INTO session VALUES (?1, 'p', ?2, 's', 'C:/work/app', 'SEKRET-123 title', '1', 1, ?3, NULL, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![id, parent, updated, cost, t[0], t[1], t[2], t[3], t[4]]).unwrap();
     }
 
-    fn message(c: &rusqlite::Connection, id: &str, sid: &str, created: i64, data: serde_json::Value) {
+    pub fn message(c: &rusqlite::Connection, id: &str, sid: &str, created: i64, data: serde_json::Value) {
         c.execute("INSERT INTO message VALUES (?1, ?2, ?3, ?3, ?4)", params![id, sid, created, data.to_string()]).unwrap();
     }
 
-    fn reply(provider: &str, created: i64, tokens: [i64; 5], cost: f64) -> serde_json::Value {
+    pub fn reply(provider: &str, created: i64, tokens: [i64; 5], cost: f64) -> serde_json::Value {
         serde_json::json!({"role": "assistant", "providerID": provider, "modelID": "gpt-6-sol", "cost": cost,
             "tokens": {"input": tokens[0], "output": tokens[1], "reasoning": tokens[2], "cache": {"read": tokens[3], "write": tokens[4]}},
             "time": {"created": created, "completed": created + 500}, "path": {"cwd": "C:/work/app", "root": "C:/work"},
             "summary": {"body": "SEKRET-123"}})
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::fixture::*;
+    use rusqlite::params;
 
     #[test]
     fn a_session_adds_up_its_five_token_columns_and_names_its_last_provider() {

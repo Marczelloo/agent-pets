@@ -79,6 +79,7 @@ export const pl = {
     settings: 'Ustawienia',
     limits: 'Limity',
     noData: 'brak danych',
+    usage: { session: (v: string) => `sesja: ${v} tok.`, today: (v: string) => `dziś: ${v} tok.` },
     sessions: 'Sesje',
     noSessions: 'Brak aktywnych sesji',
     tasks: 'Zadania',
