@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-pub enum Agent { Claude, Codex }
+pub enum Agent { Claude, Codex, Opencode, Antigravity, Copilot, Cursor, Grok, Other }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -10,7 +10,7 @@ pub enum Origin { Cli, Desktop, Router }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum App { Terminal, ClaudeDesktop, CodexApp, Vscode }
+pub enum App { Terminal, ClaudeDesktop, CodexApp, Vscode, T3code, Cursor, Antigravity, Zed, Jetbrains, Other }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -32,6 +32,12 @@ pub struct JumpTarget {
     pub session_id: String,
     pub cwd: String,
     pub app: Option<App>,
+    /// nazwa programu `App::Other` (np. `originator` Codexa spoza mapy)
+    #[serde(default)]
+    pub app_name: Option<String>,
+    /// PID programu-gospodarza (VS Code, t3code…), gdy różny od procesu agenta
+    #[serde(default)]
+    pub host_pid: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -68,6 +74,12 @@ pub struct Session {
     /// `needs_you` rodzica to prośba jego subagenta: dalsza praca dziecka znaczy, że już odpowiedziano
     #[serde(skip)]
     pub waits_on_child: bool,
+    /// id modelu, którego używa agent (np. `claude-opus-5-5`); nazwę do wyświetlenia liczy UI
+    #[serde(default)]
+    pub model: Option<String>,
+    /// nazwa do wyświetlenia agenta `Other` (z furtki)
+    #[serde(default)]
+    pub agent_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,7 +113,7 @@ pub struct Limit {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Source { Claude, Codex, Router }
+pub enum Source { Claude, Codex, Router, Opencode, Generic }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -135,6 +147,10 @@ pub struct EventData {
     pub sub_end: bool,
     /// prośba (`NeedsInput`) zgłoszona przez subagenta, czeka u rodzica
     pub from_child: bool,
+    pub model: Option<String>,
+    pub agent_name: Option<String>,
+    pub app_name: Option<String>,
+    pub host_pid: Option<u32>,
 }
 
 /// Zadanie Agent Routera powiązane z wątkiem Codexa (`~/.agent-router/status.json`).
@@ -165,7 +181,12 @@ impl Event {
         Event { source, session_id: session_id.into(), kind, tool: None, ts, data: EventData::default() }
     }
     pub fn agent(&self) -> Agent {
-        match self.source { Source::Claude => Agent::Claude, Source::Codex | Source::Router => Agent::Codex }
+        match self.source {
+            Source::Claude => Agent::Claude,
+            Source::Codex | Source::Router => Agent::Codex,
+            Source::Opencode => Agent::Opencode,
+            Source::Generic => Agent::Other,
+        }
     }
 }
 
@@ -180,6 +201,40 @@ mod tests {
             "turn_started_at": null, "jump": {"pid": null, "session_id": "s", "cwd": "", "app": null}});
         let s: Session = serde_json::from_value(v).unwrap();
         assert_eq!((s.parent, s.sub, s.action, s.question), (None, None, None, None));
+    }
+
+    #[test]
+    fn a_0_9_session_has_no_model_agent_name_or_host() {
+        let v = serde_json::json!({"id": "s", "agent": "codex", "origin": "cli", "title": "", "cwd": "", "state": "thinking",
+            "tool": null, "progress": null, "context": null, "started_at": 1, "last_activity": 2, "state_since": 2,
+            "turn_started_at": null, "jump": {"pid": null, "session_id": "s", "cwd": "", "app": "vscode"}});
+        let s: Session = serde_json::from_value(v).unwrap();
+        assert_eq!((s.model, s.agent_name, s.jump.app_name, s.jump.host_pid), (None, None, None, None));
+    }
+
+    #[test]
+    fn new_variants_round_trip_in_snake_case() {
+        for (a, j) in [(Agent::Opencode, "opencode"), (Agent::Antigravity, "antigravity"), (Agent::Copilot, "copilot"),
+                       (Agent::Cursor, "cursor"), (Agent::Grok, "grok"), (Agent::Other, "other")] {
+            assert_eq!(serde_json::to_value(a).unwrap(), j);
+            assert_eq!(serde_json::from_value::<Agent>(j.into()).unwrap(), a);
+        }
+        for (a, j) in [(App::T3code, "t3code"), (App::Cursor, "cursor"), (App::Antigravity, "antigravity"),
+                       (App::Zed, "zed"), (App::Jetbrains, "jetbrains"), (App::Other, "other")] {
+            assert_eq!(serde_json::to_value(a).unwrap(), j);
+            assert_eq!(serde_json::from_value::<App>(j.into()).unwrap(), a);
+        }
+        for (x, j) in [(Source::Opencode, "opencode"), (Source::Generic, "generic")] {
+            assert_eq!(serde_json::to_value(x).unwrap(), j);
+            assert_eq!(serde_json::from_value::<Source>(j.into()).unwrap(), x);
+        }
+    }
+
+    #[test]
+    fn opencode_and_door_events_belong_to_their_agents() {
+        assert_eq!(Event::new(Source::Opencode, "opencode:s", Kind::Prompt, 1).agent(), Agent::Opencode);
+        assert_eq!(Event::new(Source::Generic, "generic:kilo:s", Kind::Prompt, 1).agent(), Agent::Other);
+        assert_eq!(Event::new(Source::Router, "r", Kind::Prompt, 1).agent(), Agent::Codex);
     }
 
     #[test]

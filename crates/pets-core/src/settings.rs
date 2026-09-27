@@ -31,7 +31,14 @@ pub struct Settings {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
-pub struct Apps { pub claude_code: bool, pub codex: bool, pub agent_router: bool }
+pub struct Apps {
+    pub claude_code: bool,
+    pub codex: bool,
+    pub agent_router: bool,
+    pub opencode: bool,
+    /// furtka: `/v1/events/generic` dla dowolnych agentów
+    pub generic: bool,
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
@@ -276,7 +283,9 @@ impl Stage {
     }
 }
 
-impl Default for Apps { fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true } } }
+impl Default for Apps {
+    fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: true, generic: true } }
+}
 impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
 impl Default for Pets {
     fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5, react_to_media: true } }
@@ -468,6 +477,14 @@ mod tests {
         let l = load_str("{bad");
         let e = l.error.unwrap();
         assert!(e.contains("settings.json") && !e.contains("uszkodzony"), "{e}");
+    }
+
+    #[test]
+    fn a_0_9_file_turns_on_opencode_and_the_door() {
+        let l = load_str(r#"{"version":1,"apps":{"claude_code":true,"codex":false,"agent_router":true}}"#);
+        assert!(l.error.is_none());
+        let a = l.settings.apps;
+        assert_eq!((a.claude_code, a.codex, a.agent_router, a.opencode, a.generic), (true, false, true, true, true));
     }
 
     #[test]

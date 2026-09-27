@@ -59,22 +59,44 @@ fn host_ok(h: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn resume(t: &Target) -> (String, Vec<String>) {
+/// Id sesji w samym agencie (bez naszego prefiksu `opencode:`).
+fn agent_id(t: &Target) -> &str {
     match t.agent {
-        Agent::Claude => ("claude".into(), vec!["--resume".into(), t.session_id.clone()]),
-        Agent::Codex => ("codex".into(), vec!["resume".into(), t.session_id.clone()]),
+        Agent::Opencode => t.session_id.strip_prefix("opencode:").unwrap_or(&t.session_id),
+        _ => &t.session_id,
     }
 }
 
-/// Komenda wznowienia do schowka. Id spoza bezpiecznego alfabetu jest przefiltrowane.
+/// Program i argumenty wznowienia; `None` = agent bez wznowienia z linii poleceń (furtka, agenci z 0.11/0.12).
+fn resume(t: &Target) -> Option<(String, Vec<String>)> {
+    let id = agent_id(t).to_string();
+    match t.agent {
+        Agent::Claude => Some(("claude".into(), vec!["--resume".into(), id])),
+        Agent::Codex => Some(("codex".into(), vec!["resume".into(), id])),
+        Agent::Opencode => Some(("opencode".into(), vec!["--session".into(), id])),
+        Agent::Antigravity | Agent::Copilot | Agent::Cursor | Agent::Grok | Agent::Other => None,
+    }
+}
+
+/// Komenda wznowienia do schowka (albo samo `cd`, gdy agent nie ma wznowienia). Id spoza bezpiecznego alfabetu jest przefiltrowane.
 pub fn resume_command(t: &Target) -> String {
-    let id: String = t.session_id.chars().filter(|c| id_char(*c)).collect();
-    let base = match t.agent { Agent::Claude => format!("claude --resume {id}"), Agent::Codex => format!("codex resume {id}") };
-    if t.cwd.is_empty() { base } else { format!("cd \"{}\"; {base}", t.cwd.replace('"', "")) }
+    let id: String = agent_id(t).chars().filter(|c| id_char(*c)).collect();
+    let cd = (!t.cwd.is_empty()).then(|| format!("cd \"{}\"", t.cwd.replace('"', "")));
+    let base = resume(t).map(|(p, a)| {
+        let args: Vec<&str> = a[..a.len() - 1].iter().map(String::as_str).collect();
+        format!("{p} {} {id}", args.join(" "))
+    });
+    match (cd, base) {
+        (Some(cd), Some(b)) => format!("{cd}; {b}"),
+        (Some(cd), None) => cd,
+        (None, Some(b)) => b,
+        (None, None) => String::new(),
+    }
 }
 
 pub fn plan(t: &Target) -> Vec<Step> {
-    if !safe_id(&t.session_id) { return vec![Step::Clipboard(resume_command(t))]; }
+    let resumable = resume(t).is_some();
+    if resumable && !safe_id(agent_id(t)) { return vec![Step::Clipboard(resume_command(t))]; }
     let mut out = Vec::new();
     match t.agent {
         Agent::Claude => {
@@ -90,12 +112,13 @@ pub fn plan(t: &Target) -> Vec<Step> {
             if t.desktop { out.push(Step::DeepLink(format!("codex://threads/{}", t.session_id))); }
             if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); }
         }
+        _ => if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); },
     }
-    if !t.cwd.is_empty() && Path::new(&t.cwd).is_dir() {
-        let (program, args) = resume(t);
+    if let Some((program, args)) = resume(t).filter(|_| !t.cwd.is_empty() && Path::new(&t.cwd).is_dir()) {
         out.push(Step::OpenTerminal { cwd: t.cwd.clone(), program, args });
     }
-    out.push(Step::Clipboard(resume_command(t)));
+    let clip = resume_command(t);
+    if !clip.is_empty() { out.push(Step::Clipboard(clip)); }
     out
 }
 
@@ -169,6 +192,27 @@ mod tests {
         let mut x = t(Agent::Claude, true);
         x.host_session_id = Some("local_x&y".into());
         assert_eq!(plan(&x)[0], Step::FocusProcess(42));
+    }
+
+    #[test]
+    fn opencode_resumes_its_own_session_id() {
+        let mut x = t(Agent::Opencode, false);
+        x.session_id = "opencode:ses_3f2a".into();
+        let p = plan(&x);
+        assert_eq!(p[0], Step::FocusProcess(42));
+        assert!(p.iter().any(|s| matches!(s, Step::OpenTerminal { program, args, .. }
+            if program == "opencode" && args == &vec!["--session".to_string(), "ses_3f2a".into()])), "{p:?}");
+        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.ends_with("; opencode --session ses_3f2a")), "{p:?}");
+    }
+
+    #[test]
+    fn an_agent_without_resume_focuses_and_copies_only_the_folder() {
+        let mut x = t(Agent::Other, false);
+        x.session_id = "generic:kilo:abc".into();
+        let p = plan(&x);
+        assert_eq!(p[0], Step::FocusProcess(42));
+        assert!(p.iter().all(|s| !matches!(s, Step::OpenTerminal { .. } | Step::DeepLink(_))), "{p:?}");
+        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("cd \"") && !c.contains(';')), "{p:?}");
     }
 
     #[test]

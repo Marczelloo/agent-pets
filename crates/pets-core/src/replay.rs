@@ -50,6 +50,17 @@ impl Replay {
 mod tests {
     use super::*;
     use crate::model::{Event, Kind, Source};
+
+    #[test]
+    fn an_unknown_future_agent_skips_only_its_line() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("r.jsonl");
+        let ok = serde_json::to_string(&Event::new(crate::model::Source::Opencode, "opencode:a", crate::model::Kind::Prompt, 1)).unwrap();
+        let bad = ok.replace("\"opencode\"", "\"kiro\"");
+        std::fs::write(&p, format!("{bad}\n{ok}\n")).unwrap();
+        let r = Replay::load(&p, 1.0).unwrap();
+        assert_eq!(r.events.len(), 1);
+    }
     use crate::store::{Store, Timing};
 
     fn ev(id: &str, kind: Kind, ts: i64) -> Event { Event::new(Source::Claude, id, kind, ts) }

@@ -39,7 +39,16 @@ fn name(s: &Session, lang: Lang) -> String {
 }
 
 fn limit_toast(l: &Limit, lang: Lang) -> Toast {
-    let who = match l.agent { Agent::Claude => "Claude", Agent::Codex => "Codex" };
+    let who = match l.agent {
+        Agent::Claude => "Claude",
+        Agent::Codex => "Codex",
+        Agent::Opencode => "opencode",
+        Agent::Antigravity => "Antigravity",
+        Agent::Copilot => "Copilot",
+        Agent::Cursor => "Cursor",
+        Agent::Grok => "Grok",
+        Agent::Other => "Agent",
+    };
     let five = l.window == Window::FiveHour;
     let (title, body) = match lang {
         Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w}"), format!("Zużyto {:.0}% limitu {w}", l.used_pct)) }
@@ -113,7 +122,7 @@ mod tests {
         Session { id: id.into(), agent: Agent::Claude, origin: Origin::Cli, title: format!("T-{id}"), cwd: String::new(),
             state, tool: None, progress: None, context: None, started_at: 0, last_activity: since, state_since: since,
             turn_started_at: turn, jump: JumpTarget::default(), router_task: None,
-            parent: None, sub: None, action: None, question: None, waits_on_child: false }
+            parent: None, sub: None, action: None, question: None, waits_on_child: false, model: None, agent_name: None }
     }
     fn snap(sessions: Vec<Session>, limits: Vec<Limit>) -> Snapshot { Snapshot { sessions, limits, now: 0 } }
     const ALL: Settings = Settings { needs_you: true, done: true, limits: true };

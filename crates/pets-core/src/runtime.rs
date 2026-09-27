@@ -248,6 +248,10 @@ fn agent_on(apps: crate::settings::Apps, agent: crate::model::Agent) -> bool {
         crate::model::Agent::Claude => apps.claude_code,
         // router zleca zadania na tym samym koncie Codexa
         crate::model::Agent::Codex => apps.codex || apps.agent_router,
+        crate::model::Agent::Opencode => apps.opencode,
+        crate::model::Agent::Other => apps.generic,
+        // własne adaptery w 0.11 i 0.12
+        crate::model::Agent::Antigravity | crate::model::Agent::Copilot | crate::model::Agent::Cursor | crate::model::Agent::Grok => false,
     }
 }
 
@@ -256,13 +260,20 @@ fn session_on(apps: crate::settings::Apps, s: &crate::model::Session) -> bool {
         (crate::model::Origin::Router, _) => apps.agent_router,
         (_, crate::model::Agent::Claude) => apps.claude_code,
         (_, crate::model::Agent::Codex) => apps.codex,
+        (_, a) => agent_on(apps, a),
     }
 }
 
 fn event_on(apps: crate::settings::Apps, e: &Event) -> bool {
     use crate::model::{Origin, Source};
     if e.source == Source::Router || e.data.origin == Some(Origin::Router) { return apps.agent_router; }
-    match e.source { Source::Claude => apps.claude_code, Source::Codex => apps.codex, Source::Router => apps.agent_router }
+    match e.source {
+        Source::Claude => apps.claude_code,
+        Source::Codex => apps.codex,
+        Source::Router => apps.agent_router,
+        Source::Opencode => apps.opencode,
+        Source::Generic => apps.generic,
+    }
 }
 
 fn source_key(e: &Event) -> &'static str {
@@ -270,7 +281,13 @@ fn source_key(e: &Event) -> &'static str {
     if e.session_id == claude::desktop_usage::SESSION_ID || e.session_id == claude::account_usage::SESSION_ID {
         return "claude_usage";
     }
-    match e.source { Source::Claude => "claude_code", Source::Codex => "codex", Source::Router => "agent_router" }
+    match e.source {
+        Source::Claude => "claude_code",
+        Source::Codex => "codex",
+        Source::Router => "agent_router",
+        Source::Opencode => "opencode",
+        Source::Generic => "generic",
+    }
 }
 
 #[cfg(test)]
@@ -379,6 +396,22 @@ mod tests {
     }
 
     #[test]
+    fn opencode_and_the_door_follow_their_switches() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        rt.apply_external(event(Source::Claude, "c1", Kind::Prompt));
+        rt.apply_external(event(Source::Opencode, "opencode:a", Kind::Prompt));
+        rt.apply_external(event(Source::Generic, "generic:kilo:a", Kind::Prompt));
+        let apps = crate::settings::Apps { opencode: false, generic: false, ..Default::default() };
+        assert!(rt.set_apps(apps));
+        let ids: Vec<&str> = rt.store().sessions().iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["c1"]);
+        assert!(!rt.apply_external(event(Source::Generic, "generic:kilo:b", Kind::Prompt)));
+        assert!(!rt.apply_external(event(Source::Opencode, "opencode:b", Kind::Prompt)));
+    }
+
+    #[test]
     fn turning_an_app_off_removes_its_pets_and_limits_at_once() {
         use crate::model::{Agent, Kind, Limit, Source, Window};
         let h = home();
@@ -389,7 +422,7 @@ mod tests {
         let mut l = event(Source::Codex, "x1", Kind::Limits);
         l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 10.0, resets_at: None }];
         rt.apply_external(l);
-        let apps = crate::settings::Apps { claude_code: true, codex: false, agent_router: false };
+        let apps = crate::settings::Apps { claude_code: true, codex: false, agent_router: false, ..Default::default() };
         assert!(rt.set_apps(apps));
         let ids: Vec<&str> = rt.store().sessions().iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["c1"], "sesja routera znika z routerem, choć to wątek Codexa");

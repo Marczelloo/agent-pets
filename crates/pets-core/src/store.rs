@@ -61,6 +61,7 @@ fn new_session(e: &Event) -> Session {
         Source::Claude => Origin::Cli,
         Source::Codex => Origin::Desktop,
         Source::Router => Origin::Router,
+        Source::Opencode | Source::Generic => Origin::Cli,
     });
     Session {
         id: e.session_id.clone(),
@@ -83,6 +84,8 @@ fn new_session(e: &Event) -> Session {
         action: None,
         question: None,
         waits_on_child: false,
+        model: None,
+        agent_name: None,
     }
 }
 
@@ -93,7 +96,17 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(p) = d.progress { s.progress = Some(p); }
     if let Some(c) = d.context { s.context = Some(c); }
     if let Some(p) = d.pid { s.jump.pid = Some(p); }
-    if let Some(a) = d.app { s.jump.app = Some(a); }
+    if let Some(a) = d.app {
+        // aplikacja agenta (rejestr, `originator`) wygrywa z programem z drzewa procesów, który tylko uzupełnia
+        let agent_app = matches!(s.jump.app, Some(App::ClaudeDesktop | App::CodexApp));
+        if !agent_app || matches!(a, App::ClaudeDesktop | App::CodexApp) {
+            s.jump.app = Some(a);
+            s.jump.app_name = d.app_name.clone().filter(|n| !n.is_empty());
+        }
+    }
+    if let Some(p) = d.host_pid { s.jump.host_pid = Some(p); }
+    if let Some(m) = d.model.as_ref().filter(|m| !m.is_empty()) { s.model = Some(m.clone()); }
+    if let Some(n) = d.agent_name.as_ref().filter(|n| !n.is_empty()) { s.agent_name = Some(n.clone()); }
     if let Some(r) = &d.router_task { s.router_task = Some(r.clone()); }
     // sesja nigdy nie jest własnym rodzicem (zniknęłaby ze sceny i z panelu)
     if let Some(p) = d.parent.as_ref().filter(|p| **p != s.id) { s.parent = Some(p.clone()); }
@@ -444,6 +457,45 @@ mod tests {
     fn tool(t: Tool, ts: i64) -> Event { let mut e = ev(Kind::ToolStart, ts); e.tool = Some(t); e }
     fn alive(_: u32) -> bool { true }
     fn st(s: &Store) -> (State, Option<Tool>) { let x = s.session("s1").unwrap(); (x.state, x.tool) }
+
+    #[test]
+    fn empty_model_or_name_does_not_erase_what_we_know() {
+        let mut s = Store::new(Timing::default());
+        let mut e = Event::new(Source::Generic, "generic:kilo:a", Kind::Prompt, 0);
+        e.data.model = Some("GLM-5.3".into());
+        e.data.agent_name = Some("Kilo CLI".into());
+        s.apply(&e);
+        let mut e2 = Event::new(Source::Generic, "generic:kilo:a", Kind::Meta, 10);
+        e2.data.model = Some(String::new());
+        e2.data.agent_name = Some(String::new());
+        s.apply(&e2);
+        let x = s.session("generic:kilo:a").unwrap();
+        assert_eq!((x.agent, x.model.as_deref(), x.agent_name.as_deref()), (Agent::Other, Some("GLM-5.3"), Some("Kilo CLI")));
+    }
+
+    #[test]
+    fn a_host_from_the_process_tree_does_not_override_the_agent_app() {
+        let mut s = Store::new(Timing::default());
+        let mut e = ev(Kind::Prompt, 0);
+        e.data.app = Some(App::ClaudeDesktop);
+        s.apply(&e);
+        let mut e2 = ev(Kind::Meta, 10);
+        e2.data.app = Some(App::Terminal);
+        e2.data.host_pid = Some(7);
+        s.apply(&e2);
+        let j = &s.session("s1").unwrap().jump;
+        assert_eq!((j.app, j.host_pid), (Some(App::ClaudeDesktop), Some(7)));
+        // terminal bez programu wyżej zostaje uzupełniony programem
+        let mut e3 = Event::new(Source::Claude, "s2", Kind::Prompt, 0);
+        e3.data.app = Some(App::Terminal);
+        s.apply(&e3);
+        let mut e4 = Event::new(Source::Claude, "s2", Kind::Meta, 10);
+        e4.data.app = Some(App::Other);
+        e4.data.app_name = Some("Warp".into());
+        s.apply(&e4);
+        let j = &s.session("s2").unwrap().jump;
+        assert_eq!((j.app, j.app_name.as_deref()), (Some(App::Other), Some("Warp")));
+    }
 
     #[test]
     fn new_session_starts_idle_then_thinks_on_prompt() {
