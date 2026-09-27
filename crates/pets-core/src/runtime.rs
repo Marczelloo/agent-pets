@@ -138,8 +138,8 @@ impl Runtime {
                 Incoming::Opencode(v) => self.on_opencode(&v),
                 Incoming::Copilot(env) => self.apps.copilot
                     && crate::adapters::copilot::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
-                // adapter w tasku 4
-                Incoming::Antigravity(_) => false,
+                Incoming::Antigravity(env) => self.apps.antigravity
+                    && crate::adapters::antigravity::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -507,6 +507,22 @@ mod tests {
         let s = rt.store().session("copilot:cop_1").expect("sesja Copilota");
         assert_eq!((s.agent, s.jump.pid, s.tool), (Agent::Copilot, Some(std::process::id()), Some(crate::model::Tool::Bash)));
         assert_eq!(s.action.as_deref(), Some("cargo test"));
+    }
+
+    #[test]
+    fn an_antigravity_hook_brings_an_antigravity_pet() {
+        let h = home();
+        let mut c = cfg(&h);
+        c.apps.antigravity = true;
+        let mut rt = Runtime::start(c).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreInvocation",
+            "payload": {"conversationId": "d5f1", "workspacePaths": ["C:/w"], "modelName": "gemini-3.5-pro"}}).to_string();
+        assert_eq!(post_agent(&ep, "antigravity", &body), 204);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while rt.store().session("antigravity:d5f1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        let s = rt.store().session("antigravity:d5f1").expect("sesja Antigravity");
+        assert_eq!((s.agent, s.state, s.model.as_deref()), (Agent::Antigravity, crate::model::State::Thinking, Some("gemini-3.5-pro")));
     }
 
     #[test]

@@ -58,6 +58,21 @@ pub fn from_copilot(name: &str) -> Tool {
     }
 }
 
+/// Nazwy narzędzi Antigravity (spike S2; do potwierdzenia nagraniem na żywo). MCP: `mcp_…`.
+pub fn from_antigravity(name: &str) -> Tool {
+    match name {
+        "run_command" => Tool::Bash,
+        "view_file" | "view_file_outline" | "view_code_item" | "list_dir" => Tool::Read,
+        "write_to_file" | "replace_file_content" | "multi_replace_file_content" => Tool::Edit,
+        "grep_search" | "find_by_name" | "codebase_search" => Tool::Grep,
+        "read_url_content" | "search_web" => Tool::Web,
+        n if n.starts_with("browser_") => Tool::Web,
+        "invoke_subagent" => Tool::Agent,
+        n if n.starts_with("mcp_") => Tool::Mcp,
+        _ => Tool::Other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
