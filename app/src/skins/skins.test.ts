@@ -36,12 +36,13 @@ describe('skins for agents', () => {
     expect(SKINS.opencode.legacy).toBeFalsy();
     expect(SKINS.clawd.legacy && SKINS.kodek.legacy).toBe(true);
   });
-  it('the blob draws its letter and opencode its prompt eyes', () => {
+  it('the blob draws its letter and opencode its logo eye', () => {
     const rec = recorder();
     drawPet(rec.ctx, petFor({ agent: 'other', agent_name: 'Kilo' }, 'idle'), 60, 40, 1, 0);
     expect(rec.log.some(l => l.startsWith('fillText(K'))).toBe(true);
     const oc = recorder();
     drawPet(oc.ctx, petFor({ agent: 'opencode', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
-    expect(oc.log.some(l => l.includes('#F5F5F5') || l.includes('#f5f5f5'))).toBe(true);
+    expect(oc.log.some(l => l.includes('#F1ECEC'))).toBe(true);
+    expect(oc.log.some(l => l.includes('#131010'))).toBe(true);
   });
 });

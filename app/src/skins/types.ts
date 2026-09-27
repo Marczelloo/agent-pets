@@ -8,10 +8,8 @@ export interface Skin {
   eyeX: number; eyeW: number; eyeH: number;
   screenFace: boolean; antenna: boolean; backVents: boolean;
   eyeGlint: boolean; blush: boolean; frontLegsOnlySitting: boolean;
-  /** oczy: pigułki (domyślnie) albo znak zachęty `>` i kursor `_` na ekranie */
-  eyes?: 'pill' | 'prompt';
-  /** kolory ekranu twarzy (`screenFace`); domyślnie ekran Kodka */
-  screen?: { bg: string; fg: string };
+  /** oczy: dwie pigułki (domyślnie) albo jedno oko cyklopa w kształcie „o” z logo opencode */
+  eyes?: 'pill' | 'cyclops';
   /** wielka litera nazwy agenta na brzuchu (`Pet.mark`) */
   mark?: boolean;
   /** ma własny rysunek w stylach Pixel i Sticker; bez tego te style rysują go jak Clean */

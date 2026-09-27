@@ -10,7 +10,7 @@ import { sticker } from './sticker';
 import type { StyleDef } from './types';
 export type { StyleDef } from './types';
 /** Kolor agenta (poświata Neonu, oczy, akcenty). */
-export const ACCENT: Record<SkinId, string> = { clawd: '#D97757', kodek: '#5DCAA5', opencode: '#F5A623', blob: '#8C887E' };
+export const ACCENT: Record<SkinId, string> = { clawd: '#D97757', kodek: '#5DCAA5', opencode: '#CFC9C9', blob: '#8C887E' };
 export const STYLES: Record<StyleId, StyleDef> = {
   clean, sketch, sticker, pixel, neon, ink, pastel,
 };
