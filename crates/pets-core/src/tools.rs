@@ -29,6 +29,20 @@ pub fn from_codex(name: &str) -> Option<Tool> {
     }
 }
 
+/// Nazwy narzędzi opencode (spike S1, z dokumentacji). Nazwa z `_` spoza listy to narzędzie MCP (`serwer_narzędzie`).
+pub fn from_opencode(name: &str) -> Tool {
+    match name {
+        "bash" => Tool::Bash,
+        "edit" | "write" | "patch" | "multiedit" => Tool::Edit,
+        "read" => Tool::Read,
+        "grep" | "glob" | "list" => Tool::Grep,
+        "webfetch" | "websearch" => Tool::Web,
+        "task" => Tool::Agent,
+        n if n.contains('_') => Tool::Mcp,
+        _ => Tool::Other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

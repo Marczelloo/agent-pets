@@ -63,6 +63,8 @@ pub struct Runtime {
     _ingest: Ingest,
     /// furtka otwarta (`apps.generic`), wspólna z wątkiem endpointu
     door: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// program-gospodarz sesji opencode, liczony raz na sesję (jeden zrzut procesów)
+    opencode_hosts: std::collections::HashMap<String, Option<crate::host::Host>>,
     _watcher: Option<notify::RecommendedWatcher>,
 }
 
@@ -80,7 +82,7 @@ impl Runtime {
             hook_state: HookState::default(), lang: cfg.lang, links, links_path,
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
-            _ingest: ingest, door, _watcher: None,
+            _ingest: ingest, door, opencode_hosts: Default::default(), _watcher: None,
         };
         rt.sources.lang = rt.lang;
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
@@ -133,6 +135,7 @@ impl Runtime {
                 Incoming::ClaudeHook(env) => self.on_hook(env),
                 Incoming::ClaudeStatusline(s) => claude::statusline::to_events(&s).into_iter().fold(false, |c, e| self.apply(e) | c),
                 Incoming::Generic(e) => self.apply(e),
+                Incoming::Opencode(v) => self.on_opencode(&v),
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -234,6 +237,27 @@ impl Runtime {
             e.data.parent = id.split('/').next().map(String::from);
             self.apply(e);
         }
+    }
+
+    fn on_opencode(&mut self, env: &serde_json::Value) -> bool {
+        if !self.apps.opencode { return false; }
+        let mut changed = false;
+        for mut e in crate::adapters::opencode::events(env, self.lang) {
+            // nowa (albo wróciła) sesja: program z drzewa procesów nad procesem opencode
+            if self.store.session(&e.session_id).is_none() {
+                let pid = e.data.pid;
+                let host = self.opencode_hosts.entry(e.session_id.clone())
+                    .or_insert_with(|| pid.and_then(|p| crate::host::host_of(&crate::host::ProcTable::snapshot(), p))).clone();
+                if let Some(h) = host {
+                    e.data.app = Some(h.app);
+                    e.data.app_name = h.name;
+                    e.data.host_pid = Some(h.pid);
+                }
+            }
+            if e.kind == crate::model::Kind::SessionEnd { self.opencode_hosts.remove(&e.session_id); }
+            changed |= self.apply(e);
+        }
+        changed
     }
 
     fn on_hook(&mut self, env: HookEnvelope) -> bool {
@@ -432,6 +456,23 @@ mod tests {
         assert_eq!((s.agent, s.state, s.tool), (Agent::Other, crate::model::State::Working, Some(crate::model::Tool::Bash)));
         rt.set_apps(crate::settings::Apps { generic: false, ..Default::default() });
         assert_eq!(send(&ep), 404);
+    }
+
+    #[test]
+    fn an_opencode_plugin_envelope_brings_an_opencode_pet() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let body = serde_json::json!({"v": 1, "ts": crate::time::now_ms(), "pid": std::process::id(), "event": "tool.before",
+            "session": "ses_1", "cwd": "C:/w", "tool": "bash", "input": {"command": "cargo test"}}).to_string();
+        let r = ureq::post(&format!("http://127.0.0.1:{}/v1/events/opencode", ep.port))
+            .set("Authorization", &format!("Bearer {}", ep.token)).send_string(&body).unwrap();
+        assert_eq!(r.status(), 204);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while rt.store().session("opencode:ses_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        let s = rt.store().session("opencode:ses_1").expect("sesja opencode");
+        assert_eq!((s.agent, s.jump.pid), (Agent::Opencode, Some(std::process::id())));
+        assert_eq!(s.action.as_deref(), Some("cargo test"));
     }
 
     #[test]

@@ -11,6 +11,8 @@ pub enum Incoming {
     ClaudeStatusline(StatuslineEnvelope),
     /// zdarzenie z furtki, już sprawdzone (`adapters::generic::to_event`)
     Generic(crate::model::Event),
+    /// koperta pluginu opencode (`adapters::opencode::events`)
+    Opencode(serde_json::Value),
 }
 
 pub struct Ingest {
@@ -46,13 +48,14 @@ impl Ingest {
     }
 }
 
-enum Route { Claude, Statusline, Generic }
+enum Route { Claude, Statusline, Opencode, Generic }
 
 fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, generic: &AtomicBool) -> u16 {
     if *req.method() != tiny_http::Method::Post { return 404; }
     let route = match req.url() {
         "/v1/events/claude" => Route::Claude,
         "/v1/events/claude-statusline" => Route::Statusline,
+        "/v1/events/opencode" => Route::Opencode,
         // wyłączona furtka wygląda jak brak trasy
         "/v1/events/generic" if generic.load(Ordering::Relaxed) => Route::Generic,
         _ => return 404,
@@ -66,6 +69,7 @@ fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Inco
     let msg = match route {
         Route::Statusline => serde_json::from_slice::<StatuslineEnvelope>(&body).ok().map(Incoming::ClaudeStatusline),
         Route::Claude => serde_json::from_slice::<HookEnvelope>(&body).ok().map(Incoming::ClaudeHook),
+        Route::Opencode => serde_json::from_slice::<serde_json::Value>(&body).ok().filter(|v| v.is_object()).map(Incoming::Opencode),
         Route::Generic => serde_json::from_slice::<crate::adapters::generic::GenericEvent>(&body).ok()
             .and_then(|g| crate::adapters::generic::to_event(g, crate::time::now_ms()).ok()).map(Incoming::Generic),
     };
@@ -143,6 +147,22 @@ mod tests {
         let big = format!(r#"{{"agent":"kilo","session":"abc","state":"done","title":"{}"}}"#, "x".repeat(1 << 20));
         assert_eq!(post(port, "/v1/events/generic", "secret", &big), 413);
         assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "nic nie trafiło do kanału");
+        ing.stop();
+    }
+
+    #[test]
+    fn opencode_envelopes_have_their_own_route() {
+        let (tx, rx) = channel();
+        let ing = Ingest::start("secret".into(), tx, door(false)).unwrap();
+        let port = ing.endpoint().port;
+        let body = r#"{"v":1,"event":"session.status","session":"ses_1","status":"busy"}"#;
+        assert_eq!(post(port, "/v1/events/opencode", "secret", body), 204);
+        match rx.recv_timeout(Duration::from_secs(2)).unwrap() {
+            Incoming::Opencode(v) => assert_eq!(v["session"], "ses_1"),
+            _ => panic!("zła trasa"),
+        }
+        assert_eq!(post(port, "/v1/events/opencode", "wrong", body), 401);
+        assert_eq!(post(port, "/v1/events/opencode", "secret", "[1]"), 400);
         ing.stop();
     }
 

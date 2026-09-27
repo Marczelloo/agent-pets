@@ -1,6 +1,7 @@
 //! Adaptery agentów bez własnych logów w rdzeniu: zdarzenia z pluginu (opencode) i z furtki (dowolny agent).
 //! Tekst z zewnątrz jest niezaufany: bez znaków sterujących, przycięty.
 pub mod generic;
+pub mod opencode;
 
 /// Tekst z zewnątrz: znaki sterujące zamienione na spacje, obcięte brzegi, najwyżej `max` znaków.
 pub fn clean_text(s: &str, max: usize) -> String {

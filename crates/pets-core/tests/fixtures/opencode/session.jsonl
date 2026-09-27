@@ -1,0 +1,14 @@
+{"v":1,"ts":1790000000000,"pid":4242,"event":"session.created","session":"ses_3f2a","cwd":"C:/work/app"}
+{"v":1,"ts":1790000000100,"pid":4242,"event":"chat.message","session":"ses_3f2a","cwd":"C:/work/app","model":"openai/gpt-6-sol"}
+{"v":1,"ts":1790000000200,"pid":4242,"event":"session.status","session":"ses_3f2a","cwd":"C:/work/app","status":"busy"}
+{"v":1,"ts":1790000000300,"pid":4242,"event":"tool.before","session":"ses_3f2a","cwd":"C:/work/app","tool":"edit","input":{"file_path":"C:/work/app/src/main.ts"}}
+{"v":1,"ts":1790000000400,"pid":4242,"event":"tool.after","session":"ses_3f2a","cwd":"C:/work/app","tool":"edit"}
+{"v":1,"ts":1790000000500,"pid":4242,"event":"permission.asked","session":"ses_3f2a","cwd":"C:/work/app","question":"Run rm -rf dist?"}
+{"v":1,"ts":1790000000600,"pid":4242,"event":"permission.replied","session":"ses_3f2a","cwd":"C:/work/app"}
+{"v":1,"ts":1790000000700,"pid":4242,"event":"session.updated","session":"ses_3f2a","cwd":"C:/work/app","title":"Fix the build"}
+{"v":1,"ts":1790000000800,"pid":4242,"event":"session.status","session":"ses_3f2a","cwd":"C:/work/app","status":"retry"}
+{"v":1,"ts":1790000000900,"pid":4242,"event":"session.status","session":"ses_3f2a","cwd":"C:/work/app","status":"idle"}
+{"v":1,"ts":1790000001000,"pid":4242,"event":"question.asked","session":"ses_3f2a","cwd":"C:/work/app","question":"Which port?"}
+{"v":1,"ts":1790000001100,"pid":4242,"event":"question.rejected","session":"ses_3f2a","cwd":"C:/work/app"}
+{"v":1,"ts":1790000001200,"pid":4242,"event":"session.error","session":"ses_3f2a","cwd":"C:/work/app"}
+{"v":1,"ts":1790000001300,"pid":4242,"event":"session.deleted","session":"ses_3f2a","cwd":"C:/work/app"}
