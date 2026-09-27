@@ -110,11 +110,16 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     }
 }
 
+/// Ponowne uruchomienie z menu Start otwiera ustawienia; uruchomienie przez autostart Windows (aplikacja już działa,
+/// bo użytkownik włączył ją wcześniej ręcznie) nie otwiera niczego.
+fn second_launch_opens_settings(args: &[String]) -> bool { !args.iter().any(|a| a == system::AUTOSTART_ARG) }
+
 /// Wpis autostartu zgodny z ustawieniem (porównanie z rejestrem, nie z poprzednimi ustawieniami).
 /// Build deweloperski nie rejestruje się (wskazywałby `target\debug`).
 pub fn sync_autostart(on: bool) {
     if cfg!(debug_assertions) { return; }
-    if let Some(v) = system::autostart_action(on, system::autostart_at(system::RUN_KEY)) { let _ = system::set_autostart(v); }
+    let Some(cmd) = system::current_autostart_command() else { return };
+    if let Some(v) = system::autostart_action(on, system::autostart_value(system::RUN_KEY).as_deref(), &cmd) { let _ = system::set_autostart(v); }
 }
 
 /// Przy starcie: włączony Claude Code bez hooków albo ze starym `hook.exe` (aktualizacja) dostaje je ponownie.
@@ -142,7 +147,7 @@ pub fn uninstall_cli(args: &[String]) -> Option<i32> {
 pub fn run() {
     tauri::Builder::default()
         // musi być pierwszą wtyczką: drugie uruchomienie nie startuje drugiego rdzenia, tylko otwiera ustawienia
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| settings::open(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| if second_launch_opens_settings(&args) { settings::open(app) }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let prefs = settings::SettingsState::load(settings::home());
@@ -193,4 +198,16 @@ pub fn run() {
                 if code.is_none() { api.prevent_exit(); }
             }
         });
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::second_launch_opens_settings;
+
+    #[test]
+    fn a_second_launch_from_autostart_opens_nothing() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(second_launch_opens_settings(&a(&["agent-pets.exe"])), "Start menu opens settings, as before");
+        assert!(!second_launch_opens_settings(&a(&["agent-pets.exe", "--autostart"])));
+    }
 }

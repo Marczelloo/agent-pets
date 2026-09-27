@@ -13,7 +13,7 @@ pub fn set_autostart_at(key: &str, exe: &str, on: bool) -> std::io::Result<()> {
         let mut h = HKEY::default();
         RegCreateKeyW(HKEY_CURRENT_USER, &HSTRING::from(key), &mut h).ok().map_err(std::io::Error::other)?;
         let r = if on {
-            let data = wide(&format!("\"{exe}\""));
+            let data = wide(&autostart_command(exe));
             let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len() * 2);
             RegSetValueExW(h, &HSTRING::from(RUN_VALUE), None, REG_SZ, Some(bytes)).ok()
         } else {
@@ -28,15 +28,26 @@ pub fn set_autostart_at(key: &str, exe: &str, on: bool) -> std::io::Result<()> {
 }
 
 /// Czy pod `key` jest wpis autostartu.
-pub fn autostart_at(key: &str) -> bool {
+pub fn autostart_at(key: &str) -> bool { autostart_value(key).is_some() }
+
+/// Polecenie z wpisu autostartu pod `key`, jeśli jest.
+pub fn autostart_value(key: &str) -> Option<String> {
+    let mut size: u32 = 0;
     unsafe {
-        let mut h = HKEY::default();
-        if RegOpenKeyExW(HKEY_CURRENT_USER, &HSTRING::from(key), None, KEY_READ, &mut h).is_err() { return false; }
-        let found = RegQueryValueExW(h, &HSTRING::from(RUN_VALUE), None, None, None, None).is_ok();
-        let _ = RegCloseKey(h);
-        found
+        RegGetValueW(HKEY_CURRENT_USER, &HSTRING::from(key), &HSTRING::from(RUN_VALUE), RRF_RT_REG_SZ, None, None, Some(&mut size)).ok().ok()?;
+        let mut buf = vec![0u16; (size as usize).div_ceil(2)];
+        RegGetValueW(HKEY_CURRENT_USER, &HSTRING::from(key), &HSTRING::from(RUN_VALUE), RRF_RT_REG_SZ, None,
+            Some(buf.as_mut_ptr() as *mut core::ffi::c_void), Some(&mut size)).ok().ok()?;
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..len]))
     }
 }
+
+/// Wpis autostartu: ścieżka w cudzysłowie i `--autostart`, żeby druga instancja uruchomiona przez Windows
+/// (gdy aplikacja już działa) niczego nie otwierała.
+pub fn autostart_command(exe: &str) -> String { format!("\"{exe}\" {AUTOSTART_ARG}") }
+
+pub const AUTOSTART_ARG: &str = "--autostart";
 
 /// Jasny pasek zadań (Ustawienia → Personalizacja → Kolory → tryb Windows). Brak wartości = ciemny.
 pub fn light_taskbar() -> bool {
@@ -50,12 +61,25 @@ pub fn light_taskbar() -> bool {
 }
 
 /// Co zrobić z wpisem autostartu: porównujemy z rejestrem, nie z poprzednimi ustawieniami
-/// (kreator zapisuje domyślne `true`, a wpisu jeszcze nie ma).
-pub fn autostart_action(desired: bool, registered: bool) -> Option<bool> { (desired != registered).then_some(desired) }
+/// (kreator zapisuje domyślne `true`, a wpisu jeszcze nie ma). Wpis inny niż `cmd` (0.8.0 bez flagi,
+/// stara ścieżka) jest przepisywany.
+pub fn autostart_action(desired: bool, registered: Option<&str>, cmd: &str) -> Option<bool> {
+    match (desired, registered) {
+        (true, Some(r)) if r == cmd => None,
+        (true, _) => Some(true),
+        (false, Some(_)) => Some(false),
+        (false, None) => None,
+    }
+}
 
 pub fn set_autostart(on: bool) -> std::io::Result<()> {
     let exe = std::env::current_exe()?;
     set_autostart_at(RUN_KEY, &exe.to_string_lossy(), on)
+}
+
+/// Polecenie autostartu dla bieżącego pliku aplikacji.
+pub fn current_autostart_command() -> Option<String> {
+    std::env::current_exe().ok().map(|e| autostart_command(&e.to_string_lossy()))
 }
 
 /// Usuwa klucz rejestracji powiadomień (AUMID) aplikacji.
@@ -118,10 +142,15 @@ mod tests {
 
     #[test]
     fn autostart_is_written_only_when_the_registry_disagrees() {
-        assert_eq!(autostart_action(true, false), Some(true));
-        assert_eq!(autostart_action(false, true), Some(false));
-        assert_eq!(autostart_action(true, true), None);
-        assert_eq!(autostart_action(false, false), None);
+        let cmd = autostart_command("C:/x/agent-pets.exe");
+        assert_eq!(cmd, "\"C:/x/agent-pets.exe\" --autostart");
+        assert_eq!(autostart_action(true, None, &cmd), Some(true));
+        assert_eq!(autostart_action(false, Some(&cmd), &cmd), Some(false));
+        assert_eq!(autostart_action(true, Some(&cmd), &cmd), None);
+        assert_eq!(autostart_action(false, None, &cmd), None);
+        // wpis z 0.8.0 (bez flagi) albo ze starej ścieżki jest przepisywany
+        assert_eq!(autostart_action(true, Some("\"C:/x/agent-pets.exe\""), &cmd), Some(true));
+        assert_eq!(autostart_action(true, Some("\"C:/old/agent-pets.exe\" --autostart"), &cmd), Some(true));
     }
 
     #[test]
@@ -129,6 +158,7 @@ mod tests {
         let key = r"Software\AgentPetsTest\Run";
         set_autostart_at(key, r"C:\x\agent-pets.exe", true).unwrap();
         assert!(autostart_at(key));
+        assert_eq!(autostart_value(key).as_deref(), Some(r#""C:\x\agent-pets.exe" --autostart"#));
         set_autostart_at(key, "", false).unwrap();
         assert!(!autostart_at(key));
         set_autostart_at(key, "", false).unwrap();
