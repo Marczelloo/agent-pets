@@ -12,10 +12,11 @@ import { drawSticker } from "../models/sticker";
 import { drawPixel } from "../models/pixel";
 import { DEFAULT_LOOK } from "../../look";
 import type { Look } from "../../types";
+import { effectiveStyle } from "../effective";
 export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
-const lk=look??DEFAULT_LOOK,st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=ACCENT[c.type];if(st.sketch)pen.boil=Math.floor(t*st.sketch.boilHz);pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.fx;
+const lk0=look??DEFAULT_LOOK,lk={...lk0,style:effectiveStyle(lk0.style,c.type)},st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=c.accent??ACCENT[c.type];if(st.sketch)pen.boil=Math.floor(t*st.sketch.boilHz);pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.fx;
 if(st.model==='sticker')return drawSticker(x,c,X,Y,u,t,lk);if(st.model==='pixel')return drawPixel(x,c,X,Y,u,t,lk);
-const P=c.p,tg=c.tg||{},sk=SKINS[c.type],pal=sk.pal;
+const P=c.p,tg=c.tg||{},sk=SKINS[c.type],pal=c.pal??sk.pal,prompt=sk.eyes==='prompt';
 const gr=cl(P.grey.x),cm=lerpC(pal.m,pal.g,gr),cs=lerpC(pal.s,pal.gs,gr),cb=lerpC(pal.b,pal.gs,gr);
 const wob=cl(P.wobW.x),shk=cl(P.shake.x),th=P.th.x+.4*Math.cos(t*4)*wob+.35*Math.sin(t*28)*shk,co=Math.cos(th),si=Math.sin(th);
 const sit=cl(P.sit.x),loaf=cl(P.loaf.x),down=Math.max(sit,loaf),walk=cl(P.walkW.x),lean=cl(P.lean.x);
@@ -24,7 +25,7 @@ const hw=cl(P.hopW.x);h*=hw;sq*=hw*pen.squash;
 const wb=Math.abs(Math.sin(t*10))*walk,br=Math.sin(t*(2.3-loaf))*.02*(1+cl(P.sleep.x)*1.5),tb=Math.abs(Math.sin(t*20))*.008*cl(P.typeW.x);
 const pil=c.prop==='pillow'?cl(P.propA.x)*loaf:0;
 const hopY=(h*24+wb*2.5+pil*4)*u;
-const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=17*u,bot=-12*u*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(st.line.minPx,2.4*u*st.line.scale);
+const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=17*u,bot=(sk.legs.length?-12*u:0)*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(st.line.minPx,2.4*u*st.line.scale);
 const hW=(W*Math.abs(co)+Dp*Math.abs(si))/2,XX=X+P.lx.x*u;
 const sc=1+.1*lean,rot=Math.sin(t*4)*.1*wob+Math.sin(t*1.4)*.035*cl(P.think.x)+loaf*.06+pil*.08+P.tilt.x,scx=sc*(1-(sq+br)*.6),scy=sc*(1+sq+br+tb),oy=-hopY+lean*4*u,cr=Math.cos(rot),sr=Math.sin(rot);
 const toW=(lx: any,ly: any)=>{const a=lx*scx,b=ly*scy;return [a*cr-b*sr,a*sr+b*cr+oy];};
@@ -61,23 +62,29 @@ const bl=c.blink>0?Math.sin(PI*(c.blink/.16)):0,sl=cl(P.sleep.x),hp=cl(P.happy.x
 const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFace&&loaf>.5;
 let ecol=st.face?.eyes==='accent'?pen.ol:'#1E1410';
 if(front&&fwid>4*u){
-if(sk.screenFace){const m=8*u*co,sx0=fcx-fwid/2+m,sy0=top+8*u,sw=fwid-2*m,sh=H-20*u,tw=cl(P.typeW.x);shp(x,rrP(sx0,sy0,sw,sh,9*u*co),'#2C2C2A',u);ecol='#5DCAA5';
+if(sk.screenFace){const m=8*u*co,sx0=fcx-fwid/2+m,sy0=top+8*u,sw=fwid-2*m,sh=H-20*u,tw=cl(P.typeW.x);shp(x,rrP(sx0,sy0,sw,sh,9*u*co),sk.screen?.bg??'#2C2C2A',u);ecol=sk.screen?.fg??'#5DCAA5';
 x.save();path(x,rrP(sx0,sy0,sw,sh,9*u*co),0,0);x.clip();
 if(tw>.02){x.globalAlpha=GA*tw;x.fillStyle=ecol;const off=(t*18*u)%(6*u);for(let i=0;i<4;i++){const ly=sy0+sh*.66+i*6*u-off;const ww=sw*(.2+.5*(((i*7+Math.floor(t*3))%5)/5));x.fillRect(sx0+6*u*co,ly,ww,2.2*u);}}
 if(saver){const tri=(v: any)=>Math.abs((((v%1)+1)%1)*2-1);x.globalAlpha=GA*loaf*.85;x.fillStyle=ecol;x.fillRect(sx0+3*u+(sw-9*u)*tri(t*.23),sy0+3*u+(sh-9*u)*tri(t*.31),3.5*u,3.5*u);}
 x.restore();
-if((Math.floor(t*2.2)%2)&&open>.3){x.save();x.globalAlpha=GA*(1-tw)*open*ea;x.fillStyle=ecol;x.fillRect(fcx-5*u*co,top+H*.66,10*u*co,3*u);x.restore();}}
+if(!prompt&&(Math.floor(t*2.2)%2)&&open>.3){x.save();x.globalAlpha=GA*(1-tw)*open*ea;x.fillStyle=ecol;x.fillRect(fcx-5*u*co,top+H*.66,10*u*co,3*u);x.restore();}}
 [-1,1].forEach((s: any)=>{const ex=fcx+s*(sk.eyeX)*W*co+exs,ew=(sk.eyeW)*u*Math.sqrt(Math.max(0,co)),eh=(sk.eyeH)*u;
 x.save();x.fillStyle=ecol;x.strokeStyle=ecol;x.lineWidth=Math.max(1,2.6*u);
-if(open>.02&&!saver){x.globalAlpha=GA*ea;shp(x,rrP(ex-ew/2,ey-eh*open/2,ew,Math.max(.5,eh*open),ew/2),ecol,u,{noStroke:1,j:.5,raw:1});if(sk.eyeGlint){x.fillStyle='#FFFFFF';x.beginPath();x.arc(ex+ew*.18,ey-eh*open*.22,2.4*u*open,0,TAU);x.fill();}}
-if(sl>.02&&!saver){x.globalAlpha=GA*ea*sl;x.beginPath();x.arc(ex,ey-2*u,5.5*u,.15*PI,.85*PI);x.stroke();}
+if(prompt&&!saver){
+// opencode: lewe oko to znak zachęty `>`, prawe to kursor `_` (mrugnięcie skraca go do kropki, sen przygasza)
+if(s<0&&open>.02){x.globalAlpha=GA*ea;x.beginPath();x.moveTo(ex-ew*.6,ey-eh*open*.42);x.lineTo(ex+ew*.6,ey);x.lineTo(ex-ew*.6,ey+eh*open*.42);x.stroke();}
+if(s>0&&Math.max(hp,dz,sqn)<.5){const cw=ew*1.5*Math.max(.28,1-bl);x.globalAlpha=GA*ea*(1-.6*sl);x.fillRect(ex-cw/2,ey+eh*.3,cw,Math.max(1,2.8*u));}}
+else if(open>.02&&!saver){x.globalAlpha=GA*ea;shp(x,rrP(ex-ew/2,ey-eh*open/2,ew,Math.max(.5,eh*open),ew/2),ecol,u,{noStroke:1,j:.5,raw:1});if(sk.eyeGlint){x.fillStyle='#FFFFFF';x.beginPath();x.arc(ex+ew*.18,ey-eh*open*.22,2.4*u*open,0,TAU);x.fill();}}
+if(sl>.02&&!saver&&!prompt){x.globalAlpha=GA*ea*sl;x.beginPath();x.arc(ex,ey-2*u,5.5*u,.15*PI,.85*PI);x.stroke();}
 if(sqn>.05){x.globalAlpha=GA*ea*sqn;x.beginPath();x.moveTo(ex-5*u,ey-3*u*s);x.lineTo(ex+5*u,ey+3*u*s);x.moveTo(ex-5*u,ey+1*u);x.lineTo(ex+5*u,ey+1*u);x.stroke();}
 if(hp>.02){x.globalAlpha=GA*ea*hp;x.beginPath();x.arc(ex,ey+5*u,5.5*u,1.15*PI,1.85*PI);x.stroke();}
 if(pen.fx&&hp>.3){x.globalAlpha=GA*ea*hp;x.fillStyle='#FFFFFF';x.font=`${Math.max(6,10*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.fillText('✦',ex+ew*.5,ey-eh*.35);}
 if(dz>.02){x.globalAlpha=GA*ea*dz;const k=5*u;x.beginPath();x.moveTo(ex-k,ey-k);x.lineTo(ex+k,ey+k);x.moveTo(ex+k,ey-k);x.lineTo(ex-k,ey+k);x.stroke();}
 
 if(hp>.02&&sk.blush){x.globalAlpha=GA*ea*hp*.6;x.fillStyle='#F0997B';x.beginPath();x.ellipse(ex+s*6*u*co,ey+14*u,6*u*co,3.5*u,0,0,TAU);x.fill();}
-x.restore();});}
+x.restore();});
+// blob: wielka litera nazwy agenta na brzuchu (tekst, nigdy znaczniki)
+if(sk.mark&&c.mark){x.save();x.globalAlpha=GA*ea;x.fillStyle=pal.h;x.font=`bold ${Math.max(6,H*.3)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.translate(fcx,top+H*.76);x.scale(Math.max(.05,co),1);x.fillText(String(c.mark).slice(0,1),0,0);x.restore();}}
 x.globalAlpha=GA;x.strokeStyle=pen.ol;x.lineWidth=lw;
 if(sit>.05&&loaf<.5){legs.filter((g: any)=>!sk.frontLegsOnlySitting||g.z>=-.5*u).forEach((g: any)=>{const sw=Math.sin(t*6+g.i*2)*2.5*u*cl(P.swing.x);x.save();x.globalAlpha=GA*sit;shp(x,elP(g.x+si*6*u,-3*u+sw,7*u,5*u),cm,u);x.restore();});}
 x.restore();

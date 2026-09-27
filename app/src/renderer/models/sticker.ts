@@ -20,7 +20,8 @@ export const STICKER = {
 const EYE = '#1E1410', TEAL = '#5DCAA5', SCREEN = '#2C2C2A', PHONE = '#C9C7C1', PHONE_IN = '#A5A298', BLUSH = '#F0997B';
 
 export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: number, u: number, t: number, _look: Look): void {
-  const skin = c.type, sk = SKINS[skin], pal = sk.pal, S = STICKER[skin];
+  // tylko Clawd i Kodek: inne skórki rysują się w Sticker jak w Clean (`effectiveStyle`)
+  const skin = c.type as 'clawd' | 'kodek', sk = SKINS[skin], pal = sk.pal, S = STICKER[skin];
   const r = rig(c, X, Y, u, t, { w: S.w, h: S.h, arm: S.arm });
   const tg = c.tg || {}, P = c.p;
   const cm = lerpC(pal.m, pal.g, r.grey), cs = lerpC(pal.s, pal.gs, r.grey);

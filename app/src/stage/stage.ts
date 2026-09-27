@@ -8,7 +8,9 @@ import { drawBadge, drawLimits, drawMiniMore, drawProgress, drawRouterBadge, lim
 import { MINI_SCALE, miniAlpha, miniScene, minisLeftOf, minisOf, parentScene } from './minis';
 import { routerHealth } from './router';
 import { drawSpawn, SPAWN_S } from './spawn';
-import { ACCENT, STYLES } from '../styles';
+import { STYLES } from '../styles';
+import { accentFor } from './sceneFor';
+import { effectiveStyle } from '../renderer/effective';
 import { geometry, layout, zoomOf, type LayoutOut } from './layout';
 import { Orderer } from './order';
 import { bgStyle, bgVisible } from './background';
@@ -131,8 +133,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       e.pet.alpha = Math.min(1, Math.max(0, k)) * miniAlpha(e.session, nowMs);
       painter.frame(x, { dt, t0: T + e.phase, X: m.x, Y, u: mu, look, animate: budget.animate(e.session.state), saving, reduced, dpr: devicePixelRatio || 1 });
       if (k < 1 && !reduced) {
-        drawSpawn(x, m.x, Y, mu, Math.max(0, k), look.motion, STYLES[look.style]?.model === 'pixel', devicePixelRatio || 1,
-          ACCENT[e.session.agent === 'codex' ? 'kodek' : 'clawd']);
+        drawSpawn(x, m.x, Y, mu, Math.max(0, k), look.motion, STYLES[effectiveStyle(look.style, e.pet.type)]?.model === 'pixel', devicePixelRatio || 1,
+          accentFor(e.session));
       }
       const rt = e.session.router_task;
       if (e.session.sub?.kind === 'router' || rt) {

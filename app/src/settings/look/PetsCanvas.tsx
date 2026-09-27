@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { createPet, pen, setScene } from '../../renderer';
+import { pen, setScene } from '../../renderer';
 import { PetPainter } from '../../renderer/painter';
 import { reducedMotion } from '../../stage/power';
-import { skinFor, type SceneKey } from '../../stage/sceneFor';
+import { petFor, type SceneKey } from '../../stage/sceneFor';
 import type { Agent, Look } from '../../types';
 import { backing, subscribe } from './loop';
 
@@ -29,7 +29,7 @@ export function PetsCanvas({ pets, scene, u, width, height, className }: Props) 
     let T = Math.random() * 10;
     return subscribe(dt => {
       const { pets: list, scene: sc } = live.current;
-      while (painters.current.length < list.length) painters.current.push(new PetPainter(createPet(skinFor(list[painters.current.length].agent), sc)));
+      while (painters.current.length < list.length) painters.current.push(new PetPainter(petFor({ agent: list[painters.current.length].agent, agent_name: null }, sc)));
       T += dt;
       const d = devicePixelRatio || 1;
       const bw = backing(width, d), bh = backing(height, d);

@@ -6,4 +6,5 @@ export const clawd: Skin = {
   eyeX: .2, eyeW: 11, eyeH: 22,
   screenFace: false, antenna: false, backVents: false,
   eyeGlint: true, blush: true, frontLegsOnlySitting: true,
+  legacy: true,
 };

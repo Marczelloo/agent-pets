@@ -8,6 +8,7 @@ import { drawBubble, measureBubble, type BubbleBox } from '../renderer/bubble';
 import { reducedMotion } from '../stage/power';
 import { blockContextMenu } from '../stage/nocontext';
 import { ACCENT } from '../styles';
+import { accentFor } from '../stage/sceneFor';
 import type { Pets, Session, Settings, SettingsView, Snapshot, StageSettings } from '../types';
 import { arrange } from './arrange';
 import { Picker, type BubbleWant } from './pick';
@@ -32,7 +33,7 @@ const picker = new Picker();
 const live = new Map<string, Live>();
 
 const lookOf = (s: Session) => lookFor(pets, appFor(s));
-const accentOf = (id: string) => ACCENT[snap.sessions.find(s => s.id === id)?.agent === 'codex' ? 'kodek' : 'clawd'];
+const accentOf = (id: string) => { const s = snap.sessions.find(x => x.id === id); return s ? accentFor(s) : ACCENT.clawd; };
 const keyOf = (w: BubbleWant) => `${w.id}|${w.kind}|${w.text}`;
 
 /** Nowy stan: które dymki mają być, które wchodzą, a które znikają. */

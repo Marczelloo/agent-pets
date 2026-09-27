@@ -1,6 +1,6 @@
-import { createPet, setScene, throwPhones, type Pet } from '../renderer';
+import { setScene, throwPhones, type Pet } from '../renderer';
 import type { Session } from '../types';
-import { MUSIC_SCENES, sceneFor, skinFor, type SceneKey } from './sceneFor';
+import { MUSIC_SCENES, petFor, sceneFor, type SceneKey } from './sceneFor';
 
 export interface Entry { session: Session; pet: Pet; scene: SceneKey; born: number; byeAt?: number; phase: number }
 
@@ -34,7 +34,7 @@ export class Roster {
       const e = this.entries.get(s.id);
       if (!e) {
         if (scene === 'bye') continue;
-        this.entries.set(s.id, { session: s, pet: createPet(skinFor(s.agent), scene), scene, born: t, phase: phaseOf(s.id) });
+        this.entries.set(s.id, { session: s, pet: petFor(s, scene), scene, born: t, phase: phaseOf(s.id) });
         seen.add(s.id);
         continue;
       }

@@ -6,4 +6,5 @@ export const kodek: Skin = {
   eyeX: .17, eyeW: 8.5, eyeH: 15,
   screenFace: true, antenna: true, backVents: true,
   eyeGlint: false, blush: false, frontLegsOnlySitting: false,
+  legacy: true,
 };

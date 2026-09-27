@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { createPet, pen } from '../renderer';
+import { pen } from '../renderer';
 import { PetPainter } from '../renderer/painter';
 import { frameBudget, reducedMotion } from '../stage/power';
-import { sceneFor, skinFor } from '../stage/sceneFor';
+import { petFor, sceneFor } from '../stage/sceneFor';
 import { switchScene } from '../stage/roster';
 import type { Look, Session } from '../types';
 
@@ -35,7 +35,7 @@ export function PetCanvas({ session, look, mini = false, music = false }: { sess
     const c = ref.current;
     const x = c?.getContext('2d');
     if (!c || !x) return;
-    painter.current ??= new PetPainter(createPet(skinFor(session.agent), scene));
+    painter.current ??= new PetPainter(petFor(session, scene));
     pen.font = getComputedStyle(document.body).fontFamily || 'sans-serif';
     let raf = 0, last = performance.now(), T = Math.random() * 10, acc = 0;
     const frame = (now: number) => {

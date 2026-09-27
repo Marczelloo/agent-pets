@@ -1,4 +1,7 @@
-import type { SkinId } from '../skins';
+import { blobPal, type SkinId } from '../skins';
+import { createPet, type Pet } from '../renderer/pet';
+import { agentLabel } from '../model-label';
+import { ACCENT } from '../styles';
 import type { Session } from '../types';
 
 export type SceneKey = 'thinking' | 'edit' | 'bash' | 'read' | 'grep' | 'web' | 'agent' | 'mcp'
@@ -28,4 +31,26 @@ export function sceneFor(s: Pick<Session, 'state' | 'tool'>, music = false): Sce
   return STATE[s.state] ?? 'thinking';
 }
 
-export const skinFor = (agent: string): SkinId => (agent === 'codex' ? 'kodek' : 'clawd');
+const SKIN_OF: Record<string, SkinId> = { claude: 'clawd', codex: 'kodek', opencode: 'opencode' };
+/** Skórka agenta; agenci bez własnej maskotki (furtka, a do 0.11/0.12 także reszta) dostają bloba. */
+export const skinFor = (agent: string): SkinId => SKIN_OF[agent] ?? 'blob';
+
+const blobName = (s: Pick<Session, 'agent' | 'agent_name'>) => agentLabel({ agent: s.agent, agent_name: s.agent_name?.trim() || null });
+
+/** Kolor akcentu zwierzaka sesji (dymki, pojawianie się); blob ma własny z nazwy. */
+export function accentFor(s: Pick<Session, 'agent' | 'agent_name'>): string {
+  const skin = skinFor(s.agent);
+  return skin === 'blob' ? blobPal(blobName(s)).s : ACCENT[skin];
+}
+
+/** Zwierzak sesji: blob dostaje barwę i literę z nazwy agenta. */
+export function petFor(s: Pick<Session, 'agent' | 'agent_name'>, scene: SceneKey): Pet {
+  const c = createPet(skinFor(s.agent), scene);
+  if (c.type === 'blob') {
+    const name = blobName(s);
+    c.pal = blobPal(name);
+    c.accent = c.pal.s;
+    c.mark = (name.match(/[\p{L}\p{N}]/u)?.[0] ?? 'A').toUpperCase();
+  }
+  return c;
+}

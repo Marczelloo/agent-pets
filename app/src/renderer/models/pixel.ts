@@ -44,7 +44,8 @@ export function drawPixel(x: CanvasRenderingContext2D, c: Pet, X: number, Y: num
 
 /** Jedna klatka modelu jako lista komórek względem podstawy zwierzaka. */
 function build(c: Pet, X: number, Y: number, u: number, ts: number, g: number, key: string): Frame {
-  const skin = c.type, B = BODY[skin];
+  // tylko Clawd i Kodek: inne skórki rysują się w Pixel jak w Clean (`effectiveStyle`)
+  const skin = c.type as 'clawd' | 'kodek', B = BODY[skin];
   const r = rig(c, X, Y, u, ts, { w: B.w, h: B.h, arm: 16 });
   const pal = r.grey > .5 ? GREY : PIXEL_PAL[skin];
   const C = (css: number) => Math.round(css / g), U = (units: number) => Math.round(units * u / g);

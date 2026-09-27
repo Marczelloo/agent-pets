@@ -8,6 +8,7 @@ import { drawPet } from './draw/body';
 import { gridPx } from './models/pixel';
 import { pen } from './pen';
 import { setMotion, type Pet } from './pet';
+import { effectiveStyle } from './effective';
 
 export interface PaintFrame { dt: number; t0: number; X: number; Y: number; u: number; look: Look; animate: boolean; saving: boolean; reduced: boolean; dpr: number }
 
@@ -25,11 +26,11 @@ export class PetPainter {
     pen.dpr = f.dpr;
     // zwierzak zatrzymany (oszczędzanie): bez efektów — cząsteczki i nakładki zawisłyby w miejscu
     if (!env.fx || !f.animate) { if (pet.fx) { pet.fx.parts = []; pet.fx.words = []; } drawPet(x, pet, f.X, f.Y, f.u, t, f.look); return; }
-    const st = STYLES[f.look.style] ?? STYLES.clean, s = fxState(pet), pixel = st.model === 'pixel';
+    const st = STYLES[effectiveStyle(f.look.style, pet.type)] ?? STYLES.clean, s = fxState(pet), pixel = st.model === 'pixel';
     s.env = env;
     const flash = flashFrame(s, f.t0, env);
     const [dx, dy] = shakeOffset(s, t, env, f.u, pixel ? gridPx(f.u, f.dpr) / f.dpr : 0);
-    const g: FxCtx = { X: f.X + dx, Y: f.Y + dy, u: f.u, t, dpr: f.dpr, env, model: st.model, flash, glow: flashGlow(s, f.t0, env), accent: ACCENT[pet.type], alpha: pet.alpha ?? 1 };
+    const g: FxCtx = { X: f.X + dx, Y: f.Y + dy, u: f.u, t, dpr: f.dpr, env, model: st.model, flash, glow: flashGlow(s, f.t0, env), accent: pet.accent ?? ACCENT[pet.type], alpha: pet.alpha ?? 1 };
     drawFxBack(x, pet, g);
     const k = pixel ? 0 : stretchOf(pet);
     x.save();

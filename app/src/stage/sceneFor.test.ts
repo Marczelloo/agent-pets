@@ -31,6 +31,6 @@ describe('sceneFor', () => {
   it('picks the skin by agent', () => {
     expect(skinFor('claude')).toBe('clawd');
     expect(skinFor('codex')).toBe('kodek');
-    expect(skinFor('gemini')).toBe('clawd');
+    expect(skinFor('gemini')).toBe('blob'); // 0.10: nieznany agent to blob, nie Clawd
   });
 });

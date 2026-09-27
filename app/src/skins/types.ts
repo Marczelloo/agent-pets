@@ -1,4 +1,4 @@
-export type SkinId = 'clawd' | 'kodek';
+export type SkinId = 'clawd' | 'kodek' | 'opencode' | 'blob';
 export interface Skin {
   id: SkinId;
   pal: { m: string; s: string; b: string; h: string; g: string; gs: string };
@@ -8,4 +8,12 @@ export interface Skin {
   eyeX: number; eyeW: number; eyeH: number;
   screenFace: boolean; antenna: boolean; backVents: boolean;
   eyeGlint: boolean; blush: boolean; frontLegsOnlySitting: boolean;
+  /** oczy: pigułki (domyślnie) albo znak zachęty `>` i kursor `_` na ekranie */
+  eyes?: 'pill' | 'prompt';
+  /** kolory ekranu twarzy (`screenFace`); domyślnie ekran Kodka */
+  screen?: { bg: string; fg: string };
+  /** wielka litera nazwy agenta na brzuchu (`Pet.mark`) */
+  mark?: boolean;
+  /** ma własny rysunek w stylach Pixel i Sticker; bez tego te style rysują go jak Clean */
+  legacy?: boolean;
 }
