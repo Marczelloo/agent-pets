@@ -54,6 +54,10 @@ pub struct Diagnostics {
     pub autostart_registered: bool,
     pub last_seen: BTreeMap<String, i64>,
     pub apps: Vec<(AppId, bool, String)>,
+    /// stan skanu statystyk (bez nazw projektów i ścieżek)
+    pub stats_files: usize,
+    pub stats_scanned_bytes: u64,
+    pub stats_total_bytes: u64,
 }
 
 /// Czas ostatniego zdarzenia z każdego źródła, uzupełniany przez rdzeń (`core::live`).
@@ -178,6 +182,9 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
         last_seen,
         autostart_registered: crate::system::autostart_at(crate::system::RUN_KEY),
         apps: AppId::ALL.iter().map(|id| (*id, app_on(&s, *id), integrations::status(*id, &st.home, lang).detail)).collect(),
+        stats_files: app.try_state::<crate::stats::StatsState>().and_then(|x| x.scanner.try_lock().ok().map(|s| s.book.files.len())).unwrap_or(0),
+        stats_scanned_bytes: app.try_state::<crate::stats::StatsState>().map(|x| x.progress.lock().unwrap().scanned).unwrap_or(0),
+        stats_total_bytes: app.try_state::<crate::stats::StatsState>().map(|x| x.progress.lock().unwrap().total).unwrap_or(0),
     }
 }
 
@@ -261,5 +268,6 @@ mod tests {
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert!(keys.iter().all(|k| !k.contains("token") && !k.contains("title")), "{keys:?}");
         assert!(keys.iter().all(|k| !k.contains("action") && !k.contains("question") && !k.contains("session")), "0.8: bez tekstów akcji {keys:?}");
+        for k in ["stats_files", "stats_scanned_bytes", "stats_total_bytes"] { assert!(keys.contains(&k), "0.9: stan skanu statystyk {keys:?}"); }
     }
 }

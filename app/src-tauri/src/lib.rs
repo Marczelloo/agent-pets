@@ -6,6 +6,7 @@ mod notify;
 mod panel;
 mod settings;
 mod shell;
+mod stats;
 mod system;
 mod tooltip;
 mod tray;
@@ -168,6 +169,8 @@ pub fn run() {
             let (core_tx, core_rx) = std::sync::mpsc::channel();
             app.manage(core::Control(std::sync::Mutex::new(core_tx)));
             core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), core_rx);
+            app.manage(stats::StatsState::load(&settings::home()));
+            stats::spawn(app.handle().clone());
             app.manage(system::Power::default());
             system::watch_power(app.handle().clone());
             app.manage(updater::Updater::default());
@@ -188,11 +191,13 @@ pub fn run() {
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get,
             updater::update_status, updater::update_check, updater::update_install,
-            session_dismiss, sessions_dismiss_inactive, session_undismiss
+            session_dismiss, sessions_dismiss_inactive, session_undismiss,
+            stats::stats_open, stats::stats_view, stats::stats_progress
         ])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")
-        .run(|_app, event| {
+        .run(|app, event| {
+            if let RunEvent::Exit = event { stats::save_now(app); }
             // Okno sceny ginie razem z paskiem przy restarcie Explorera; aplikacja ma wtedy żyć dalej.
             if let RunEvent::ExitRequested { api, code, .. } = event {
                 if code.is_none() { api.prevent_exit(); }
