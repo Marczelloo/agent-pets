@@ -47,6 +47,9 @@ struct Inner { hits: Vec<Hit>, shown: bool }
 impl Bubbles {
     pub fn set_hits(&self, hits: Vec<Hit>) { self.inner.lock().unwrap().hits = hits; }
 
+    /// Nad zwierzakiem sesji widać teraz jakiś dymek: najechanie go rozwija zamiast pokazywać tooltip.
+    pub fn showing(&self, id: &str) -> bool { self.inner.lock().unwrap().hits.iter().any(|h| h.id == id) }
+
     /// Nad zwierzakiem sesji widać teraz dymek z jej pytaniem (zastępuje toast „czeka na Ciebie”).
     pub fn asking(&self, id: &str) -> bool {
         let s = self.inner.lock().unwrap();
@@ -185,6 +188,14 @@ mod tests {
         let stage = Rect { left: -300, top: 1032, right: -100, bottom: 1080 };
         let b = band(stage, second, 500, 80, 150);
         assert_eq!((b.rect.left, b.rect.right, b.rect.top), (-500, 0, 952));
+    }
+
+    #[test]
+    fn hovering_a_pet_with_a_visible_bubble_expands_it_instead_of_the_tooltip() {
+        let b = Bubbles::default();
+        b.set_hits(vec![Hit { id: "a".into(), kind: Kind::Action, x: 0.0, y: 0.0, w: 10.0, h: 10.0 }]);
+        assert!(b.showing("a"));
+        assert!(!b.showing("b"));
     }
 
     #[test]

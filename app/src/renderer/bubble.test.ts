@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STYLE_IDS } from '../look';
 import type { Look } from '../types';
-import { BUBBLE_MAX_W, drawBubble, measureBubble, type BubbleKind } from './bubble';
+import { BUBBLE_MAX_W, drawBubble, layoutLines, measureBubble, type BubbleKind } from './bubble';
 import { recorder } from './testing';
 
 /** Kontekst z `measureText` proporcjonalnym do długości tekstu (nagrywający zwraca stałą). */
@@ -86,6 +86,30 @@ describe('speech bubbles', () => {
       const right = Math.max(...rects.map(([x, , w]) => x + w)), bottom = Math.max(...rects.map(([, y, , h]) => y + h));
       expect(Math.abs(box.w - right), `w @${dpr}`).toBeLessThan(0.51);
       expect(Math.abs(box.h - bottom), `h @${dpr}`).toBeLessThan(0.51);
+    }
+  });
+});
+
+describe('expanded bubbles (hover)', () => {
+  const w = (s: string) => s.length * 7;
+  it('wrap on words and end with an ellipsis past the last line', () => {
+    expect(layoutLines('Allow Bash? npm test', 1000, w, 4)).toEqual(['Allow Bash? npm test']);
+    expect(layoutLines('aaa bbb ccc ddd', 7 * 7, w, 4)).toEqual(['aaa bbb', 'ccc ddd']);
+    const many = layoutLines('word '.repeat(60).trim(), 70, w, 3);
+    expect(many).toHaveLength(3);
+    expect(many[2].endsWith('…')).toBe(true);
+    expect(layoutLines('x'.repeat(40), 70, w, 4)[0].length).toBeLessThanOrEqual(10);
+  });
+  it('a long text grows the bubble in height, in every style', () => {
+    const long = 'Allow Bash? npm run build && npm test -- --coverage --reporter=verbose in C:/work/agent-pets/app';
+    for (const style of STYLE_IDS) {
+      const { ctx, log } = measuring();
+      const one = measureBubble(ctx, long, look(style), 1);
+      const big = measureBubble(ctx, long, look(style), 1, 1, true);
+      expect(big.h, style).toBeGreaterThan(one.h);
+      drawBubble(ctx, 0, 0, long, 'question', look(style), 20, 1, 1, undefined, true);
+      expect(log.some(l => l.includes('NaN')), style).toBe(false);
+      expect(log.filter(l => l === 'save()').length, style).toBe(log.filter(l => l === 'restore()').length);
     }
   });
 });

@@ -185,6 +185,12 @@ describe('panel', () => {
     for (const name of ['Claude Code', 'Codex', 'opencode', 'Inny agent']) expect(html).toContain(`>${name}</button>`);
     expect(html).toMatch(/aria-checked="true"[^>]*>Claude Code<\/button>/);
   });
+  it('look tab: previews the bubbles in the chosen style', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toMatch(/<canvas[^>]*class="bubble-preview"/);
+    expect(html).toContain('Dymki');
+  });
   it('taskbar tab: bubbles and subagents section with three switches', () => {
     const s = defaultSettings();
     const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="stage" onTab={() => {}}

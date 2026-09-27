@@ -6,6 +6,7 @@ import { appLabel } from '../model';
 import { t } from '../../i18n';
 import { LookGallery } from './LookGallery';
 import { PreviewStage } from './PreviewStage';
+import { BubblePreview } from './BubblePreview';
 import { PetsCanvas } from './PetsCanvas';
 import { Toggle } from '../Toggle';
 
@@ -55,6 +56,11 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
         <PetPicker agent={agent} onPick={setAgent} />
       </div>
       <PreviewStage look={{ style: pets.style, motion: pets.motion }} agent={agent} scene={scene} cycle={cycle} onScene={setScene} onCycle={setCycle} />
+      <div className="row">
+        <span className="text"><span className="label">{t().look.bubblesTitle}</span>
+          <span className="desc">{t().look.bubblesDesc}</span></span>
+      </div>
+      <BubblePreview look={{ style: pets.style, motion: pets.motion }} agent={agent} />
       <LookGallery style={pets.style} motion={pets.motion} scene={scene} agent={agent} onPick={s => onChange({ ...pets, style: s })} />
       <p className="label strip-label">{t().look.taskbar}</p>
       <PetsCanvas className="taskbar" scene={scene} u={0.3} width={330} height={48}

@@ -4,7 +4,12 @@ import { t } from '../i18n';
 import type { BubbleKind } from '../renderer/bubble';
 import type { Look, Session, Snapshot } from '../types';
 
-export interface BubbleWant { id: string; kind: BubbleKind; text: string; /** środek zwierzaka, px CSS sceny */ x: number; look: Look }
+/** Dymek, który pojawia się sam, jest krótki; pełny tekst pokazuje się po najechaniu na zwierzaka. */
+export const SHORT_CHARS = 32;
+export const shorten = (s: string) => { const c = Array.from(s); return c.length <= SHORT_CHARS ? s : c.slice(0, SHORT_CHARS).join('').trimEnd() + '…'; };
+
+export interface BubbleWant { id: string; kind: BubbleKind; /** krótki tekst dymku */ text: string; /** pełny tekst (po najechaniu) */ full: string;
+  /** środek zwierzaka, px CSS sceny */ x: number; look: Look }
 export interface BubbleSwitches { questions: boolean; actions: boolean }
 
 export class Picker {
@@ -32,13 +37,13 @@ export class Picker {
     const out: BubbleWant[] = [];
     const waiting = own.filter(s => s.state === 'needs_you' && at.has(s.id));
     if (on.questions) {
-      for (const s of waiting) out.push({ id: s.id, kind: 'question', text: s.question || t().state.needs_you, x: at.get(s.id)!, look: looks(s) });
+      for (const s of waiting) { const q = s.question || t().state.needs_you; out.push({ id: s.id, kind: 'question', text: shorten(q), full: q, x: at.get(s.id)!, look: looks(s) }); }
     }
     const c = this.current;
     if (c && now >= c.until) this.current = null;
     if (on.actions && this.current && waiting.length === 0) {
       const s = own.find(v => v.id === this.current!.id);
-      if (s && at.has(s.id)) out.push({ id: s.id, kind: 'action', text: this.current.text, x: at.get(s.id)!, look: looks(s) });
+      if (s && at.has(s.id)) out.push({ id: s.id, kind: 'action', text: shorten(this.current.text), full: this.current.text, x: at.get(s.id)!, look: looks(s) });
     }
     return out;
   }

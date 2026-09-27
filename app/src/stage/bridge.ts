@@ -26,7 +26,8 @@ export interface Bridge {
   setWidth(css: number): void;
   /** Widoczne zwierzaki (środek w px CSS sceny) dla okna dymków. */
   setPets?(pets: { id: string; x: number }[], width: number, zoom: number): void;
-  showTooltip(anchorX: number, content: TooltipContent): void;
+  /** `pet`: zwierzak pod kursorem; jego dymek (jeśli widać) rozwija się zamiast tooltipa. */
+  showTooltip(anchorX: number, content: TooltipContent, pet?: string): void;
   hideTooltip(): void;
   /** Otwiera panel (albo zamyka otwarty); `focus` podświetla sesję. */
   openPanel(focus?: string): void;
@@ -53,7 +54,7 @@ export function tauriBridge(): Bridge {
     openMenu: (target, x, y) => { void invoke('stage_menu', { target, x, y }); },
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
     setPets: (pets, width, zoom) => { void invoke('stage_pets', { pets, width, zoom }); },
-    showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },
+    showTooltip: (anchorX, content, pet) => { void invoke('tooltip_show', { anchorX, content, pet: pet ?? null }); },
     hideTooltip: () => { void invoke('tooltip_hide'); },
     openPanel: focus => { void invoke('panel_open', { focus: focus ?? null }); },
   };

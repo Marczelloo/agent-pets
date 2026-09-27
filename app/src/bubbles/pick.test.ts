@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Look, Session, Snapshot } from '../types';
-import { Picker } from './pick';
+import { Picker, SHORT_CHARS } from './pick';
 
 const LOOK: Look = { style: 'clean', motion: 'calm' };
 const looks = () => LOOK;
@@ -20,6 +20,16 @@ describe('bubble picker', () => {
     const w = p.update(snap([s('a', { state: 'needs_you', question: 'Zgoda na Bash? npm test' }), s('b', { state: 'needs_you', question: 'Pytanie: Który?' }), s('c')]),
       pets('a', 'b', 'c'), looks, ON, 0);
     expect(w.map(b => [b.id, b.kind, b.text, b.x])).toEqual([['a', 'question', 'Zgoda na Bash? npm test', 40], ['b', 'question', 'Pytanie: Który?', 90]]);
+  });
+
+  it('the automatic bubble is short, the full text waits for hover', () => {
+    const q = 'Allow Bash? npm run build && npm test -- --coverage';
+    const w = new Picker().update(snap([s('a', { state: 'needs_you', question: q })]), pets('a'), looks, ON, 0);
+    expect(w[0].full).toBe(q);
+    expect(Array.from(w[0].text).length).toBeLessThanOrEqual(SHORT_CHARS + 1);
+    expect(w[0].text.endsWith('…')).toBe(true);
+    const short = new Picker().update(snap([s('a', { state: 'needs_you', question: 'Który?' })]), pets('a'), looks, ON, 0);
+    expect([short[0].text, short[0].full]).toEqual(['Który?', 'Który?']);
   });
 
   it('a waiting session without a question text still asks', () => {

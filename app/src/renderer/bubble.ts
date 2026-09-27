@@ -13,6 +13,9 @@ export interface BubbleBox { w: number; h: number }
 
 /** Najszerszy dymek (px CSS przy zoom 1): 40 znaków zwykłej czcionki z zapasem. */
 export const BUBBLE_MAX_W = 300;
+/** Dymek rozwinięty po najechaniu: szerszy i w kilku liniach (pełne pytanie albo komenda). */
+export const BUBBLE_WIDE_W = 340;
+export const BUBBLE_MAX_LINES = 5;
 const FONT_PX = 12, PAD_X = 10, PAD_Y = 5, LINE = 16, RADIUS = 11, TAIL_H = 7, TAIL_W = 6;
 /** Ciepły kolor pytania (spec 2.2: pytanie zawsze ma pomarańczowe tło albo akcent). */
 const AMBER = '#EF9F27';
@@ -53,28 +56,68 @@ function fit(text: string, max: number, width: (s: string) => number): string {
   return chars.join('') + '…';
 }
 
+/**
+ * Tekst w liniach nie szerszych niż `max`: łamanie na spacjach, zbyt długie słowo cięte po znakach;
+ * po `maxLines` liniach reszta znika, a ostatnia linia kończy się wielokropkiem.
+ */
+export function layoutLines(text: string, max: number, width: (s: string) => number, maxLines: number): string[] {
+  const lines: string[] = [];
+  let cur = '';
+  const push = (l: string) => { lines.push(l); cur = ''; };
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (width(next) <= max) { cur = next; continue; }
+    if (cur) push(cur);
+    let w = word;
+    while (width(w) > max) {
+      const chars = Array.from(w);
+      let n = chars.length - 1;
+      while (n > 1 && width(chars.slice(0, n).join('')) > max) n--;
+      push(chars.slice(0, n).join(''));
+      w = chars.slice(n).join('');
+    }
+    cur = w;
+  }
+  if (cur) push(cur);
+  if (lines.length <= maxLines) return lines.length ? lines : [''];
+  const out = lines.slice(0, maxLines);
+  out[maxLines - 1] = fit(`${out[maxLines - 1]} ${lines[maxLines]}`, max, width);
+  if (!out[maxLines - 1].endsWith('…')) out[maxLines - 1] = fit(out[maxLines - 1] + '…', max, width);
+  return out;
+}
+
 /** Pikselowy dymek w całych komórkach ramki: to samo dla pomiaru i rysowania (przy skali ekranu `dpr`). */
-function pixelGeom(text: string, zoom: number, dpr: number) {
+function pixelGeom(text: string, zoom: number, dpr: number, wrap = false) {
   const { g, t } = pixelCells(zoom, dpr);
-  const pad = 3 * g, maxText = BUBBLE_MAX_W * zoom - 2 * pad;
-  const shown = fit(text, maxText, s => textWidth(s) * t);
-  const cw = Math.max(6, Math.ceil((textWidth(shown) * t + 2 * pad) / g)), chh = Math.ceil((FONT_ROWS * t + 2 * pad) / g);
-  return { g, t, shown, cw, chh };
+  const pad = 3 * g, maxText = (wrap ? BUBBLE_WIDE_W : BUBBLE_MAX_W) * zoom - 2 * pad, tw = (s: string) => textWidth(s) * t;
+  const lines = wrap ? layoutLines(text, maxText, tw, BUBBLE_MAX_LINES) : [fit(text, maxText, tw)];
+  const lineH = (FONT_ROWS + 2) * t;
+  const cw = Math.max(6, Math.ceil((Math.max(...lines.map(tw)) + 2 * pad) / g));
+  const chh = Math.ceil((FONT_ROWS * t + (lines.length - 1) * lineH + 2 * pad) / g);
+  return { g, t, lines, lineH, cw, chh };
 }
 
 /** `dpr`: skala ekranu; pikselowy dymek ma inną szerokość przy 125 % czy 150 %, a układ musi znać tę prawdziwą. */
-export function measureBubble(ctx: CanvasRenderingContext2D, text: string, look: Look, zoom: number, dpr = 1): BubbleBox {
+/** Linie tekstu zwykłego dymku (bez zawijania: jedna linia przycięta do szerokości). */
+function textLines(ctx: CanvasRenderingContext2D, text: string, zoom: number, wrap: boolean): string[] {
+  const w = (s: string) => ctx.measureText(s).width;
+  if (!wrap) return [fit(text, (BUBBLE_MAX_W - 2 * PAD_X) * zoom, w)];
+  return layoutLines(text, (BUBBLE_WIDE_W - 2 * PAD_X) * zoom, w, BUBBLE_MAX_LINES);
+}
+
+/** `wrap`: dymek rozwinięty (po najechaniu) — pełny tekst w kilku liniach. */
+export function measureBubble(ctx: CanvasRenderingContext2D, text: string, look: Look, zoom: number, dpr = 1, wrap = false): BubbleBox {
   if (look.style === 'pixel') {
     // ramka na `chh` komórek i dwa rzędy ogonka pod nią
-    const { g, cw, chh } = pixelGeom(text, zoom, dpr);
+    const { g, cw, chh } = pixelGeom(text, zoom, dpr, wrap);
     return { w: cw * g, h: (chh + 2) * g };
   }
   ctx.save();
   ctx.font = font(paint(look, 'action', ACCENT.clawd), zoom);
-  const maxText = (BUBBLE_MAX_W - 2 * PAD_X) * zoom;
-  const tw = Math.min(maxText, ctx.measureText(text).width);
+  const lines = textLines(ctx, text, zoom, wrap);
+  const tw = Math.max(...lines.map(l => ctx.measureText(l).width));
   ctx.restore();
-  return { w: tw + 2 * PAD_X * zoom, h: (LINE + 2 * PAD_Y + TAIL_H) * zoom };
+  return { w: tw + 2 * PAD_X * zoom, h: (lines.length * LINE + 2 * PAD_Y + TAIL_H) * zoom };
 }
 
 /** Obrys dymku z ogonkiem jako wielokąt (łuki rogów z odcinków), w kolejności zgodnej z ruchem wskazówek. */
@@ -105,11 +148,11 @@ function trace(ctx: CanvasRenderingContext2D, pts: number[][], jitter: number, s
  * `accent`: kolor agenta (obwódka Neonu).
  */
 export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, kind: BubbleKind, look: Look,
-  tailX: number, zoom: number, dpr: number, accent: string = ACCENT.clawd): void {
+  tailX: number, zoom: number, dpr: number, accent: string = ACCENT.clawd, wrap = false): void {
   const p = paint(look, kind, accent);
-  if (look.style === 'pixel') { drawPixelBubble(ctx, x, y, text, p, tailX, zoom, dpr); return; }
-  const box = measureBubble(ctx, text, look, zoom);
-  const w = box.w, h = (LINE + 2 * PAD_Y) * zoom, r = RADIUS * zoom, tw = TAIL_W * zoom, th = TAIL_H * zoom;
+  if (look.style === 'pixel') { drawPixelBubble(ctx, x, y, text, p, tailX, zoom, dpr, wrap); return; }
+  const box = measureBubble(ctx, text, look, zoom, dpr, wrap);
+  const w = box.w, h = box.h - TAIL_H * zoom, r = RADIUS * zoom, tw = TAIL_W * zoom, th = TAIL_H * zoom;
   const tx = x + Math.min(w - r - tw, Math.max(r + tw, tailX));
   const pts = outline(x, y, w, h, r, tx, th, tw);
   ctx.save();
@@ -133,14 +176,13 @@ export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillStyle = p.text;
   ctx.font = font(p, zoom);
   ctx.textBaseline = 'middle';
-  const shown = fit(text, w - 2 * PAD_X * zoom, s => ctx.measureText(s).width);
-  ctx.fillText(shown, x + PAD_X * zoom, y + h / 2 + 0.5 * zoom);
+  textLines(ctx, text, zoom, wrap).forEach((l, i) => ctx.fillText(l, x + PAD_X * zoom, y + (PAD_Y + LINE * (i + 0.5)) * zoom + 0.5 * zoom));
   ctx.restore();
 }
 
 /** Pikselowy dymek: ramka o grubości jednej komórki `gridPx`, ścięte rogi, schodkowy ogonek, tekst z `pixelfont`. */
-function drawPixelBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, p: Paint, tailX: number, zoom: number, dpr: number): void {
-  const { g, t, shown, cw, chh } = pixelGeom(text, zoom, dpr);
+function drawPixelBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, p: Paint, tailX: number, zoom: number, dpr: number, wrap = false): void {
+  const { g, t, lines, lineH, cw, chh } = pixelGeom(text, zoom, dpr, wrap);
   const snap = (v: number) => Math.round(v * dpr) / dpr;
   const X = snap(x), Y = snap(y);
   const rect = (cx: number, cy: number, w: number, h: number) => ctx.fillRect(X + cx * g, Y + cy * g, w * g, h * g);
@@ -162,14 +204,17 @@ function drawPixelBubble(ctx: CanvasRenderingContext2D, x: number, y: number, te
   rect(tc, chh + 1, 1, 1);
   // tekst: komórka czcionki = całe piksele urządzenia, początek na siatce ramki
   ctx.fillStyle = p.text;
-  const tx0 = X + 3 * g, ty0 = Y + Math.round((chh * g - FONT_ROWS * t) / 2 * dpr) / dpr;
-  let cx = 0;
-  for (const ch of Array.from(shown)) {
-    const rows = glyphOf(ch);
-    rows.forEach((row, ry) => {
-      for (let i = 0; i < row.length; i++) if (row[i] === '#') ctx.fillRect(tx0 + (cx + i) * t, ty0 + ry * t, t, t);
-    });
-    cx += (rows[0]?.length ?? 1) + 1;
-  }
+  const textH = FONT_ROWS * t + (lines.length - 1) * lineH;
+  const tx0 = X + 3 * g, ty0 = Y + Math.round((chh * g - textH) / 2 * dpr) / dpr;
+  lines.forEach((line, li) => {
+    let cx = 0;
+    for (const ch of Array.from(line)) {
+      const rows = glyphOf(ch);
+      rows.forEach((row, ry) => {
+        for (let i = 0; i < row.length; i++) if (row[i] === '#') ctx.fillRect(tx0 + (cx + i) * t, ty0 + li * lineH + ry * t, t, t);
+      });
+      cx += (rows[0]?.length ?? 1) + 1;
+    }
+  });
   ctx.restore();
 }

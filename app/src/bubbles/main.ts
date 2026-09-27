@@ -17,7 +17,8 @@ import { Picker, type BubbleWant } from './pick';
 const MARGIN = 150;
 const POP_MS = 150, FADE_MS = 200, ROW_GAP = 4;
 
-interface Live { want: BubbleWant; box: BubbleBox; born: number; gone: number | null }
+/** `wide`: rozwinięty po najechaniu na zwierzaka (pełny tekst w kilku liniach). */
+interface Live { want: BubbleWant; box: BubbleBox; born: number; gone: number | null; wide: boolean }
 interface StagePets { pets: { id: string; x: number }[]; width: number; zoom: number }
 
 const canvas = document.getElementById('bubbles') as HTMLCanvasElement;
@@ -29,6 +30,8 @@ let pets: Pets = defaultPets();
 let stage: StageSettings = defaultStage();
 let at: StagePets = { pets: [], width: 0, zoom: 1 };
 let visible = true, moving = false, raf = 0, lastHits = '';
+/** zwierzak pod kursorem, którego dymek jest rozwinięty (od Rust, zamiast tooltipa) */
+let hovered: string | null = null;
 const picker = new Picker();
 const live = new Map<string, Live>();
 
@@ -43,8 +46,10 @@ function refresh(): void {
   const wants = on ? picker.update(snap, at.pets, lookOf, stage.bubbles, now) : [];
   const keys = new Set(wants.map(keyOf));
   for (const w of wants) {
-    const k = keyOf(w), l = live.get(k);
-    if (l) { l.want = w; l.gone = null; } else live.set(k, { want: w, box: measureBubble(ctx, w.text, w.look, at.zoom, devicePixelRatio || 1), born: now, gone: null });
+    const k = keyOf(w), l = live.get(k), wide = hovered === w.id && w.full !== w.text;
+    const box = () => measureBubble(ctx, wide ? w.full : w.text, w.look, at.zoom, devicePixelRatio || 1, wide);
+    if (l) { if (l.wide !== wide) { l.wide = wide; l.box = box(); } l.want = w; l.gone = null; }
+    else live.set(k, { want: w, box: box(), born: now, gone: null, wide });
   }
   for (const [k, l] of live) if (!keys.has(k) && l.gone == null) l.gone = on ? now : now - FADE_MS;
   void paint();
@@ -87,7 +92,7 @@ async function paint(): Promise<void> {
       const s = 0.8 + 0.2 * tIn, ox = left + tail, oy = y + l.box.h;
       ctx.translate(ox, oy); ctx.scale(s, s); ctx.translate(-ox, -oy);
     }
-    drawBubble(ctx, left, y, l.want.text, l.want.kind, l.want.look, tail, at.zoom, d, accentOf(l.want.id));
+    drawBubble(ctx, left, y, l.wide ? l.want.full : l.want.text, l.want.kind, l.want.look, tail, at.zoom, d, accentOf(l.want.id), l.wide);
     ctx.restore();
     if (l.gone == null) hits.push({ id: l.want.id, kind: l.want.kind, x: left, y, w: l.box.w, h: l.box.h });
   });
@@ -100,6 +105,7 @@ void listen<Snapshot>('pets://snapshot', e => { snap = e.payload; refresh(); });
 void listen<StagePets>('pets://stage-pets', e => { at = e.payload; refresh(); });
 void listen<boolean>('pets://visibility', e => { visible = e.payload; refresh(); });
 void listen<boolean>('pets://moving', e => { moving = e.payload; refresh(); });
+void listen<string | null>('pets://hover', e => { if (hovered !== e.payload) { hovered = e.payload; refresh(); } });
 const onSettings = (s: Settings) => { setLang(resolveLang(s.language ?? 'auto')); pets = s.pets; stage = s.stage ?? defaultStage(); refresh(); };
 void listen<Settings>('pets://settings', e => onSettings(e.payload));
 void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); onSettings(v.settings); });

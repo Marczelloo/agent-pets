@@ -49,8 +49,16 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// `pet`: zwierzak pod kursorem. Gdy nad nim stoi dymek, najechanie rozwija dymek do pełnego tekstu zamiast pokazywać tooltip.
 #[tauri::command]
-pub fn tooltip_show(app: AppHandle, tip: State<Tooltip>, shell: State<Shell>, anchor_x: f64, content: serde_json::Value) {
+pub fn tooltip_show(app: AppHandle, tip: State<Tooltip>, shell: State<Shell>, bubbles: State<crate::bubbles::Bubbles>,
+    anchor_x: f64, content: serde_json::Value, pet: Option<String>) {
+    if let Some(id) = pet.filter(|id| bubbles.showing(id)) {
+        tip.hide(&app);
+        let _ = app.emit_to("bubbles", "pets://hover", Some(id));
+        return;
+    }
+    let _ = app.emit_to("bubbles", "pets://hover", None::<String>);
     let Some((stage, monitor, scale)) = shell.stage_geom() else { return };
     let seq = tip.open(stage.left + (anchor_x * scale).round() as i32, stage, monitor, scale);
     let _ = app.emit_to("tooltip", "tooltip://content", ContentMsg { seq, content });
@@ -68,7 +76,10 @@ pub fn tooltip_size(app: AppHandle, tip: State<Tooltip>, seq: u64, w: f64, h: f6
 }
 
 #[tauri::command]
-pub fn tooltip_hide(app: AppHandle, tip: State<Tooltip>) { tip.hide(&app); }
+pub fn tooltip_hide(app: AppHandle, tip: State<Tooltip>) {
+    tip.hide(&app);
+    let _ = app.emit_to("bubbles", "pets://hover", None::<String>);
+}
 
 #[cfg(test)]
 mod tests {

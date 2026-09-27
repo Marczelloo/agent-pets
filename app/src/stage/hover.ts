@@ -53,7 +53,7 @@ export class Hover {
     }
     this.key = key;
     this.sentAt = Date.now();
-    this.bridge.showTooltip(t.x, content);
+    this.bridge.showTooltip(t.x, content, t.kind === 'pet' || t.kind === 'mini' ? t.id : undefined);
   }
 
   clear(): void { this.x = this.y = -1; this.hide(); }
