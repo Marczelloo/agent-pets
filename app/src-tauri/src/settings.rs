@@ -191,6 +191,25 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
 /// Tytuł okna ustawień (pasek tytułu, przycisk w pasku zadań, Alt+Tab).
 pub fn window_title(lang: Lang) -> &'static str { i18n::tr(lang, "Agent Pets: ustawienia", "Agent Pets: settings") }
 
+/// Rozmiar okna: naturalny (cała treść bez przewijania), ale nie większy niż obszar roboczy ekranu minus margines.
+pub fn fit_size(desired: (f64, f64), work: Option<(f64, f64)>) -> (f64, f64) {
+    const MARGIN: f64 = 32.0;
+    match work {
+        Some((w, h)) => (desired.0.min(w - MARGIN), desired.1.min(h - MARGIN)),
+        None => desired,
+    }
+}
+
+/// Obszar roboczy głównego monitora w pikselach logicznych (bez paska zadań).
+pub fn work_area(app: &AppHandle) -> Option<(f64, f64)> {
+    let m = app.primary_monitor().ok().flatten()?;
+    let (s, a) = (m.scale_factor(), m.work_area());
+    Some((a.size.width as f64 / s, a.size.height as f64 / s))
+}
+
+/// Okno ustawień: 1100×860 mieści „Wygląd” (7 stylów w rzędzie) i większość kart bez przewijania.
+pub const WINDOW: (f64, f64) = (1100.0, 860.0);
+
 /// Otwiera okno ustawień (albo kreator przy pierwszym uruchomieniu); drugie wywołanie tylko je pokazuje.
 pub fn open(app: &AppHandle) { open_at(app, None) }
 
@@ -211,8 +230,9 @@ fn open_at(app: &AppHandle, tab: Option<&str>) {
     let tab = tab.map(str::to_string);
     std::thread::spawn(move || {
         let url = tab.map(|t| format!("settings.html#{t}")).unwrap_or_else(|| "settings.html".into());
+        let (w, h) = fit_size(WINDOW, work_area(&app));
         let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App(url.into()))
-            .title(window_title(app.state::<SettingsState>().lang())).inner_size(760.0, 560.0).min_inner_size(620.0, 460.0).center().build();
+            .title(window_title(app.state::<SettingsState>().lang())).inner_size(w, h).min_inner_size(620.0, 460.0).center().build();
     });
 }
 
@@ -260,6 +280,14 @@ mod tests {
         std::fs::write(&c, b"y").unwrap();
         assert_eq!(pick_hook(&[a.clone(), b.clone(), c]), Some(b));
         assert_eq!(pick_hook(&[a]), None);
+    }
+
+    #[test]
+    fn windows_open_at_their_natural_size_but_never_larger_than_the_screen() {
+        assert_eq!(fit_size((1100.0, 860.0), Some((2560.0, 1392.0))), (1100.0, 860.0));
+        assert_eq!(fit_size((1100.0, 860.0), Some((1366.0, 728.0))), (1100.0, 696.0));
+        assert_eq!(fit_size((1100.0, 860.0), Some((1024.0, 600.0))), (992.0, 568.0));
+        assert_eq!(fit_size((800.0, 720.0), None), (800.0, 720.0));
     }
 
     #[test]

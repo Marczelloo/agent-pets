@@ -40,8 +40,21 @@ describe('pets in the statistics window', () => {
   });
   it('each badge dresses its pet', () => {
     expect(WEAR_OF).toEqual({ glutton: 'bib', cache_master: 'scarf', night_owl: 'nightcap', marathon: 'headband' });
-    const html = renderToString(<Badges badges={demoStats().badges} pets={pets} animate={false} />);
+    const html = renderToString(<Badges badges={demoStats().badges} totalTokens={42_000_000} pets={pets} animate={false} />);
     for (const w of ['bib', 'scarf', 'nightcap', 'headband']) expect(html).toContain(`data-wear="${w}"`);
+  });
+  it('each badge explains itself on hover or focus', () => {
+    const html = renderToString(<Badges badges={demoStats().badges} totalTokens={42_000_000} pets={pets} animate={false} />);
+    expect(html.match(/role="tooltip"/g)).toHaveLength(4);
+    expect(html.match(/tabindex="0"/g)).toHaveLength(4);
+    expect(html).toContain('21 mln (50% wszystkich tokenów)');
+    expect(html).toContain('co najmniej 1 mln tokenów');
+    expect(html).toContain('między 23:00 a 5:00');
+    expect(html).toContain('Przerwy dłuższe niż 5 min się nie liczą');
+  });
+  it('a project without a folder reads as "No project" on the podium', () => {
+    const places = [{ project: ':no-project', value: 1, agent: 'claude' as const }];
+    expect(renderToString(<Podium places={places} format={formatHours} pets={pets} animate={false} replay="w" />)).toContain('Bez projektu');
   });
   it('race lanes carry a running pet', () => {
     const html = renderToString(<Race lanes={demoStats().race} race="agents" format={formatHours} pets={pets} elapsed={Infinity} animate={false} />);

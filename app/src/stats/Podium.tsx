@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import { rng } from '../renderer/rng';
 import { reducedMotion } from '../stage/power';
 import type { Pets, StatsPlace } from '../types';
+import { projectName } from './model';
 import { CONFETTI_MS, confettiColors, drawConfetti, spawnConfetti, stepConfetti, type Piece } from './confetti';
 import { StatPet } from './StatPet';
 
@@ -60,7 +61,7 @@ export function Podium({ places, format, pets, animate, replay }: PodiumProps) {
               w={PET_W} h={PET_H} u={PET_U} pets={pets} animate={animate} delay={delays[i]} />}
           </div>
           <div className="blk">{i + 1}</div>
-          <div className="nm">{p?.project ?? t().stats.emptyStep}</div>
+          <div className="nm" title={p ? projectName(p.project) : undefined}>{p ? projectName(p.project) : t().stats.emptyStep}</div>
           <div className="vl">{p ? format(p.value) : ''}</div>
         </div>;
       })}

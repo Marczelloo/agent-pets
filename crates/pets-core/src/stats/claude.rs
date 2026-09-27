@@ -9,10 +9,30 @@ pub fn fnv64(s: &str) -> u64 {
     s.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
 }
 
-/// Ostatni człon ścieżki (`C:\work\Agent Pets` → `Agent Pets`); tylko on trafia do księgi.
-pub fn project_of(cwd: &str) -> Option<String> {
-    cwd.split(['/', '\\']).filter(|p| !p.is_empty()).last().map(String::from)
+/// Klucz „bez projektu”: rozmowa w aplikacji Claude albo Codex bez folderu projektu, katalog domowy albo
+/// tymczasowy. Okno pokazuje go jako „Bez projektu”.
+pub const NO_PROJECT: &str = ":no-project";
+
+fn is_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10 && b[4] == b'-' && b[7] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
 }
+
+/// Nazwa projektu z `cwd`: ostatni człon ścieżki, a dla folderów, które nie są projektami, `NO_PROJECT`.
+pub fn project_of(cwd: &str) -> Option<String> {
+    let parts: Vec<&str> = cwd.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    let last = *parts.last()?;
+    let low: Vec<String> = parts.iter().map(|p| p.to_ascii_lowercase()).collect();
+    let n = low.len();
+    let pair = |a: &str, b: &str| low.windows(2).any(|w| w[0] == a && w[1] == b);
+    let none = low.iter().any(|p| p == "scratch-workspaces")                              // Claude: rozmowa bez projektu
+        || (n >= 3 && low[n - 3] == "codex" && is_date(parts[n - 2]))                      // Codex: Documents\Codex\<data>\<czat>
+        || pair("local", "temp")                                                           // katalog tymczasowy
+        || (n == 3 && parts[0].ends_with(':') && low[1] == "users")                        // C:\Users\<nazwa>
+        || (n == 2 && (low[0] == "home" || low[0] == "users"));                            // /home/<nazwa>, /Users/<nazwa>
+    Some(if none { NO_PROJECT.to_string() } else { last.to_string() })
+}
+
 
 /// Jedna linia transkryptu → wkład w `e` (spec 2.2). Ta sama odpowiedź (`message.id`) powtarza się w kolejnych
 /// wierszach, raz na blok treści: liczymy przyrost względem poprzedniego wiersza, więc suma to ostatnie liczby.
@@ -147,6 +167,25 @@ mod tests {
         let t = total(&e);
         assert_eq!((t.tools.edit, t.tools.bash, t.tools.grep, t.tools.mcp, t.tools.other), (1, 1, 1, 1, 0));
         assert_eq!(t.questions, 1);
+    }
+
+    #[test]
+    fn folders_that_are_not_projects_are_grouped_as_no_project() {
+        for cwd in [
+            r"C:\Users\ja\AppData\Roaming\Claude\scratch-workspaces\ea4a\d32c\scratch-2026-09-24-6d902d",
+            r"C:\Users\ja\Documents\Codex\2026-07-15\czy",
+            r"C:\Users\ja",
+            r"C:\Users\ja\AppData\Local\Temp",
+            r"C:\Users\ja\AppData\Local\Temp\claude\x\scratchpad\spike",
+            "/home/ja",
+        ] { assert_eq!(project_of(cwd).as_deref(), Some(NO_PROJECT), "{cwd}"); }
+        for (cwd, p) in [
+            (r"C:\Users\ja\Documents\ChatGPT\Agent Pets", "Agent Pets"),
+            (r"d:\wszystko\Projekty\Web dev\tests", "tests"),
+            (r"C:\Users\ja\Documents\Codex", "Codex"),
+            (r"C:\Users\ja\Documents\Codex\2026-07-15\czy\src", "src"),
+            ("/home/ja/code/agent-pets", "agent-pets"),
+        ] { assert_eq!(project_of(cwd).as_deref(), Some(p), "{cwd}"); }
     }
 
     #[test]

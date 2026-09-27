@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLang } from '../i18n';
-import { agentName, badgeText, formatChange, formatHours, formatPct, formatTokens, scanPct } from './model';
+import { agentName, badgeText, formatChange, formatHours, formatPct, formatTokens, projectName, scanPct } from './model';
 import { countUp } from './count';
 
 afterEach(() => setLang('pl'));
@@ -20,6 +20,12 @@ describe('stats model', () => {
   it('names agents and badges', () => {
     expect(['claude', 'codex', 'router'].map(a => agentName(a as never))).toEqual(['Claude Code', 'Codex', 'Agent Router']);
     expect(badgeText('cache_master')).toBe('Mistrz cache');
+  });
+  it('folders that are not projects read as "No project"', () => {
+    expect(projectName(':no-project')).toBe('Bez projektu');
+    expect(projectName('Agent Pets')).toBe('Agent Pets');
+    setLang('en');
+    expect(projectName(':no-project')).toBe('No project');
   });
   it('turns scan progress into a percentage', () => {
     expect(scanPct({ files: 3, scanned: 50, total: 200, done: false })).toBe(25);

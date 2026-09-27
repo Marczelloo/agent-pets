@@ -4,11 +4,14 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use super::FileEntry;
 
+/// Wersja formatu; starsza księga jest przeliczana od nowa z historii (2: projekty „bez projektu”, kwadranse).
+pub const VERSION: u32 = 2;
+
 /// Księga statystyk (`~/.agent-pets/stats.json`): wpis na każdy przeczytany plik historii.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Book { pub v: u32, pub files: BTreeMap<String, FileEntry> }
 
-impl Default for Book { fn default() -> Self { Book { v: 1, files: BTreeMap::new() } } }
+impl Default for Book { fn default() -> Self { Book { v: VERSION, files: BTreeMap::new() } } }
 
 impl Book {
     pub fn default_path() -> PathBuf { dirs::home_dir().unwrap_or_default().join(".agent-pets").join("stats.json") }
@@ -16,8 +19,12 @@ impl Book {
     /// Brak pliku to pusta księga; uszkodzony plik odkładamy jako `.bad` i zaczynamy od nowa.
     pub fn load(path: &Path) -> Book {
         let Ok(text) = std::fs::read_to_string(path) else { return Book::default() };
+        // inna wersja formatu to nie uszkodzony plik: przeliczamy historię od nowa, bez odkładania `.bad`
+        #[derive(Deserialize)]
+        struct Head { v: u32 }
+        if serde_json::from_str::<Head>(&text).is_ok_and(|h| h.v != VERSION) { return Book::default(); }
         match serde_json::from_str::<Book>(&text) {
-            Ok(b) if b.v == 1 => b,
+            Ok(b) => b,
             _ => {
                 let _ = std::fs::rename(path, path.with_extension("json.bad"));
                 Book::default()
@@ -67,7 +74,7 @@ mod tests {
         b.save(&p).unwrap();
         assert!(!dir.path().join("stats.json.tmp").exists(), "zapis przez plik tymczasowy i rename");
         let l = Book::load(&p);
-        assert_eq!(l.v, 1);
+        assert_eq!(l.v, VERSION);
         assert_eq!(l.files, b.files);
     }
 
@@ -84,10 +91,20 @@ mod tests {
     }
 
     #[test]
+    fn a_book_of_an_older_format_is_rebuilt_from_the_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("stats.json");
+        std::fs::write(&p, r#"{"v":1,"files":{"a.jsonl":{"cursor":{"offset":5,"size":5,"mtime":0,"last_event":null,"line":1,"skip_until":0,"last_msg":null,"last_total":null,"model":null},"meta":{"agent":"claude","project":"home-folder","sub":false,"started":null},"buckets":{}}}}"#).unwrap();
+        let b = Book::load(&p);
+        assert_eq!((b.v, b.files.len()), (VERSION, 0));
+        assert!(!dir.path().join("stats.json.bad").exists(), "an old format is not a broken file");
+    }
+
+    #[test]
     fn a_missing_file_is_an_empty_book() {
         let dir = tempfile::tempdir().unwrap();
         let b = Book::load(&dir.path().join("stats.json"));
-        assert_eq!((b.v, b.files.len()), (1, 0));
+        assert_eq!((b.v, b.files.len()), (VERSION, 0));
     }
 
     #[test]

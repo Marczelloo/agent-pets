@@ -99,7 +99,7 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
         <div className="row bottom">
           <section className="card"><div className="ct"><span>{x.activity}</span></div><Calendar days={view.calendar} /></section>
           <section className="card"><div className="ct"><span>{x.badges}</span></div>
-            <Badges badges={view.badges} pets={pets} animate={animate} />
+            <Badges badges={view.badges} totalTokens={view.tiles.tokens} pets={pets} animate={animate} />
           </section>
         </div>
       </>}

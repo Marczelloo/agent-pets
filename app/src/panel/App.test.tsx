@@ -75,7 +75,9 @@ describe('PanelView', () => {
   it('has a statistics button next to settings', () => {
     const html = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null}
       onJump={() => {}} onSettings={() => {}} onStats={() => {}} />);
-    expect(html).toMatch(/aria-label="Statystyki"[^>]*>📊/);
+    expect(html).toMatch(/aria-label="Statystyki"[^>]*><svg/);
+    expect(html).toMatch(/aria-label="Ustawienia"[^>]*><svg/);
+    expect(html).not.toMatch(/[📊⚙]/u);
   });
   it('after removing, offers undo with the count', () => {
     const view = (n: number) => renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0}

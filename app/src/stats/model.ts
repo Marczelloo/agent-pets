@@ -32,5 +32,8 @@ export function agentName(a: StatAgent): string {
 
 export const badgeText = (k: BadgeKind): string => t().stats.badge[k];
 
+/** Nazwa projektu do pokazania; `:no-project` (rozmowa bez folderu, katalog domowy albo tymczasowy) to „Bez projektu”. */
+export const projectName = (p: string): string => (p === ':no-project' ? t().stats.noProject : p);
+
 /** Postęp pierwszego skanu w procentach (pusta kolejka = 100). */
 export const scanPct = (p: StatsProgress): number => (p.total > 0 ? Math.min(100, Math.floor((p.scanned * 100) / p.total)) : 100);

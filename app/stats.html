@@ -73,7 +73,17 @@ canvas.enter{animation:enter .45s cubic-bezier(.2,.8,.3,1.2) both}
 .bd .badge-pet{flex:none}
 .bd b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bd span{font-size:11px;color:var(--mut);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bd>div:last-child{min-width:0}
+.bd{position:relative;outline:none;cursor:default}
+.bd:focus-visible{box-shadow:0 0 0 2px var(--txt)}
+.bd>div:nth-child(2){min-width:0}
+.tip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translate(-50%,4px);width:260px;max-width:70vw;padding:8px 10px;
+  background:var(--card);color:var(--txt);border:1px solid var(--edge);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.25);
+  font-size:12px;line-height:1.45;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,transform .15s,visibility 0s .15s;z-index:5}
+.bd:hover .tip,.bd:focus-visible .tip{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .15s,transform .15s}
+.badges .bd:nth-child(2n) .tip{left:auto;right:0;transform:translate(0,4px)}
+.badges .bd:nth-child(2n):hover .tip,.badges .bd:nth-child(2n):focus-visible .tip{transform:none}
+.badges .bd:nth-child(2n+1) .tip{left:0;transform:translate(0,4px)}
+.badges .bd:nth-child(2n+1):hover .tip,.badges .bd:nth-child(2n+1):focus-visible .tip{transform:none}
 .none{margin:6px 0;color:var(--mut);font-size:12px}
 .empty{display:flex;flex-direction:column;align-items:center;gap:8px;margin:64px 0;color:var(--mut)}
 @media (prefers-reduced-motion: reduce){.rec{animation:none}.scan .bar i{transition:none}canvas.enter{animation:none}}

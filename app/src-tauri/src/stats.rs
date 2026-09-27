@@ -133,8 +133,10 @@ pub fn open(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
         let lang = app.state::<crate::settings::SettingsState>().lang();
+        // 800×720 mieści całe okno (podium, wyścig, kalendarz, odznaki i pasek wczytywania) bez przewijania
+        let (w, h) = crate::settings::fit_size((800.0, 720.0), crate::settings::work_area(&app));
         let _ = WebviewWindowBuilder::new(&app, "stats", WebviewUrl::App("stats.html".into()))
-            .title(window_title(lang)).inner_size(760.0, 560.0).min_inner_size(620.0, 460.0).center().build();
+            .title(window_title(lang)).inner_size(w, h).min_inner_size(620.0, 460.0).center().build();
     });
 }
 

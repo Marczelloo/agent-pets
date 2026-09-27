@@ -1,7 +1,7 @@
 import { reducedMotion } from '../stage/power';
 import type { Pets, StatsLane, StatsRace } from '../types';
 import { COUNT_MS, countUp } from './count';
-import { agentName } from './model';
+import { agentName, projectName } from './model';
 import { StatPet } from './StatPet';
 
 export interface RaceProps {
@@ -19,7 +19,7 @@ export function Race({ lanes, race, format, pets, elapsed, animate }: RaceProps)
     {lanes.map(l => {
       const w = (countUp(l.value, elapsed, COUNT_MS, reduced) / max) * 100;
       return <div className="lane" key={l.key}>
-        <span className="nm">{race === 'agents' && l.agent ? agentName(l.agent) : l.key}</span>
+        <span className="nm">{race === 'agents' && l.agent ? agentName(l.agent) : projectName(l.key)}</span>
         <div className="trk">
           <i className={`bar ${l.agent ?? ''}`} style={{ width: `${w}%` }} />
           <div className="runner" style={{ left: `calc(${w}% - 18px)` }}>

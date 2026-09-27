@@ -5,6 +5,7 @@ import { actionLabel, formatAgo, formatDuration, petTooltip } from '../tooltip/t
 import type { Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
 import { childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
+import { GearIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 import { resolveLang, setLang, setSystemLang, t } from '../i18n';
@@ -39,8 +40,8 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
       <header>
         <h1>Agent Pets</h1>
         <span className="count">{t().sessions(sessions.length)}</span>
-        {onStats && <button type="button" className="gear" aria-label={t().panel.stats} title={t().panel.stats} onClick={onStats}>📊</button>}
-        {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}>⚙</button>}
+        {onStats && <button type="button" className="gear" aria-label={t().panel.stats} title={t().panel.stats} onClick={onStats}><StatsIcon /></button>}
+        {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}><GearIcon /></button>}
       </header>
       {bar && <div className="update" role="status">
         <span className="text">{bar.text}</span>
