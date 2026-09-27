@@ -84,7 +84,7 @@ pub struct Session {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum SubKind { Claude, Codex, Router }
+pub enum SubKind { Claude, Codex, Router, Opencode }
 
 /// Opis dziecka: kto je uruchomił i po co.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

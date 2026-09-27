@@ -52,7 +52,8 @@ pub fn to_event(g: GenericEvent, ts: i64) -> Result<Event, Reject> {
     let mut e = Event::new(Source::Generic, format!("generic:{}:{}", g.agent, g.session), kind, ts);
     if kind == Kind::ToolStart { e.tool = Some(g.tool.unwrap_or(Tool::Other)); }
     let d = &mut e.data;
-    d.agent_name = text(&g.name, 40).or_else(|| Some(g.agent.clone()));
+    // tylko zgłoszona nazwa; domyślną (id agenta) nadaje sklep przy tworzeniu sesji, żeby zdarzenie bez `name` jej nie zmieniało
+    d.agent_name = text(&g.name, 40);
     d.title = text(&g.title, 80);
     d.cwd = text(&g.cwd, 260);
     d.model = text(&g.model, 64);
@@ -135,8 +136,21 @@ mod tests {
     }
 
     #[test]
-    fn the_name_defaults_to_the_agent_id() {
-        assert_eq!(to_event(g(base("done")), 1).unwrap().data.agent_name.as_deref(), Some("kilo"));
+    fn a_name_is_sent_only_when_reported() {
+        // brak `name` nie może nadpisać nazwy zgłoszonej wcześniej (id agenta jako domyślną nadaje sklep)
+        assert_eq!(to_event(g(base("done")), 1).unwrap().data.agent_name, None);
+    }
+
+    #[test]
+    fn a_door_pet_keeps_its_name_between_events() {
+        let mut st = crate::store::Store::new(crate::store::Timing::default());
+        st.apply(&to_event(g(base("working")), 1).unwrap());
+        assert_eq!(st.session("generic:kilo:abc").unwrap().agent_name.as_deref(), Some("kilo"), "domyślnie id agenta");
+        let mut named = base("working");
+        named["name"] = json!("Kilo CLI");
+        st.apply(&to_event(g(named), 2).unwrap());
+        st.apply(&to_event(g(base("done")), 3).unwrap());
+        assert_eq!(st.session("generic:kilo:abc").unwrap().agent_name.as_deref(), Some("Kilo CLI"));
     }
 
     #[test]

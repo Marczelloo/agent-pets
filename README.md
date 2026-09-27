@@ -267,7 +267,7 @@ curl -s -X POST "http://127.0.0.1:$PORT/v1/events/generic" \
 |---|---|---|
 | `agent` | yes | your agent's id, `[a-z0-9-]{1,32}`. Names of agents with their own integration (`claude`, `codex`, `opencode`, …) are refused |
 | `session` | yes | session id, `[A-Za-z0-9_.:-]{1,128}` |
-| `state` | yes | `thinking`, `working`, `needs_you`, `done`, `error`, `idle`, `sleep`, `compacting`, `ended` |
+| `state` | yes | `thinking`, `working`, `needs_you`, `done`, `error`, `idle`, `sleep`, `compacting`, `ended`. `idle` and `sleep` only keep the session alive and update its fields; send `done` to end a turn (the pet goes idle 2 minutes later) |
 | `name` | no | name to show (40 characters) |
 | `tool` | no | with `working`: `edit`, `bash`, `read`, `grep`, `web`, `agent`, `mcp`, `other` |
 | `title`, `question`, `cwd`, `model` | no | session title, the question while `needs_you`, working folder, model id |

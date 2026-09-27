@@ -85,7 +85,8 @@ fn new_session(e: &Event) -> Session {
         question: None,
         waits_on_child: false,
         model: None,
-        agent_name: None,
+        // sesja z furtki (`generic:<agent>:<sesja>`): do czasu zgłoszenia nazwy pokazujemy id agenta
+        agent_name: (e.source == Source::Generic).then(|| e.session_id.split(':').nth(1).map(String::from)).flatten(),
     }
 }
 
@@ -97,9 +98,15 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(c) = d.context { s.context = Some(c); }
     if let Some(p) = d.pid { s.jump.pid = Some(p); }
     if let Some(a) = d.app {
-        // aplikacja agenta (rejestr, `originator`) wygrywa z programem z drzewa procesów, który tylko uzupełnia
-        let agent_app = matches!(s.jump.app, Some(App::ClaudeDesktop | App::CodexApp));
-        if !agent_app || matches!(a, App::ClaudeDesktop | App::CodexApp) {
+        // aplikacja agenta (rejestr, `originator`) wygrywa z programem z drzewa procesów, który tylko uzupełnia;
+        // samo „terminal” (transkrypt, rejestr) nie zastępuje konkretnego programu (terminal w VS Code to VS Code)
+        let agent_app = |x: App| matches!(x, App::ClaudeDesktop | App::CodexApp);
+        let keep = match s.jump.app {
+            Some(cur) if agent_app(cur) => !agent_app(a),
+            Some(cur) => a == App::Terminal && cur != App::Terminal,
+            None => false,
+        };
+        if !keep {
             s.jump.app = Some(a);
             s.jump.app_name = d.app_name.clone().filter(|n| !n.is_empty());
         }
@@ -474,6 +481,21 @@ mod tests {
     }
 
     #[test]
+    fn a_plain_terminal_does_not_replace_a_known_program() {
+        // Claude CLI w terminalu VS Code: hook zna VS Code, a transkrypt i rejestr mówią tylko „terminal”
+        let mut s = Store::new(Timing::default());
+        let mut e = ev(Kind::Prompt, 0);
+        e.data.app = Some(App::Vscode);
+        e.data.host_pid = Some(7);
+        s.apply(&e);
+        let mut t = ev(Kind::Meta, 10);
+        t.data.app = Some(App::Terminal);
+        s.apply(&t);
+        let j = &s.session("s1").unwrap().jump;
+        assert_eq!((j.app, j.host_pid), (Some(App::Vscode), Some(7)));
+    }
+
+    #[test]
     fn a_host_from_the_process_tree_does_not_override_the_agent_app() {
         let mut s = Store::new(Timing::default());
         let mut e = ev(Kind::Prompt, 0);
@@ -829,7 +851,7 @@ mod tests {
 
     fn sub(kind: SubKind, background: bool) -> SubInfo { SubInfo { kind, agent_type: None, description: None, background } }
     fn kid(id: &str, parent: &str, kind: Kind, ts: i64, info: SubInfo) -> Event {
-        let src = match info.kind { SubKind::Claude => Source::Claude, SubKind::Codex => Source::Codex, SubKind::Router => Source::Router };
+        let src = match info.kind { SubKind::Claude => Source::Claude, SubKind::Codex => Source::Codex, SubKind::Router => Source::Router, SubKind::Opencode => Source::Opencode };
         let mut e = Event::new(src, id, kind, ts);
         e.data.parent = Some(parent.into());
         e.data.sub = Some(info);

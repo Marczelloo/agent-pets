@@ -100,6 +100,11 @@ fn session_undismiss(app: tauri::AppHandle, ids: Vec<String>) {
 /// Skutki zmiany ustawień. Powiadomienia i zgoda na limity Anthropic są czytane na bieżąco w swoich wątkach.
 pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings, new: &pets_core::settings::Settings) {
     if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Apps(new.apps)); }
+    // otwarta furtka: `hook.exe report` pod stałą ścieżką `~/.agent-pets/hook.exe` (spec 8)
+    if new.apps.generic && !old.apps.generic {
+        let st = app.state::<settings::SettingsState>();
+        let _ = pets_core::integrations::place_hook(&st.home, settings::pick_hook(&settings::hook_candidates(app)).as_deref(), st.lang());
+    }
     if old.autostart != new.autostart { sync_autostart(new.autostart); }
     if old.stage != new.stage { app.state::<shell::Shell>().settings_changed(); }
     if old.updates != new.updates { updater::mode_changed(app, new.updates); }

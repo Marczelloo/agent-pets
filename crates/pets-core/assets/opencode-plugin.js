@@ -53,6 +53,8 @@ export const AgentPets = async ({ directory }) => {
       const sid = p.sessionID || (p.info && p.info.id);
       switch (t) {
         case "session.created":
+          post(t, sid, { parent: str(p.info && p.info.parentID, 128), title: str(p.info && p.info.title, 200) });
+          break;
         case "session.deleted":
         case "session.error":
         case "permission.replied":
@@ -61,7 +63,7 @@ export const AgentPets = async ({ directory }) => {
           post(t, sid, {});
           break;
         case "session.updated":
-          post(t, sid, { title: str(p.info && p.info.title, 200) });
+          post(t, sid, { title: str(p.info && p.info.title, 200), parent: str(p.info && p.info.parentID, 128) });
           break;
         case "session.status":
           post(t, sid, { status: str(p.status && p.status.type, 20) });

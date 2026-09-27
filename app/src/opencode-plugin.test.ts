@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 // plugin to zwykły moduł JS instalowany do opencode; testujemy dokładnie ten plik
 const PLUGIN = new URL('../../crates/pets-core/assets/opencode-plugin.js', import.meta.url).href;
-const CONTRACT = ['v', 'ts', 'pid', 'event', 'session', 'cwd', 'status', 'tool', 'title', 'model', 'question', 'input'];
+const CONTRACT = ['v', 'ts', 'pid', 'event', 'session', 'cwd', 'status', 'tool', 'title', 'model', 'question', 'input', 'parent'];
 
 type Hooks = Record<string, (...a: unknown[]) => Promise<void>>;
 const env = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, EP: process.env.AGENT_PETS_ENDPOINT };
@@ -90,6 +90,13 @@ describe('opencode plugin', () => {
     expect(b[2]).toMatchObject({ event: 'question.asked', question: 'Which port?' });
     expect(b[3]).toMatchObject({ event: 'session.updated', session: 's', title: 'Fix build' });
     expect(JSON.stringify(b)).not.toContain('SEKRET-123');
+  });
+
+  it('a task session names its parent', async () => {
+    const h = await load();
+    await h.event({ event: { type: 'session.created', properties: { info: { id: 'ses_kid', parentID: 'ses_p', title: 'Find tests' } } } });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sent()[0]).toMatchObject({ event: 'session.created', session: 'ses_kid', parent: 'ses_p', title: 'Find tests' });
   });
 
   it('ignores events it does not know', async () => {

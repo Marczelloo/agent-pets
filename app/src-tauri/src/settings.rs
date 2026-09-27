@@ -115,7 +115,11 @@ pub fn update(app: &AppHandle, f: impl FnOnce(&mut Settings)) -> Result<(), Stri
 }
 
 /// Ustawienia z okna, bez listy aplikacji (tę zmieniają tylko integracje, żeby nie cofnąć instalacji hooków).
-pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings { Settings { apps: current.apps, ..incoming } }
+/// Wyjątek: furtka nie ma instalacji, więc jej przełącznik przychodzi z okna.
+pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings {
+    let apps = core_settings::Apps { generic: incoming.apps.generic, ..current.apps };
+    Settings { apps, ..incoming }
+}
 
 #[tauri::command]
 pub fn settings_get(state: tauri::State<SettingsState>) -> SettingsView {
@@ -276,6 +280,18 @@ mod tests {
         let merged = merge_user_settings(&current, incoming);
         assert!(!merged.apps.claude_code);
         assert!(!merged.autostart);
+    }
+
+    #[test]
+    fn the_door_switch_from_the_window_is_kept() {
+        // furtka nie ma instalacji: jej przełącznik w oknie jest jedynym sposobem, żeby ją zamknąć
+        let mut current = Settings::default();
+        current.apps.claude_code = false;
+        let mut incoming = Settings::default();
+        incoming.apps.generic = false;
+        let merged = merge_user_settings(&current, incoming);
+        assert!(!merged.apps.generic, "furtka zamknięta");
+        assert!(!merged.apps.claude_code, "reszta aplikacji bez zmian");
     }
 
     #[test]

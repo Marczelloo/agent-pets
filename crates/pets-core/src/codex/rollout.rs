@@ -81,6 +81,8 @@ fn host(originator: &str, source: Option<&str>) -> (Origin, Option<App>, Option<
         "codex desktop" | "" => App::CodexApp,
         "codex_vscode" => App::Vscode,
         "t3code_desktop" => App::T3code,
+        // warianty aplikacji Codex (np. `codex_work_desktop`)
+        x if x.starts_with("codex") && x.ends_with("desktop") => App::CodexApp,
         _ => return (Origin::Desktop, Some(App::Other), Some(originator.trim().chars().filter(|c| !c.is_control()).take(40).collect())),
     };
     (Origin::Desktop, Some(app), None)
@@ -351,6 +353,8 @@ mod tests {
         assert_eq!(host("Codex Desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
         assert_eq!(host("codex desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
         assert_eq!(host("codex_vscode", json!("vscode")), (Some(Origin::Desktop), Some(App::Vscode), None));
+        // warianty aplikacji Codex spotkane w prawdziwych logach
+        assert_eq!(host("codex_work_desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
         assert_eq!(host("t3code_desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::T3code), None));
         let long = "x".repeat(60);
         assert_eq!(host("zed_codex", json!("vscode")), (Some(Origin::Desktop), Some(App::Other), Some("zed_codex".into())));

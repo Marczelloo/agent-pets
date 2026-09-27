@@ -40,7 +40,7 @@ export interface Session {
   agent_name?: string | null;
 }
 
-export type SubKind = 'claude' | 'codex' | 'router';
+export type SubKind = 'claude' | 'codex' | 'router' | 'opencode';
 export interface SubInfo { kind: SubKind; agent_type: string | null; description: string | null; background: boolean }
 
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }

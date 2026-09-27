@@ -1,5 +1,5 @@
 //! opencode: koperty z naszego pluginu (`assets/opencode-plugin.js`) na `/v1/events/opencode`.
-//! Kontrakt (plan 0.10, task 5): `{v, ts, pid, event, session, cwd, status, tool, title, model, question, input}`.
+//! Kontrakt (plan 0.10, task 5): `{v, ts, pid, event, session, cwd, status, tool, title, model, question, input, parent}`.
 //! `input` to biała lista pól do tekstu akcji; wszystko spoza kontraktu jest pomijane.
 use super::{clean_text, safe_id};
 use crate::action::action_text;
@@ -63,6 +63,11 @@ pub fn events(env: &Value, lang: Lang) -> Vec<Event> {
     d.pid = env.get("pid").and_then(|v| v.as_u64()).and_then(|p| u32::try_from(p).ok()).filter(|p| *p > 0);
     d.cwd = text("cwd", 260);
     d.origin = Some(Origin::Cli);
+    // sesja uruchomiona narzędziem `task` (subagent) należy do rodzica: mini-zwierzak przy nim, jak u Claude'a
+    if let Some(p) = s("parent").filter(|p| safe_id(p) && *p != session) {
+        d.parent = Some(format!("opencode:{p}"));
+        d.sub = Some(SubInfo { kind: SubKind::Opencode, agent_type: None, description: text("title", 80), background: false });
+    }
     match s("event").unwrap_or("") {
         "tool.before" => d.action = action(tool, env.get("input"), lang),
         "permission.asked" | "question.asked" => d.question = text("question", 300),
@@ -119,6 +124,17 @@ mod tests {
         assert_eq!(long.data.question.map(|q| q.chars().count()), Some(300));
         let bash = one(json!({"event": "tool.before", "session": "s", "tool": "bash", "input": {"command": "cargo test"}}));
         assert_eq!((bash.tool, bash.data.action.as_deref()), (Some(Tool::Bash), Some("cargo test")));
+    }
+
+    #[test]
+    fn a_task_session_is_a_child_of_its_parent() {
+        let e = one(json!({"event": "session.created", "session": "ses_kid", "parent": "ses_p", "title": "Find tests (@general subagent)"}));
+        assert_eq!(e.data.parent.as_deref(), Some("opencode:ses_p"));
+        let sub = e.data.sub.expect("dziecko");
+        assert_eq!((sub.kind, sub.description.as_deref()), (SubKind::Opencode, Some("Find tests (@general subagent)")));
+        let bad = one(json!({"event": "session.created", "session": "ses_kid", "parent": "../x"}));
+        assert_eq!((bad.data.parent, bad.data.sub), (None, None));
+        assert_eq!(one(json!({"event": "session.created", "session": "ses_top"})).data.parent, None);
     }
 
     #[test]
