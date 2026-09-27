@@ -2,6 +2,7 @@ import { PI, TAU, cl, lerpC } from "../math";
 import { pen, rrP, elP, path, shp, hose, mitt } from "../pen";
 import { drawProp, drawPillow, drawMug } from "./props";
 import { drawItems } from "./items";
+import { drawWear } from "./wear";
 import { drawHeadFx, drawWorldFx } from "./overlay";
 import { SKINS } from "../../skins";
 import type { Pet } from "../pet";
@@ -86,6 +87,7 @@ if(!netBack)drawItems(x,c,arms,u,t,lw);if(tg._mug){const R_=arms[1];drawMug(x,R_
 arms.forEach((a: any)=>{if(a.fr>0){x.globalAlpha=GA*a.fr;mitt(x,a,mr*(a.s>0&&tg._big?1.3+.2*lean:1),cm,u);x.globalAlpha=GA;}});
 x.restore();
 bodyT();
+if(c.wear)drawWear(x,c.wear,{x:0,top,w:hW*2,h:H,rot:0},u,lw);
 drawHeadFx(x,c,u,t,top,hW,GA);
 x.restore();
 worldT();

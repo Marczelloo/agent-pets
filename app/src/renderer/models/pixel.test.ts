@@ -42,6 +42,24 @@ describe('pixel model', () => {
     advance(.5);
     expect(frame()).not.toEqual(a);
   });
+  it('worn items are integer rectangles too', () => {
+    for (const wear of ['crown', 'bib', 'scarf', 'nightcap', 'headband']) for (const skin of ['clawd', 'kodek'] as const) {
+      // model pikselowy pamięta klatkę przez 0,1 s, więc porównujemy dwa jednakowo zasiane zwierzaki
+      const mk = (w?: string) => {
+        setRng(seeded(4).next);
+        const c = createPet(skin, 'idle');
+        if (w) c.wear = w;
+        for (let i = 1; i <= 60; i++) stepPet(c, 1 / 60, i / 60);
+        return c;
+      };
+      const plain = recorder(), worn = recorder();
+      drawPet(plain.ctx, mk(), 61.3, 40.2, .3, 2, { style: 'pixel', motion: 'calm' });
+      drawPet(worn.ctx, mk(wear), 61.3, 40.2, .3, 2, { style: 'pixel', motion: 'calm' });
+      expect(worn.log.length, `${skin}/${wear}`).toBeGreaterThan(plain.log.length);
+      expect(worn.log.some(l => /^(moveTo|lineTo|arc|ellipse|fillText|stroke|fill)\(/.test(l))).toBe(false);
+      for (const l of worn.log.filter(v => v.startsWith('fillRect('))) for (const v of l.slice(9, -1).split(',').map(Number)) expect(Number.isInteger(v), l).toBe(true);
+    }
+  });
   it('a small palette per pet and prop', () => {
     const cols = new Set(draw('edit', 2, 1).filter(l => l.startsWith('fillStyle=')));
     expect(cols.size).toBeLessThanOrEqual(14);

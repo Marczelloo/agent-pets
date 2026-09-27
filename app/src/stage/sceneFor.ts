@@ -2,7 +2,8 @@ import type { SkinId } from '../skins';
 import type { Session } from '../types';
 
 export type SceneKey = 'thinking' | 'edit' | 'bash' | 'read' | 'grep' | 'web' | 'agent' | 'mcp'
-  | 'needs' | 'done' | 'error' | 'idle' | 'sleep' | 'compact' | 'bye';
+  | 'needs' | 'done' | 'error' | 'idle' | 'sleep' | 'compact' | 'bye'
+  | 'podium_first' | 'podium_second' | 'podium_third' | 'run';
 
 const TOOL: Record<string, SceneKey> = {
   edit: 'edit', bash: 'bash', read: 'read', grep: 'grep', web: 'web', agent: 'agent', mcp: 'mcp', other: 'mcp',

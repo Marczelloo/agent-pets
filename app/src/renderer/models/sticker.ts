@@ -5,6 +5,7 @@ import type { Look } from '../../types';
 import { PI, TAU, cl, lerpC } from '../math';
 import { drawItems } from '../draw/items';
 import { drawHeadFx, drawWorldFx } from '../draw/overlay';
+import { drawWear } from '../draw/wear';
 import { drawMug, drawPillow, drawProp } from '../draw/props';
 import { elP, pen, rrP, seg, shp } from '../pen';
 import type { Pet } from '../pet';
@@ -90,7 +91,9 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
 
   // nakładki nad głową i w świecie
   // dymek na tej wysokości co w modelu wektorowym: naklejka jest wyższa, a dymek przy skokach nie może wyjść z paska
-  body(); drawHeadFx(x, c, u, t, top + (S.h - sk.height) * u, W / 2, GA); x.restore();
+  body();
+  if (c.wear) drawWear(x, c.wear, { x: 0, top, w: W, h: H, rot: 0 }, u, lw);
+  drawHeadFx(x, c, u, t, top + (S.h - sk.height) * u, W / 2, GA); x.restore();
   world(); drawWorldFx(x, c, r.arms, u, lw, GA); x.restore();
 }
 
