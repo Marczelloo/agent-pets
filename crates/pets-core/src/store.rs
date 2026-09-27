@@ -61,7 +61,7 @@ fn new_session(e: &Event) -> Session {
         Source::Claude => Origin::Cli,
         Source::Codex => Origin::Desktop,
         Source::Router => Origin::Router,
-        Source::Opencode | Source::Generic => Origin::Cli,
+        Source::Opencode | Source::Generic | Source::Copilot | Source::Antigravity => Origin::Cli,
     });
     Session {
         id: e.session_id.clone(),
@@ -851,7 +851,7 @@ mod tests {
 
     fn sub(kind: SubKind, background: bool) -> SubInfo { SubInfo { kind, agent_type: None, description: None, background } }
     fn kid(id: &str, parent: &str, kind: Kind, ts: i64, info: SubInfo) -> Event {
-        let src = match info.kind { SubKind::Claude => Source::Claude, SubKind::Codex => Source::Codex, SubKind::Router => Source::Router, SubKind::Opencode => Source::Opencode };
+        let src = match info.kind { SubKind::Claude => Source::Claude, SubKind::Codex => Source::Codex, SubKind::Router => Source::Router, SubKind::Opencode => Source::Opencode, SubKind::Copilot => Source::Copilot };
         let mut e = Event::new(src, id, kind, ts);
         e.data.parent = Some(parent.into());
         e.data.sub = Some(info);

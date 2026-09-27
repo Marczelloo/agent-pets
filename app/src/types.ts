@@ -40,7 +40,7 @@ export interface Session {
   agent_name?: string | null;
 }
 
-export type SubKind = 'claude' | 'codex' | 'router' | 'opencode';
+export type SubKind = 'claude' | 'codex' | 'router' | 'opencode' | 'copilot';
 export interface SubInfo { kind: SubKind; agent_type: string | null; description: string | null; background: boolean }
 
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
@@ -56,7 +56,7 @@ export type PointerMsg =
   | { kind: 'context'; x: number; y: number };
 export interface TooltipContent { title: string; subtitle: string; lines: string[] }
 
-export type AppId = 'claude_code' | 'codex' | 'agent_router' | 'opencode';
+export type AppId = 'claude_code' | 'codex' | 'agent_router' | 'opencode' | 'copilot' | 'antigravity';
 export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
 export type MotionId = 'calm' | 'dynamic';
 export interface Look { style: StyleId; motion: MotionId }
@@ -64,8 +64,8 @@ export interface Look { style: StyleId; motion: MotionId }
 export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number; react_to_media?: boolean }
 /** Lustro `media::Media` (zdarzenie `pets://media`): czy coś gra w Windows (GSMTC) i w jakiej aplikacji. */
 export interface Media { playing: boolean; app: string | null }
-/** `opencode` i `generic` (furtka) od 0.10; brak w pliku 0.9.1 = wartości domyślne rdzenia. */
-export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean; opencode?: boolean; generic?: boolean }
+/** `opencode` i `generic` (furtka) od 0.10, `copilot` i `antigravity` od 0.11; brak w starszym pliku = wartości domyślne rdzenia. */
+export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean; opencode?: boolean; generic?: boolean; copilot?: boolean; antigravity?: boolean }
 export interface Settings {
   version: number;
   apps: AppsSettings;

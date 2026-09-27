@@ -39,6 +39,10 @@ pub struct Apps {
     pub opencode: bool,
     /// furtka: `/v1/events/generic` dla dowolnych agentów
     pub generic: bool,
+    /// plik hooków w `~/.copilot/hooks`: tylko po wyraźnym włączeniu
+    pub copilot: bool,
+    /// klucz w `~/.gemini/config/hooks.json`: tylko po wyraźnym włączeniu
+    pub antigravity: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -79,6 +83,8 @@ pub struct Overrides {
     #[serde(skip_serializing_if = "Option::is_none")] pub codex: Option<LookOverride>,
     #[serde(skip_serializing_if = "Option::is_none")] pub agent_router: Option<LookOverride>,
     #[serde(skip_serializing_if = "Option::is_none")] pub opencode: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub copilot: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub antigravity: Option<LookOverride>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -286,7 +292,7 @@ impl Stage {
 }
 
 impl Default for Apps {
-    fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true } }
+    fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false } }
 }
 impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
 impl Default for Pets {
@@ -488,6 +494,24 @@ mod tests {
         let a = l.settings.apps;
         // opencode zmienia pliki opencode, więc tylko na wyraźne włączenie; furtka to lokalna trasa
         assert_eq!((a.claude_code, a.codex, a.agent_router, a.opencode, a.generic), (true, false, true, false, true));
+    }
+
+    #[test]
+    fn a_0_10_file_keeps_copilot_and_antigravity_off() {
+        let l = load_str(r#"{"version":1,"apps":{"claude_code":true,"codex":true,"agent_router":true,"opencode":true,"generic":true}}"#);
+        assert!(l.error.is_none());
+        let a = l.settings.apps;
+        // oba zapisują pliki hooków w konfiguracji agentów, więc tylko na wyraźne włączenie
+        assert_eq!((a.opencode, a.copilot, a.antigravity), (true, false, false));
+        let back: Apps = serde_json::from_value(serde_json::to_value(Apps { copilot: true, ..a }).unwrap()).unwrap();
+        assert_eq!((back.copilot, back.antigravity), (true, false));
+    }
+
+    #[test]
+    fn copilot_and_antigravity_look_overrides_survive_a_save() {
+        let l = load_str(r#"{"version":1,"pets":{"overrides":{"copilot":{"style":"neon"},"antigravity":{"motion":"calm"}}}}"#);
+        assert_eq!(l.settings.pets.overrides.copilot, Some(LookOverride { style: Some(Style::Neon), motion: None }));
+        assert_eq!(l.settings.pets.overrides.antigravity, Some(LookOverride { style: None, motion: Some(Motion::Calm) }));
     }
 
     #[test]

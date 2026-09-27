@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum AppId { ClaudeCode, Codex, AgentRouter, Opencode }
+pub enum AppId { ClaudeCode, Codex, AgentRouter, Opencode, Copilot, Antigravity }
 
 impl AppId {
-    pub const ALL: [AppId; 4] = [AppId::ClaudeCode, AppId::Codex, AppId::AgentRouter, AppId::Opencode];
+    pub const ALL: [AppId; 6] = [AppId::ClaudeCode, AppId::Codex, AppId::AgentRouter, AppId::Opencode, AppId::Copilot, AppId::Antigravity];
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -78,7 +78,10 @@ fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
 }
 
 fn home_folder(id: AppId) -> &'static str {
-    match id { AppId::ClaudeCode => ".claude", AppId::Codex => ".codex", AppId::AgentRouter => ".agent-router", AppId::Opencode => ".config/opencode" }
+    match id {
+        AppId::ClaudeCode => ".claude", AppId::Codex => ".codex", AppId::AgentRouter => ".agent-router",
+        AppId::Opencode => ".config/opencode", AppId::Copilot => ".copilot", AppId::Antigravity => ".gemini",
+    }
 }
 
 /// Aplikację wykrywamy po jej katalogu w domu użytkownika: tworzy go przy pierwszym uruchomieniu.
@@ -96,6 +99,10 @@ pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
             "~/.agent-router not found (Agent Router MCP server)."),
         AppId::Opencode => tr(lang, "Nie znaleziono ~/.config/opencode. Uruchom opencode raz, potem włącz tutaj.",
             "~/.config/opencode not found. Run opencode once, then turn it on here."),
+        AppId::Copilot => tr(lang, "Nie znaleziono ~/.copilot. Uruchom Copilot raz, potem włącz tutaj.",
+            "~/.copilot not found. Run Copilot once, then turn it on here."),
+        AppId::Antigravity => tr(lang, "Nie znaleziono ~/.gemini. Uruchom Antigravity raz, potem włącz tutaj.",
+            "~/.gemini not found. Run Antigravity once, then turn it on here."),
     };
     Detected { found: false, path: None, note: Some(note.into()) }
 }
@@ -225,6 +232,19 @@ mod tests {
     }
 
     fn oc(h: &Path) -> PathBuf { h.join(".config").join("opencode") }
+
+    #[test]
+    fn copilot_and_antigravity_are_detected_by_their_home_folders() {
+        let h = home();
+        for id in [AppId::Copilot, AppId::Antigravity] { assert!(!detect(id, h.path(), Lang::Pl).found); }
+        assert!(detect(AppId::Copilot, h.path(), Lang::Pl).note.unwrap().contains("~/.copilot"));
+        assert!(detect(AppId::Antigravity, h.path(), Lang::En).note.unwrap().contains("~/.gemini"));
+        std::fs::create_dir_all(h.path().join(".copilot")).unwrap();
+        std::fs::create_dir_all(h.path().join(".gemini")).unwrap();
+        assert!(detect(AppId::Copilot, h.path(), Lang::Pl).found);
+        assert!(detect(AppId::Antigravity, h.path(), Lang::Pl).found);
+        assert_eq!(AppId::ALL.len(), 6);
+    }
 
     #[test]
     fn opencode_is_detected_by_its_config_folder() {

@@ -183,6 +183,8 @@ export const pl = {
       codex: 'Nic do instalowania: czytam pliki sesji z ~/.codex/sessions.',
       agent_router: 'Nic do instalowania: czytam ~/.agent-router/status.json.',
       opencode: 'Zainstaluję plugin w ~/.config/opencode/plugins/agent-pets.js (usunę go przy wyłączeniu).',
+      copilot: 'Zapiszę hooki w ~/.copilot/hooks/agent-pets.json (usunę go przy wyłączeniu).',
+      antigravity: 'Dopiszę hooki do ~/.gemini/config/hooks.json (z kopią zapasową; usunę je przy wyłączeniu).',
     } as Record<AppId, string>,
     sourceClaudeUsage: 'Limity Claude\'a',
     report: {

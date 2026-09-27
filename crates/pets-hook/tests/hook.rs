@@ -17,7 +17,7 @@ fn run_hook(endpoint_path: &std::path::Path, stdin: &str) -> std::process::Outpu
 #[test]
 fn forwards_hook_payload_silently() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true))).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default()))).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -51,7 +51,7 @@ fn run_report(endpoint_path: &std::path::Path, args: &[&str]) -> std::process::O
 #[test]
 fn report_sends_a_door_event_and_says_nothing() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true))).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default()))).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -72,7 +72,7 @@ fn report_errors_go_to_stderr_with_code_2() {
     let down = run_report(&dir.path().join("missing.json"), &["--agent", "kilo", "--session", "abc", "--state", "done"]);
     assert_eq!(down.status.code(), Some(2), "widżet nie działa");
     let (tx, _rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps { generic: false, ..Default::default() }))).unwrap();
     ing.endpoint().write(&p).unwrap();
     let closed = run_report(&p, &["--agent", "kilo", "--session", "abc", "--state", "done"]);
     assert_eq!(closed.status.code(), Some(2), "furtka wyłączona");

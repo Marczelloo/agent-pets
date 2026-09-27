@@ -23,6 +23,8 @@ export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId | null {
     case 'claude': return 'claude_code';
     case 'codex': return 'codex';
     case 'opencode': return 'opencode';
+    case 'copilot': return 'copilot';
+    case 'antigravity': return 'antigravity';
     default: return null;
   }
 }

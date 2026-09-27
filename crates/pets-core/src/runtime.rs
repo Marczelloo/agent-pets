@@ -61,8 +61,8 @@ pub struct Runtime {
     apps: crate::settings::Apps,
     last_seen: std::collections::BTreeMap<&'static str, i64>,
     _ingest: Ingest,
-    /// furtka otwarta (`apps.generic`), wspólna z wątkiem endpointu
-    door: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// trasy włączane z ustawień (furtka, Copilot, Antigravity), wspólne z wątkiem endpointu
+    doors: std::sync::Arc<crate::ingest::Doors>,
     /// program-gospodarz sesji opencode, liczony raz na sesję (jeden zrzut procesów)
     opencode_hosts: std::collections::HashMap<String, Option<crate::host::Host>>,
     _watcher: Option<notify::RecommendedWatcher>,
@@ -74,15 +74,15 @@ impl Runtime {
         let mut links = crate::links::Links::load(&links_path);
         links.prune(crate::time::now_ms());
         let (tx, hooks) = channel();
-        let door = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(cfg.apps.generic));
-        let ingest = Ingest::start(Endpoint::new_token(), tx, door.clone())?;
+        let doors = std::sync::Arc::new(crate::ingest::Doors::new(&cfg.apps));
+        let ingest = Ingest::start(Endpoint::new_token(), tx, doors.clone())?;
         ingest.endpoint().write(&cfg.endpoint_path).context("zapis endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
             hook_state: HookState::default(), lang: cfg.lang, links, links_path,
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
-            _ingest: ingest, door, opencode_hosts: Default::default(), _watcher: None,
+            _ingest: ingest, doors, opencode_hosts: Default::default(), _watcher: None,
         };
         rt.sources.lang = rt.lang;
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
@@ -116,7 +116,7 @@ impl Runtime {
             if let Some(p) = self.router.as_mut() { p.reset(); }
         }
         self.apps = apps;
-        self.door.store(apps.generic, std::sync::atomic::Ordering::Relaxed);
+        self.doors.set(&apps);
         let removed = self.store.retain_sessions(|s| session_on(apps, s));
         removed | self.store.retain_limits(|l| agent_on(apps, l.agent))
     }
@@ -136,6 +136,8 @@ impl Runtime {
                 Incoming::ClaudeStatusline(s) => claude::statusline::to_events(&s).into_iter().fold(false, |c, e| self.apply(e) | c),
                 Incoming::Generic(e) => self.apply(e),
                 Incoming::Opencode(v) => self.on_opencode(&v),
+                // adaptery w taskach 3 i 4
+                Incoming::Copilot(_) | Incoming::Antigravity(_) => false,
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -279,8 +281,10 @@ fn agent_on(apps: crate::settings::Apps, agent: crate::model::Agent) -> bool {
         crate::model::Agent::Codex => apps.codex || apps.agent_router,
         crate::model::Agent::Opencode => apps.opencode,
         crate::model::Agent::Other => apps.generic,
-        // własne adaptery w 0.11 i 0.12
-        crate::model::Agent::Antigravity | crate::model::Agent::Copilot | crate::model::Agent::Cursor | crate::model::Agent::Grok => false,
+        crate::model::Agent::Copilot => apps.copilot,
+        crate::model::Agent::Antigravity => apps.antigravity,
+        // własne adaptery w 0.12
+        crate::model::Agent::Cursor | crate::model::Agent::Grok => false,
     }
 }
 
@@ -302,6 +306,8 @@ fn event_on(apps: crate::settings::Apps, e: &Event) -> bool {
         Source::Router => apps.agent_router,
         Source::Opencode => apps.opencode,
         Source::Generic => apps.generic,
+        Source::Copilot => apps.copilot,
+        Source::Antigravity => apps.antigravity,
     }
 }
 
@@ -316,6 +322,8 @@ fn source_key(e: &Event) -> &'static str {
         Source::Router => "agent_router",
         Source::Opencode => "opencode",
         Source::Generic => "generic",
+        Source::Copilot => "copilot",
+        Source::Antigravity => "antigravity",
     }
 }
 
@@ -440,6 +448,40 @@ mod tests {
         assert_eq!(ids, vec!["c1"]);
         assert!(!rt.apply_external(event(Source::Generic, "generic:kilo:b", Kind::Prompt)));
         assert!(!rt.apply_external(event(Source::Opencode, "opencode:b", Kind::Prompt)));
+    }
+
+    #[test]
+    fn copilot_and_antigravity_follow_their_switches() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        assert!(!rt.apply_external(event(Source::Copilot, "copilot:a", Kind::Prompt)));
+        assert!(!rt.apply_external(event(Source::Antigravity, "antigravity:a", Kind::Prompt)));
+        rt.set_apps(crate::settings::Apps { copilot: true, antigravity: true, ..Default::default() });
+        assert!(rt.apply_external(event(Source::Copilot, "copilot:a", Kind::Prompt)));
+        assert!(rt.apply_external(event(Source::Antigravity, "antigravity:a", Kind::Prompt)));
+        assert_eq!(rt.store().session("copilot:a").map(|s| s.agent), Some(Agent::Copilot));
+        assert!(rt.set_apps(crate::settings::Apps { copilot: false, antigravity: true, ..Default::default() }));
+        assert!(rt.store().session("copilot:a").is_none());
+        assert_eq!(rt.store().session("antigravity:a").map(|s| s.agent), Some(Agent::Antigravity));
+    }
+
+    #[test]
+    fn copilot_and_antigravity_routes_open_with_their_switches() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let send = |agent: &str, token: &str, body: &str| ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
+            .set("Authorization", &format!("Bearer {token}")).send_string(body)
+            .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
+        let env = r#"{"ts":1,"ppid":5,"event":"Stop","payload":{"sessionId":"s"}}"#;
+        for agent in ["copilot", "antigravity"] { assert_eq!(send(agent, &ep.token, env), 404, "{agent} zamknięty"); }
+        rt.set_apps(crate::settings::Apps { copilot: true, antigravity: true, ..Default::default() });
+        for agent in ["copilot", "antigravity"] {
+            assert_eq!(send(agent, &ep.token, env), 204, "{agent}");
+            assert_eq!(send(agent, "wrong", env), 401, "{agent}");
+            assert_eq!(send(agent, &ep.token, r#"{"x":1}"#), 400, "{agent}");
+        }
     }
 
     #[test]

@@ -228,6 +228,18 @@ mod tests {
     }
 
     #[test]
+    fn copilot_and_antigravity_focus_their_program_without_resume() {
+        for (a, id) in [(Agent::Copilot, "copilot:cop_1"), (Agent::Antigravity, "antigravity:d5f1")] {
+            let mut x = t(a, false);
+            x.session_id = id.into();
+            let p = plan(&x);
+            assert_eq!(p[0], Step::FocusProcess(42), "{a:?}");
+            assert!(p.iter().all(|s| !matches!(s, Step::OpenTerminal { .. } | Step::DeepLink(_))), "{p:?}");
+            assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("cd \"") && !c.contains(';')), "{p:?}");
+        }
+    }
+
+    #[test]
     fn nonexistent_cwd_skips_the_terminal() {
         let mut x = t(Agent::Codex, false);
         x.cwd = r"C:\nie\ma\takiego\katalogu".into();

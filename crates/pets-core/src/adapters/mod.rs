@@ -3,6 +3,20 @@
 pub mod generic;
 pub mod opencode;
 
+use serde::{Deserialize, Serialize};
+
+/// Koperta `hook.exe --agent <id> --event <nazwa>` (Copilot, Antigravity): wejście hooka bez zmian plus to, co wie hook.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AgentEnvelope {
+    pub ts: i64,
+    pub ppid: Option<u32>,
+    /// nazwa zdarzenia z argumentu `--event` (Antigravity nie przysyła jej w JSON-ie)
+    pub event: String,
+    pub payload: serde_json::Value,
+    #[serde(default)]
+    pub host: Option<crate::host::Host>,
+}
+
 /// Tekst z zewnątrz: znaki sterujące zamienione na spacje, obcięte brzegi, najwyżej `max` znaków.
 pub fn clean_text(s: &str, max: usize) -> String {
     let t: String = s.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();

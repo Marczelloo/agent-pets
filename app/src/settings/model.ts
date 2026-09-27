@@ -3,9 +3,10 @@ import { formatAgo } from '../tooltip/text';
 import type { AppId, AppRow, Diagnostics, Settings } from '../types';
 import { t } from '../i18n';
 
-export const APP_LABEL: Record<AppId, string> = { claude_code: 'Claude Code', codex: 'Codex', agent_router: 'Agent Router', opencode: 'opencode' };
+export const APP_LABEL: Record<AppId, string> = { claude_code: 'Claude Code', codex: 'Codex', agent_router: 'Agent Router', opencode: 'opencode', copilot: 'GitHub Copilot', antigravity: 'Antigravity' };
 export const appLabel = (id: AppId): string =>
-  ({ claude_code: t().agent.claude, codex: t().agent.codex, agent_router: t().origin.router, opencode: t().agent.opencode })[id];
+  ({ claude_code: t().agent.claude, codex: t().agent.codex, agent_router: t().origin.router, opencode: t().agent.opencode,
+     copilot: APP_LABEL.copilot, antigravity: t().agent.antigravity })[id];
 export const appHint = (id: AppId): string => t().settings.appHint[id];
 const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id in APP_LABEL ? appLabel(id as AppId) : id;
 
@@ -15,7 +16,7 @@ export type WizardStep = (typeof WIZARD_STEPS)[number];
 /** Jak `Settings::default()` w rdzeniu; używane, gdy aplikacja nie odpowiada (podgląd w przeglądarce). */
 export function defaultSettings(): Settings {
   return {
-    version: 1, apps: { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true }, claude_statusline: false, claude_plan_usage: false,
+    version: 1, apps: { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false }, claude_statusline: false, claude_plan_usage: false,
     notifications: { needs_you: true, done: true, limits: true }, pets: defaultPets(),
     power_saving: 'auto', autostart: true, language: 'auto', updates: 'notify', stage: defaultStage(),
   };

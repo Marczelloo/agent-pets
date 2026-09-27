@@ -172,6 +172,8 @@ export const en: Dict = {
       codex: 'Nothing to install: reads session files in ~/.codex/sessions.',
       agent_router: 'Nothing to install: reads ~/.agent-router/status.json.',
       opencode: 'I’ll install a plugin at ~/.config/opencode/plugins/agent-pets.js (removed when turned off).',
+      copilot: 'I’ll write hooks to ~/.copilot/hooks/agent-pets.json (removed when turned off).',
+      antigravity: 'I’ll add hooks to ~/.gemini/config/hooks.json (with a backup; removed when turned off).',
     },
     sourceClaudeUsage: 'Claude limits',
     report: {

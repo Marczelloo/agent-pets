@@ -70,6 +70,8 @@ fn app_on(s: &Settings, id: AppId) -> bool {
         AppId::Codex => s.apps.codex,
         AppId::AgentRouter => s.apps.agent_router,
         AppId::Opencode => s.apps.opencode,
+        AppId::Copilot => s.apps.copilot,
+        AppId::Antigravity => s.apps.antigravity,
     }
 }
 
@@ -79,6 +81,8 @@ fn set_app(s: &mut Settings, id: AppId, on: bool) {
         AppId::Codex => s.apps.codex = on,
         AppId::AgentRouter => s.apps.agent_router = on,
         AppId::Opencode => s.apps.opencode = on,
+        AppId::Copilot => s.apps.copilot = on,
+        AppId::Antigravity => s.apps.antigravity = on,
     }
 }
 

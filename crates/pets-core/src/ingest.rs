@@ -13,6 +13,27 @@ pub enum Incoming {
     Generic(crate::model::Event),
     /// koperta pluginu opencode (`adapters::opencode::events`)
     Opencode(serde_json::Value),
+    /// `hook.exe --agent copilot` (`adapters::copilot::events`)
+    Copilot(crate::adapters::AgentEnvelope),
+    /// `hook.exe --agent antigravity` (`adapters::antigravity::events`)
+    Antigravity(crate::adapters::AgentEnvelope),
+}
+
+/// Trasy włączane w locie z ustawień; zamknięta wygląda jak brak trasy (404).
+#[derive(Debug, Default)]
+pub struct Doors { pub generic: AtomicBool, pub copilot: AtomicBool, pub antigravity: AtomicBool }
+
+impl Doors {
+    pub fn new(apps: &crate::settings::Apps) -> Doors {
+        let d = Doors::default();
+        d.set(apps);
+        d
+    }
+    pub fn set(&self, apps: &crate::settings::Apps) {
+        self.generic.store(apps.generic, Ordering::Relaxed);
+        self.copilot.store(apps.copilot, Ordering::Relaxed);
+        self.antigravity.store(apps.antigravity, Ordering::Relaxed);
+    }
 }
 
 pub struct Ingest {
@@ -24,8 +45,8 @@ pub struct Ingest {
 const MAX_BODY: u64 = 1 << 20;
 
 impl Ingest {
-    /// `generic`: czy furtka (`/v1/events/generic`) jest otwarta; przełączana w locie z ustawień.
-    pub fn start(token: String, tx: Sender<Incoming>, generic: Arc<AtomicBool>) -> anyhow::Result<Ingest> {
+    /// `doors`: które trasy włączane z ustawień są otwarte (furtka, Copilot, Antigravity); przełączane w locie.
+    pub fn start(token: String, tx: Sender<Incoming>, doors: Arc<Doors>) -> anyhow::Result<Ingest> {
         let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").map_err(|e| anyhow::anyhow!(e))?);
         let port = server.server_addr().to_ip().map(|a| a.port()).ok_or_else(|| anyhow::anyhow!("brak portu"))?;
         let endpoint = Endpoint { port, token: token.clone() };
@@ -33,7 +54,7 @@ impl Ingest {
         let handle = std::thread::spawn(move || {
             let expected = format!("Bearer {token}");
             for mut req in srv.incoming_requests() {
-                let status = handle_request(&mut req, &expected, &tx, &generic);
+                let status = handle_request(&mut req, &expected, &tx, &doors);
                 let _ = req.respond(tiny_http::Response::empty(status));
             }
         });
@@ -48,16 +69,18 @@ impl Ingest {
     }
 }
 
-enum Route { Claude, Statusline, Opencode, Generic }
+enum Route { Claude, Statusline, Opencode, Generic, Copilot, Antigravity }
 
-fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, generic: &AtomicBool) -> u16 {
+fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, doors: &Doors) -> u16 {
     if *req.method() != tiny_http::Method::Post { return 404; }
     let route = match req.url() {
         "/v1/events/claude" => Route::Claude,
         "/v1/events/claude-statusline" => Route::Statusline,
         "/v1/events/opencode" => Route::Opencode,
-        // wyłączona furtka wygląda jak brak trasy
-        "/v1/events/generic" if generic.load(Ordering::Relaxed) => Route::Generic,
+        // wyłączona furtka albo integracja wygląda jak brak trasy
+        "/v1/events/generic" if doors.generic.load(Ordering::Relaxed) => Route::Generic,
+        "/v1/events/copilot" if doors.copilot.load(Ordering::Relaxed) => Route::Copilot,
+        "/v1/events/antigravity" if doors.antigravity.load(Ordering::Relaxed) => Route::Antigravity,
         _ => return 404,
     };
     let auth = req.headers().iter().find(|h| h.field.equiv("Authorization")).map(|h| h.value.as_str().to_string());
@@ -72,6 +95,8 @@ fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Inco
         Route::Opencode => serde_json::from_slice::<serde_json::Value>(&body).ok().filter(|v| v.is_object()).map(Incoming::Opencode),
         Route::Generic => serde_json::from_slice::<crate::adapters::generic::GenericEvent>(&body).ok()
             .and_then(|g| crate::adapters::generic::to_event(g, crate::time::now_ms()).ok()).map(Incoming::Generic),
+        Route::Copilot => serde_json::from_slice::<crate::adapters::AgentEnvelope>(&body).ok().map(Incoming::Copilot),
+        Route::Antigravity => serde_json::from_slice::<crate::adapters::AgentEnvelope>(&body).ok().map(Incoming::Antigravity),
     };
     match msg {
         Some(m) => { let _ = tx.send(m); 204 }
@@ -83,7 +108,6 @@ fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Inco
 mod tests {
     use super::*;
     use std::sync::mpsc::channel;
-    use std::sync::atomic::AtomicBool;
     use std::time::Duration;
 
     fn post(port: u16, path: &str, token: &str, body: &str) -> u16 {
@@ -114,7 +138,7 @@ mod tests {
         ing.stop();
     }
 
-    fn door(on: bool) -> Arc<AtomicBool> { Arc::new(AtomicBool::new(on)) }
+    fn door(on: bool) -> Arc<Doors> { Arc::new(Doors::new(&crate::settings::Apps { generic: on, ..Default::default() })) }
 
     #[test]
     fn the_door_accepts_a_valid_event() {
@@ -175,7 +199,7 @@ mod tests {
         let body = r#"{"agent":"kilo","session":"abc","state":"done"}"#;
         assert_eq!(post(port, "/v1/events/generic", "secret", body), 404);
         assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
-        d.store(true, std::sync::atomic::Ordering::Relaxed);
+        d.generic.store(true, std::sync::atomic::Ordering::Relaxed);
         assert_eq!(post(port, "/v1/events/generic", "secret", body), 204, "przełącznik działa w locie");
         ing.stop();
     }

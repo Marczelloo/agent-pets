@@ -84,7 +84,7 @@ pub struct Session {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum SubKind { Claude, Codex, Router, Opencode }
+pub enum SubKind { Claude, Codex, Router, Opencode, Copilot }
 
 /// Opis dziecka: kto je uruchomił i po co.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -113,7 +113,7 @@ pub struct Limit {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Source { Claude, Codex, Router, Opencode, Generic }
+pub enum Source { Claude, Codex, Router, Opencode, Generic, Copilot, Antigravity }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -186,6 +186,8 @@ impl Event {
             Source::Codex | Source::Router => Agent::Codex,
             Source::Opencode => Agent::Opencode,
             Source::Generic => Agent::Other,
+            Source::Copilot => Agent::Copilot,
+            Source::Antigravity => Agent::Antigravity,
         }
     }
 }
@@ -235,6 +237,16 @@ mod tests {
         assert_eq!(Event::new(Source::Opencode, "opencode:s", Kind::Prompt, 1).agent(), Agent::Opencode);
         assert_eq!(Event::new(Source::Generic, "generic:kilo:s", Kind::Prompt, 1).agent(), Agent::Other);
         assert_eq!(Event::new(Source::Router, "r", Kind::Prompt, 1).agent(), Agent::Codex);
+    }
+
+    #[test]
+    fn copilot_and_antigravity_events_belong_to_their_agents() {
+        assert_eq!(Event::new(Source::Copilot, "copilot:s", Kind::Prompt, 1).agent(), Agent::Copilot);
+        assert_eq!(Event::new(Source::Antigravity, "antigravity:s", Kind::Prompt, 1).agent(), Agent::Antigravity);
+        for (x, j) in [(Source::Copilot, "copilot"), (Source::Antigravity, "antigravity")] {
+            assert_eq!(serde_json::to_value(x).unwrap(), j);
+        }
+        assert_eq!(serde_json::to_value(SubKind::Copilot).unwrap(), "copilot");
     }
 
     #[test]
