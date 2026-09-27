@@ -167,6 +167,7 @@ export const en: Dict = {
     copyReport: 'Copy report',
     langAuto: 'Automatic (like Windows)',
     broken: e => `The settings file is damaged (${e}); using default settings.`,
+    antigravityNote: 'Needs a version with hooks (Antigravity 2.0 or a newer IDE). Antigravity does not say when it waits for your approval, so this pet never shows “needs you”.',
     appHint: {
       claude_code: 'I’ll install hooks in ~/.claude/settings.json (with a backup).',
       codex: 'Nothing to install: reads session files in ~/.codex/sessions.',

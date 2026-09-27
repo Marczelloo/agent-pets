@@ -141,6 +141,9 @@ fn repair_integrations(app: &tauri::AppHandle) {
     }
     // tylko nasz plik: cudzy `agent-pets.js` zostaje, a enable zwraca błąd bez zmian
     if apps.opencode { let _ = integrations::enable(AppId::Opencode, &st.home, None, st.lang()); }
+    // odświeża komendy i `hook.exe` po aktualizacji; cudzy plik albo klucz zostaje (enable zwraca błąd bez zmian)
+    if apps.copilot { let _ = integrations::enable(AppId::Copilot, &st.home, src.as_deref(), st.lang()); }
+    if apps.antigravity { let _ = integrations::enable(AppId::Antigravity, &st.home, src.as_deref(), st.lang()); }
     if apps.generic { let _ = integrations::place_hook(&st.home, src.as_deref(), st.lang()); }
 }
 

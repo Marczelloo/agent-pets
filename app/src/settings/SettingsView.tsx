@@ -65,6 +65,9 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
                 onChange={on => void onIntegration(r.id, on)}>
                 {r.detected.found ? `${r.detected.path} · ${r.status.detail}` : r.detected.note}
               </Toggle>
+              {(r.id === 'copilot' || r.id === 'antigravity') && (
+                <p className="fix">{appHint(r.id)}{r.id === 'antigravity' && ` ${t().settings.antigravityNote}`}</p>
+              )}
               {r.id === 'claude_code' && s.apps.claude_code && !r.status.installed && (
                 <p className="fix">{appHint('claude_code')}{' '}
                   <button type="button" onClick={() => void onIntegration(r.id, true)}>{t().settings.reinstall}</button></p>

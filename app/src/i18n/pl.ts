@@ -178,6 +178,7 @@ export const pl = {
     copyReport: 'Skopiuj raport',
     langAuto: 'Automatycznie (jak Windows)',
     broken: (e: string) => `Plik ustawień jest uszkodzony (${e}); używam ustawień domyślnych.`,
+    antigravityNote: 'Potrzebna wersja z hookami (Antigravity 2.0 albo nowsze IDE). Antigravity nie mówi, kiedy czeka na Twoją zgodę, więc ten zwierzak nie pokazuje „czeka na Ciebie”.',
     appHint: {
       claude_code: 'Zainstaluję hooki w ~/.claude/settings.json (z kopią zapasową).',
       codex: 'Nic do instalowania: czytam pliki sesji z ~/.codex/sessions.',

@@ -13,6 +13,8 @@ const rows: AppRow[] = [
   { id: 'codex', detected: { found: false, path: null, note: 'Nie znaleziono ~/.codex.' }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: false },
   { id: 'agent_router', detected: { found: true, path: 'C:/h/.agent-router', note: null }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: true },
   { id: 'opencode', detected: { found: true, path: 'C:/h/.config/opencode', note: null }, status: { installed: false, detail: 'Plugin: brak' }, enabled: false },
+  { id: 'copilot', detected: { found: true, path: 'C:/h/.copilot', note: null }, status: { installed: false, detail: 'Hooki: brak' }, enabled: false },
+  { id: 'antigravity', detected: { found: false, path: null, note: 'Nie znaleziono ~/.gemini.' }, status: { installed: false, detail: 'Hooki: brak' }, enabled: false },
 ];
 const diag: Diagnostics = { version: '0.5.0', endpoint_port: 1, settings_path: 's', settings_error: null, hook_exe: null,
   autostart_registered: false, last_seen: {}, apps: [], stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
@@ -146,6 +148,15 @@ describe('SettingsView', () => {
     expect(html).toContain('Agent Router');
     expect(html).toContain('opencode');
     expect(html).toContain('Plugin: brak');
+  });
+  it('Copilot and Antigravity say what they write and where; Antigravity says what it cannot show', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toContain('>GitHub Copilot<');
+    expect(html).toContain('~/.copilot/hooks/agent-pets.json');
+    expect(html).toContain('~/.gemini/config/hooks.json');
+    expect(html).toContain('czeka na Ciebie');
+    expect(html).toMatch(/aria-label="GitHub Copilot"(?![^>]*checked="")/);
   });
   it('the apps tab has the door switch, on for a 0.9.1 file', () => {
     const old = { ...defaultSettings(), apps: { claude_code: true, codex: true, agent_router: true } } as unknown as Settings;

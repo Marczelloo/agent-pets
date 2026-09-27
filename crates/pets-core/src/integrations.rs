@@ -77,6 +77,154 @@ fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
     }
 }
 
+/// Komenda hooka dla cmd i bash: ukośniki (bash nie zjada `\`), cudzysłów tylko przy spacji.
+pub fn hook_command(hook: &Path, agent: &str, event: &str) -> String {
+    let p = hook.to_string_lossy().replace('\\', "/");
+    let p = if p.contains(' ') { format!("\"{p}\"") } else { p };
+    format!("{p} --agent {agent} --event {event}")
+}
+
+/// Komenda hooka dla PowerShella (klucz `powershell` Copilota): operator wywołania i apostrofy, `'` podwojony.
+pub fn hook_command_ps(hook: &Path, agent: &str, event: &str) -> String {
+    let p = hook.to_string_lossy().replace('\\', "/").replace('\'', "''");
+    format!("& '{p}' --agent {agent} --event {event}")
+}
+
+/// Zdarzenia Copilota: PascalCase dla tych, które zna też VS Code, camelCase dla tych tylko z CLI (spec 0.11 §3.1).
+pub const COPILOT_EVENTS: [&str; 11] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart",
+    "SubagentStop", "Stop", "sessionEnd", "notification", "errorOccurred", "postToolUseFailure"];
+pub const ANTIGRAVITY_EVENTS: [&str; 4] = ["PreInvocation", "PreToolUse", "PostToolUse", "Stop"];
+/// Klucz naszego hooka w `hooks.json` Antigravity.
+const ANTIGRAVITY_KEY: &str = "agent-pets";
+
+pub fn copilot_hooks(home: &Path) -> PathBuf { home.join(".copilot").join("hooks").join("agent-pets.json") }
+pub fn antigravity_hooks(home: &Path) -> PathBuf { home.join(".gemini").join("config").join("hooks.json") }
+
+/// Wszystkie komendy w drzewie JSON (pola `command` i `powershell`).
+fn commands(v: &serde_json::Value, out: &mut Vec<String>) {
+    match v {
+        serde_json::Value::Object(o) => for (k, x) in o {
+            match (k.as_str(), x.as_str()) {
+                ("command" | "powershell", Some(c)) => out.push(c.to_string()),
+                _ => commands(x, out),
+            }
+        },
+        serde_json::Value::Array(a) => for x in a { commands(x, out) },
+        _ => {}
+    }
+}
+
+/// Czy to nasz wpis: ma komendy i każda to nasz `hook.exe` dla tego agenta.
+fn ours(v: &serde_json::Value, agent: &str) -> bool {
+    let mut c = Vec::new();
+    commands(v, &mut c);
+    let mark = format!("--agent {agent} --event ");
+    !c.is_empty() && c.iter().all(|x| x.contains(&mark))
+}
+
+fn copilot_json(hook: &Path) -> serde_json::Value {
+    let hooks: serde_json::Map<String, serde_json::Value> = COPILOT_EVENTS.iter().map(|ev| (ev.to_string(), serde_json::json!([{
+        "type": "command", "command": hook_command(hook, "copilot", ev), "powershell": hook_command_ps(hook, "copilot", ev), "timeoutSec": 5,
+    }]))).collect();
+    serde_json::json!({ "version": 1, "hooks": hooks })
+}
+
+enum HookFile { Missing, Ours, Foreign }
+
+fn copilot_file(home: &Path) -> HookFile {
+    match std::fs::read(copilot_hooks(home)) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => HookFile::Missing,
+        Ok(b) if serde_json::from_slice::<serde_json::Value>(&b).is_ok_and(|v| ours(&v, "copilot")) => HookFile::Ours,
+        _ => HookFile::Foreign,
+    }
+}
+
+fn foreign_copilot(lang: Lang) -> String {
+    tr(lang, "Plik agent-pets.json w ~/.copilot/hooks nie jest nasz, nie nadpisuję.",
+        "agent-pets.json in ~/.copilot/hooks is not ours; not overwriting it.").into()
+}
+
+fn enable_copilot(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+    if !home.join(".copilot").is_dir() { return Err(detect(AppId::Copilot, home, lang).note.unwrap_or_default()); }
+    if let HookFile::Foreign = copilot_file(home) { return Err(foreign_copilot(lang)); }
+    let hook = place_hook(home, hook_src, lang)?;
+    let f = copilot_hooks(home);
+    let text = serde_json::to_string_pretty(&copilot_json(&hook)).map_err(|e| e.to_string())?;
+    if std::fs::read_to_string(&f).ok().as_deref() != Some(text.as_str()) {
+        let dir = f.parent().expect("hooks/");
+        let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
+        std::fs::create_dir_all(dir).map_err(err)?;
+        // zapis atomowy: Copilot nigdy nie wczyta połowy pliku
+        let tmp = dir.join(".agent-pets.json.tmp");
+        std::fs::write(&tmp, &text).map_err(err)?;
+        std::fs::rename(&tmp, &f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e) })?;
+    }
+    Ok(tr(lang, "Hooki Copilota zapisane. Uruchom ponownie otwarte sesje Copilota.",
+        "Copilot hooks written. Restart open Copilot sessions.").into())
+}
+
+fn disable_copilot(home: &Path, lang: Lang) -> Result<String, String> {
+    match copilot_file(home) {
+        HookFile::Ours => {
+            std::fs::remove_file(copilot_hooks(home)).map_err(|e| e.to_string())?;
+            Ok(tr(lang, "Hooki Copilota usunięte.", "Copilot hooks removed.").into())
+        }
+        _ => Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()),
+    }
+}
+
+fn antigravity_entry(hook: &Path) -> serde_json::Value {
+    let cmd = |ev: &str| serde_json::json!({"type": "command", "command": hook_command(hook, "antigravity", ev), "timeout": 5});
+    let groups: serde_json::Map<String, serde_json::Value> = ANTIGRAVITY_EVENTS.iter().map(|ev| {
+        let g = if ev.ends_with("ToolUse") { serde_json::json!({"matcher": "*", "hooks": [cmd(ev)]}) } else { serde_json::json!({"hooks": [cmd(ev)]}) };
+        (ev.to_string(), serde_json::json!([g]))
+    }).collect();
+    serde_json::Value::Object(groups)
+}
+
+/// Plik hooków Antigravity: `None` = brak pliku; błąd = zły JSON, główny element nie jest obiektem albo nasz klucz jest cudzy.
+fn read_antigravity(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
+    let f = antigravity_hooks(home);
+    let v: serde_json::Value = match std::fs::read(&f) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+        Ok(b) => serde_json::from_slice(&b).map_err(|e| format!("{} {} ({e})", f.display(), tr(lang, "jest uszkodzony", "is damaged")))?,
+    };
+    if !v.is_object() {
+        return Err(format!("{} {}", f.display(), tr(lang, "ma nieoczekiwany format, nie zmieniam go.", "has an unexpected format; not changing it.")));
+    }
+    if v.get(ANTIGRAVITY_KEY).is_some_and(|k| !ours(k, "antigravity")) {
+        return Err(tr(lang, "Klucz agent-pets w ~/.gemini/config/hooks.json nie jest nasz, nie zmieniam go.",
+            "The agent-pets key in ~/.gemini/config/hooks.json is not ours; not changing it.").into());
+    }
+    Ok(Some(v))
+}
+
+fn enable_antigravity(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+    if !home.join(".gemini").is_dir() { return Err(detect(AppId::Antigravity, home, lang).note.unwrap_or_default()); }
+    read_antigravity(home, lang)?;
+    let hook = place_hook(home, hook_src, lang)?;
+    let entry = antigravity_entry(&hook);
+    crate::hooks_install::edit_file(&antigravity_hooks(home), |v| { v[ANTIGRAVITY_KEY] = entry; })
+        .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), antigravity_hooks(home).display()))?;
+    Ok(tr(lang, "Hooki Antigravity zapisane (kopia: hooks.json.agent-pets.bak). Potrzebna wersja Antigravity z hookami.",
+        "Antigravity hooks written (backup: hooks.json.agent-pets.bak). Needs an Antigravity version with hooks.").into())
+}
+
+fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, String> {
+    let nothing = || Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into());
+    let Some(v) = read_antigravity(home, lang)? else { return nothing() };
+    if v.get(ANTIGRAVITY_KEY).is_none() { return nothing(); }
+    let f = antigravity_hooks(home);
+    let mut empty = false;
+    crate::hooks_install::edit_file(&f, |v| {
+        if let Some(o) = v.as_object_mut() { o.remove(ANTIGRAVITY_KEY); empty = o.is_empty(); }
+    }).map_err(|e| e.to_string())?;
+    // plik tylko z naszym kluczem: po wyłączeniu nic w nim nie zostało
+    if empty { std::fs::remove_file(&f).map_err(|e| e.to_string())?; }
+    Ok(tr(lang, "Hooki Antigravity usunięte.", "Antigravity hooks removed.").into())
+}
+
 fn home_folder(id: AppId) -> &'static str {
     match id {
         AppId::ClaudeCode => ".claude", AppId::Codex => ".codex", AppId::AgentRouter => ".agent-router",
@@ -120,6 +268,21 @@ fn read_claude_settings(home: &Path, lang: Lang) -> Result<Option<serde_json::Va
 }
 
 pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
+    let hooks = |installed: bool| Status { installed, detail: if installed { tr(lang, "Hooki: zainstalowane", "Hooks: installed") }
+        else { tr(lang, "Hooki: brak", "Hooks: missing") }.into() };
+    if id == AppId::Copilot {
+        return match copilot_file(home) {
+            HookFile::Ours => hooks(true),
+            HookFile::Missing => hooks(false),
+            HookFile::Foreign => Status { installed: false, detail: foreign_copilot(lang) },
+        };
+    }
+    if id == AppId::Antigravity {
+        return match read_antigravity(home, lang) {
+            Ok(v) => hooks(v.is_some_and(|v| v.get(ANTIGRAVITY_KEY).is_some())),
+            Err(e) => Status { installed: false, detail: e },
+        };
+    }
     if id == AppId::Opencode {
         return match plugin_file(home) {
             PluginFile::Ours(_) => Status { installed: true, detail: tr(lang, "Plugin: zainstalowany", "Plugin: installed").into() },
@@ -154,6 +317,8 @@ pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf
 
 pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
     if id == AppId::Opencode { return enable_opencode(home, lang); }
+    if id == AppId::Copilot { return enable_copilot(home, hook_src, lang); }
+    if id == AppId::Antigravity { return enable_antigravity(home, hook_src, lang); }
     if id != AppId::ClaudeCode { return Ok(tr(lang, "Nic do instalowania", "Nothing to install").into()); }
     read_claude_settings(home, lang)?;
     let hook = place_hook(home, hook_src, lang)?;
@@ -165,6 +330,8 @@ pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Re
 pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, String> {
     let nothing = || Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into());
     if id == AppId::Opencode { return disable_opencode(home, lang); }
+    if id == AppId::Copilot { return disable_copilot(home, lang); }
+    if id == AppId::Antigravity { return disable_antigravity(home, lang); }
     if id != AppId::ClaudeCode { return nothing(); }
     let Some(v) = read_claude_settings(home, lang)? else { return nothing() };
     let settings = claude_settings(home);
@@ -270,6 +437,137 @@ mod tests {
         disable(AppId::Opencode, h.path(), Lang::Pl).unwrap();
         assert!(!f.exists());
         assert!(!status(AppId::Opencode, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn hook_commands_work_in_cmd_bash_and_powershell_even_with_spaces_and_apostrophes() {
+        let p = Path::new(r"C:\Users\ja\.agent-pets\hook.exe");
+        assert_eq!(hook_command(p, "copilot", "Stop"), "C:/Users/ja/.agent-pets/hook.exe --agent copilot --event Stop");
+        let sp = Path::new(r"C:\Users\Jan Kowalski\.agent-pets\hook.exe");
+        assert_eq!(hook_command(sp, "antigravity", "PreToolUse"),
+            r#""C:/Users/Jan Kowalski/.agent-pets/hook.exe" --agent antigravity --event PreToolUse"#);
+        let ap = Path::new(r"C:\Users\O'Neil\.agent-pets\hook.exe");
+        assert_eq!(hook_command_ps(ap, "copilot", "Stop"), "& 'C:/Users/O''Neil/.agent-pets/hook.exe' --agent copilot --event Stop");
+        assert_eq!(hook_command_ps(sp, "copilot", "Stop"), "& 'C:/Users/Jan Kowalski/.agent-pets/hook.exe' --agent copilot --event Stop");
+    }
+
+    fn copilot_json(h: &Path) -> Value { serde_json::from_slice(&std::fs::read(copilot_hooks(h)).unwrap()).unwrap() }
+
+    #[test]
+    fn the_copilot_hooks_file_installs_once_and_uninstalls() {
+        let h = home();
+        let src = hook_src(h.path());
+        assert!(enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).is_err(), "bez ~/.copilot");
+        std::fs::create_dir_all(h.path().join(".copilot")).unwrap();
+        assert!(!status(AppId::Copilot, h.path(), Lang::Pl).installed);
+        enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).unwrap();
+        let first = std::fs::read(copilot_hooks(h.path())).unwrap();
+        enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).unwrap();
+        assert_eq!(std::fs::read(copilot_hooks(h.path())).unwrap(), first, "powtórne włączenie nic nie zmienia");
+        assert_eq!(copilot_hooks(h.path()), h.path().join(".copilot").join("hooks").join("agent-pets.json"));
+        let v = copilot_json(h.path());
+        assert_eq!(v["version"], 1);
+        let hooks = v["hooks"].as_object().unwrap();
+        assert_eq!(hooks.len(), COPILOT_EVENTS.len());
+        for ev in COPILOT_EVENTS {
+            let entry = &hooks[ev][0];
+            assert_eq!(entry["type"], "command");
+            assert!(entry["command"].as_str().unwrap().ends_with(&format!("hook.exe --agent copilot --event {ev}")), "{entry}");
+            assert!(entry["powershell"].as_str().unwrap().starts_with("& '"), "{entry}");
+            assert_eq!(entry["timeoutSec"], 5);
+        }
+        assert!(installed_hook(h.path()).is_file(), "hook.exe na stałej ścieżce");
+        assert_eq!(std::fs::read_dir(copilot_hooks(h.path()).parent().unwrap()).unwrap().count(), 1, "bez plików tymczasowych");
+        assert!(status(AppId::Copilot, h.path(), Lang::Pl).installed);
+        disable(AppId::Copilot, h.path(), Lang::Pl).unwrap();
+        assert!(!copilot_hooks(h.path()).exists());
+        assert!(!status(AppId::Copilot, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn someone_elses_copilot_agent_pets_json_is_never_touched() {
+        let h = home();
+        let f = copilot_hooks(h.path());
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let theirs = r#"{"version":1,"hooks":{"Stop":[{"type":"command","command":"my-script.ps1"}]}}"#;
+        std::fs::write(&f, theirs).unwrap();
+        std::fs::write(f.with_file_name("audit.json"), "{}").unwrap();
+        assert!(enable(AppId::Copilot, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err());
+        disable(AppId::Copilot, h.path(), Lang::Pl).unwrap();
+        uninstall_all(h.path(), false, Lang::Pl);
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), theirs);
+        assert!(f.with_file_name("audit.json").exists(), "cudze pliki w hooks/ zostają");
+        let st = status(AppId::Copilot, h.path(), Lang::Pl);
+        assert!(!st.installed && st.detail.contains("nie jest nasz"), "{st:?}");
+    }
+
+    fn ag_json(h: &Path) -> Value { serde_json::from_slice(&std::fs::read(antigravity_hooks(h)).unwrap()).unwrap() }
+
+    #[test]
+    fn antigravity_hooks_join_someone_elses_hooks_and_leave_them_alone() {
+        let h = home();
+        let src = hook_src(h.path());
+        assert!(enable(AppId::Antigravity, h.path(), Some(&src), Lang::Pl).is_err(), "bez ~/.gemini");
+        let f = antigravity_hooks(h.path());
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let mine = json!({"PostToolUse": [{"matcher": "run_command", "hooks": [{"type": "command", "command": "./lint.sh", "timeout": 10}]}]});
+        std::fs::write(&f, serde_json::to_string(&json!({"my-linter": mine})).unwrap()).unwrap();
+        enable(AppId::Antigravity, h.path(), Some(&src), Lang::Pl).unwrap();
+        let v = ag_json(h.path());
+        assert_eq!(v["my-linter"], mine, "cudzy hook bez zmian");
+        let ours = v["agent-pets"].as_object().unwrap();
+        assert_eq!(ours.len(), ANTIGRAVITY_EVENTS.len());
+        for ev in ANTIGRAVITY_EVENTS {
+            let group = &ours[ev][0];
+            let cmd = group["hooks"][0]["command"].as_str().unwrap();
+            assert!(cmd.ends_with(&format!("hook.exe --agent antigravity --event {ev}")), "{cmd}");
+            assert_eq!(group["hooks"][0]["timeout"], 5);
+            assert_eq!(group.get("matcher").and_then(|m| m.as_str()), if ev.ends_with("ToolUse") { Some("*") } else { None }, "{ev}");
+        }
+        assert!(f.with_file_name("hooks.json.agent-pets.bak").exists(), "kopia przed zmianą");
+        assert!(status(AppId::Antigravity, h.path(), Lang::Pl).installed);
+        disable(AppId::Antigravity, h.path(), Lang::Pl).unwrap();
+        assert_eq!(ag_json(h.path()), json!({"my-linter": mine}));
+        assert!(!status(AppId::Antigravity, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn antigravity_creates_its_config_folder_and_removes_a_file_left_empty() {
+        let h = home();
+        std::fs::create_dir_all(h.path().join(".gemini")).unwrap();
+        enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        assert!(ag_json(h.path())["agent-pets"].is_object());
+        disable(AppId::Antigravity, h.path(), Lang::Pl).unwrap();
+        assert!(!antigravity_hooks(h.path()).exists(), "pusty plik po naszym kluczu znika");
+        assert!(disable(AppId::Antigravity, h.path(), Lang::Pl).is_ok(), "brak pliku to nic do usunięcia");
+    }
+
+    #[test]
+    fn a_broken_or_foreign_antigravity_file_is_left_as_it_is() {
+        let h = home();
+        let f = antigravity_hooks(h.path());
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let foreign = r#"{"agent-pets":{"Stop":[{"hooks":[{"type":"command","command":"their.sh"}]}]}}"#;
+        for text in ["{nie json", "[]", foreign] {
+            std::fs::write(&f, text).unwrap();
+            assert!(enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err(), "{text}");
+            let _ = disable(AppId::Antigravity, h.path(), Lang::Pl);
+            uninstall_all(h.path(), false, Lang::Pl);
+            assert_eq!(std::fs::read_to_string(&f).unwrap(), text, "{text}");
+            assert!(!status(AppId::Antigravity, h.path(), Lang::Pl).installed, "{text}");
+        }
+    }
+
+    #[test]
+    fn uninstall_removes_copilot_and_antigravity_hooks() {
+        let h = home();
+        let src = hook_src(h.path());
+        std::fs::create_dir_all(h.path().join(".copilot")).unwrap();
+        std::fs::create_dir_all(h.path().join(".gemini")).unwrap();
+        enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).unwrap();
+        enable(AppId::Antigravity, h.path(), Some(&src), Lang::Pl).unwrap();
+        uninstall_all(h.path(), false, Lang::Pl);
+        assert!(!copilot_hooks(h.path()).exists() && !antigravity_hooks(h.path()).exists());
     }
 
     #[test]
