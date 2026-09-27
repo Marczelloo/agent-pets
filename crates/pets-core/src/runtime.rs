@@ -428,7 +428,9 @@ mod tests {
     fn opencode_and_the_door_follow_their_switches() {
         use crate::model::{Kind, Source};
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut c = cfg(&h);
+        c.apps.opencode = true;
+        let mut rt = Runtime::start(c).unwrap();
         rt.apply_external(event(Source::Claude, "c1", Kind::Prompt));
         rt.apply_external(event(Source::Opencode, "opencode:a", Kind::Prompt));
         rt.apply_external(event(Source::Generic, "generic:kilo:a", Kind::Prompt));
@@ -461,7 +463,9 @@ mod tests {
     #[test]
     fn an_opencode_plugin_envelope_brings_an_opencode_pet() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut c = cfg(&h);
+        c.apps.opencode = true;
+        let mut rt = Runtime::start(c).unwrap();
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let body = serde_json::json!({"v": 1, "ts": crate::time::now_ms(), "pid": std::process::id(), "event": "tool.before",
             "session": "ses_1", "cwd": "C:/w", "tool": "bash", "input": {"command": "cargo test"}}).to_string();

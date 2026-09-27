@@ -124,14 +124,19 @@ pub fn sync_autostart(on: bool) {
     if let Some(v) = system::autostart_action(on, system::autostart_value(system::RUN_KEY).as_deref(), &cmd) { let _ = system::set_autostart(v); }
 }
 
-/// Przy starcie: włączony Claude Code bez hooków albo ze starym `hook.exe` (aktualizacja) dostaje je ponownie.
+/// Przy starcie: włączony Claude Code bez hooków albo ze starym `hook.exe` (aktualizacja) dostaje je ponownie;
+/// włączony opencode dostaje plugin z tej wersji; otwarta furtka ma `hook.exe report` w stałym miejscu.
 fn repair_integrations(app: &tauri::AppHandle) {
+    use pets_core::integrations::{self, AppId};
     let st = app.state::<settings::SettingsState>();
-    if !st.get().apps.claude_code { return; }
+    let apps = st.get().apps;
     let src = settings::pick_hook(&settings::hook_candidates(app));
-    if pets_core::integrations::claude_needs_repair(&st.home, src.as_deref()) {
-        let _ = pets_core::integrations::enable(pets_core::integrations::AppId::ClaudeCode, &st.home, src.as_deref(), st.lang());
+    if apps.claude_code && integrations::claude_needs_repair(&st.home, src.as_deref()) {
+        let _ = integrations::enable(AppId::ClaudeCode, &st.home, src.as_deref(), st.lang());
     }
+    // tylko nasz plik: cudzy `agent-pets.js` zostaje, a enable zwraca błąd bez zmian
+    if apps.opencode { let _ = integrations::enable(AppId::Opencode, &st.home, None, st.lang()); }
+    if apps.generic { let _ = integrations::place_hook(&st.home, src.as_deref(), st.lang()); }
 }
 
 /// `agent-pets.exe --uninstall-integrations [--remove-data]` (deinstalator NSIS): sprząta i kończy bez okien.

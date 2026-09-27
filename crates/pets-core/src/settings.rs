@@ -35,6 +35,7 @@ pub struct Apps {
     pub claude_code: bool,
     pub codex: bool,
     pub agent_router: bool,
+    /// plugin w konfiguracji opencode: tylko po wyraźnym włączeniu
     pub opencode: bool,
     /// furtka: `/v1/events/generic` dla dowolnych agentów
     pub generic: bool,
@@ -284,7 +285,7 @@ impl Stage {
 }
 
 impl Default for Apps {
-    fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: true, generic: true } }
+    fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true } }
 }
 impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
 impl Default for Pets {
@@ -480,11 +481,12 @@ mod tests {
     }
 
     #[test]
-    fn a_0_9_file_turns_on_opencode_and_the_door() {
+    fn a_0_9_file_opens_the_door_but_not_opencode() {
         let l = load_str(r#"{"version":1,"apps":{"claude_code":true,"codex":false,"agent_router":true}}"#);
         assert!(l.error.is_none());
         let a = l.settings.apps;
-        assert_eq!((a.claude_code, a.codex, a.agent_router, a.opencode, a.generic), (true, false, true, true, true));
+        // opencode zmienia pliki opencode, więc tylko na wyraźne włączenie; furtka to lokalna trasa
+        assert_eq!((a.claude_code, a.codex, a.agent_router, a.opencode, a.generic), (true, false, true, false, true));
     }
 
     #[test]

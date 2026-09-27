@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum AppId { ClaudeCode, Codex, AgentRouter }
+pub enum AppId { ClaudeCode, Codex, AgentRouter, Opencode }
 
 impl AppId {
-    pub const ALL: [AppId; 3] = [AppId::ClaudeCode, AppId::Codex, AppId::AgentRouter];
+    pub const ALL: [AppId; 4] = [AppId::ClaudeCode, AppId::Codex, AppId::AgentRouter, AppId::Opencode];
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -23,8 +23,62 @@ pub fn pets_dir(home: &Path) -> PathBuf { home.join(".agent-pets") }
 pub fn installed_hook(home: &Path) -> PathBuf { pets_dir(home).join("hook.exe") }
 fn statusline_original(home: &Path) -> PathBuf { pets_dir(home).join("statusline-original.json") }
 
+/// Pierwsza linia naszego pluginu: plik bez niej nie jest nasz i nie ruszamy go.
+pub const PLUGIN_MARK: &str = "// agent-pets plugin v1";
+pub const OPENCODE_PLUGIN: &str = include_str!("../assets/opencode-plugin.js");
+fn opencode_dir(home: &Path) -> PathBuf { home.join(".config").join("opencode") }
+/// opencode 1.18 wczytuje `{plugin,plugins}/*.{ts,js}` z katalogu konfiguracji (spike S1).
+pub fn opencode_plugin(home: &Path) -> PathBuf { opencode_dir(home).join("plugins").join("agent-pets.js") }
+
+enum PluginFile { Missing, Ours(String), Foreign }
+
+fn plugin_file(home: &Path) -> PluginFile {
+    match std::fs::read_to_string(opencode_plugin(home)) {
+        Ok(t) if t.starts_with(PLUGIN_MARK) => PluginFile::Ours(t),
+        Ok(_) => PluginFile::Foreign,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => PluginFile::Missing,
+        // plik jest, ale nie da się go przeczytać (np. nie UTF-8): traktujemy jak cudzy
+        Err(_) => PluginFile::Foreign,
+    }
+}
+
+fn foreign_plugin(lang: Lang) -> String {
+    tr(lang, "Plik agent-pets.js w plugins/ opencode nie jest nasz, nie nadpisuję.",
+        "agent-pets.js in the opencode plugins/ folder is not ours; not overwriting it.").into()
+}
+
+fn enable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
+    if !opencode_dir(home).is_dir() { return Err(detect(AppId::Opencode, home, lang).note.unwrap_or_default()); }
+    let f = opencode_plugin(home);
+    match plugin_file(home) {
+        PluginFile::Foreign => return Err(foreign_plugin(lang)),
+        PluginFile::Ours(t) if t == OPENCODE_PLUGIN => {}
+        _ => {
+            let dir = f.parent().expect("plugins/");
+            let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
+            std::fs::create_dir_all(dir).map_err(err)?;
+            // zapis atomowy: opencode nigdy nie wczyta połowy pliku
+            let tmp = dir.join(".agent-pets.js.tmp");
+            std::fs::write(&tmp, OPENCODE_PLUGIN).map_err(err)?;
+            std::fs::rename(&tmp, &f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e) })?;
+        }
+    }
+    Ok(tr(lang, "Plugin opencode zainstalowany. Uruchom ponownie otwarte sesje opencode.",
+        "opencode plugin installed. Restart open opencode sessions.").into())
+}
+
+fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
+    match plugin_file(home) {
+        PluginFile::Ours(_) => {
+            std::fs::remove_file(opencode_plugin(home)).map_err(|e| e.to_string())?;
+            Ok(tr(lang, "Plugin opencode usunięty.", "opencode plugin removed.").into())
+        }
+        _ => Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()),
+    }
+}
+
 fn home_folder(id: AppId) -> &'static str {
-    match id { AppId::ClaudeCode => ".claude", AppId::Codex => ".codex", AppId::AgentRouter => ".agent-router" }
+    match id { AppId::ClaudeCode => ".claude", AppId::Codex => ".codex", AppId::AgentRouter => ".agent-router", AppId::Opencode => ".config/opencode" }
 }
 
 /// Aplikację wykrywamy po jej katalogu w domu użytkownika: tworzy go przy pierwszym uruchomieniu.
@@ -40,6 +94,8 @@ pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
             "~/.codex not found. Run Codex once, then turn it on here."),
         AppId::AgentRouter => tr(lang, "Nie znaleziono ~/.agent-router (serwer MCP Agent Router).",
             "~/.agent-router not found (Agent Router MCP server)."),
+        AppId::Opencode => tr(lang, "Nie znaleziono ~/.config/opencode. Uruchom opencode raz, potem włącz tutaj.",
+            "~/.config/opencode not found. Run opencode once, then turn it on here."),
     };
     Detected { found: false, path: None, note: Some(note.into()) }
 }
@@ -57,6 +113,13 @@ fn read_claude_settings(home: &Path, lang: Lang) -> Result<Option<serde_json::Va
 }
 
 pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
+    if id == AppId::Opencode {
+        return match plugin_file(home) {
+            PluginFile::Ours(_) => Status { installed: true, detail: tr(lang, "Plugin: zainstalowany", "Plugin: installed").into() },
+            PluginFile::Missing => Status { installed: false, detail: tr(lang, "Plugin: brak", "Plugin: missing").into() },
+            PluginFile::Foreign => Status { installed: false, detail: foreign_plugin(lang) },
+        };
+    }
     if id != AppId::ClaudeCode { return Status { installed: true, detail: tr(lang, "Nic do instalowania", "Nothing to install").into() }; }
     match read_claude_settings(home, lang) {
         Err(e) => Status { installed: false, detail: e },
@@ -69,7 +132,8 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
 }
 
 /// Kopiuje `hook.exe` do `~/.agent-pets` tylko wtedy, gdy go brak albo zawartość się różni (np. nowa wersja).
-fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, String> {
+/// Też dla furtki: `hook.exe report` ma stałą ścieżkę `~/.agent-pets/hook.exe` (spec 8).
+pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, String> {
     let dst = installed_hook(home);
     if let Some(src) = src.filter(|s| s.is_file()) {
         let new = std::fs::read(src).map_err(|e| format!("{} {}: {e}", tr(lang, "Nie mogę odczytać", "Cannot read"), src.display()))?;
@@ -82,6 +146,7 @@ fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, St
 }
 
 pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+    if id == AppId::Opencode { return enable_opencode(home, lang); }
     if id != AppId::ClaudeCode { return Ok(tr(lang, "Nic do instalowania", "Nothing to install").into()); }
     read_claude_settings(home, lang)?;
     let hook = place_hook(home, hook_src, lang)?;
@@ -92,6 +157,7 @@ pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Re
 
 pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, String> {
     let nothing = || Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into());
+    if id == AppId::Opencode { return disable_opencode(home, lang); }
     if id != AppId::ClaudeCode { return nothing(); }
     let Some(v) = read_claude_settings(home, lang)? else { return nothing() };
     let settings = claude_settings(home);
@@ -156,6 +222,65 @@ mod tests {
         assert!(d.found && d.path.unwrap().ends_with(".codex"));
         assert!(detect(AppId::AgentRouter, h.path(), Lang::Pl).found);
         assert!(!detect(AppId::ClaudeCode, h.path(), Lang::Pl).found);
+    }
+
+    fn oc(h: &Path) -> PathBuf { h.join(".config").join("opencode") }
+
+    #[test]
+    fn opencode_is_detected_by_its_config_folder() {
+        let h = home();
+        let d = detect(AppId::Opencode, h.path(), Lang::Pl);
+        assert!(!d.found && d.note.unwrap().contains("opencode"));
+        std::fs::create_dir_all(oc(h.path())).unwrap();
+        assert!(detect(AppId::Opencode, h.path(), Lang::Pl).found);
+    }
+
+    #[test]
+    fn the_opencode_plugin_installs_once_and_uninstalls() {
+        let h = home();
+        std::fs::create_dir_all(oc(h.path())).unwrap();
+        assert!(!status(AppId::Opencode, h.path(), Lang::Pl).installed);
+        enable(AppId::Opencode, h.path(), None, Lang::Pl).unwrap();
+        enable(AppId::Opencode, h.path(), None, Lang::Pl).unwrap();
+        let f = opencode_plugin(h.path());
+        assert_eq!(f, oc(h.path()).join("plugins").join("agent-pets.js"));
+        assert!(std::fs::read_to_string(&f).unwrap().starts_with(PLUGIN_MARK));
+        assert_eq!(std::fs::read_dir(f.parent().unwrap()).unwrap().count(), 1, "bez plików tymczasowych");
+        assert!(status(AppId::Opencode, h.path(), Lang::Pl).installed);
+        disable(AppId::Opencode, h.path(), Lang::Pl).unwrap();
+        assert!(!f.exists());
+        assert!(!status(AppId::Opencode, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn someone_elses_agent_pets_js_is_never_touched() {
+        let h = home();
+        let f = opencode_plugin(h.path());
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(&f, "export const Mine = 1").unwrap();
+        assert!(enable(AppId::Opencode, h.path(), None, Lang::Pl).is_err());
+        disable(AppId::Opencode, h.path(), Lang::Pl).unwrap();
+        uninstall_all(h.path(), false, Lang::Pl);
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "export const Mine = 1");
+        assert!(!status(AppId::Opencode, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn uninstall_removes_the_opencode_plugin() {
+        let h = home();
+        assert!(enable(AppId::Opencode, h.path(), None, Lang::Pl).is_err(), "bez opencode nie tworzymy jego konfiguracji");
+        assert!(!oc(h.path()).exists());
+        std::fs::create_dir_all(oc(h.path())).unwrap();
+        enable(AppId::Opencode, h.path(), None, Lang::Pl).unwrap();
+        uninstall_all(h.path(), false, Lang::Pl);
+        assert!(!opencode_plugin(h.path()).exists());
+    }
+
+    #[test]
+    fn the_plugin_times_out_and_sends_no_message_content() {
+        assert!(OPENCODE_PLUGIN.starts_with(PLUGIN_MARK));
+        assert!(OPENCODE_PLUGIN.contains("AbortSignal.timeout(300)"));
+        assert!(!OPENCODE_PLUGIN.contains("parts"), "treść wiadomości nie trafia do koperty");
     }
 
     #[test]

@@ -65,7 +65,12 @@ pub struct Diagnostics {
 pub struct LastSeen(pub Mutex<BTreeMap<String, i64>>);
 
 fn app_on(s: &Settings, id: AppId) -> bool {
-    match id { AppId::ClaudeCode => s.apps.claude_code, AppId::Codex => s.apps.codex, AppId::AgentRouter => s.apps.agent_router }
+    match id {
+        AppId::ClaudeCode => s.apps.claude_code,
+        AppId::Codex => s.apps.codex,
+        AppId::AgentRouter => s.apps.agent_router,
+        AppId::Opencode => s.apps.opencode,
+    }
 }
 
 fn set_app(s: &mut Settings, id: AppId, on: bool) {
@@ -73,6 +78,7 @@ fn set_app(s: &mut Settings, id: AppId, on: bool) {
         AppId::ClaudeCode => s.apps.claude_code = on,
         AppId::Codex => s.apps.codex = on,
         AppId::AgentRouter => s.apps.agent_router = on,
+        AppId::Opencode => s.apps.opencode = on,
     }
 }
 
