@@ -72,6 +72,9 @@ export const en: Dict = {
       progress: 'Download progress',
     },
   },
+  media: {
+    playing: (app: string | null) => app ? `${app} playing` : 'music playing',
+  },
   tooltip: {
     tasks: (done, total) => `Tasks: ${done}/${total}`,
     context: pct => `Context: ${pct}%`,
@@ -267,6 +270,8 @@ export const en: Dict = {
       error: 'Error',
       idle: 'Idle',
       sleep: 'Asleep',
+      vibe: 'Music',
+      doze: 'Doze ♪',
       bye: 'Goodbye',
       podium_first: 'Podium: 1st place',
       podium_second: 'Podium: 2nd place',
@@ -281,6 +286,8 @@ export const en: Dict = {
     },
     motionTitle: 'Motion',
     motionDesc: 'Dynamic: snappy anime-style action — punch barrages, hand seals, impact flashes and particles',
+    mediaTitle: 'Listen to music',
+    mediaDesc: 'Idle and sleeping pets put on headphones when music plays in Windows. Track titles are never read.',
     previewScene: 'Preview scene',
     taskbar: 'In the taskbar',
     perAgent: 'Per agent',

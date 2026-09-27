@@ -3,7 +3,7 @@ import type { SceneKey } from '../../stage/sceneFor';
 
 export const PREVIEW_GROUPS: { id: 'work' | 'states' | 'stats'; scenes: SceneKey[] }[] = [
   { id: 'work', scenes: ['thinking', 'edit', 'bash', 'read', 'grep', 'web', 'agent', 'mcp', 'compact'] },
-  { id: 'states', scenes: ['needs', 'done', 'error', 'idle', 'sleep', 'bye'] },
+  { id: 'states', scenes: ['needs', 'done', 'error', 'idle', 'vibe', 'sleep', 'doze', 'bye'] },
   // okno statystyk (0.9)
   { id: 'stats', scenes: ['podium_first', 'podium_second', 'podium_third', 'run'] },
 ];

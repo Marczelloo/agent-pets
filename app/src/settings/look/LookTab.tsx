@@ -7,6 +7,7 @@ import { t } from '../../i18n';
 import { LookGallery } from './LookGallery';
 import { PreviewStage } from './PreviewStage';
 import { PetsCanvas } from './PetsCanvas';
+import { Toggle } from '../Toggle';
 
 const APPS: AppId[] = ['claude_code', 'codex', 'agent_router'];
 
@@ -62,5 +63,10 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
         );
       })}
     </details>
+    <section className="card">
+      <Toggle label={t().look.mediaTitle} checked={pets.react_to_media !== false} onChange={on => onChange({ ...pets, react_to_media: on })}>
+        {t().look.mediaDesc}
+      </Toggle>
+    </section>
   </>;
 }

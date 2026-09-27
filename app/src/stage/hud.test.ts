@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPct, drawMiniMore, drawRouterBadge, limitBars, progressFraction } from './hud';
+import { clampPct, drawMiniMore, drawRouterBadge, eqHeights, limitBars, progressFraction } from './hud';
 import { recorder } from '../renderer/testing';
 
 describe('hud', () => {
@@ -24,6 +24,12 @@ describe('hud', () => {
       { agent: 'codex', window: 'weekly', pct: 91 },
     ]);
     expect(limitBars([])).toEqual([]);
+  });
+  it('EQ bars stay in 1..5 px under the pet; dozing ones barely move', () => {
+    for (let t = 0; t < 5; t += 0.07) {
+      for (const h of eqHeights(t, 'dance')) expect(h).toBeGreaterThanOrEqual(1), expect(h).toBeLessThanOrEqual(5);
+      for (const h of eqHeights(t, 'doze')) expect(h).toBeLessThanOrEqual(2.5);
+    }
   });
 });
 

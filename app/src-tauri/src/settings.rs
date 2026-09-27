@@ -207,8 +207,8 @@ pub fn work_area(app: &AppHandle) -> Option<(f64, f64)> {
     Some((a.size.width as f64 / s, a.size.height as f64 / s))
 }
 
-/// Okno ustawień: 1100×860 mieści „Wygląd” (7 stylów w rzędzie) i większość kart bez przewijania.
-pub const WINDOW: (f64, f64) = (1100.0, 860.0);
+/// Okno ustawień: 1100×920 mieści „Wygląd” (7 stylów w rzędzie, przełącznik muzyki) i większość kart bez przewijania.
+pub const WINDOW: (f64, f64) = (1100.0, 920.0);
 
 /// Otwiera okno ustawień (albo kreator przy pierwszym uruchomieniu); drugie wywołanie tylko je pokazuje.
 pub fn open(app: &AppHandle) { open_at(app, None) }

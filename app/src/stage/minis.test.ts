@@ -80,4 +80,11 @@ describe('parent pose', () => {
     expect(parentScene(s('p', { state: 'ended', tool: null }), [P, young], 60_000, false)).toBe('bye');
     expect(parentScene(s('p', { state: 'working', tool: 'edit' }), [P], 60_000, true)).toBe('edit');
   });
+  it('an idle parent listens to music, but not while it delegates', () => {
+    const young = kid('a', 57_000);
+    expect(parentScene(s('p', { state: 'idle', tool: null }), [P], 60_000, true, true)).toBe('vibe');
+    expect(parentScene(s('p', { state: 'sleep', tool: null }), [P], 60_000, true, true)).toBe('doze');
+    expect(parentScene(s('p', { state: 'idle', tool: null }), [P, young], 60_000, true, true)).toBe('agent');
+    expect(parentScene(s('p', { state: 'idle', tool: null }), [P], 60_000, true)).toBe('idle');
+  });
 });

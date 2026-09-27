@@ -2,7 +2,7 @@
 import { PI, TAU } from '../math';
 import { rng } from '../rng';
 import type { Pet } from '../pet';
-import type { Scene } from '../scenes';
+import { BEAT, type Scene } from '../scenes';
 import { at, every, keys, snapE } from './kit';
 import { emit, impact, spray, word } from './state';
 
@@ -54,6 +54,34 @@ export const STATES: Record<string, Scene> = {
     }],
     ['trening: przysiady', 2.4, (a) => ({ sit: 0.45 + 0.45 * Math.sin(a * TAU * 1.25), armL: 1.6, armR: 1.6, squint: 0.4, _stiff: 2 }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.8, 0.4)) spray(c, 'dust', 2, 0, -2, 30, -PI / 2, PI);
+    }],
+  ] },
+  // muzyka w systemie: headbang z „rogami”, DJ z ręką na słuchawce, disco (Travolta); nutki na każde uderzenie
+  vibe: { cycle: 1, base: { th: 0.1, _phones: 1, _hf: BEAT }, acts: [
+    ['headbang', 3.2, (_a, _c, t) => { const b = (t * BEAT) % 1, k = b < 0.2 ? snapE(b / 0.2) : 1 - (b - 0.2) / 0.8;
+      return { tilt: 0.16 * k - 0.04, lean: 0.35 * k, squint: 1, armL: 2.6, armR: 2.6, hopW: 0.2, _stiff: 2 }; }, undefined, undefined, (a, c, _t, dt) => {
+      if (every(a, dt, 1 / BEAT)) emit(c, 'note', (rng() - 0.5) * 70, -72, { vx: (rng() - 0.5) * 30, vy: -22 });
+    }],
+    ['DJ: ręka na słuchawce', 3.2, (_a, _c, t) => ({ ikL: 1, hxL: -44, hyL: -62, ikR: 1, hxR: 30 + 9 * Math.sin(t * TAU * BEAT * 2), hyR: -26,
+      th: 0.3, look: 0.4, happy: 0.8, tilt: 0.04 * Math.sin(t * PI * BEAT) }), undefined, undefined, (a, c, _t, dt) => {
+      if (every(a, dt, 2 / BEAT)) emit(c, 'note', 40 + rng() * 20, -50, { vx: 20, vy: -25 });
+    }],
+    // co uderzenie palec w górę naprzemiennie: prawa ręka w prawo ↔ lewa w lewo, wolna na biodrze; biodra za palcem
+    ['disco', 6 / BEAT, (_a, _c, t) => { const s = Math.floor(t * BEAT) % 2 ? -1 : 1;
+      return { ikL: 1, ikR: 1, hxR: s > 0 ? 42 : 47, hyR: s > 0 ? -96 : -25, hxL: s < 0 ? -42 : -47, hyL: s < 0 ? -96 : -25,
+        lx: 5 * s, tilt: -0.08 * s, th: 0.2 * s, look: -0.6, ex: 0.8 * s, happy: 1, _stiff: 3 }; }, undefined, undefined, (a, c, t, dt) => {
+      if (every(a, dt, 1 / BEAT)) { const s = Math.floor(t * BEAT) % 2 ? -1 : 1; emit(c, 'note', 50 * s, -95, { vx: 20 * s, vy: -22 }); }
+    }],
+    // obrót widać tylko w modelu wektorowym (naklejka i piksele stoją przodem), więc kulminacją jest skok i poza „disco”
+    ['obrót i poza', 2.2, keys([[0, { th: 0, lx: 0, hopW: 0, _stiff: 2 }], [0.7, { th: TAU, lx: 0, hopW: 0.9, armL: 1.6, armR: 1.6 }],
+      [0.9, { hopW: 0, armL: 0.3, armR: 2.8, lean: 0.3, tilt: -0.1, happy: 1 }], [2.2, {}]]), undefined, undefined, (a, c, _t, dt) => {
+      if (at(a, dt, 0.9)) spray(c, 'spark', 7, 20, -70, 70, -PI / 2, PI);
+    }],
+  ] },
+  // śpi przy muzyce: jak `sleep` (bąbel z nosa), w słuchawkach; nutka co dwa uderzenia, nisko nad poduszką
+  doze: { cycle: 1, base: { loaf: 1, sleep: 1, dim: 1, th: 0.3, _prop: 'pillow', armL: 0.15, armR: 0.15, _phones: 1 }, acts: [
+    ['bąbel z nosa w rytm', 4, (a, _c, t) => ({ _snot: 0.5 - 0.5 * Math.cos(a * TAU / 2), tilt: 0.04 * Math.sin(t * PI * BEAT / 2) }), undefined, undefined, (a, c, _t, dt) => {
+      if (every(a, dt, 2 / BEAT, 0.5)) emit(c, 'note', 25 + rng() * 15, -55, { vx: 12, vy: -16 });
     }],
   ] },
   sleep: { cycle: 1, base: { loaf: 1, sleep: 1, dim: 1, th: 0.3, _prop: 'pillow', armL: 0.15, armR: 0.15 }, acts: [

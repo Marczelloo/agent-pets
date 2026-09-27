@@ -2,7 +2,7 @@ import { pen } from '../renderer';
 import { PetPainter } from '../renderer/painter';
 import { appFor, defaultPets, defaultStage, lookFor } from '../look';
 import { resolveLang, setLang } from '../i18n';
-import type { Pets, PointerMsg, Snapshot, StageLayout, StageSettings } from '../types';
+import type { Media, Pets, PointerMsg, Snapshot, StageLayout, StageSettings } from '../types';
 import type { Bridge } from './bridge';
 import { drawBadge, drawLimits, drawMiniMore, drawProgress, drawRouterBadge, limitBars } from './hud';
 import { MINI_SCALE, miniAlpha, miniScene, minisLeftOf, minisOf, parentScene } from './minis';
@@ -31,6 +31,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let clockOffset = 0;
   let maxPets: number | undefined;
   let pets: Pets = defaultPets();
+  let media: Media = { playing: false, app: null };
+  const music = () => media.playing && pets.react_to_media !== false;
   let stage: StageSettings = defaultStage();
   let orderer = new Orderer(stage.order);
   const bg = document.getElementById('bg');
@@ -38,7 +40,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   const painters = new WeakMap<Entry, PetPainter>();
   /** kiedy (T) dziecko pierwszy raz stanęło jako mini: do efektu wejścia */
   const miniBorn = new Map<string, number>();
-  const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset }));
+  const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset, media: music() ? media : null }));
   let through: boolean | null = null;
   const handle: StageHandle = {
     hover: p => {
@@ -67,8 +69,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       showBadge: stage.show.badge, showLimits: stage.show.limits,
       minis: p => minisOf(p, snap.sessions, now, on), minisLeft: minisLeftOf(stage),
     });
-    // rodzic z młodym dzieckiem (bez mini) ma pozę „deleguje”; mini żegna się po swojemu
-    roster.sync(snap.sessions, T, s => s.parent ? miniScene(s, now) : parentScene(s, snap.sessions, now, on));
+    // rodzic z młodym dzieckiem (bez mini) ma pozę „deleguje”; mini żegna się po swojemu; bezczynny rodzic słucha muzyki
+    roster.sync(snap.sessions, T, s => s.parent ? miniScene(s, now) : parentScene(s, snap.sessions, now, on, music()));
     const shownMinis = new Set(out.pets.flatMap(p => p.minis.map(m => m.id)));
     for (const id of shownMinis) if (!miniBorn.has(id)) miniBorn.set(id, T);
     for (const id of [...miniBorn.keys()]) if (!shownMinis.has(id)) miniBorn.delete(id);
@@ -107,7 +109,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
         saving, reduced, dpr: devicePixelRatio || 1 });
       // HUD w skali sceny: rysowany w układzie 1× i powiększony o `z`
       x.save(); x.translate(p.x, h - 4 * h / 48); x.scale(z, z);
-      if (stage.show.progress) drawProgress(x, 0, 0, e.session, T);
+      if (stage.show.progress) drawProgress(x, 0, 0, e.session, T, e.scene === 'vibe' ? 'dance' : e.scene === 'doze' ? 'doze' : null);
       x.restore();
       if (e.session.origin === 'router') { x.save(); x.translate(p.x, 8 * h / 48); x.scale(z, z); drawRouterBadge(x, 0, 0); x.restore(); }
       drawMinis(p, z, u, Y, h, dt);
@@ -165,6 +167,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   });
   bridge.onMoving?.(on => bg?.classList.toggle('moving', on));
   bridge.onPower(s => { saving = s; budget = frameBudget(s); });
+  bridge.onMedia?.(m => { const was = music(), app = media.app; media = m; if (music() !== was) relayout(); else if (m.app !== app) hover.refresh(true); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;
 }

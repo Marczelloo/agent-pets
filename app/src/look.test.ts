@@ -3,7 +3,7 @@ import { appFor, defaultPets, lookFor, withOverride } from './look';
 
 describe('look', () => {
   it('new settings: sticker, calm, no overrides', () => {
-    expect(defaultPets()).toEqual({ style: 'sticker', motion: 'calm', overrides: {}, max_visible: 5 });
+    expect(defaultPets()).toEqual({ style: 'sticker', motion: 'calm', overrides: {}, max_visible: 5, react_to_media: true });
   });
   it('maps a session to its app; router tasks win over the agent', () => {
     expect(appFor({ agent: 'claude', origin: 'cli' })).toBe('claude_code');

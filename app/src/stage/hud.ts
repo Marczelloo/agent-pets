@@ -1,5 +1,6 @@
 import type { Limit, Session } from '../types';
 import { BADGE_W } from './layout';
+import { BEAT } from '../renderer/scenes';
 
 export const AGENT_COLOR: Record<string, string> = { claude: '#D97757', codex: '#5DCAA5' };
 const TRACK = 'rgba(128,128,128,0.30)';
@@ -13,8 +14,12 @@ export function progressFraction(p: Session['progress']): number | null {
   return Math.min(1, Math.max(0, p.done / p.total));
 }
 
-/** Pasek postępu pod zwierzakiem: 28×2 px; bez listy zadań pulsuje, gdy sesja pracuje. */
-export function drawProgress(x: CanvasRenderingContext2D, cx: number, y: number, s: Session, t: number): void {
+/**
+ * Pasek postępu pod zwierzakiem: 28×2 px; bez listy zadań pulsuje, gdy sesja pracuje.
+ * `music`: zwierzak słucha muzyki — zamiast paska szare słupki equalizera (szare = bezczynny, nie praca).
+ */
+export function drawProgress(x: CanvasRenderingContext2D, cx: number, y: number, s: Session, t: number, music: EqMode = null): void {
+  if (music) { drawEq(x, cx, y, t, music); return; }
   const col = AGENT_COLOR[s.agent] ?? AGENT_COLOR.claude;
   const f = progressFraction(s.progress);
   x.save();
@@ -28,6 +33,22 @@ export function drawProgress(x: CanvasRenderingContext2D, cx: number, y: number,
     x.fillStyle = col;
     x.fillRect(cx - 14, y, 28, 2);
   }
+  x.restore();
+}
+
+export type EqMode = 'dance' | 'doze' | null;
+const EQ = [[1, 0], [1.5, 1.3], [0.75, 2.2], [1.25, 0.6]] as const;
+
+/** Wysokości słupków EQ (px, 1–5): taniec skacze w rytm, drzemka ledwo faluje. */
+export function eqHeights(t: number, mode: 'dance' | 'doze'): number[] {
+  const amp = mode === 'dance' ? 4 : 1.5, sp = mode === 'dance' ? 1 : 0.35;
+  return EQ.map(([k, ph]) => 1 + amp * Math.abs(Math.sin(t * Math.PI * BEAT * k * sp + ph)));
+}
+
+function drawEq(x: CanvasRenderingContext2D, cx: number, y: number, t: number, mode: 'dance' | 'doze'): void {
+  x.save();
+  x.fillStyle = mode === 'dance' ? 'rgba(150,150,150,0.8)' : 'rgba(140,140,140,0.6)';
+  eqHeights(t, mode).forEach((h, i) => x.fillRect(cx - 13 + i * 7, y + 2 - h, 5, h));
   x.restore();
 }
 
