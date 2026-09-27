@@ -104,7 +104,7 @@ mod tests {
     }
     fn total(e: &FileEntry) -> Cell {
         let mut c = Cell::default();
-        for m in e.hours.values() { for x in m.values() { c.add(x); } }
+        for m in e.buckets.values() { for x in m.values() { c.add(x); } }
         c
     }
     fn feed(lines: &[String]) -> FileEntry {
@@ -141,7 +141,7 @@ mod tests {
     fn a_helper_thread_without_a_parent_is_skipped() {
         let guardian = l("10:00:00", "session_meta", json!({"id": "g", "cwd": "C:\\p", "originator": "Codex Desktop", "thread_source": "subagent"}));
         let e = feed(&[guardian, tokens("10:00:05", 100, 0, 10)]);
-        assert!(e.hours.is_empty());
+        assert!(e.buckets.is_empty());
         assert_eq!(e.meta.agent, None);
     }
 
@@ -175,7 +175,7 @@ mod tests {
         let t = total(&e);
         assert_eq!((t.questions, t.tools.bash, t.tools.edit, t.tools.web, t.tools.other), (1, 1, 1, 1, 0));
         assert_eq!(e.cursor.model.as_deref(), Some("gpt-6-sol"));
-        let first_hour = e.hours.values().next().unwrap();
+        let first_hour = e.buckets.values().next().unwrap();
         assert!(first_hour.contains_key("unknown") && first_hour.contains_key("gpt-6-sol"), "{first_hour:?}");
     }
 

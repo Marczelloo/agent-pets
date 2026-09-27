@@ -65,7 +65,7 @@ fn stats_scan(out: Option<PathBuf>) -> anyhow::Result<()> {
         if p.done { break; }
     }
     let mut c = Cell::default();
-    for e in sc.book.files.values() { for m in e.hours.values() { for x in m.values() { c.add(x); } } }
+    for e in sc.book.files.values() { for m in e.buckets.values() { for x in m.values() { c.add(x); } } }
     println!("plików: {files}, czas skanu: {:.1} s", t0.elapsed().as_secs_f64());
     println!("tokeny: {} (wejście {}, cache odczyt {}, cache zapis {}, wyjście {}), praca: {} h, pytania: {}",
         c.tokens(), c.input, c.cache_read, c.cache_write, c.output, c.active_ms / 3_600_000, c.questions);

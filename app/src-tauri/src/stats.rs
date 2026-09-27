@@ -13,12 +13,19 @@ const SAVE_EVERY_MS: i64 = 5_000;
 const RESCAN: Duration = Duration::from_secs(30);
 const PROGRESS_EVERY_MS: i64 = 500;
 
-pub struct StatsState { pub scanner: Mutex<Scanner>, pub progress: Mutex<Progress> }
+pub struct StatsState {
+    pub scanner: Mutex<Scanner>,
+    pub progress: Mutex<Progress>,
+    /// zapis dozwolony dopiero po udanym odczycie księgi z dysku
+    pub writable: std::sync::atomic::AtomicBool,
+}
 
 impl StatsState {
+    /// Pusta księga do czasu odczytu z dysku w wątku skanu (`spawn`).
     pub fn load(home: &std::path::Path) -> StatsState {
         let roots = vec![home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
-        StatsState { scanner: Mutex::new(Scanner::new(roots, Book::load(&Book::default_path()))), progress: Mutex::new(Progress::default()) }
+        StatsState { scanner: Mutex::new(Scanner::new(roots, Book::default())), progress: Mutex::new(Progress::default()),
+            writable: std::sync::atomic::AtomicBool::new(false) }
     }
 }
 
@@ -29,6 +36,8 @@ pub fn run_until_done(sc: &Mutex<Scanner>, step: u64, pause: &dyn Fn() -> bool, 
     let queued = sc.lock().unwrap().refresh();
     let mut last_save = now();
     loop {
+        // pełny ekran: nie czytamy nic, nawet jednej porcji (przegląd 0.9)
+        if pause() { sleep(1_000); continue; }
         let p = sc.lock().unwrap().step(step, pause);
         progress(p);
         let t = now();
@@ -39,6 +48,19 @@ pub fn run_until_done(sc: &Mutex<Scanner>, step: u64, pause: &dyn Fn() -> bool, 
         if t - last_save >= SAVE_EVERY_MS { save(&sc.lock().unwrap().book); last_save = t; }
         sleep(if pause() { 1_000 } else { 20 });
     }
+}
+
+/// Księga z dysku; błąd odczytu (np. blokada antywirusa przy starcie) ponawiamy, a gdy nie mija, zwracamy `None`:
+/// wtedy nic nie zapisujemy, żeby pusta księga nie nadpisała historii (przegląd 0.9, I4).
+pub fn open_book(path: &std::path::Path, tries: u32, sleep: &dyn Fn(u64)) -> Option<Book> {
+    for i in 0..tries {
+        match Book::load_checked(path) {
+            Ok(b) => return Some(b),
+            Err(e) if i + 1 < tries => { let _ = e; sleep(1_000) }
+            Err(e) => eprintln!("agent-pets: statystyki: nie da się odczytać księgi ({e}); bez zapisu do końca sesji"),
+        }
+    }
+    None
 }
 
 /// Przesunięcie czasu lokalnego względem UTC (ms) w chwili `ts`, z czasem letnim.
@@ -67,10 +89,16 @@ pub fn spawn(app: AppHandle) {
         }
         let st = app.state::<StatsState>();
         let path = Book::default_path();
+        if let Some(b) = open_book(&path, 5, &|ms| std::thread::sleep(Duration::from_millis(ms))) {
+            st.scanner.lock().unwrap().book = b;
+            st.writable.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         let mut sent = 0i64;
         loop {
             run_until_done(&st.scanner, STEP_BYTES, &crate::shell::fullscreen_app,
-                &mut |b: &Book| if let Err(e) = b.save(&path) { eprintln!("agent-pets: statystyki: {e}") },
+                &mut |b: &Book| if st.writable.load(std::sync::atomic::Ordering::Relaxed) {
+                    if let Err(e) = b.save(&path) { eprintln!("agent-pets: statystyki: {e}") }
+                },
                 &pets_core::time::now_ms,
                 &mut |p| {
                     *st.progress.lock().unwrap() = p;
@@ -86,6 +114,7 @@ pub fn spawn(app: AppHandle) {
 /// Zapis przy wyjściu z aplikacji (bez czekania na zamek skanera w trakcie długiego kroku).
 pub fn save_now(app: &AppHandle) {
     if let Some(st) = app.try_state::<StatsState>() {
+        if !st.writable.load(std::sync::atomic::Ordering::Relaxed) { return; }
         if let Ok(sc) = st.scanner.try_lock() { let _ = sc.book.save(&Book::default_path()); }
     }
 }
@@ -146,6 +175,31 @@ mod tests {
         let line = serde_json::json!({"type": "user", "timestamp": "2026-09-27T10:00:00.000Z", "cwd": "C:/w/x", "message": {"content": "x"}}).to_string();
         std::fs::write(p.join("s.jsonl"), format!("{line}\n").repeat(lines)).unwrap();
         (d, vec![std::path::PathBuf::from(p.parent().unwrap())])
+    }
+
+    #[test]
+    fn a_paused_scan_reads_nothing_until_it_resumes() {
+        let (_d, roots) = home_with(10);
+        let sc = Mutex::new(Scanner::new(roots, Book::default()));
+        let log = RefCell::new(Vec::<String>::new());
+        let pauses = Cell::new(2);
+        run_until_done(&sc, 1 << 30, &|| { let n = pauses.get(); if n > 0 { pauses.set(n - 1) } n > 0 },
+            &mut |_| {}, &|| 0, &mut |p| log.borrow_mut().push(format!("step {}", p.scanned)),
+            &|ms| log.borrow_mut().push(format!("sleep {ms}")));
+        let l = log.borrow();
+        assert_eq!((l[0].as_str(), l[1].as_str()), ("sleep 1000", "sleep 1000"), "{l:?}");
+        assert!(l[2].starts_with("step ") && l[2] != "step 0", "{l:?}");
+    }
+
+    #[test]
+    fn the_book_opens_with_retries_and_never_as_an_empty_stand_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let tries = Cell::new(0);
+        let locked = dir.path().join("stats.json");
+        std::fs::create_dir(&locked).unwrap();
+        assert!(open_book(&locked, 3, &|_| tries.set(tries.get() + 1)).is_none());
+        assert_eq!(tries.get(), 2, "waits between the three tries");
+        assert!(open_book(&dir.path().join("none.json"), 3, &|_| {}).is_some());
     }
 
     #[test]

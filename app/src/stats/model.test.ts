@@ -24,6 +24,7 @@ describe('stats model', () => {
   it('turns scan progress into a percentage', () => {
     expect(scanPct({ files: 3, scanned: 50, total: 200, done: false })).toBe(25);
     expect(scanPct({ files: 0, scanned: 0, total: 0, done: true })).toBe(100);
+    expect(scanPct({ files: 1, scanned: 150, total: 100, done: false }), 'files grew during the pass').toBe(100);
   });
 });
 

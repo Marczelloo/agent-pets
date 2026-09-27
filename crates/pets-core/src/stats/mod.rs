@@ -1,5 +1,5 @@
 //! Statystyki pracy agentów (spec 0.9): sumy tokenów, czasu pracy, pytań i narzędzi per plik historii,
-//! w kubełkach godzina (UTC) × model. Tylko liczby, nazwy folderów projektów i modeli; bez treści.
+//! w kubełkach kwadrans (UTC) × model. Tylko liczby, nazwy folderów projektów i modeli; bez treści.
 pub mod active;
 pub mod book;
 pub mod claude;
@@ -10,11 +10,14 @@ pub mod summary;
 pub use active::active_tick;
 pub use book::Book;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use crate::model::Tool;
 
 pub const HOUR_MS: i64 = 3_600_000;
+/// Kubełek czasu w księdze: kwadrans mieści każde prawdziwe przesunięcie strefy (+5:30, +5:45), więc praca po
+/// lokalnej północy nie trafia do poprzedniego dnia (przegląd 0.9, I2).
+pub const BUCKET_MS: i64 = 15 * 60_000;
 /// Dłuższa przerwa między zdarzeniami agenta to pauza, nie praca (spec 2.3).
 pub const GAP_MS: i64 = 5 * 60_000;
 
@@ -74,15 +77,19 @@ pub struct Cursor {
     /// Codex: ostatnia suma narastająca `[input bez cache, cache_read, cache_write, output]`
     pub last_total: Option<[u64; 4]>,
     pub model: Option<String>,
+    /// Claude: skróty (FNV-1a) `message.id` już policzonych odpowiedzi; Claude Code dopisuje starsze odpowiedzi
+    /// jeszcze raz przy wznowieniu i kompaktowaniu (przegląd 0.9, C1)
+    #[serde(default)]
+    pub seen: BTreeSet<u64>,
 }
 
-/// Wpis księgi dla jednego pliku historii: kursor, metadane i wkład (godzina UTC → model → sumy).
+/// Wpis księgi dla jednego pliku historii: kursor, metadane i wkład (kwadrans UTC → model → sumy).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct FileEntry { pub cursor: Cursor, pub meta: FileMeta, pub hours: BTreeMap<i64, BTreeMap<String, Cell>> }
+pub struct FileEntry { pub cursor: Cursor, pub meta: FileMeta, pub buckets: BTreeMap<i64, BTreeMap<String, Cell>> }
 
 impl FileEntry {
     pub fn cell(&mut self, ts: i64, model: &str) -> &mut Cell {
-        self.hours.entry(ts.div_euclid(HOUR_MS)).or_default().entry(model.to_string()).or_default()
+        self.buckets.entry(ts.div_euclid(BUCKET_MS)).or_default().entry(model.to_string()).or_default()
     }
 }
 
@@ -94,10 +101,11 @@ mod tests {
     #[test]
     fn a_cell_lands_in_its_utc_hour_bucket() {
         let mut e = FileEntry::default();
-        e.cell(2 * HOUR_MS + 5, "m").input += 3;
+        e.cell(2 * BUCKET_MS + 5, "m").input += 3;
         e.cell(-1, "m").output += 1;
-        assert_eq!(e.hours.keys().copied().collect::<Vec<_>>(), [-1, 2]);
-        assert_eq!(e.hours[&2]["m"].input, 3);
+        assert_eq!(e.buckets.keys().copied().collect::<Vec<_>>(), [-1, 2]);
+        assert_eq!(e.buckets[&2]["m"].input, 3);
+        assert_eq!(BUCKET_MS, 15 * 60_000, "a quarter hour fits every real timezone offset");
     }
 
     #[test]

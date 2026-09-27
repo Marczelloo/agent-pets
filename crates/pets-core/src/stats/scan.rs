@@ -135,7 +135,7 @@ mod tests {
     fn append(p: &Path, s: &str) { std::fs::OpenOptions::new().append(true).open(p).unwrap().write_all(s.as_bytes()).unwrap(); }
     fn input_of(b: &Book) -> u64 {
         let mut c = Cell::default();
-        for e in b.files.values() { for m in e.hours.values() { for x in m.values() { c.add(x); } } }
+        for e in b.files.values() { for m in e.buckets.values() { for x in m.values() { c.add(x); } } }
         c.input
     }
     struct Home { _d: tempfile::TempDir, roots: Vec<PathBuf>, main: PathBuf, agent: PathBuf, rollout: PathBuf }

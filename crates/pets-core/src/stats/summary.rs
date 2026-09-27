@@ -81,8 +81,8 @@ pub fn summary(book: &Book, q: &Query, now: i64, tz: &dyn Fn(i64) -> i64) -> Sta
             if e.meta.sub { subagents += 1 } else { sessions += 1 }
         }
         let mut file_active = 0u64;
-        for (&h, models) in &e.hours {
-            let ts = h * HOUR_MS;
+        for (&h, models) in &e.buckets {
+            let ts = h * super::BUCKET_MS;
             let d = local_day(ts, tz);
             for c in models.values() {
                 empty = false;
@@ -198,6 +198,16 @@ mod tests {
         let today = |tz: &dyn Fn(i64) -> i64| summary(&b, &q(Period::Today, Metric::Time, RaceBy::Agents), NOW, tz).tiles.active_ms;
         assert_eq!(today(&utc), 0);
         assert_eq!(today(&|_| 2 * HOUR_MS), 10 * MIN);
+    }
+
+    #[test]
+    fn half_hour_timezones_put_work_on_the_right_day() {
+        // 00:10 w Indiach (+5:30) to 18:40 UTC dnia poprzedniego
+        let mut b = Book::default();
+        put(&mut b, "a", meta(StatAgent::Claude, "p", false, at(-1, 1)), at(-1, 18) + 40 * 60_000, work(10 * MIN));
+        let ist = |_: i64| 5 * HOUR_MS + 30 * 60_000;
+        let v = summary(&b, &q(Period::Today, Metric::Time, RaceBy::Agents), D0 + 10 * HOUR_MS, &ist);
+        assert_eq!(v.tiles.active_ms, 10 * MIN);
     }
 
     #[test]

@@ -33,4 +33,4 @@ export function agentName(a: StatAgent): string {
 export const badgeText = (k: BadgeKind): string => t().stats.badge[k];
 
 /** Postęp pierwszego skanu w procentach (pusta kolejka = 100). */
-export const scanPct = (p: StatsProgress): number => (p.total > 0 ? Math.floor((p.scanned * 100) / p.total) : 100);
+export const scanPct = (p: StatsProgress): number => (p.total > 0 ? Math.min(100, Math.floor((p.scanned * 100) / p.total)) : 100);

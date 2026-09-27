@@ -25,11 +25,27 @@ impl Book {
         }
     }
 
+    /// Jak `load`, ale błąd odczytu inny niż brak pliku (np. blokada antywirusa) jest błędem, a nie pustą księgą:
+    /// pusta księga zapisana potem na dysk skasowałaby historię plików, których już nie ma (przegląd 0.9, I4).
+    pub fn load_checked(path: &Path) -> io::Result<Book> {
+        match std::fs::read_to_string(path) {
+            Ok(_) => Ok(Book::load(path)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Book::default()),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Zapis atomowy: plik tymczasowy i zamiana.
     pub fn save(&self, path: &Path) -> io::Result<()> {
         if let Some(d) = path.parent() { std::fs::create_dir_all(d)?; }
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(self).map_err(io::Error::other)?)?;
+        {
+            use std::io::Write;
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(&serde_json::to_vec(self).map_err(io::Error::other)?)?;
+            // na dysku przed zamianą: po zaniku zasilania nie zostaje pusty plik
+            f.sync_all()?;
+        }
         std::fs::rename(&tmp, path)
     }
 }
@@ -53,6 +69,18 @@ mod tests {
         let l = Book::load(&p);
         assert_eq!(l.v, 1);
         assert_eq!(l.files, b.files);
+    }
+
+    #[test]
+    fn a_read_error_is_not_an_empty_book() {
+        let dir = tempfile::tempdir().unwrap();
+        // katalog w miejscu pliku: błąd odczytu inny niż „brak pliku”
+        let p = dir.path().join("stats.json");
+        std::fs::create_dir(&p).unwrap();
+        assert!(Book::load_checked(&p).is_err());
+        assert!(p.is_dir() && !dir.path().join("stats.json.bad").exists(), "nothing moved aside");
+        let missing = dir.path().join("none.json");
+        assert_eq!(Book::load_checked(&missing).unwrap().files.len(), 0);
     }
 
     #[test]

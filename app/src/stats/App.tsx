@@ -70,7 +70,10 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
         <span>{x.loading(scanPct(progress))}</span>
         <span className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={scanPct(progress)}><i style={{ width: `${scanPct(progress)}%` }} /></span>
       </div>}
-      {view.empty ? <div className="empty"><StatPet agent="claude" scene="sleep" w={96} h={72} u={0.45} pets={pets} animate={animate} /><p>{x.empty}</p></div> : <>
+      {view.empty ? <div className="empty">{progress && !progress.done
+        // pierwszy skan jeszcze trwa: zwierzak czyta historię, tekst jest w pasku wyżej
+        ? <StatPet agent="claude" scene="read" w={96} h={72} u={0.45} pets={pets} animate={animate} />
+        : <><StatPet agent="claude" scene="sleep" w={96} h={72} u={0.45} pets={pets} animate={animate} /><p>{x.empty}</p></>}</div> : <>
         <div className="row top">
           <section className="card">
             <div className="ct"><span>{x.podium[period]}</span>
@@ -119,6 +122,8 @@ export default function Root({ tauri }: { tauri: boolean }) {
   const [progress, setProgress] = useState<StatsProgress | null>(null);
   const [, relang] = useState(0);
   const [pets, setPets] = useState<Pets>(defaultPets);
+  // tryb oszczędzania energii: bez liczników, wejść i konfetti (spec 3.3), jak w panelu i na scenie
+  const [saving, setSaving] = useState(false);
   const lang = (l: Parameters<typeof resolveLang>[0]) => { setLang(resolveLang(l)); relang(n => n + 1); };
   const pick = (c: Partial<Choice>) => setChoice(o => { const n = { ...o, ...c }; saveChoice(n); return n; });
   const refresh = useCallback(() => {
@@ -129,16 +134,23 @@ export default function Root({ tauri }: { tauri: boolean }) {
   useEffect(() => {
     if (!tauri) return;
     const every = setInterval(() => { if (!document.hidden) refresh(); }, 30_000);
+    // w trakcie skanu liczby rosną na żywo (spec 3.2), najwyżej co 2 s
+    let shown = 0;
     const un = [
-      listen<StatsProgress>('stats://progress', e => { setProgress(e.payload); if (e.payload.done) refresh(); }),
+      listen<StatsProgress>('stats://progress', e => {
+        setProgress(e.payload);
+        if (e.payload.done || Date.now() - shown >= 2_000) { shown = Date.now(); refresh(); }
+      }),
+      listen<boolean>('pets://power', e => setSaving(e.payload)),
       listen<Settings>('pets://settings', e => { lang(e.payload.language ?? 'auto'); setPets(e.payload.pets); }),
     ];
     void invoke<StatsProgress>('stats_progress').then(setProgress);
+    void invoke<boolean>('power_get').then(setSaving);
     void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); lang(v.settings.language ?? 'auto'); setPets(v.settings.pets); });
     return () => { clearInterval(every); un.forEach(p => void p.then(f => f())); };
   }, [tauri, refresh]);
 
   if (!view) return null;
-  return <StatsPage view={view} {...choice} progress={progress} animate pets={pets} onPeriod={period => pick({ period })}
+  return <StatsPage view={view} {...choice} progress={progress} animate={!saving} pets={pets} onPeriod={period => pick({ period })}
     onMetric={metric => pick({ metric })} onRace={race => pick({ race })} />;
 }

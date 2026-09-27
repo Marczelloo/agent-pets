@@ -4,6 +4,11 @@ use crate::time::rfc3339_ms;
 use crate::tools::from_claude;
 use super::{active_tick, Cell, FileEntry, StatAgent};
 
+/// Stały skrót tekstu (FNV-1a 64): nie zmienia się między wersjami kompilatora, więc może leżeć w księdze.
+pub fn fnv64(s: &str) -> u64 {
+    s.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
+}
+
 /// Ostatni człon ścieżki (`C:\work\Agent Pets` → `Agent Pets`); tylko on trafia do księgi.
 pub fn project_of(cwd: &str) -> Option<String> {
     cwd.split(['/', '\\']).filter(|p| !p.is_empty()).last().map(String::from)
@@ -28,6 +33,15 @@ pub fn claude_line(e: &mut FileEntry, line: &str, sub: bool) {
     let model = e.cursor.model.clone().unwrap_or_else(|| "unknown".to_string());
     if let Some((end, ms)) = active_tick(&mut e.cursor.last_event, ts) { e.cell(end, &model).active_ms += ms; }
     let (true, Some(m)) = (assistant, msg) else { return };
+    if let Some(id) = m.get("id").and_then(Value::as_str) {
+        let current = e.cursor.last_msg.as_ref().is_some_and(|(i, _)| i == id);
+        // odpowiedź już policzona, dopisana w pliku jeszcze raz (wznowienie, kompaktowanie): ani tokenów, ani narzędzi
+        if !e.cursor.seen.insert(fnv64(id)) && !current {
+            // po powtórce żadna odpowiedź nie jest „bieżąca”: powtórzona też bywa ta ostatnio policzona
+            e.cursor.last_msg = None;
+            return;
+        }
+    }
     if let (Some(u), Some(id)) = (m.get("usage"), m.get("id").and_then(Value::as_str)) {
         let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
         let new = Cell { input: n("input_tokens"), cache_read: n("cache_read_input_tokens"),
@@ -53,13 +67,13 @@ pub fn claude_line(e: &mut FileEntry, line: &str, sub: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stats::{Cell, FileEntry, HOUR_MS, StatAgent};
+    use crate::stats::{Cell, FileEntry, BUCKET_MS, StatAgent};
     use crate::time::rfc3339_ms;
     use serde_json::{json, Value};
 
     const DAY: &str = "2026-09-27T";
     fn at(hms: &str) -> String { format!("{DAY}{hms}.000Z") }
-    fn hour(hms: &str) -> i64 { rfc3339_ms(&at(hms)).unwrap().div_euclid(HOUR_MS) }
+    fn hour(hms: &str) -> i64 { rfc3339_ms(&at(hms)).unwrap().div_euclid(BUCKET_MS) }
     fn user(hms: &str, text: &str) -> String {
         json!({"type": "user", "timestamp": at(hms), "cwd": "C:\\work\\Agent Pets", "message": {"role": "user", "content": text}}).to_string()
     }
@@ -73,7 +87,7 @@ mod tests {
     fn tool(name: &str, input: Value) -> Value { json!([{"type": "tool_use", "id": "t", "name": name, "input": input}]) }
     fn total(e: &FileEntry) -> Cell {
         let mut c = Cell::default();
-        for m in e.hours.values() { for x in m.values() { c.add(x); } }
+        for m in e.buckets.values() { for x in m.values() { c.add(x); } }
         c
     }
     fn feed(lines: &[String], sub: bool) -> FileEntry {
@@ -92,7 +106,23 @@ mod tests {
         let t = total(&e);
         assert_eq!((t.input, t.cache_read, t.cache_write, t.output), (10, 900, 100, 90));
         assert_eq!(e.cursor.model.as_deref(), Some("claude-opus-5-5"));
-        assert_eq!(e.hours[&hour("10:00:00")].keys().collect::<Vec<_>>(), ["claude-opus-5-5"]);
+        assert_eq!(e.buckets[&hour("10:00:00")].keys().collect::<Vec<_>>(), ["claude-opus-5-5"]);
+    }
+
+    #[test]
+    fn an_answer_replayed_later_in_the_file_counts_once() {
+        let e = feed(&[
+            asst("10:00:00", "A", usage(10, 900, 100, 5), json!([])),
+            asst("10:00:01", "A", usage(10, 900, 100, 40), tool("Bash", json!({}))),
+            asst("10:00:05", "B", usage(20, 0, 0, 7), tool("Edit", json!({}))),
+            // Claude Code dopisuje starsze odpowiedzi jeszcze raz (resume, kompaktowanie), ze starym czasem
+            asst("10:00:00", "A", usage(10, 900, 100, 0), json!([])),
+            asst("10:00:01", "A", usage(10, 900, 100, 40), tool("Bash", json!({}))),
+            asst("10:00:05", "B", usage(20, 0, 0, 7), tool("Edit", json!({}))),
+        ], false);
+        let t = total(&e);
+        assert_eq!((t.input, t.cache_read, t.cache_write, t.output), (30, 900, 100, 47));
+        assert_eq!((t.tools.bash, t.tools.edit), (1, 1));
     }
 
     #[test]
@@ -137,18 +167,18 @@ mod tests {
             user("11:00:00", "b"),
             asst("11:00:10", "c", usage(1, 0, 0, 1), json!([])),
         ], false);
-        let active = |h: i64| e.hours.get(&h).map(|m| m.values().map(|c| c.active_ms).sum::<u64>()).unwrap_or(0);
+        let active = |h: i64| e.buckets.get(&h).map(|m| m.values().map(|c| c.active_ms).sum::<u64>()).unwrap_or(0);
         assert_eq!(active(hour("10:00:00")), 180_000);
         assert_eq!(active(hour("11:00:00")), 10_000);
 
         let e = feed(&[user("09:59:50", "a"), user("10:00:20", "b")], false);
-        assert_eq!(e.hours.keys().copied().collect::<Vec<_>>(), [hour("10:00:00")]);
+        assert_eq!(e.buckets.keys().copied().collect::<Vec<_>>(), [hour("10:00:00")]);
     }
 
     #[test]
     fn broken_lines_change_only_the_line_counter() {
         let e = feed(&["{ nie json".to_string(), json!({"type": "user"}).to_string()], false);
-        assert!(e.hours.is_empty());
+        assert!(e.buckets.is_empty());
         assert_eq!(e.cursor.line, 2);
     }
 

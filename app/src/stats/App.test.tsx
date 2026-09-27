@@ -33,6 +33,15 @@ describe('StatsPage', () => {
     expect(html).toContain('class="empty"');
     expect(html).not.toContain('NaN');
   });
+  it('during the first scan an empty book shows the loading bar, not the empty text', () => {
+    const html = renderToString(<StatsPage {...base({ view: empty, progress: { files: 40, scanned: 10, total: 100, done: false } })} />);
+    expect(html).toContain('Wczytuję historię… 10%');
+    expect(html).not.toContain('Statystyki pojawią się');
+  });
+  it('without motion (energy saver) the pets do not make an entrance', () => {
+    expect(renderToString(<StatsPage {...base({ animate: true })} />)).toContain('class="enter"');
+    expect(renderToString(<StatsPage {...base({ animate: false })} />)).not.toContain('enter');
+  });
   it('the calendar has a cell per day with its level', () => {
     const html = renderToString(<StatsPage {...base()} />);
     expect(html.match(/class="day lv\d"/g)?.length).toBe(182);
