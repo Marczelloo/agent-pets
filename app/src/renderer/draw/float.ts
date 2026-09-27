@@ -1,5 +1,5 @@
 import { PI } from "../math";
-import { bbox, path, rrP, shp } from "../pen";
+import { bbox, path, pen, rrP, shp } from "../pen";
 import type { Skin } from "../../skins/types";
 
 /** Gogle Copilota: jasna oprawa i ciemne soczewki (kształt z logo Copilota). */
@@ -33,9 +33,11 @@ export function archP(X: number, Y: number, W: number, H: number, R: number): nu
 
 /** Gradient w kolorach Google w obrysie `p`, potem ponownie kontur (wypełnienie go przykryło). */
 export function googleFill(x: CanvasRenderingContext2D, p: number[][]) {
-  const b = bbox(p), g = x.createLinearGradient(b[0], b[1], b[2], b[3]);
-  GOOGLE.forEach((c, i) => g.addColorStop(i / (GOOGLE.length - 1), c));
-  x.save(); path(x, p, 0, 0); x.clip(); x.globalAlpha *= .92; x.fillStyle = g; x.fillRect(b[0], b[1], b[2] - b[0], b[3] - b[1]); x.restore();
+  const st = pen.st, b = bbox(p), g = x.createLinearGradient(b[0], b[1], b[2], b[3]);
+  // kolory przechodzą przez styl jak każde wypełnienie (Ink szary, Pastel jaśniejszy, Neon przyciemniony)
+  GOOGLE.forEach((c, i) => g.addColorStop(i / (GOOGLE.length - 1), st.fillFor ? st.fillFor(c) : c));
+  // szkic: kreskowanie ma zostać widoczne pod gradientem
+  x.save(); path(x, p, 0, 0); x.clip(); x.globalAlpha *= st.sketch ? .5 : .92; x.fillStyle = g; x.fillRect(b[0], b[1], b[2] - b[0], b[3] - b[1]); x.restore();
   path(x, p, 0, 0); x.stroke();
 }
 

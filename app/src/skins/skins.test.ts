@@ -66,6 +66,17 @@ describe('skins for agents', () => {
     drawPet(rec.ctx, petFor({ agent: 'antigravity', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
     for (const c of ['#4285F4', '#34A853', '#FBBC05', '#EA4335']) expect(rec.log.some(l => l.includes(`addColorStop`) && l.includes(c)), c).toBe(true);
   });
+  it('the Google colours follow the style like every other fill', () => {
+    const stops = (style: 'clean' | 'ink' | 'pastel') => {
+      const rec = recorder();
+      drawPet(rec.ctx, petFor({ agent: 'antigravity', agent_name: null }, 'idle'), 60, 40, 1, 0.5, { style, motion: 'calm' });
+      return rec.log.filter(l => l.includes('addColorStop'));
+    };
+    expect(stops('clean').some(l => l.includes('#4285F4'))).toBe(true);
+    expect(stops('ink').some(l => l.includes('#4285F4'))).toBe(false);
+    expect(stops('ink').length).toBeGreaterThan(0);
+    expect(stops('pastel').some(l => l.includes('#4285F4'))).toBe(false);
+  });
   it('the arch has an opening at the bottom', () => {
     const p = archP(-40, -60, 80, 60, 10);
     const inside = (x: number, y: number) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
