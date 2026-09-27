@@ -10,17 +10,19 @@
 
 # Agent Pets
 
-Animated pets that live in the Windows 11 taskbar and show what your coding agents are doing: **Claude Code**, **OpenAI Codex** and **Agent Router** tasks. Each session gets its own pet. The pet codes at a desk, types commands into a terminal, reads files, catches web pages with a butterfly net, waves when it needs you, dances when it's done, and naps when idle. Progress, context usage and rate limits show up next to it.
+Animated pets that live in the Windows 11 taskbar and show what your coding agents are doing: **Claude Code**, **OpenAI Codex**, **opencode** and **Agent Router** tasks, plus any other tool through a small local API. Each session gets its own pet. The pet codes at a desk, types commands into a terminal, reads files, catches web pages with a butterfly net, waves when it needs you, dances when it's done, and naps when idle. Progress, context usage and rate limits show up next to it.
 
 <p align="center">
   <img src="docs/images/taskbar.png" alt="Five pets in the taskbar: a knocked-out Codex robot after an error, a Codex robot presenting a web page, Clawd waving because it needs you, a Codex robot with the Agent Router badge, Clawd typing at a desk; a +2 badge and rate-limit bars" width="900">
 </p>
 
-> **Status: public beta (0.7).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
+> **Status: public beta (0.10).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
 
 ## Highlights
 
-- **One pet per session.** Clawd for Claude Code, Kodek for Codex. Their pose follows the session: thinking, editing, running commands, reading, searching, browsing, delegating to subagents, waiting for you, done, error, idle, asleep.
+- **One pet per session.** Clawd for Claude Code, Kodek for Codex, a graphite terminal block with `>` `_` eyes for opencode, and a round blob in its own colour with the first letter of its name for any other agent. Their pose follows the session: thinking, editing, running commands, reading, searching, browsing, delegating to subagents, waiting for you, done, error, idle, asleep.
+- **Agent, model and program.** The pet belongs to the agent that runs the loop (Claude Code, Codex, opencode…); the tooltip and panel name the model it talks to and the program you drive it from: "Claude Code · Opus 5.5 · t3code", "opencode · GPT-6 Sol · VS Code". Programs such as t3code, VS Code, Cursor, Zed or JetBrains IDEs are found by walking up the agent's process tree, and "Przejdź" (Go) brings their window forward.
+- **A door for other agents.** Any tool can report its state with one HTTP call or `hook.exe report` and gets a pet of its own. See [Door for other agents](#door-for-other-agents).
 - **Everything at a glance.** Task progress under each pet, 5-hour and weekly limits for Claude and Codex next to them, a "+N" badge when the taskbar runs out of room. Pets that wait for you never get hidden.
 - **Panel and "Przejdź" (Go).** Click a pet for all your sessions and limits with reset times; one click takes you back to the session: the Claude or Codex app, its terminal window, or a new terminal that resumes it.
 - **Seven looks and two ways to move.** Sticker (like the app icon), Sketch, Clean, Pixel art, Neon, Ink and Pastel, all readable at taskbar size, plus a Dynamic motion mode with anime-inspired scenes: a punch barrage on the keyboard with a final BAM!, ninja hand seals before a command, a detective with a giant magnifier, Shikamaru-style thinking, a thunder dash for the web, a summoning seal for subagents, Hollow Purple while compacting, and particles, impact frames and speed lines. Pick one look for everyone or a different one per agent, and preview every animation in Settings.
@@ -62,18 +64,22 @@ The interface is in English and Polish and follows the Windows display language;
 | **Taskbar layout**: position, monitor, floating window, background, size, order; remove pets and sessions | ✅ from 0.7 | Settings → Taskbar, right-click a pet |
 | **Speech bubbles** (questions, actions) and **subagents** (mini pets, panel rows, Agent Router tasks as children) | ✅ from 0.8 | Settings → Taskbar → Bubbles and subagents |
 | **Statistics**: podium, counters, race, activity calendar, badges | ✅ from 0.9 | 📊 in the panel, or Statistics in the tray menu |
-| More agents (opencode, Gemini CLI and others) | ⏳ Next phases | see [Roadmap](#roadmap) |
+| **opencode** sessions: states, tools, permission requests and questions, model | ✅ from 0.10 | Settings → Apps → opencode, see [opencode](#opencode) |
+| **Programs**: t3code, VS Code, Cursor, Zed, JetBrains IDEs in the subtitle, with an icon and jump to their window | ✅ from 0.10 | automatic |
+| **Model** in the tooltip and panel (Opus 5.5, GPT-6 Sol, GLM-5.3…) | ✅ from 0.10 | automatic |
+| **Door for other agents** (HTTP and `hook.exe report`) | ✅ from 0.10 | [Door for other agents](#door-for-other-agents) |
+| Antigravity and GitHub Copilot (0.11), Cursor and Grok Build (0.12) with their own pets | ⏳ Next | see [Roadmap](#roadmap) |
 
 ## Install
 
 1. Download `Agent.Pets_<version>_x64-setup.exe` from [GitHub Releases](https://github.com/Marczelloo/agent-pets/releases).
 2. Run it. The installer is not code-signed yet, so Windows SmartScreen may warn you: choose **More info → Run anyway**. It installs for your user only, no administrator rights.
 3. The first-run wizard asks:
-   - which apps get pets. It shows the ones it found: Claude Code (`~/.claude`), Codex (`~/.codex`), Agent Router (`~/.agent-router`). For Claude Code it installs hooks in `~/.claude/settings.json` and keeps a backup;
+   - which apps get pets. It shows the ones it found: Claude Code (`~/.claude`), Codex (`~/.codex`), Agent Router (`~/.agent-router`), opencode (`~/.config/opencode`). For Claude Code it installs hooks in `~/.claude/settings.json` and keeps a backup; for opencode it adds a plugin file, `~/.config/opencode/plugins/agent-pets.js`;
    - whether to fetch Claude plan limits from Anthropic (off by default, see [Claude rate limits](#claude-rate-limits));
    - notifications and starting with Windows;
    - the look: one of seven styles and calm or dynamic motion, from a live gallery.
-4. Restart open Claude Code sessions so they pick up the hooks.
+4. Restart open Claude Code and opencode sessions so they pick up the hooks and the plugin.
 
 Change anything later in **Settings**: right-click the tray icon, or the ⚙ button in the panel. Running Agent Pets again from the Start menu opens Settings too.
 
@@ -223,6 +229,53 @@ The status file holds only a short title per task, never the task text, diffs or
 
 From 0.8, a task delegated by a Claude Code session (`codex_delegate`, `codex_continue`, `codex_review`) or by a Codex thread belongs to that session: it shows as a mini pet next to it and as a row under it in the panel. The link (task id → session id, nothing else) is kept in `~/.agent-pets/links.json` for 7 days so it survives a restart. A task whose session has ended, or one started by hand, stays a pet of its own.
 
+### opencode
+
+Turn opencode on in Settings → Apps (or in the wizard). Agent Pets writes one file, `~/.config/opencode/plugins/agent-pets.js`, marked as ours on its first line; turning opencode off deletes it, and a file with that name that is not ours is never touched. Restart open opencode sessions afterwards.
+
+The plugin runs inside opencode and sends the session state, the kind of tool, a short action text (file name, command, search pattern or host), the text of a permission request or question, and the model name to `127.0.0.1` with the token from `~/.agent-pets/endpoint.json`. It never sends messages, answers or file contents. Each call gives up after 300 ms and never throws, so opencode works the same when Agent Pets is closed.
+
+### Door for other agents
+
+Agents without their own integration can still get a pet. Send their state to the widget:
+
+```powershell
+& "$HOME\.agent-pets\hook.exe" report --agent kilo --name "Kilo CLI" --session abc --state working --tool edit --title "Refactor"
+& "$HOME\.agent-pets\hook.exe" report --agent kilo --session abc --state needs_you --question "Deploy now?"
+& "$HOME\.agent-pets\hook.exe" report --agent kilo --session abc --state ended
+```
+
+or, without `hook.exe`, over HTTP:
+
+```powershell
+$ep = Get-Content "$HOME\.agent-pets\endpoint.json" | ConvertFrom-Json
+$body = @{ agent = "kilo"; name = "Kilo CLI"; session = "abc"; state = "done" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($ep.port)/v1/events/generic" `
+  -Headers @{ Authorization = "Bearer $($ep.token)" } -ContentType "application/json" -Body $body
+```
+
+```bash
+EP="$HOME/.agent-pets/endpoint.json"
+PORT=$(grep -o '"port": *[0-9]*' "$EP" | grep -o '[0-9]*$')
+TOKEN=$(grep -o '"token": *"[^"]*"' "$EP" | cut -d'"' -f4)
+curl -s -X POST "http://127.0.0.1:$PORT/v1/events/generic" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"agent":"kilo","session":"abc","state":"working","tool":"bash","title":"npm test"}'
+```
+
+| Field | Required | Value |
+|---|---|---|
+| `agent` | yes | your agent's id, `[a-z0-9-]{1,32}`. Names of agents with their own integration (`claude`, `codex`, `opencode`, …) are refused |
+| `session` | yes | session id, `[A-Za-z0-9_.:-]{1,128}` |
+| `state` | yes | `thinking`, `working`, `needs_you`, `done`, `error`, `idle`, `sleep`, `compacting`, `ended` |
+| `name` | no | name to show (40 characters) |
+| `tool` | no | with `working`: `edit`, `bash`, `read`, `grep`, `web`, `agent`, `mcp`, `other` |
+| `title`, `question`, `cwd`, `model` | no | session title, the question while `needs_you`, working folder, model id |
+| `app` | no | program: `terminal`, `vscode`, `t3code`, `cursor`, `antigravity`, `zed`, `jetbrains`, `other` |
+| `pid` | no | the agent's process; when it exits, the pet says goodbye and jump focuses its window |
+
+The widget answers `204` when it took the event, `400` for a bad field, `401` for a wrong token and `404` when the door is off (Settings → Apps → Door for other agents). `hook.exe report` prints the reason and exits with code 2 on any of these. Text is cut to size and shown as plain text. A session without events falls asleep and ends like any other.
+
 ### See the prototype
 
 Open `prototype/index.html` in a browser. Buttons switch states and tools, and the bottom strip shows the real taskbar size.
@@ -231,6 +284,8 @@ Open `prototype/index.html` in a browser. Buttons switch states and tools, and t
 
 ```
 Claude Code ──hook.exe──HTTP (127.0.0.1 + token)──┐
+opencode ──plugin──HTTP (127.0.0.1 + token)───────┤
+any tool ──hook.exe report / HTTP (door)──────────┤
 Codex  ──~/.codex/sessions/**/rollout-*.jsonl──────┼─► adapters ─► state machine ─► taskbar stage
 Claude transcripts + ~/.claude/sessions registry ──┤
 Agent Router ──~/.agent-router/status.json─────────┘
@@ -241,16 +296,17 @@ Agent Router ──~/.agent-router/status.json─────────┘
   - the state machine: `thinking`, `working:<tool>`, `needs_you`, `done`, `error`, `idle`, `sleep`, `compacting` and `ended`, with a minimum time per state and inactivity timeouts;
   - the Claude hook, transcript and registry adapters;
   - the Codex rollout parser;
+  - the opencode and door adapters, and the process-tree walk that finds the program hosting an agent;
   - an incremental file tailer, a file watcher, the local ingest server and the hooks installer.
-- **`hook.exe`** is the Claude Code hook client and, with `--agent-pets-statusline`, the statusline pass-through.
+- **`hook.exe`** is the Claude Code hook client, with `--agent-pets-statusline` the statusline pass-through, and with `report` the command-line side of the door.
 - **`pets-cli`** runs everything as a terminal app, with record and replay.
 - **`app/`** is the Tauri app. Rust embeds the stage window in the taskbar (`SetParent` into `Shell_TrayWnd`), measures the free space with UI Automation, follows DPI and Explorer restarts, reads the mouse natively and shows the tooltip window. The TypeScript side draws the pets on a Canvas at 30 fps and pauses while the taskbar is hidden or a fullscreen app runs. The renderer is a 1:1 port of the prototype, checked call-by-call against it in tests.
-- **Privacy:** session data stays on your machine. Outgoing connections: the update check (`latest.json` and the installer from this repository's GitHub releases, nothing is sent; off in Settings → General) and the opt-in plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. From transcripts only titles, task progress and token counters are kept, never message content. Bubbles, tooltips and the panel show the file names, commands and search patterns an agent is working on and the question it asks; this text lives only in memory and is never written to disk, logs, the diagnostics report or a `pets-cli --record` file. Statistics are kept in `~/.agent-pets/stats.json`: numbers only (tokens, work time, questions, tool calls per hour and model), the project folder names, model names and the paths of the transcripts already read; never message content, commands, file names or session titles.
+- **Privacy:** session data stays on your machine. Outgoing connections: the update check (`latest.json` and the installer from this repository's GitHub releases, nothing is sent; off in Settings → General) and the opt-in plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. The opencode plugin and the door send only states, tool kinds, short action texts, questions and model names over that local connection; text from the door is treated as untrusted, cut to size and shown as plain text. From transcripts only titles, task progress and token counters are kept, never message content. Bubbles, tooltips and the panel show the file names, commands and search patterns an agent is working on and the question it asks; this text lives only in memory and is never written to disk, logs, the diagnostics report or a `pets-cli --record` file. Statistics are kept in `~/.agent-pets/stats.json`: numbers only (tokens, work time, questions, tool calls per hour and model), the project folder names, model names and the paths of the transcripts already read; never message content, commands, file names or session titles.
 
 ## Project layout
 
 ```
-crates/pets-core    core library (model, state machine, adapters, ingest, watcher, settings, integrations)
+crates/pets-core    core library (model, state machine, adapters, ingest, watcher, settings, integrations); assets/ holds the opencode plugin
 crates/pets-hook    hook.exe
 crates/pets-cli     pets-cli (run / replay / install-hooks / uninstall-hooks / install-statusline / uninstall-statusline)
 app/                Tauri app: taskbar stage, renderer, skins, tooltip, panel and settings (React), jump, notifications, installer
@@ -273,7 +329,9 @@ tools/              fixture anonymizer and its test, CPU measurement
 8. ~~0.7: automatic updates, removing pets and sessions by hand, taskbar layout (position, monitor, floating window, background, size, order)~~
 9. ~~0.8: speech bubbles above the pets, subagents (Claude Code, Codex, Agent Router tasks as children)~~
 10. ~~0.9: statistics with a podium, counters, a race, an activity calendar and badges~~
-11. **Next:** more agents (opencode, t3code, zcode, Gemini CLI, Grok)
+11. ~~0.10: opencode, programs (t3code, editors) in the subtitle and jump, the model in text, a door for any agent, the blob pet~~
+12. **Next:** 0.11 Antigravity and GitHub Copilot, 0.12 Cursor and Grok Build, each with its own pet
+13. Later, in this order: ZCode, Kilo CLI, Qwen Code, Goose, Junie, Kiro, Cline (the door works for them today)
 
 ## License
 
