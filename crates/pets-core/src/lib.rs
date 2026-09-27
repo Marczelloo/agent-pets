@@ -4,6 +4,7 @@ pub mod codex;
 pub mod dismiss;
 pub mod endpoint;
 pub mod hooks_install;
+pub mod host;
 pub mod i18n;
 pub mod ingest;
 pub mod links;

@@ -73,6 +73,14 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
     e.data.cwd = p.get("cwd").and_then(|v| v.as_str()).map(String::from);
 
     let task_tool = matches!(tool_name, "TaskCreate" | "TaskUpdate" | "TaskList" | "TaskGet");
+    // program się nie zmienia, ale sesja mogła powstać przed włączeniem widżetu, więc też przy każdym prompcie
+    if matches!(name, "SessionStart" | "UserPromptSubmit") {
+        if let Some(h) = &env.host {
+            e.data.app = Some(h.app);
+            e.data.app_name = h.name.clone();
+            e.data.host_pid = Some(h.pid);
+        }
+    }
     match name {
         "SessionStart" => e.kind = Kind::SessionStart,
         "UserPromptSubmit" => e.kind = Kind::Prompt,
@@ -201,11 +209,25 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn env(v: serde_json::Value) -> HookEnvelope { HookEnvelope { ts: 1000, ppid: Some(77), payload: v } }
+    fn env(v: serde_json::Value) -> HookEnvelope { HookEnvelope { ts: 1000, ppid: Some(77), payload: v, host: None } }
     fn te(e: &HookEnvelope) -> Vec<Event> { to_events(e, Lang::Pl, None) }
     fn fixture(name: &str) -> HookEnvelope {
         let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/claude/hooks").join(name);
         env(serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap())
+    }
+
+    #[test]
+    fn the_host_program_rides_on_session_start_and_prompts() {
+        let host = crate::host::Host { app: App::T3code, name: None, pid: 9 };
+        for name in ["SessionStart", "UserPromptSubmit"] {
+            let mut x = env(json!({"hook_event_name": name, "session_id": "s", "cwd": "C:\\p", "prompt": "a", "source": "startup"}));
+            x.host = Some(host.clone());
+            let e = te(&x);
+            assert_eq!((e[0].data.app, e[0].data.host_pid), (Some(App::T3code), Some(9)), "{name}");
+        }
+        let mut x = env(json!({"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Edit", "tool_input": {}}));
+        x.host = Some(host);
+        assert_eq!(te(&x)[0].data.app, None, "reszta zdarzeń bez programu");
     }
 
     #[test]

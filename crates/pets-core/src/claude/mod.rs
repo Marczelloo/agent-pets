@@ -14,6 +14,9 @@ pub struct HookEnvelope {
     pub ts: i64,
     pub ppid: Option<u32>,
     pub payload: serde_json::Value,
+    /// program, w którym działa agent (0.10); starsze `hook.exe` go nie wysyłają
+    #[serde(default)]
+    pub host: Option<crate::host::Host>,
 }
 
 /// Dane statusline Claude Code (CLI) przesłane przez `hook.exe --agent-pets-statusline`.

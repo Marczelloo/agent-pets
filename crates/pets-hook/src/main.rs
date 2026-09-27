@@ -5,7 +5,7 @@
 //! wypisuje wyłącznie wyjście dotychczasowej komendy statusline użytkownika, bajt w bajt.
 use pets_core::claude::{HookEnvelope, StatuslineEnvelope};
 use pets_core::endpoint::Endpoint;
-use pets_core::{pid, statusline_install, time};
+use pets_core::{host, pid, statusline_install, time};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -34,7 +34,13 @@ fn post(path_suffix: &str, body: serde_json::Value) -> Option<()> {
 
 fn run() -> Option<()> {
     let payload: serde_json::Value = serde_json::from_slice(&read_stdin()).ok()?;
-    let env = HookEnvelope { ts: time::now_ms(), ppid: pid::agent_pid(), payload };
+    let ppid = pid::agent_pid();
+    // program-gospodarz tylko tam, gdzie rdzeń go czyta: jeden zrzut procesów na start sesji i prompt
+    let host = match payload.get("hook_event_name").and_then(|v| v.as_str()) {
+        Some("SessionStart" | "UserPromptSubmit") => ppid.and_then(|p| host::host_of(&host::ProcTable::snapshot(), p)),
+        _ => None,
+    };
+    let env = HookEnvelope { ts: time::now_ms(), ppid, payload, host };
     post("/v1/events/claude", serde_json::to_value(&env).ok()?)
 }
 
