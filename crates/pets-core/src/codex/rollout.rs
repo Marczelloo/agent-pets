@@ -54,7 +54,7 @@ pub fn js_tool_calls(src: &str) -> Vec<String> {
     out
 }
 
-const ASK: [&str; 3] = ["request_user_input", "request_user_input_async", "request_permissions"];
+pub(crate) const ASK: [&str; 3] = ["request_user_input", "request_user_input_async", "request_permissions"];
 /// Pytanie, które nie blokuje narzędzia: wraca od razu, a odpowiedź przychodzi jako nowa tura.
 const ASYNC_ASK: &str = "request_user_input_async";
 
