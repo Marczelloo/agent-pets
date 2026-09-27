@@ -167,6 +167,17 @@ describe('panel', () => {
       onJump={() => {}} onSettings={() => {}} />);
     expect(html).toContain('aria-label="Ustawienia"');
   });
+  it('panel: a door agent name is text, never markup, and a program gets its icon', () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    const sess = { id: 'generic:kilo:a', agent: 'other' as const, agent_name: evil, origin: 'cli' as const, title: evil, cwd: '', state: 'working' as const,
+      tool: 'bash' as const, progress: null, context: null, started_at: 0, last_activity: 0, state_since: 0, turn_started_at: null,
+      jump: { pid: null, session_id: 'generic:kilo:a', cwd: '', app: 'vscode' as const } };
+    const html = renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0} status={null} focusId={null}
+      onJump={() => {}} onSettings={() => {}} />);
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img');
+    expect(html).toMatch(/<svg[^>]*class="host-icon"/);
+  });
   it('taskbar tab: bubbles and subagents section with three switches', () => {
     const s = defaultSettings();
     const html = renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab="stage" onTab={() => {}}

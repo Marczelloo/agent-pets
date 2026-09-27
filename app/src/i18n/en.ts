@@ -12,6 +12,18 @@ export const en: Dict = {
     grok: 'Grok',
     other: 'Agent',
   },
+  app: {
+    terminal: 'terminal',
+    claude_desktop: 'Claude app',
+    codex_app: 'Codex app',
+    vscode: 'VS Code',
+    t3code: 't3code',
+    cursor: 'Cursor',
+    antigravity: 'Antigravity',
+    zed: 'Zed',
+    jetbrains: 'JetBrains',
+    other: 'program',
+  },
   origin: {
     cli: 'CLI',
     desktop: 'app',

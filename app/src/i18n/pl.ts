@@ -23,6 +23,18 @@ export const pl = {
     grok: 'Grok',
     other: 'Agent',
   },
+  app: {
+    terminal: 'terminal',
+    claude_desktop: 'aplikacja Claude',
+    codex_app: 'aplikacja Codex',
+    vscode: 'VS Code',
+    t3code: 't3code',
+    cursor: 'Cursor',
+    antigravity: 'Antigravity',
+    zed: 'Zed',
+    jetbrains: 'JetBrains',
+    other: 'program',
+  },
   origin: {
     cli: 'CLI',
     desktop: 'aplikacja',

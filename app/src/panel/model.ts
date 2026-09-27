@@ -3,6 +3,7 @@ import { actionLabel, formatReset } from '../tooltip/text';
 import { isLive, routerHealth } from '../stage/router';
 import type { Limit, Session, UpdateStatus } from '../types';
 import { t } from '../i18n';
+import { agentLabel, hostLabel, modelLabel } from '../model-label';
 
 const URGENT = new Set(['needs_you', 'error']);
 
@@ -59,7 +60,7 @@ export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
 const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? '';
 
 export function sessionSubtitle(s: Session): string {
-  return [t().agent[s.agent] ?? s.agent, t().origin[s.origin] ?? s.origin, basename(s.cwd)].filter(Boolean).join(' · ');
+  return [agentLabel(s), modelLabel(s.model), hostLabel(s), basename(s.cwd)].filter(Boolean).join(' · ');
 }
 
 export function progressText(s: Session): string | null {

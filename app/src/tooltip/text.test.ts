@@ -25,7 +25,7 @@ describe('petTooltip', () => {
   it('shows title, agent, action, progress, context and quiet time', () => {
     expect(petTooltip(base, 220_000)).toEqual({
       title: 'Widżet w pasku',
-      subtitle: 'Claude Code · CLI',
+      subtitle: 'Claude Code',
       lines: ['Uruchamia komendy', 'Zadania: 2/5', 'Kontekst: 25%', 'Ostatnia aktywność: 2 min temu'],
     });
   });
@@ -42,6 +42,16 @@ describe('petTooltip', () => {
     const lines = petTooltip({ ...base, context: { used: 5, max: 0 }, progress: { done: 0, total: 0 } }, 100_000).lines;
     expect(lines.some(l => l.startsWith('Kontekst'))).toBe(false);
     expect(lines.some(l => l.startsWith('Zadania'))).toBe(false);
+  });
+  it('subtitles follow agent · model · program (spec 2)', () => {
+    const j = (app: Session['jump']['app']) => ({ pid: null, session_id: 's', cwd: '', app });
+    const sub = (p: Partial<Session>) => petTooltip({ ...base, ...p }, 0).subtitle;
+    expect(sub({ model: 'claude-opus-5-5', jump: j('terminal') })).toBe('Claude Code · Opus 5.5');
+    expect(sub({ model: 'glm-5.3' })).toBe('Claude Code · GLM-5.3');
+    expect(sub({ model: 'claude-opus-5-5', jump: j('t3code') })).toBe('Claude Code · Opus 5.5 · t3code');
+    expect(sub({ agent: 'opencode', model: 'gpt-6', jump: j('t3code') })).toBe('opencode · GPT-6 · t3code');
+    expect(sub({ agent: 'cursor', model: 'claude-sonnet-5', jump: j('cursor') })).toBe('Cursor · Sonnet 5 · Cursor');
+    expect(sub({ agent: 'other', agent_name: 'Kilo CLI' })).toBe('Kilo CLI');
   });
   it('names origins and unknown values safely', () => {
     expect(petTooltip({ ...base, agent: 'codex', origin: 'router' }, 0).subtitle).toBe('Codex · Agent Router');

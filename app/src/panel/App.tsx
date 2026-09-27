@@ -9,6 +9,8 @@ import { GearIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 import { resolveLang, setLang, setSystemLang, t } from '../i18n';
+import { hostLabel } from '../model-label';
+import { HostIcon } from './HostIcon';
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
   isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
@@ -73,7 +75,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
             {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} music={!!media?.playing} /> : <div className="pet" />}
             <div className="info">
               <div className="title">{petTooltip(s, nowMs).title}</div>
-              <div className="sub">{sessionSubtitle(s)}</div>
+              <div className="sub">{s.jump.app && hostLabel(s) && <HostIcon app={s.jump.app} />}{sessionSubtitle(s)}</div>
               <div className="meta">
                 <span className="state">{actionLabel(s, media)}</span>
                 {kids.length > 0 && <span>{t().panel.subagents(kids.length)}</span>}

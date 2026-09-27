@@ -4,6 +4,7 @@ import { listens } from '../stage/sceneFor';
 import { clampPct, progressFraction } from '../stage/hud';
 import { routerLine } from '../stage/router';
 import { t, lang } from '../i18n';
+import { agentLabel, hostLabel, modelLabel } from '../model-label';
 
 const cut = (s: string, n: number) => ([...s].length <= n ? s : [...s].slice(0, n - 1).join('') + '…');
 const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? '';
@@ -50,7 +51,7 @@ export function petTooltip(s: Session, nowMs: number, media?: Media | null): Too
   lines.push(t().tooltip.lastActivity(formatAgo(nowMs - s.last_activity)));
   return {
     title: cut(s.title || basename(s.cwd) || t().tooltip.untitled, 80),
-    subtitle: `${t().agent[s.agent] ?? s.agent} · ${t().origin[s.origin] ?? s.origin}`,
+    subtitle: [agentLabel(s), modelLabel(s.model), hostLabel(s)].filter(Boolean).join(' · '),
     lines,
   };
 }

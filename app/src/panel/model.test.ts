@@ -27,6 +27,7 @@ describe('panel model', () => {
   it('describes a session', () => {
     const x = { ...s('a', 'working', 0), tool: 'bash' as const, origin: 'desktop' as const, progress: { done: 2, total: 5 }, context: { used: 50, max: 200 } };
     expect(sessionSubtitle(x)).toBe('Claude Code · aplikacja · a');
+    expect(sessionSubtitle({ ...x, origin: 'cli', model: 'gpt-6-sol', agent: 'opencode', jump: { ...x.jump, app: 'vscode' } })).toBe('opencode · GPT-6 Sol · VS Code · a');
     expect(progressText(x)).toBe('2/5');
     expect(contextText(x)).toBe('25%');
     expect(progressText({ ...x, progress: { done: 0, total: 0 } })).toBeNull();
