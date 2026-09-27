@@ -5,6 +5,7 @@ pub mod book;
 pub mod claude;
 pub mod codex;
 pub mod scan;
+pub mod summary;
 
 pub use active::active_tick;
 pub use book::Book;
