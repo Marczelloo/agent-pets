@@ -125,11 +125,19 @@ fn click(app: &AppHandle, h: &Hit) {
     }
 }
 
+/// Dymek pod kursorem po zmianie (`Some(nowy)`), albo `None`, gdy nic się nie zmieniło.
+pub fn hover_change(prev: &Option<String>, target: Option<&Hit>) -> Option<Option<String>> {
+    let now = target.map(|h| h.id.clone());
+    (now != *prev).then_some(now)
+}
+
 /// Kursor nad dymkiem: okno łapie mysz (bez fokusu); poza dymkami przepuszcza kliknięcia do okien pod spodem.
 fn spawn_pointer(app: AppHandle) {
     std::thread::spawn(move || {
         let mut was_down = false;
         let mut over = false;
+        // dymek pod kursorem rozwija się do pełnej treści, jak po najechaniu na zwierzaka
+        let mut hovering: Option<String> = None;
         loop {
             std::thread::sleep(Duration::from_millis(30));
             let Some(win) = app.get_webview_window("bubbles") else { continue };
@@ -138,6 +146,10 @@ fn spawn_pointer(app: AppHandle) {
             let Some(c) = shell::cursor_in(&win) else { continue };
             let target = hit(&hits, c.x, c.y).cloned();
             if target.is_some() != over { over = target.is_some(); shell::set_passthrough(&win, !over); }
+            if let Some(h) = hover_change(&hovering, target.as_ref()) {
+                hovering = h;
+                let _ = app.emit_to("bubbles", "pets://bubble-hover", hovering.clone());
+            }
             if c.left && !was_down {
                 if let Some(t) = &target {
                     let a = app.clone();
@@ -196,6 +208,15 @@ mod tests {
         b.set_hits(vec![Hit { id: "a".into(), kind: Kind::Action, x: 0.0, y: 0.0, w: 10.0, h: 10.0 }]);
         assert!(b.showing("a"));
         assert!(!b.showing("b"));
+    }
+
+    #[test]
+    fn the_bubble_under_the_cursor_is_reported_once_per_change() {
+        let h = Hit { id: "a".into(), kind: Kind::Question, x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
+        assert_eq!(hover_change(&None, Some(&h)), Some(Some("a".into())));
+        assert_eq!(hover_change(&Some("a".into()), Some(&h)), None, "bez zmiany nic nie wysyłamy");
+        assert_eq!(hover_change(&Some("a".into()), None), Some(None));
+        assert_eq!(hover_change(&None, None), None);
     }
 
     #[test]

@@ -32,6 +32,8 @@ let at: StagePets = { pets: [], width: 0, zoom: 1 };
 let visible = true, moving = false, raf = 0, lastHits = '';
 /** zwierzak pod kursorem, którego dymek jest rozwinięty (od Rust, zamiast tooltipa) */
 let hovered: string | null = null;
+/** dymek pod kursorem (od Rust, wątek kursora okna dymków): też się rozwija */
+let bubbleHovered: string | null = null;
 const picker = new Picker();
 const live = new Map<string, Live>();
 
@@ -46,7 +48,7 @@ function refresh(): void {
   const wants = on ? picker.update(snap, at.pets, lookOf, stage.bubbles, now) : [];
   const keys = new Set(wants.map(keyOf));
   for (const w of wants) {
-    const k = keyOf(w), l = live.get(k), wide = hovered === w.id && w.full !== w.text;
+    const k = keyOf(w), l = live.get(k), wide = (hovered === w.id || bubbleHovered === w.id) && w.full !== w.text;
     const box = () => measureBubble(ctx, wide ? w.full : w.text, w.look, at.zoom, devicePixelRatio || 1, wide);
     if (l) { if (l.wide !== wide) { l.wide = wide; l.box = box(); } l.want = w; l.gone = null; }
     else live.set(k, { want: w, box: box(), born: now, gone: null, wide });
@@ -106,6 +108,7 @@ void listen<StagePets>('pets://stage-pets', e => { at = e.payload; refresh(); })
 void listen<boolean>('pets://visibility', e => { visible = e.payload; refresh(); });
 void listen<boolean>('pets://moving', e => { moving = e.payload; refresh(); });
 void listen<string | null>('pets://hover', e => { if (hovered !== e.payload) { hovered = e.payload; refresh(); } });
+void listen<string | null>('pets://bubble-hover', e => { if (bubbleHovered !== e.payload) { bubbleHovered = e.payload; refresh(); } });
 const onSettings = (s: Settings) => { setLang(resolveLang(s.language ?? 'auto')); pets = s.pets; stage = s.stage ?? defaultStage(); refresh(); };
 void listen<Settings>('pets://settings', e => onSettings(e.payload));
 void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); onSettings(v.settings); });
