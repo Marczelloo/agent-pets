@@ -9,7 +9,7 @@ Zwierzaki dla kolejnych agentów, poprawny podpis i skok dla programów, które 
 Zakres:
 1. agenci: **opencode, Antigravity, GitHub Copilot, Cursor, Grok Build**;
 2. oś „program” (gospodarz sesji) z wykrywaniem, podpisem i skokiem;
-3. furtka: ogólna trasa w endpoincie i komenda `agent-pets report`;
+3. furtka: ogólna trasa w endpoincie i komenda `hook.exe report`;
 4. maskotki nowych agentów (styl Clean) i uniwersalny zwierzak dla nieznanych agentów;
 5. model w tooltipie i panelu.
 
@@ -158,7 +158,7 @@ Każde wydanie działa samodzielnie i kończy się testem na żywo. Do testów 0
 - Wymagane: `agent` (`[a-z0-9-]{1,32}`), `session`, `state` (wartości `State`). Reszta opcjonalna. Nieznane pola są ignorowane, błędne dają 400.
 - `agent` równy znanemu agentowi (`claude`, `codex`, `opencode`…) jest odrzucany (400): znani agenci mają własne trasy, furtka nie może się pod nich podszywać.
 - Sesja furtki ma id `generic:<agent>:<session>`, `Agent::Other`, `agent_name` = `name` albo `agent`.
-- `agent-pets report --agent <id> --session <id> --state <stan> [--name --tool --title --cwd --model --question]` w `pets-cli`: to samo z linii poleceń, dla skryptów.
+- `hook.exe report --agent <id> --session <id> --state <stan> [--name --tool --title --cwd --model --question]`: to samo z linii poleceń, dla skryptów. W `hook.exe`, bo `pets-cli` nie trafia do instalatora; przy włączonej furtce aplikacja trzyma kopię w `~/.agent-pets/hook.exe` (stała ścieżka do dokumentacji).
 - Dokumentacja: sekcja w README z przykładem w PowerShell i w bashu.
 - Wyłączenie: `integrations.generic = false` → trasa zwraca 404.
 
@@ -177,7 +177,7 @@ Każde wydanie działa samodzielnie i kończy się testem na żywo. Do testów 0
   - mapa `originator` Codexa (w tym nieznany → `Other` z nazwą) i mapa programów po nazwie procesu;
   - przejście po procesach: limit poziomów, brak rodzica;
   - furtka: poprawne zdarzenie, brak pól wymaganych, zły `agent`, podszycie pod znanego agenta, za duże ciało, wyłączona trasa, zły token;
-  - `report` w `pets-cli` buduje to samo ciało co przykład z 8;
+  - `hook.exe report` buduje to samo ciało co przykład z 8;
   - nazwa modelu do wyświetlenia;
   - integracja opencode: instalacja, stan, odinstalowanie przywraca plik.
 - **TS:**
