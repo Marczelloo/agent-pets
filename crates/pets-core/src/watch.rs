@@ -1,33 +1,41 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
+use crate::claude::subagent::SubagentParser;
 use crate::claude::transcript::TranscriptParser;
+use crate::i18n::Lang;
 use crate::codex::rollout::RolloutParser;
 use crate::model::Event;
 use crate::tail::TailReader;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FileKind { ClaudeTranscript, CodexRollout }
+pub enum FileKind { ClaudeTranscript, ClaudeSubagent, CodexRollout }
 
 pub fn kind_of(path: &Path) -> Option<FileKind> {
     if path.extension().and_then(|e| e.to_str()) != Some("jsonl") { return None; }
     let name = path.file_name()?.to_str()?;
     if name.starts_with("rollout-") { return Some(FileKind::CodexRollout); }
+    let in_subagents = path.parent().and_then(|d| d.file_name()).map(|d| d == "subagents").unwrap_or(false);
+    if in_subagents && path.components().any(|c| c.as_os_str() == "projects") { return Some(FileKind::ClaudeSubagent); }
     if path.components().any(|c| c.as_os_str() == "projects") { return Some(FileKind::ClaudeTranscript); }
     None
 }
 
-enum Parser { Claude(TranscriptParser), Codex(RolloutParser) }
+enum Parser { Claude(TranscriptParser), Subagent(SubagentParser), Codex(RolloutParser) }
 
 /// Śledzone pliki transkryptów i rolloutów, każdy z własnym czytnikiem końcówki i parserem.
-pub struct Sources { tails: HashMap<PathBuf, (TailReader, Parser)> }
+pub struct Sources {
+    tails: HashMap<PathBuf, (TailReader, Parser)>,
+    /// język tekstów akcji z plików
+    pub lang: Lang,
+}
 
 impl Default for Sources {
     fn default() -> Self { Self::new() }
 }
 
 impl Sources {
-    pub fn new() -> Self { Sources { tails: HashMap::new() } }
+    pub fn new() -> Self { Sources { tails: HashMap::new(), lang: crate::i18n::system() } }
 
     pub fn track(&mut self, path: &Path, from_start: bool) -> bool {
         if self.tails.contains_key(path) { return true; }
@@ -37,7 +45,8 @@ impl Sources {
         };
         let parser = match kind {
             FileKind::ClaudeTranscript => Parser::Claude(TranscriptParser::new()),
-            FileKind::CodexRollout => Parser::Codex(RolloutParser::new()),
+            FileKind::ClaudeSubagent => Parser::Subagent(SubagentParser::new(path, self.lang)),
+            FileKind::CodexRollout => Parser::Codex(RolloutParser::with_lang(self.lang)),
         };
         self.tails.insert(path.to_path_buf(), (tail, parser));
         true
@@ -49,8 +58,14 @@ impl Sources {
         let lines = tail.read_lines().unwrap_or_default();
         lines.iter().flat_map(|l| match parser {
             Parser::Claude(p) => p.parse_line(l),
+            Parser::Subagent(p) => p.parse_line(l),
             Parser::Codex(p) => p.parse_line(l),
         }).collect()
+    }
+
+    /// Subagenci, których plik kończy się odpowiedzią: (id dziecka, czas ostatniej linii).
+    pub fn finished_subagents(&self) -> Vec<(String, i64)> {
+        self.tails.values().filter_map(|(_, p)| match p { Parser::Subagent(s) => s.finished(), _ => None }).collect()
     }
 
     pub fn poll_all(&mut self) -> Vec<Event> {
@@ -92,6 +107,21 @@ mod tests {
         assert_eq!(kind_of(Path::new(r"C:\u\.codex\sessions\2026\09\24\rollout-x.jsonl")), Some(FileKind::CodexRollout));
         assert_eq!(kind_of(Path::new(r"C:\u\.claude\projects\p\abc.jsonl")), Some(FileKind::ClaudeTranscript));
         assert_eq!(kind_of(Path::new(r"C:\u\notes.txt")), None);
+        assert_eq!(kind_of(Path::new(r"C:\u\.claude\projects\p\abc\subagents\agent-a1.jsonl")), Some(FileKind::ClaudeSubagent));
+        assert_eq!(kind_of(Path::new(r"C:\u\.claude\projects\p\abc\subagents\agent-a1.meta.json")), None);
+    }
+
+    #[test]
+    fn subagent_files_are_parsed_as_children() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("projects").join("p").join("sess").join("subagents");
+        std::fs::create_dir_all(&sub).unwrap();
+        let p = sub.join("agent-a1.jsonl");
+        std::fs::write(&p, r#"{"isSidechain":true,"agentId":"a1","sessionId":"sess","type":"user","timestamp":"2026-09-26T10:00:00.000Z","message":{"content":"x"}}"#.to_string() + "\n").unwrap();
+        let mut s = Sources::new();
+        let e = s.poll(&p);
+        assert_eq!(e[0].session_id, "sess/a1");
+        assert_eq!(e[0].data.parent.as_deref(), Some("sess"));
     }
 
     #[test]

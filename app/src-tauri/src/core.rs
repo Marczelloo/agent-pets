@@ -24,15 +24,26 @@ pub struct Snapshot {
 pub type Shared = Arc<Mutex<Snapshot>>;
 
 /// Migawka bez sesji ukrytych ręcznie (te, które od ukrycia coś zrobiły, wracają).
+/// Dziecko (subagent) jest widoczne tylko z widocznym rodzicem: ukrycie rodzica ukrywa jego dzieci.
 pub fn snapshot_of(store: &Store, now: i64, hidden: &mut Dismissed) -> Snapshot {
-    let sessions = hidden.filter(store.sessions().into_iter().cloned().collect());
+    let sessions = with_parents(hidden.filter(store.sessions().into_iter().cloned().collect()));
     Snapshot { sessions, limits: store.limits().to_vec(), now }
 }
 
+fn with_parents(mut v: Vec<Session>) -> Vec<Session> {
+    loop {
+        let ids: std::collections::HashSet<String> = v.iter().map(|s| s.id.clone()).collect();
+        let before = v.len();
+        v.retain(|s| s.parent.as_ref().map(|p| ids.contains(p)).unwrap_or(true));
+        if v.len() == before { return v; }
+    }
+}
+
 /// „Usuń nieaktywne”: ukrywa widoczne sesje w stanach bezczynnych i zwraca ich id (do „Cofnij”).
+/// Dziecka nie ukrywa się osobno: znika z rodzicem albo samo, gdy skończy.
 pub fn dismiss_inactive(store: &Store, hidden: &mut Dismissed, now: i64) -> Vec<String> {
     let ids: Vec<String> = hidden.filter(store.sessions().into_iter().cloned().collect())
-        .into_iter().filter(dismiss::inactive).map(|s| s.id).collect();
+        .into_iter().filter(|s| s.parent.is_none() && dismiss::inactive(s)).map(|s| s.id).collect();
     hidden.dismiss(&ids, now);
     ids
 }
@@ -55,6 +66,7 @@ impl Mode {
 /// Ukrywanie odpowiada listą ukrytych id (do „Cofnij”).
 pub enum CoreMsg {
     Apps(pets_core::settings::Apps),
+    Lang(Lang),
     Dismiss(Vec<String>, Sender<Vec<String>>),
     DismissInactive(Sender<Vec<String>>),
     Undismiss(Vec<String>),
@@ -113,6 +125,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     hidden.prune(now_ms());
     let mut cfg = RuntimeConfig::from_env()?;
     cfg.apps = app.state::<crate::settings::SettingsState>().get().apps;
+    cfg.lang = pets_core::i18n::current(app.state::<crate::settings::SettingsState>().get().language);
     let mut rt = Runtime::start(cfg)?;
     // limity konta Claude z serwera Anthropic (dokładne czasy resetu, bez sesji CLI), tylko za zgodą
     let (usage_tx, usage) = std::sync::mpsc::channel();
@@ -130,6 +143,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         for m in msgs.try_iter() {
             match m {
                 CoreMsg::Apps(a) => changed |= rt.set_apps(a),
+                CoreMsg::Lang(l) => rt.set_lang(l),
                 CoreMsg::Dismiss(ids, reply) => { hidden.dismiss(&ids, now); let _ = reply.send(ids); changed = true; }
                 CoreMsg::DismissInactive(reply) => { let _ = reply.send(dismiss_inactive(rt.store(), &mut hidden, now)); changed = true; }
                 CoreMsg::Undismiss(ids) => { hidden.undismiss(&ids); changed = true; }
@@ -263,5 +277,35 @@ mod tests {
         assert_eq!(state("d5"), Some(State::NeedsYou));
         assert_eq!(state("d6"), Some(State::Error));
         assert_eq!(state("d7"), Some(State::Done));
+    }
+
+    fn child(store: &mut Store, id: &str, parent: &str, ts: i64) {
+        let mut e = Event::new(Source::Claude, id, Kind::Prompt, ts);
+        e.data.parent = Some(parent.into());
+        e.data.sub = Some(SubInfo { kind: SubKind::Claude, agent_type: None, description: None, background: false });
+        store.apply(&e);
+    }
+
+    #[test]
+    fn hiding_a_parent_hides_its_children() {
+        let mut store = Store::new(Timing::default());
+        store.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 1_000));
+        store.apply(&Event::new(Source::Claude, "q", Kind::Prompt, 1_000));
+        child(&mut store, "p/a", "p", 1_000);
+        child(&mut store, "q/b", "q", 1_000);
+        let mut hidden = Dismissed::default();
+        hidden.dismiss(&["p".into()], 1_500);
+        let ids: Vec<String> = snapshot_of(&store, 1_600, &mut hidden).sessions.into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, vec!["q".to_string(), "q/b".to_string()]);
+    }
+
+    #[test]
+    fn remove_inactive_never_picks_a_child_on_its_own() {
+        let mut store = Store::new(Timing::default());
+        store.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 1_000));
+        child(&mut store, "p/a", "p", 1_000);
+        store.apply(&{ let mut e = Event::new(Source::Claude, "p/a", Kind::TurnEnd, 2_000); e.data.parent = Some("p".into()); e });
+        let gone = dismiss_inactive(&store, &mut Dismissed::default(), 3_000);
+        assert!(gone.is_empty(), "{gone:?}");
     }
 }

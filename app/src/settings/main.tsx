@@ -21,7 +21,8 @@ const demoRows: AppRow[] = [
 ];
 const demoDiag: Diagnostics = { version: '0.5.0', endpoint_port: 61234, settings_path: 'C:/Users/ja/.agent-pets/settings.json', settings_error: null,
   hook_exe: 'C:/Users/ja/.agent-pets/hook.exe', autostart_registered: true, last_seen: { claude_code: Date.now() - 20_000, codex: Date.now() - 300_000 },
-  apps: [['claude_code', true, ''], ['codex', true, ''], ['agent_router', true, '']] };
+  apps: [['claude_code', true, ''], ['codex', true, ''], ['agent_router', true, '']],
+  stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
 
 /** Karta z adresu (`settings.html#stage` z menu sceny). */
 const tabFrom = (hash: string): Tab | null => {

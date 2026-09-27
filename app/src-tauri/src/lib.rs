@@ -1,4 +1,5 @@
 mod appstate;
+mod bubbles;
 mod core;
 mod jump;
 mod media;
@@ -6,6 +7,7 @@ mod notify;
 mod panel;
 mod settings;
 mod shell;
+mod stats;
 mod system;
 mod tooltip;
 mod tray;
@@ -104,16 +106,22 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     if old.power_saving != new.power_saving { system::refresh_power(app); }
     if old.language != new.language {
         let lang = pets_core::i18n::current(new.language);
+        let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Lang(lang));
         tray::relabel(app, lang);
         if let Some(w) = app.get_webview_window("settings") { let _ = w.set_title(settings::window_title(lang)); }
     }
 }
 
+/// Ponowne uruchomienie z menu Start otwiera ustawienia; uruchomienie przez autostart Windows (aplikacja już działa,
+/// bo użytkownik włączył ją wcześniej ręcznie) nie otwiera niczego.
+fn second_launch_opens_settings(args: &[String]) -> bool { !args.iter().any(|a| a == system::AUTOSTART_ARG) }
+
 /// Wpis autostartu zgodny z ustawieniem (porównanie z rejestrem, nie z poprzednimi ustawieniami).
 /// Build deweloperski nie rejestruje się (wskazywałby `target\debug`).
 pub fn sync_autostart(on: bool) {
     if cfg!(debug_assertions) { return; }
-    if let Some(v) = system::autostart_action(on, system::autostart_at(system::RUN_KEY)) { let _ = system::set_autostart(v); }
+    let Some(cmd) = system::current_autostart_command() else { return };
+    if let Some(v) = system::autostart_action(on, system::autostart_value(system::RUN_KEY).as_deref(), &cmd) { let _ = system::set_autostart(v); }
 }
 
 /// Przy starcie: włączony Claude Code bez hooków albo ze starym `hook.exe` (aktualizacja) dostaje je ponownie.
@@ -141,7 +149,7 @@ pub fn uninstall_cli(args: &[String]) -> Option<i32> {
 pub fn run() {
     tauri::Builder::default()
         // musi być pierwszą wtyczką: drugie uruchomienie nie startuje drugiego rdzenia, tylko otwiera ustawienia
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| settings::open(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| if second_launch_opens_settings(&args) { settings::open(app) }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let prefs = settings::SettingsState::load(settings::home());
@@ -153,6 +161,8 @@ pub fn run() {
             app.manage(shell::Shell::start(app.handle())?);
             app.manage(tooltip::Tooltip::default());
             tooltip::build(app.handle())?;
+            app.manage(bubbles::Bubbles::default());
+            bubbles::build(app.handle())?;
             app.manage(panel::Panel::default());
             panel::build(app.handle())?;
             tray::build(app.handle(), app.state::<settings::SettingsState>().lang())?;
@@ -160,6 +170,8 @@ pub fn run() {
             let (core_tx, core_rx) = std::sync::mpsc::channel();
             app.manage(core::Control(std::sync::Mutex::new(core_tx)));
             core::spawn(app.handle().clone(), shared, core::Mode::from_env(), Some(snaps), core_rx);
+            app.manage(stats::StatsState::load(&settings::home()));
+            stats::spawn(app.handle().clone());
             app.manage(system::Power::default());
             system::watch_power(app.handle().clone());
             app.manage(media::MediaState::default());
@@ -178,17 +190,32 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, stage_layout, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
+            bubbles::stage_pets, bubbles::bubbles_place, bubbles::bubbles_hide, bubbles::bubbles_hits,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, system::power_get, media::media_get,
             updater::update_status, updater::update_check, updater::update_install,
-            session_dismiss, sessions_dismiss_inactive, session_undismiss
+            session_dismiss, sessions_dismiss_inactive, session_undismiss,
+            stats::stats_open, stats::stats_view, stats::stats_progress
         ])
         .build(tauri::generate_context!())
         .expect("nie udało się zbudować aplikacji Tauri")
-        .run(|_app, event| {
+        .run(|app, event| {
+            if let RunEvent::Exit = event { stats::save_now(app); }
             // Okno sceny ginie razem z paskiem przy restarcie Explorera; aplikacja ma wtedy żyć dalej.
             if let RunEvent::ExitRequested { api, code, .. } = event {
                 if code.is_none() { api.prevent_exit(); }
             }
         });
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::second_launch_opens_settings;
+
+    #[test]
+    fn a_second_launch_from_autostart_opens_nothing() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(second_launch_opens_settings(&a(&["agent-pets.exe"])), "Start menu opens settings, as before");
+        assert!(!second_launch_opens_settings(&a(&["agent-pets.exe", "--autostart"])));
+    }
 }

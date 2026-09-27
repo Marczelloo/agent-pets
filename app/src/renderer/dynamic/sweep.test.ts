@@ -5,6 +5,8 @@ import { PetPainter } from '../painter';
 import { extent, recorder, seeded } from '../testing';
 import { SCENES_DYNAMIC } from './index';
 import { CAP } from './state';
+import { MINI_SCALE } from '../../stage/minis';
+import { drawSpawn } from '../../stage/spawn';
 
 setRng(seeded(21).next);
 pen.font = 'x';
@@ -49,6 +51,20 @@ describe('dynamic sweep', () => {
         if (e.top() < top) { top = e.top(); where = `${e.where()} @${f}`; }
       }
       expect(top, `${style}/${skin}/${scene}: ${where}`).toBeGreaterThanOrEqual(-1);
+    }
+  }, 120_000);
+  it('a mini pet (55%) and its entrance stay inside the 48 px taskbar', () => {
+    for (const scene of Object.keys(SCENES_DYNAMIC)) for (const style of ['clean', 'sticker', 'pixel']) for (const skin of ['clawd', 'kodek'] as const) {
+      const p = new PetPainter(createPet(skin, scene));
+      let top = Infinity;
+      for (let f = 0; f < 30; f++) {
+        const e = extent();
+        p.frame(e.ctx, { dt: 0.1, t0: 1 + f / 10, X: 60, Y: 40, u: 0.3 * MINI_SCALE, animate: true, saving: false, reduced: false, dpr: 1, look: { style: style as never, motion: 'dynamic' } });
+        drawSpawn(e.ctx, 60, 40, 0.3 * MINI_SCALE, (f % 6) / 6, 'dynamic', style === 'pixel', 1, '#D97757');
+        drawSpawn(e.ctx, 60, 40, 0.3 * MINI_SCALE, (f % 6) / 6, 'calm', style === 'pixel', 1, '#D97757');
+        top = Math.min(top, e.top());
+      }
+      expect(top, `${style}/${skin}/${scene}`).toBeGreaterThanOrEqual(-1);
     }
   }, 120_000);
 });

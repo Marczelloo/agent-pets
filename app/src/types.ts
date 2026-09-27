@@ -24,7 +24,18 @@ export interface Session {
   jump: { pid: number | null; session_id: string; cwd: string; app: string | null };
   /** zadanie Agent Routera powiązane z tym wątkiem Codexa */
   router_task?: RouterTask | null;
+  /** id sesji rodzica; brak = zwykła sesja */
+  parent?: string | null;
+  /** tylko u dzieci (subagentów) */
+  sub?: SubInfo | null;
+  /** bieżący tekst akcji (tylko w pamięci rdzenia i okien) */
+  action?: string | null;
+  /** tekst pytania, tylko w `needs_you` */
+  question?: string | null;
 }
+
+export type SubKind = 'claude' | 'codex' | 'router';
+export interface SubInfo { kind: SubKind; agent_type: string | null; description: string | null; background: boolean }
 
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
@@ -43,7 +54,7 @@ export type AppId = 'claude_code' | 'codex' | 'agent_router';
 export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
 export type MotionId = 'calm' | 'dynamic';
 export interface Look { style: StyleId; motion: MotionId }
-/** `react_to_media` od 0.8 (brak = włączone): bezczynny zwierzak słucha muzyki grającej w systemie. */
+/** `react_to_media` od 0.9.1 (brak = włączone): bezczynny zwierzak słucha muzyki grającej w systemie. */
 export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number; react_to_media?: boolean }
 /** Lustro `media::Media` (zdarzenie `pets://media`): czy coś gra w Windows (GSMTC) i w jakiej aplikacji. */
 export interface Media { playing: boolean; app: string | null }
@@ -92,6 +103,9 @@ export interface StageSettings {
   align: StageAlign;
   order: StageOrder;
   show: { progress: boolean; limits: boolean; badge: boolean };
+  bubbles: { questions: boolean; actions: boolean };
+  /** mini-zwierzaki subagentów pracujących dłużej niż 5 s */
+  minis: boolean;
 }
 export type Language = 'auto' | 'pl' | 'en';
 /** `lang`: język tekstów z Rusta (ustawienie albo język Windows), dla `auto` w UI. */
@@ -111,4 +125,24 @@ export interface Diagnostics {
   autostart_registered: boolean;
   last_seen: Record<string, number>;
   apps: [AppId, boolean, string][];
+  stats_files: number;
+  stats_scanned_bytes: number;
+  stats_total_bytes: number;
 }
+
+// Statystyki (0.9): lustro `pets_core::stats::summary::StatsView` i `scan::Progress`.
+export type StatAgent = 'claude' | 'codex' | 'router';
+export type StatsPeriod = 'today' | 'week' | 'month' | 'all';
+export type StatsMetric = 'time' | 'tokens';
+export type StatsRace = 'agents' | 'projects';
+export type BadgeKind = 'glutton' | 'cache_master' | 'night_owl' | 'marathon';
+export interface StatsPlace { project: string; value: number; agent: StatAgent }
+export interface StatsTiles {
+  tokens: number; tokens_change: number | null; cache_pct: number | null; cache_read: number;
+  active_ms: number; longest_ms: number; sessions: number; subagents: number; questions: number;
+}
+export interface StatsLane { key: string; agent: StatAgent | null; value: number }
+export interface StatsDay { date: string; active_ms: number; level: number }
+export interface StatsBadge { kind: BadgeKind; project: string | null; agent: StatAgent | null; value: number }
+export interface StatsView { empty: boolean; podium: StatsPlace[]; tiles: StatsTiles; race: StatsLane[]; calendar: StatsDay[]; badges: StatsBadge[]; record: boolean }
+export interface StatsProgress { files: number; scanned: number; total: number; done: boolean }

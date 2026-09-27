@@ -4,7 +4,11 @@ import { appFor, defaultPets, defaultStage, lookFor } from '../look';
 import { resolveLang, setLang } from '../i18n';
 import type { Media, Pets, PointerMsg, Snapshot, StageLayout, StageSettings } from '../types';
 import type { Bridge } from './bridge';
-import { drawBadge, drawLimits, drawProgress, drawRouterBadge, limitBars } from './hud';
+import { drawBadge, drawLimits, drawMiniMore, drawProgress, drawRouterBadge, limitBars } from './hud';
+import { MINI_SCALE, miniAlpha, miniScene, minisLeftOf, minisOf, parentScene } from './minis';
+import { routerHealth } from './router';
+import { drawSpawn, SPAWN_S } from './spawn';
+import { ACCENT, STYLES } from '../styles';
 import { geometry, layout, zoomOf, type LayoutOut } from './layout';
 import { Orderer } from './order';
 import { bgStyle, bgVisible } from './background';
@@ -22,7 +26,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let snap: Snapshot = { sessions: [], limits: [], now: 0 };
   let lay: StageLayout = { max_css: 0, height_css: 48, scale: 1 };
   let out: LayoutOut = layout({ sessions: [], hasLimits: false, maxWidth: 0 });
-  let visible = true, running = false, T = 0, last = performance.now(), sentWidth = -1;
+  let visible = true, running = false, T = 0, last = performance.now(), sentWidth = -1, sentPets = '';
   const roster = new Roster();
   let clockOffset = 0;
   let maxPets: number | undefined;
@@ -34,6 +38,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   const bg = document.getElementById('bg');
   let budget = frameBudget(false), saving = false, reduced = reducedMotion();
   const painters = new WeakMap<Entry, PetPainter>();
+  /** kiedy (T) dziecko pierwszy raz stanęło jako mini: do efektu wejścia */
+  const miniBorn = new Map<string, number>();
   const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset, media: music() ? media : null }));
   let through: boolean | null = null;
   const handle: StageHandle = {
@@ -45,7 +51,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     },
   };
   // co sekundę: czas w tooltipie, a przy kolejności „uwaga” przesunięcia po histerezie
-  setInterval(() => { if (stage.order === 'attention') relayout(); hover.refresh(); reduced = reducedMotion(); }, 1000);
+  // (mini-zwierzak pojawia się po 5 s pracy dziecka, także bez nowych zdarzeń)
+  setInterval(() => { if (stage.order === 'attention' || snap.sessions.some(s => s.parent)) relayout(); hover.refresh(); reduced = reducedMotion(); }, 1000);
 
   const paintBg = () => {
     if (!bg) return;
@@ -54,15 +61,23 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     bg.classList.toggle('floating', lay.mode === 'floating');
   };
   const relayout = () => {
-    const now = Date.now() + clockOffset;
+    const now = Date.now() + clockOffset, on = stage.minis ?? true;
     out = layout({
       sessions: snap.sessions, hasLimits: limitBars(snap.limits).length > 0, maxWidth: lay.max_css, maxPets,
       geo: geometry(zoomOf(lay, stage.size), stage.gap, stage.padding),
       order: v => orderer.display(v, now), priority: v => orderer.priority(v, now),
       showBadge: stage.show.badge, showLimits: stage.show.limits,
+      minis: p => minisOf(p, snap.sessions, now, on), minisLeft: minisLeftOf(stage),
     });
-    roster.sync(snap.sessions, T, music());
+    // rodzic z młodym dzieckiem (bez mini) ma pozę „deleguje”; mini żegna się po swojemu; bezczynny rodzic słucha muzyki
+    roster.sync(snap.sessions, T, s => s.parent ? miniScene(s, now) : parentScene(s, snap.sessions, now, on, music()));
+    const shownMinis = new Set(out.pets.flatMap(p => p.minis.map(m => m.id)));
+    for (const id of shownMinis) if (!miniBorn.has(id)) miniBorn.set(id, T);
+    for (const id of [...miniBorn.keys()]) if (!shownMinis.has(id)) miniBorn.delete(id);
     if (out.width !== sentWidth) { sentWidth = out.width; bridge.setWidth(out.width); }
+    const at = out.pets.map(p => ({ id: p.id, x: Math.round(p.x) })), zoom = out.geo?.zoom ?? 1;
+    const key = JSON.stringify([at, out.width, zoom]);
+    if (key !== sentPets) { sentPets = key; bridge.setPets?.(at, out.width, zoom); }
     hover.refresh(true);
   };
   const take = (s: Snapshot) => { snap = s; clockOffset = s.now - Date.now(); relayout(); };
@@ -97,10 +112,36 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       if (stage.show.progress) drawProgress(x, 0, 0, e.session, T, e.scene === 'vibe' ? 'dance' : e.scene === 'doze' ? 'doze' : null);
       x.restore();
       if (e.session.origin === 'router') { x.save(); x.translate(p.x, 8 * h / 48); x.scale(z, z); drawRouterBadge(x, 0, 0); x.restore(); }
+      drawMinis(p, z, u, Y, h, dt);
     }
     if (out.badgeX != null) { x.save(); x.translate(out.badgeX, 0); x.scale(z, z); drawBadge(x, 0, hz, out.hidden, pen.font); x.restore(); }
     if (out.limitsX != null) { x.save(); x.translate(out.limitsX, 0); x.scale(z, z); drawLimits(x, 0, hz, limitBars(snap.limits)); x.restore(); }
     setTimeout(frame, Math.max(0, 1000 / budget.fps - (performance.now() - now)));
+  }
+
+  /** Mini-zwierzaki rodzica: skórka i styl agenta dziecka, 55% rozmiaru, efekt wejścia i szybkie pożegnanie. */
+  function drawMinis(p: LayoutOut['pets'][number], z: number, u: number, Y: number, h: number, dt: number) {
+    const nowMs = Date.now() + clockOffset, mu = u * MINI_SCALE;
+    for (const m of p.minis) {
+      const e = roster.get(m.id);
+      if (!e) continue;
+      let painter = painters.get(e);
+      if (!painter) { painter = new PetPainter(e.pet); painters.set(e, painter); }
+      const look = lookFor(pets, appFor(e.session)), born = miniBorn.get(m.id) ?? T, k = (T - born) / SPAWN_S;
+      e.pet.alpha = Math.min(1, Math.max(0, k)) * miniAlpha(e.session, nowMs);
+      painter.frame(x, { dt, t0: T + e.phase, X: m.x, Y, u: mu, look, animate: budget.animate(e.session.state), saving, reduced, dpr: devicePixelRatio || 1 });
+      if (k < 1 && !reduced) {
+        drawSpawn(x, m.x, Y, mu, Math.max(0, k), look.motion, STYLES[look.style]?.model === 'pixel', devicePixelRatio || 1,
+          ACCENT[e.session.agent === 'codex' ? 'kodek' : 'clawd']);
+      }
+      const rt = e.session.router_task;
+      if (e.session.sub?.kind === 'router' || rt) {
+        const hl = rt ? routerHealth(rt, nowMs, e.session.last_activity) : 'active';
+        x.save(); x.translate(m.x, 14 * h / 48); x.scale(z * MINI_SCALE, z * MINI_SCALE);
+        drawRouterBadge(x, 0, 0, hl === 'stalled' || hl === 'blocked'); x.restore();
+      }
+    }
+    if (p.miniMore) { x.save(); x.translate(p.miniMore.x, 0); x.scale(z, z); drawMiniMore(x, 0, h / z, p.miniMore.n, pen.font); x.restore(); }
   }
 
   function kick() {

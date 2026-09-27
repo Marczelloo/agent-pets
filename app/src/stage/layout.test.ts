@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { BADGE_W, LEFT_REACH, LIMITS_W, PAD, RIGHT_REACH, SLOT, capacity, contentWidth, geometry, layout, pickVisible, zoomOf } from './layout';
+import { BADGE_W, LEFT_REACH, LIMITS_W, MINI_MORE_W, PAD, RIGHT_REACH, SLOT, capacity, contentWidth, geometry, layout, pickVisible, zoomOf } from './layout';
+import { MINI_SCALE } from './minis';
 
 const mk = (id: string, started_at: number, state: State = 'working'): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: '', state, tool: 'edit', progress: null, context: null,
@@ -120,5 +121,69 @@ describe('stage settings in the layout', () => {
     const out = layout({ sessions, hasLimits: false, maxWidth: 2000, maxPets: 2, order: display, priority: v => [...display(v)].reverse() });
     expect(out.pets.map(p => p.id)).toEqual(['needs', 'work']);
     expect([...out.hiddenIds].sort()).toEqual(['sleep1', 'sleep2']);
+  });
+});
+
+describe('layout with mini pets', () => {
+  const kid = (id: string, parent: string, started: number): Session => ({ ...mk(id, started), parent });
+  const minisFrom = (all: Session[], more = 0) => (p: Session) => ({ shown: all.filter(c => c.parent === p.id).slice(0, 3), more });
+  const M = SLOT * MINI_SCALE;
+
+  it('max visible counts parents only and children are never pets of their own', () => {
+    const parents = Array.from({ length: 5 }, (_, i) => mk(`p${i}`, i));
+    const kids = [kid('k1', 'p0', 10), kid('k2', 'p1', 11), kid('k3', 'p1', 12)];
+    const all = [...parents, ...kids];
+    const out = layout({ sessions: all, hasLimits: false, maxWidth: 5000, maxPets: 5, minis: () => ({ shown: [], more: 0 }) });
+    expect(out.pets.map(p => p.id)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
+    expect([out.hidden, out.hiddenIds]).toEqual([0, []]);
+  });
+
+  it('a group is as wide as the parent and its minis', () => {
+    const all = [mk('p', 1), kid('a', 'p', 2), kid('b', 'p', 3)];
+    const out = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minis: minisFrom(all) });
+    expect(out.width).toBeCloseTo(contentWidth(1, false, false) + 2 * M);
+    expect(out.pets[0].minis.map(m => m.id)).toEqual(['a', 'b']);
+  });
+
+  it('minis stand on the growing side of the stage', () => {
+    const all = [mk('p', 1), kid('a', 'p', 2), kid('b', 'p', 3)];
+    const left = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minis: minisFrom(all), minisLeft: true }).pets[0];
+    expect(left.minis.every(m => m.x < left.x)).toBe(true);
+    expect(left.minis[0].x).toBeGreaterThan(left.minis[1].x);
+    const right = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minis: minisFrom(all), minisLeft: false }).pets[0];
+    expect(right.minis.every(m => m.x > right.x)).toBe(true);
+  });
+
+  it('a parent under +N takes its minis with it', () => {
+    const parents = Array.from({ length: 7 }, (_, i) => mk(`p${i}`, i));
+    const all = [...parents, kid('old', 'p0', 10), kid('new', 'p6', 11)];
+    const out = layout({ sessions: all, hasLimits: false, maxWidth: 5000, maxPets: 5, minis: minisFrom(all) });
+    const shown = out.pets.flatMap(p => p.minis.map(m => m.id));
+    expect(shown).toEqual(['new']);
+    expect(out.hiddenIds).toEqual(['p0', 'p1']);
+  });
+
+  it('more than three children show a small +N next to the minis', () => {
+    const all = [mk('p', 1), ...['a', 'b', 'c'].map((id, i) => kid(id, 'p', 2 + i))];
+    const out = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minis: minisFrom(all, 2), minisLeft: true });
+    expect(out.pets[0].miniMore?.n).toBe(2);
+    expect(out.pets[0].miniMore!.x).toBeLessThan(Math.min(...out.pets[0].minis.map(m => m.x)));
+    expect(out.width).toBeCloseTo(contentWidth(1, false, false) + 3 * M + MINI_MORE_W);
+  });
+
+  it('minis stay inside the stage and groups count toward the room', () => {
+    for (const minisLeft of [true, false]) {
+      const all = [mk('p', 1), mk('q', 2), ...['a', 'b', 'c'].map((id, i) => kid(id, 'q', 3 + i))];
+      const out = layout({ sessions: all, hasLimits: true, maxWidth: 5000, minis: minisFrom(all), minisLeft });
+      for (const p of out.pets) for (const m of p.minis) {
+        expect(m.x - LEFT_REACH * MINI_SCALE).toBeGreaterThanOrEqual(0);
+        expect(m.x + RIGHT_REACH * MINI_SCALE).toBeLessThanOrEqual(out.width);
+      }
+      const tight = layout({ sessions: all, hasLimits: false, maxWidth: contentWidth(2, false, false) + 3 * M - 1, minis: minisFrom(all), minisLeft });
+      expect(tight.pets.map(p => [p.id, p.minis.length])).toEqual([['q', 3]]);
+      // żadna grupa się nie mieści: rodzice bez mini zamiast pustej sceny
+      const tiny = layout({ sessions: all, hasLimits: false, maxWidth: contentWidth(2, false, false) + 1, minis: minisFrom(all), minisLeft });
+      expect(tiny.pets.map(p => [p.id, p.minis.length])).toEqual([['p', 0], ['q', 0]]);
+    }
   });
 });

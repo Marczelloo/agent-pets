@@ -5,6 +5,21 @@ export const PROP_PAL: Record<string, string> = {
 };
 
 export const SPRITES: Record<string, string[]> = {
+  // rzeczy „na sobie” z odznak statystyk (0.9); opaska, śliniaczek i szalik to prostokąty w pixel.ts
+  crown: [
+    'y..y..y',
+    'yy.y.yy',
+    'yyyyyyy',
+    'ycyyycy',
+  ],
+  nightcap: [
+    '......ww',
+    '.....bww',
+    '....bbb.',
+    '..bbbbb.',
+    '.bbbbbbb',
+    'wwwwwwww',
+  ],
   desk: [
     '...............kkkkkkk.',
     '...............kdddddk.',

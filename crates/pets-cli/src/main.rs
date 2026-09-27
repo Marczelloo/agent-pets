@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const USAGE: &str = "użycie: pets-cli run [--record plik.jsonl] | replay plik.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | install-statusline [hook.exe] | uninstall-statusline";
+const USAGE: &str = "użycie: pets-cli run [--record plik.jsonl] | replay plik.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | install-statusline [hook.exe] | uninstall-statusline | stats-scan [--out stats.json]";
 
 fn claude_settings() -> anyhow::Result<PathBuf> {
     Ok(dirs::home_dir().context("brak katalogu domowego")?.join(".claude").join("settings.json"))
@@ -46,11 +46,39 @@ fn replay(path: &Path, speed: f64) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Narzędzie deweloperskie (0.9): skan całej historii do osobnej księgi i podsumowanie bez nazw projektów.
+fn stats_scan(out: Option<PathBuf>) -> anyhow::Result<()> {
+    use pets_core::stats::{scan::Scanner, Book, Cell};
+    let home = dirs::home_dir().context("brak katalogu domowego")?;
+    let roots = vec![home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
+    let book = out.as_deref().map(Book::load).unwrap_or_default();
+    let mut sc = Scanner::new(roots, book);
+    let t0 = std::time::Instant::now();
+    let files = sc.refresh();
+    let mut last = std::time::Instant::now();
+    loop {
+        let p = sc.step(4 * 1024 * 1024, &|| false);
+        if p.done || last.elapsed() > Duration::from_secs(2) {
+            println!("{:>6.1} s  {} MB / {} MB  pliki w kolejce: {}", t0.elapsed().as_secs_f64(), p.scanned >> 20, p.total >> 20, p.files);
+            last = std::time::Instant::now();
+        }
+        if p.done { break; }
+    }
+    let mut c = Cell::default();
+    for e in sc.book.files.values() { for m in e.buckets.values() { for x in m.values() { c.add(x); } } }
+    println!("plików: {files}, czas skanu: {:.1} s", t0.elapsed().as_secs_f64());
+    println!("tokeny: {} (wejście {}, cache odczyt {}, cache zapis {}, wyjście {}), praca: {} h, pytania: {}",
+        c.tokens(), c.input, c.cache_read, c.cache_write, c.output, c.active_ms / 3_600_000, c.questions);
+    if let Some(o) = out { sc.book.save(&o)?; println!("księga: {} bajtów", std::fs::metadata(&o)?.len()); }
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let flag = |f: &str| args.iter().position(|a| a == f).and_then(|i| args.get(i + 1)).cloned();
     match args.first().map(String::as_str) {
         Some("run") => run(flag("--record").map(PathBuf::from)),
+        Some("stats-scan") => stats_scan(flag("--out").map(PathBuf::from)),
         Some("replay") => {
             let file = args.get(1).context(USAGE)?;
             let speed = flag("--speed").and_then(|s| s.parse().ok()).unwrap_or(10.0);

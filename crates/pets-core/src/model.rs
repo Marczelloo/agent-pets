@@ -53,6 +53,38 @@ pub struct Session {
     pub jump: JumpTarget,
     #[serde(default)]
     pub router_task: Option<RouterTask>,
+    /// id sesji rodzica; `None` = zwykła sesja
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// tylko u dzieci (subagentów)
+    #[serde(default)]
+    pub sub: Option<SubInfo>,
+    /// bieżący tekst akcji (tylko w pamięci), pusty poza pracą narzędziem
+    #[serde(default)]
+    pub action: Option<String>,
+    /// tekst pytania (tylko w pamięci), tylko w `needs_you`
+    #[serde(default)]
+    pub question: Option<String>,
+    /// `needs_you` rodzica to prośba jego subagenta: dalsza praca dziecka znaczy, że już odpowiedziano
+    #[serde(skip)]
+    pub waits_on_child: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubKind { Claude, Codex, Router }
+
+/// Opis dziecka: kto je uruchomił i po co.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SubInfo {
+    pub kind: SubKind,
+    #[serde(default)]
+    pub agent_type: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    /// zadanie w tle (`requestShape: background`): kończy się tylko przez `SubagentStop` albo po 10 min ciszy
+    #[serde(default)]
+    pub background: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,6 +123,18 @@ pub struct EventData {
     pub pid: Option<u32>,
     pub app: Option<App>,
     pub router_task: Option<RouterTask>,
+    pub parent: Option<String>,
+    pub sub: Option<SubInfo>,
+    /// tekst akcji przy `ToolStart` (brak = narzędzie bez tekstu)
+    pub action: Option<String>,
+    /// tekst pytania przy `NeedsInput`
+    pub question: Option<String>,
+    /// `taskId` zadania Agent Routera zleconego przez tę sesję (wynik `codex_delegate`/`continue`/`review`)
+    pub router_link: Option<String>,
+    /// `SubagentStop` bez `agent_id`: koniec najnowszego żyjącego dziecka tej sesji
+    pub sub_end: bool,
+    /// prośba (`NeedsInput`) zgłoszona przez subagenta, czeka u rodzica
+    pub from_child: bool,
 }
 
 /// Zadanie Agent Routera powiązane z wątkiem Codexa (`~/.agent-router/status.json`).
@@ -122,5 +166,27 @@ impl Event {
     }
     pub fn agent(&self) -> Agent {
         match self.source { Source::Claude => Agent::Claude, Source::Codex | Source::Router => Agent::Codex }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_0_7_session_loads_without_the_new_fields() {
+        let v = serde_json::json!({"id": "s", "agent": "claude", "origin": "cli", "title": "", "cwd": "", "state": "thinking",
+            "tool": null, "progress": null, "context": null, "started_at": 1, "last_activity": 2, "state_since": 2,
+            "turn_started_at": null, "jump": {"pid": null, "session_id": "s", "cwd": "", "app": null}});
+        let s: Session = serde_json::from_value(v).unwrap();
+        assert_eq!((s.parent, s.sub, s.action, s.question), (None, None, None, None));
+    }
+
+    #[test]
+    fn sub_info_is_snake_case() {
+        let i = SubInfo { kind: SubKind::Router, agent_type: None, description: Some("Tytuł".into()), background: true };
+        let v = serde_json::to_value(&i).unwrap();
+        assert_eq!(v["kind"], "router");
+        assert_eq!(serde_json::from_value::<SubInfo>(v).unwrap(), i);
     }
 }

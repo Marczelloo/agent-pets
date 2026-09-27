@@ -1,19 +1,30 @@
 import { clampPct, progressFraction } from '../stage/hud';
-import { formatReset } from '../tooltip/text';
+import { actionLabel, formatReset } from '../tooltip/text';
+import { isLive, routerHealth } from '../stage/router';
 import type { Limit, Session, UpdateStatus } from '../types';
 import { t } from '../i18n';
 
 const URGENT = new Set(['needs_you', 'error']);
 
-/** Najpierw sesje, które czekają na Ciebie albo mają błąd, potem od ostatnio aktywnej. */
+/** Najpierw sesje, które czekają na Ciebie albo mają błąd, potem od ostatnio aktywnej. Dzieci są pod rodzicem. */
 export function panelSessions(sessions: Session[]): Session[] {
-  return [...sessions].sort((a, b) =>
+  return sessions.filter(s => !s.parent).sort((a, b) =>
     Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
 }
 
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
-/** Jak `dismiss::inactive` w rdzeniu: to zdejmuje „Usuń nieaktywne”. */
-export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => INACTIVE.has(s.state));
+/** Jak `dismiss::inactive` w rdzeniu: to zdejmuje „Usuń nieaktywne” (dzieci znikają z rodzicem, nie osobno). */
+export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
+
+/** Zakończone dziecko znika z panelu po tym czasie. */
+export const CHILD_DONE_MS = 10_000;
+const FINISHED = new Set(['done', 'error', 'ended']);
+
+/** Dzieci sesji (subagenci, zadania routera) od najstarszego; zakończone jeszcze przez 10 s. */
+export function childrenOf(sessions: Session[], id: string, nowMs: number): Session[] {
+  return sessions.filter(c => c.parent === id && !(FINISHED.has(c.state) && nowMs - c.state_since >= CHILD_DONE_MS))
+    .sort((a, b) => a.started_at - b.started_at || (a.id < b.id ? -1 : 1));
+}
 
 export interface UpdateBar { text: string; action: string | null; pct: number | null }
 
@@ -57,4 +68,43 @@ export function progressText(s: Session): string | null {
 
 export function contextText(s: Session): string | null {
   return s.context && s.context.max > 0 ? `${Math.round(clampPct(s.context.used * 100 / s.context.max))}%` : null;
+}
+
+export interface ChildLabel { kind: 'type' | 'router' | 'bg' | 'warn'; text: string }
+
+/** Etykiety subagenta: typ (gdy nie jest już tytułem), „Router”, „w tle” i ostrzeżenie o utkniętym zadaniu routera. */
+export function childLabels(c: Session, nowMs: number): ChildLabel[] {
+  const out: ChildLabel[] = [];
+  const x = t().panel.child;
+  if (c.sub?.kind === 'router') out.push({ kind: 'router', text: x.router });
+  else if (c.sub?.agent_type && c.sub.agent_type !== c.title) out.push({ kind: 'type', text: c.sub.agent_type });
+  if (c.sub?.background) out.push({ kind: 'bg', text: x.background });
+  if (c.router_task && isLive(c.router_task)) {
+    const h = routerHealth(c.router_task, nowMs, c.last_activity);
+    if (h === 'stalled' || h === 'blocked') out.push({ kind: 'warn', text: t().router.health[h] });
+  }
+  return out;
+}
+
+export type ChildMark = 'run' | 'ok' | 'err' | 'idle';
+export function childMark(c: Session): ChildMark {
+  if (c.state === 'error') return 'err';
+  if (c.state === 'done' || c.state === 'ended') return 'ok';
+  return c.state === 'idle' || c.state === 'sleep' ? 'idle' : 'run';
+}
+
+/** Druga linia wiersza: bieżąca akcja, a po zakończeniu wynik („Skończył” także dla `ended`). */
+export function childLine(c: Session): string {
+  switch (childMark(c)) {
+    case 'ok': return t().state.done;
+    case 'err': return t().state.error;
+    default: return c.action || actionLabel(c);
+  }
+}
+
+/** Czas pracy jak na zegarze: 0:09, 1:12, 1:02:03. */
+export function clock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000)), p = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60;
+  return h ? `${h}:${p(m)}:${p(s % 60)}` : `${m}:${p(s % 60)}`;
 }

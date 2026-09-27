@@ -26,10 +26,11 @@ export class Roster {
 
   get(id: string): Entry | undefined { return this.entries.get(id); }
 
-  sync(sessions: Session[], t: number, music = false): void {
+  /** `sceneOf`: poza wybrana przez scenę (rodzic „deleguje”, pożegnanie mini, muzyka); domyślnie według stanu. */
+  sync(sessions: Session[], t: number, sceneOf: (s: Session) => SceneKey = s => sceneFor(s)): void {
     const seen = new Set<string>();
     for (const s of sessions) {
-      const scene = sceneFor(s, music);
+      const scene = sceneOf(s);
       const e = this.entries.get(s.id);
       if (!e) {
         if (scene === 'bye') continue;

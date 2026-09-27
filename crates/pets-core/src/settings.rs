@@ -47,7 +47,7 @@ pub struct Pets {
     pub motion: Motion,
     pub overrides: Overrides,
     pub max_visible: u8,
-    /// Bezczynny zwierzak słucha muzyki grającej w Windows (Spotify, Apple Music, przeglądarka…). Od 0.8.
+    /// Bezczynny zwierzak słucha muzyki grającej w Windows (Spotify, Apple Music, przeglądarka…). Od 0.9.1.
     pub react_to_media: bool,
 }
 
@@ -130,6 +130,10 @@ pub struct Background {
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
 pub struct Show { pub progress: bool, pub limits: bool, pub badge: bool }
 
+/// Dymki nad zwierzakami (karta „Pasek”, sekcja „Dymki i subagenci”).
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+pub struct Bubbles { pub questions: bool, pub actions: bool }
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Point { pub x: f64, pub y: f64 }
 
@@ -153,6 +157,9 @@ pub struct Stage {
     pub align: Align,
     pub order: Order,
     pub show: Show,
+    pub bubbles: Bubbles,
+    /// mini-zwierzaki subagentów pracujących dłużej niż 20 s
+    pub minis: bool,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -195,6 +202,16 @@ impl<'de> Deserialize<'de> for Show {
     }
 }
 
+impl<'de> Deserialize<'de> for Bubbles {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let m = object(d)?;
+        let mut b = Bubbles::default();
+        field(&m, "questions", &mut b.questions);
+        field(&m, "actions", &mut b.actions);
+        Ok(b)
+    }
+}
+
 impl<'de> Deserialize<'de> for Stage {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let mut m = object(d)?;
@@ -210,7 +227,10 @@ impl<'de> Deserialize<'de> for Stage {
         field(&m, "align", &mut s.align);
         field(&m, "order", &mut s.order);
         field(&m, "show", &mut s.show);
-        for k in ["position", "custom_at", "floating_at", "monitor", "background", "size", "gap", "padding", "align", "order", "show"] {
+        field(&m, "bubbles", &mut s.bubbles);
+        field(&m, "minis", &mut s.minis);
+        for k in ["position", "custom_at", "floating_at", "monitor", "background", "size", "gap", "padding", "align", "order", "show",
+                  "bubbles", "minis"] {
             m.remove(k);
         }
         s.extra = m;
@@ -225,12 +245,14 @@ pub const PRIMARY: &str = "primary";
 
 impl Default for Background { fn default() -> Self { Background { kind: BgKind::None, color: None, opacity: None, radius: 12 } } }
 impl Default for Show { fn default() -> Self { Show { progress: true, limits: true, badge: true } } }
+impl Default for Bubbles { fn default() -> Self { Bubbles { questions: true, actions: true } } }
 impl Default for Stage {
     fn default() -> Self {
         Stage {
             position: Position::Right, custom_at: None, floating_at: None, monitor: PRIMARY.into(),
             background: Background::default(), size: 100, gap: 0, padding: 2, align: Align::Right,
-            order: Order::Start, show: Show::default(), extra: serde_json::Map::new(),
+            order: Order::Start, show: Show::default(), bubbles: Bubbles::default(), minis: true,
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -460,6 +482,18 @@ mod tests {
         assert_eq!((st.background.kind, st.background.radius, st.background.color.clone(), st.background.opacity), (BgKind::None, 12, None, None));
         assert!(st.show.progress && st.show.limits && st.show.badge);
         assert!(st.custom_at.is_none() && st.floating_at.is_none());
+        assert!(st.bubbles.questions && st.bubbles.actions && st.minis, "0.8: dymki i mini-zwierzaki domyślnie włączone");
+    }
+
+    #[test]
+    fn bubble_and_mini_switches_are_read_leniently() {
+        let l = load_str(r#"{"version":1,"stage":{"gap":4,"bubbles":{"questions":false,"actions":"no"},"minis":false}}"#);
+        let st = &l.settings.stage;
+        assert_eq!((st.bubbles.questions, st.bubbles.actions, st.minis, st.gap), (false, true, false, 4));
+        assert!(!st.extra.contains_key("bubbles") && !st.extra.contains_key("minis"));
+        let l = load_str(r#"{"version":1,"stage":{"bubbles":7,"minis":"x"}}"#);
+        assert_eq!(l.settings.stage.bubbles, Bubbles::default());
+        assert!(l.settings.stage.minis);
     }
 
     #[test]

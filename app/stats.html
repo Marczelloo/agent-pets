@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>Agent Pets: statystyki</title>
+<style>
+:root{
+  --bg:#F3F3F3;--card:#FBFBFB;--line:rgba(0,0,0,.08);--edge:rgba(0,0,0,.14);--txt:#1F1F1F;--mut:#5F5E5A;--seg:#E9E9E9;--segOn:#FFFFFF;
+  --track:rgba(0,0,0,.08);--btnb:rgba(0,0,0,.12);--claude:#D97757;--codex:#1D9E75;--router:#3D6FD6;--up:#1D9E75;--down:#C2410C;
+  --gold:#E3AE3A;--silver:#B3B8C1;--bronze:#C98A5B;--recBg:rgba(227,174,58,.2);--rec:#8A5A00;
+  --cal0:rgba(0,0,0,.06);--cal1:rgba(217,119,87,.28);--cal2:rgba(217,119,87,.5);--cal3:rgba(217,119,87,.75);--cal4:#D97757;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;--seg:#2B2B2B;--segOn:#3D3D3D;
+  --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--up:#5DCAA5;--down:#F08A5D;
+  --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06)}}
+:root[data-theme="dark"]{
+  --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;--seg:#2B2B2B;--segOn:#3D3D3D;
+  --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--up:#5DCAA5;--down:#F08A5D;
+  --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06)}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+*{box-sizing:border-box}
+h1{margin:0;font:600 16px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif}
+button{font:inherit;color:var(--txt);cursor:pointer}
+button:focus-visible{outline:2px solid var(--txt);outline-offset:1px}
+.stats{max-width:900px;margin:0 auto;padding:14px 16px 16px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.rec{background:var(--recBg);color:var(--rec);font-weight:700;font-size:11px;border-radius:8px;padding:1px 8px;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.55}}
+.seg{margin-left:auto;display:flex;background:var(--seg);border:1px solid var(--line);border-radius:6px;padding:2px}
+.seg button{border:0;background:transparent;padding:3px 12px;border-radius:4px;font-size:12px;color:var(--mut)}
+.seg button.on{background:var(--segOn);color:var(--txt);box-shadow:0 0 0 1px var(--btnb)}
+.seg.small button{padding:1px 8px;font-size:11px}
+.scan{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--card);border:1px solid var(--line);border-radius:6px;font-size:12px}
+.scan .bar{flex:1;height:6px;border-radius:3px;background:var(--track);overflow:hidden}
+.scan .bar i{display:block;height:100%;background:var(--claude);transition:width .4s}
+.row{display:grid;gap:10px;margin-bottom:10px}
+.row.top{grid-template-columns:1.25fr 1fr}
+.row.bottom{grid-template-columns:auto 1fr;margin-bottom:0}
+@media (max-width:700px){.row.top,.row.bottom{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.ct{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--mut);margin:0 0 6px}
+.ct .seg{margin-left:auto}
+.podium{height:210px;position:relative;display:flex;align-items:flex-end;justify-content:center;gap:6px;overflow:hidden}
+.step{width:31%;max-width:120px;display:flex;flex-direction:column;align-items:center;min-width:0}
+.step .pet-slot{width:96px;height:80px;display:flex;justify-content:center;align-items:flex-end}
+.podium .confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+canvas.enter{animation:enter .45s cubic-bezier(.2,.8,.3,1.2) both}
+@keyframes enter{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+.blk{width:100%;border-radius:4px 4px 0 0;display:flex;justify-content:center;padding-top:5px;font:700 19px "Segoe UI Variable Display","Segoe UI";color:rgba(0,0,0,.55)}
+.s1 .blk{height:70px;background:var(--gold)}.s2 .blk{height:48px;background:var(--silver)}.s3 .blk{height:32px;background:var(--bronze)}
+.nm{font-weight:600;font-size:12.5px;margin-top:4px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vl{font-size:11.5px;color:var(--mut);min-height:16px;font-variant-numeric:tabular-nums}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.tile .k{font-size:12px;color:var(--mut)}
+.tile .v{font:600 22px/1.25 "Segoe UI Variable Display","Segoe UI";font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap}
+.tile .d{font-size:11.5px;color:var(--mut)}
+.up{color:var(--up)}.down{color:var(--down)}
+.race{margin-bottom:10px}
+.lane{display:grid;grid-template-columns:130px 1fr 80px;align-items:center;gap:8px;font-size:12px;margin-top:6px}
+.lane .nm{margin:0;font-weight:400;font-size:12px}
+.trk{height:30px;position:relative;border-bottom:1px dashed var(--edge)}
+.trk .bar{position:absolute;left:0;bottom:3px;height:8px;border-radius:4px;background:var(--mut)}
+.bar.claude{background:var(--claude)}.bar.codex{background:var(--codex)}.bar.router{background:var(--router)}
+.runner{position:absolute;bottom:0;width:36px;height:30px}
+.lane .t{text-align:right;color:var(--mut);font-variant-numeric:tabular-nums}
+.cal{display:grid;grid-template-rows:repeat(7,10px);grid-auto-flow:column;grid-auto-columns:10px;gap:2px}
+.day{border-radius:2px;background:var(--cal0)}
+.lv1{background:var(--cal1)}.lv2{background:var(--cal2)}.lv3{background:var(--cal3)}.lv4{background:var(--cal4)}
+.badges{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bd{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+.bd .badge-pet{flex:none}
+.bd b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bd span{font-size:11px;color:var(--mut);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bd{position:relative;outline:none;cursor:default}
+.bd:focus-visible{box-shadow:0 0 0 2px var(--txt)}
+.bd>div:nth-child(2){min-width:0}
+.tip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translate(-50%,4px);width:260px;max-width:70vw;padding:8px 10px;
+  background:var(--card);color:var(--txt);border:1px solid var(--edge);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.25);
+  font-size:12px;line-height:1.45;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,transform .15s,visibility 0s .15s;z-index:5}
+.bd:hover .tip,.bd:focus-visible .tip{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .15s,transform .15s}
+.badges .bd:nth-child(2n) .tip{left:auto;right:0;transform:translate(0,4px)}
+.badges .bd:nth-child(2n):hover .tip,.badges .bd:nth-child(2n):focus-visible .tip{transform:none}
+.badges .bd:nth-child(2n+1) .tip{left:0;transform:translate(0,4px)}
+.badges .bd:nth-child(2n+1):hover .tip,.badges .bd:nth-child(2n+1):focus-visible .tip{transform:none}
+.none{margin:6px 0;color:var(--mut);font-size:12px}
+.empty{display:flex;flex-direction:column;align-items:center;gap:8px;margin:64px 0;color:var(--mut)}
+@media (prefers-reduced-motion: reduce){.rec{animation:none}.scan .bar i{transition:none}canvas.enter{animation:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/stats/main.tsx"></script>
+</body>
+</html>

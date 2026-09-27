@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { actionLabel, formatAgo, petTooltip } from '../tooltip/text';
-import type { Media, Pets, RouterTask, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
+import { actionLabel, formatAgo, formatDuration, petTooltip } from '../tooltip/text';
+import type { Media, Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
+import { childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
+import { GearIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 import { resolveLang, setLang, setSystemLang, t } from '../i18n';
@@ -18,6 +19,7 @@ interface ViewProps {
   /** ukryty panel nie rysuje zwierzaków (WebView2 animuje także w ukrytym oknie) */
   animate?: boolean;
   onSettings?: () => void;
+  onStats?: () => void;
   /** wygląd zwierzaków z ustawień (styl, ruch, nadpisania) */
   pets?: Pets;
   update?: UpdateStatus;
@@ -32,7 +34,7 @@ interface ViewProps {
 }
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
   return (
@@ -40,7 +42,8 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
       <header>
         <h1>Agent Pets</h1>
         <span className="count">{t().sessions(sessions.length)}</span>
-        {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}>⚙</button>}
+        {onStats && <button type="button" className="gear" aria-label={t().panel.stats} title={t().panel.stats} onClick={onStats}><StatsIcon /></button>}
+        {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}><GearIcon /></button>}
       </header>
       {bar && <div className="update" role="status">
         <span className="text">{bar.text}</span>
@@ -65,14 +68,15 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           <button type="button" className="quiet" disabled={!hasInactive(sessions)} onClick={onDismissInactive}>{t().panel.removeInactive}</button>
         </div>}
         {sessions.length === 0 && <p className="empty">{t().panel.noSessions}</p>}
-        {sessions.map(s => (
-          <article key={s.id} id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
+        {sessions.map(s => { const kids = childrenOf(snap.sessions, s.id, nowMs); return (<div key={s.id} className="group">
+          <article id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
             {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} music={!!media?.playing} /> : <div className="pet" />}
             <div className="info">
               <div className="title">{petTooltip(s, nowMs).title}</div>
               <div className="sub">{sessionSubtitle(s)}</div>
               <div className="meta">
                 <span className="state">{actionLabel(s, media)}</span>
+                {kids.length > 0 && <span>{t().panel.subagents(kids.length)}</span>}
                 {progressText(s) && <span>{t().panel.tasks} {progressText(s)}</span>}
                 {contextText(s) && <span>{t().panel.context} {contextText(s)}</span>}
                 {s.router_task && <span className={routerHot(s.router_task, nowMs, s.last_activity) ? 'router-hot' : undefined}>
@@ -86,7 +90,10 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 title={t().panel.remove(petTooltip(s, nowMs).title)} onClick={() => onDismiss([s.id])}>✕</button>}
             </div>
           </article>
-        ))}
+          {kids.length > 0 && <ul className="kids" aria-label={t().panel.subagents(kids.length)}>
+            {kids.map(c => <SubagentRow key={c.id} c={c} nowMs={nowMs} focus={focusId === c.id} animate={animate} pets={pets} />)}
+          </ul>}
+        </div>); })}
       </section>
       {undo && undo.ids.length > 0 && <footer className="undo" role="status">
         <span>{t().panel.removed(undo.ids.length)}</span>
@@ -94,6 +101,25 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
       </footer>}
       {status && <footer className="status" role="status">{status}</footer>}
     </div>
+  );
+}
+
+/** Subagent w karcie rodzica: gałąź drzewka, mini-zwierzak, tytuł z etykietami, akcja i czas pracy. */
+function SubagentRow({ c, nowMs, focus, animate, pets }: { c: Session; nowMs: number; focus: boolean; animate: boolean; pets: Pets }) {
+  const mark = childMark(c);
+  return (
+    <li id={`s-${c.id}`} className={`kid ${c.state}${focus ? ' focus' : ''}`}>
+      <span className="branch" aria-hidden="true" />
+      {animate ? <PetCanvas session={c} look={lookFor(pets, appFor(c))} mini /> : <div className="pet mini" />}
+      <div className="body">
+        <div className="line1">
+          <span className="title">{petTooltip(c, nowMs).title}</span>
+          {childLabels(c, nowMs).map(l => <span key={l.kind} className={`chip ${l.kind}`}>{l.text}</span>)}
+        </div>
+        <div className={`act ${mark}`}><span className="mark" aria-hidden="true">{mark === 'ok' ? '✓' : mark === 'err' ? '!' : ''}</span>{childLine(c)}</div>
+      </div>
+      <span className="time" title={t().panel.child.runningFor(formatDuration(nowMs - c.started_at))}>{clock(nowMs - c.started_at)}</span>
+    </li>
   );
 }
 
@@ -156,7 +182,7 @@ export default function App() {
   };
 
   return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} pets={pets} media={pets.react_to_media !== false ? media : null}
-    onSettings={() => void invoke('settings_open')} update={update}
+    onSettings={() => void invoke('settings_open')} onStats={() => void invoke('stats_open')} update={update}
     onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))}
     onDismiss={ids => void invoke<string[]>('session_dismiss', { ids }).then(removed)}
     onDismissInactive={() => void invoke<string[]>('sessions_dismiss_inactive').then(removed)}

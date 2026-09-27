@@ -241,6 +241,33 @@ pub fn parent_rect(h: HWND) -> Option<Rect> { unsafe { GetParent(h) }.ok().and_t
 
 pub fn hide(h: HWND) { unsafe { let _ = ShowWindow(h, SW_HIDE); } }
 
+pub fn is_visible(h: HWND) -> bool { unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(h).as_bool() } }
+
+pub fn no_activate(h: HWND) {
+    unsafe {
+        let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
+        SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) as i32);
+    }
+}
+
+/// Kursor względem okna (px CSS wg DPI okna) i lewy przycisk.
+pub fn cursor_rel(h: HWND) -> Option<(f64, f64, bool)> {
+    use windows::Win32::Foundation::{POINT, RECT};
+    use windows::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
+    unsafe {
+        let mut r = RECT::default();
+        GetWindowRect(h, &mut r).ok()?;
+        let mut p = POINT::default();
+        GetCursorPos(&mut p).ok()?;
+        let dpi = GetDpiForWindow(h);
+        let scale = if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 };
+        let left = (GetAsyncKeyState(VK_LBUTTON.0 as i32) as u16 & 0x8000) != 0;
+        Some(((p.x - r.left) as f64 / scale, (p.y - r.top) as f64 / scale, left))
+    }
+}
+
 pub fn show_no_activate(h: HWND) {
     unsafe {
         let _ = ShowWindow(h, SW_SHOWNOACTIVATE);

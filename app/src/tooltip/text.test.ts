@@ -9,6 +9,19 @@ const base: Session = {
 };
 
 describe('petTooltip', () => {
+  it('shows the live action text instead of the generic label', () => {
+    expect(petTooltip({ ...base, action: 'npm test' }, 220_000).lines[0]).toBe('npm test');
+  });
+  it('a child names its task, runs for a while and shows router health', () => {
+    const kid: Session = { ...base, id: 'p/a', title: 'Znajdź testy', parent: 'p', progress: null, context: null, started_at: 40_000,
+      sub: { kind: 'router', agent_type: null, description: 'Znajdź testy', background: false },
+      router_task: { task_id: 't', status: 'running', last_activity_at: 219_000, blocked: false, stall_ms: 180_000 } };
+    const tip = petTooltip(kid, 220_000);
+    expect(tip.title).toBe('Znajdź testy');
+    expect(tip.lines).toContain('Pracuje od: 3 min');
+    expect(tip.lines.some(l => l.includes('aktywne'))).toBe(true);
+  });
+
   it('shows title, agent, action, progress, context and quiet time', () => {
     expect(petTooltip(base, 220_000)).toEqual({
       title: 'Widżet w pasku',

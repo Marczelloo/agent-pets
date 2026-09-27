@@ -24,6 +24,8 @@ export interface Bridge {
   /** Tryb „Przesuń” w pasku: scena pokazuje przerywaną ramkę. */
   onMoving?(cb: (on: boolean) => void): void;
   setWidth(css: number): void;
+  /** Widoczne zwierzaki (środek w px CSS sceny) dla okna dymków. */
+  setPets?(pets: { id: string; x: number }[], width: number, zoom: number): void;
   showTooltip(anchorX: number, content: TooltipContent): void;
   hideTooltip(): void;
   /** Otwiera panel (albo zamyka otwarty); `focus` podświetla sesję. */
@@ -50,6 +52,7 @@ export function tauriBridge(): Bridge {
     setPassthrough: on => { void invoke('stage_passthrough', { on }); },
     openMenu: (target, x, y) => { void invoke('stage_menu', { target, x, y }); },
     setWidth: w => { void invoke('stage_set_width', { width: w }); },
+    setPets: (pets, width, zoom) => { void invoke('stage_pets', { pets, width, zoom }); },
     showTooltip: (anchorX, content) => { void invoke('tooltip_show', { anchorX, content }); },
     hideTooltip: () => { void invoke('tooltip_hide'); },
     openPanel: focus => { void invoke('panel_open', { focus: focus ?? null }); },

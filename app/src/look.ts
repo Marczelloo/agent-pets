@@ -13,6 +13,7 @@ export const defaultPets = (): Pets => ({ style: 'sticker', motion: 'calm', over
 export const defaultStage = (): StageSettings => ({
   position: 'right', monitor: 'primary', background: { kind: 'none', radius: 12 },
   size: 100, gap: 0, padding: 2, align: 'right', order: 'start', show: { progress: true, limits: true, badge: true },
+  bubbles: { questions: true, actions: true }, minis: true,
 });
 
 export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId {

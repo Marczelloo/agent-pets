@@ -140,6 +140,24 @@ function build(c: Pet, X: number, Y: number, u: number, ts: number, g: number, k
   }
   if (tg._mug) { const R = r.arms[1]; blit(SPRITES.mug, C(R.hx) - 1, C(R.hy) - n(SPRITES.mug.length * SPRITE_U)); }
 
+  // rzecz „na sobie” (odznaki statystyk): nad bryłą albo na niej, w siatce
+  if (c.wear === 'crown' || c.wear === 'nightcap') {
+    const s = SPRITES[c.wear], w = n(s[0].length * SPRITE_U), h = n(s.length * SPRITE_U);
+    blit(s, c.wear === 'crown' ? -(w >> 1) : -(w >> 1) + n(4), by - h + (c.wear === 'crown' ? 1 : n(4)));
+  } else if (c.wear === 'headband') {
+    cell(bx, by + n(5), bw, n(5, 2), PROP_PAL.c);
+    cell(bx + bw, by + n(3), n(5), n(5, 2), PROP_PAL.c);
+  } else if (c.wear === 'bib') {
+    const w = 2 * Math.round(bw * .3), y = by + Math.round(bh * .56);
+    cell(-(w >> 1), y, w, n(12, 2), PROP_PAL.p);
+    cell(-(w >> 1) + 1, y + n(4), w - 2, 1, PROP_PAL.c);
+  } else if (c.wear === 'scarf') {
+    const y = by + Math.round(bh * .62);
+    cell(bx, y, bw, n(6, 2), PROP_PAL.b);
+    cell(Math.round(bw * .15), y + n(4), n(6, 2), n(12, 2), PROP_PAL.b);
+    cell(bx + 2, y + 1, 1, 1, PROP_PAL.w);
+  }
+
   // nakładki (pozycje jak w modelu wektorowym: dymek przy top−20u, myślenie przy top−22u)
   if (c.p.bubble.x > .5) { const bh2 = n(SPRITES.bang.length * 4); blit(SPRITES.bang, U(-B.w * .31) - n(10), by + 1 - bh2, 4); } // oparty o głowę: mieści się w pasku przy skokach
   if (cl(c.p.think.x) > .3) for (let i = 0; i < 3; i++) { const a = ts * 4 + i * 2.1; cell(U(Math.cos(a) * 30), by - n(18) + Math.round(Math.sin(a) * 1.5), 1, 1, COL.clay); }

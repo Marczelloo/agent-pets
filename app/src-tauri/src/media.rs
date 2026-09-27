@@ -31,9 +31,21 @@ fn read_sessions() -> windows::core::Result<Vec<(String, bool)>> {
         GlobalSystemMediaTransportControlsSessionManager as Manager,
         GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
     };
-    let mgr = Manager::RequestAsync()?.get()?;
+    thread_local! {
+        // menedżer z pierwszego odpytania, a nie nowe połączenie z usługą co 2 s; po błędzie łączymy się od nowa
+        static MGR: std::cell::RefCell<Option<Manager>> = const { std::cell::RefCell::new(None) };
+    }
+    let mgr = match MGR.with_borrow(|m| m.clone()) {
+        Some(m) => m,
+        None => {
+            let m = Manager::RequestAsync()?.get()?;
+            MGR.set(Some(m.clone()));
+            m
+        }
+    };
+    let list = mgr.GetSessions().inspect_err(|_| MGR.set(None))?;
     let mut out = Vec::new();
-    for s in mgr.GetSessions()? {
+    for s in list {
         let app = s.SourceAppUserModelId().map(|h| h.to_string()).unwrap_or_default();
         let on = s.GetPlaybackInfo().and_then(|i| i.PlaybackStatus()).map(|st| st == Status::Playing).unwrap_or(false);
         out.push((app, on));

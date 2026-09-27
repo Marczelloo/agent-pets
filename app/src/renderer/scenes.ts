@@ -21,6 +21,16 @@ export const pagePos=(a: any)=>{const p=Math.pow(cl(a/1.33),1.3);return [165+(10
 export const BOLT=[84,-36],WL=34;
 const wrenchAng=(a: any)=>a<1?235-110*ease(a):a<1.3?125+110*ease((a-1)/.3):235;
 export const SCENES: Record<string, Scene>={
+// okno statystyk (0.9): podium i wyścig
+podium_first:{base:{happy:1,look:-.2},seq:[
+['wskakuje na podium',.7,(a: any)=>({hopW:1,armL:2.2+a,armR:2.2+a})]],
+acts:[['skacze z radości',1.1,()=>({hopW:1,armL:2.7,armR:2.7})],['macha rękami',1.4,(a: any)=>({armL:2.3+.5*Math.sin(a*TAU*2),armR:2.3-.5*Math.sin(a*TAU*2),hopW:.4})]]},
+podium_second:{base:{happy:.8,look:-.2},acts:[
+['klaszcze',2,(_a: any,_c: any,t: any)=>{const s=(Math.sin(t*TAU*2)+1)/2;return {ikL:1,ikR:1,hxL:-2-11*s,hyL:-42,hxR:2+11*s,hyR:-42,hopW:.15};}]]},
+podium_third:{base:{happy:.5,look:-.2},acts:[
+['kiwa się',2,(a: any)=>({tilt:.07*Math.sin(a*PI),armL:1.6+.3*Math.sin(a*PI),armR:1.6-.3*Math.sin(a*PI)})]]},
+run:{base:{walkW:1,hopW:.3,th:.9,look:.1,ex:.6},acts:[
+['biegnie',2,()=>({})]]},
 thinking:{base:{th:-.3,look:-1,think:1},acts:[
 ['zamyśla się (ręka pod brodą)',3.5,(_a: any,_c: any,t: any)=>({ikR:1,hxR:14,hyR:-27+1.5*Math.sin(t*3)})],
 ['chodzi w tę i z powrotem',4,(a: any)=>a<1.6?{th:PI/2,lx:26*ease(a/1.6),walkW:1,look:-.3}:a<2.1?{th:-PI/2,lx:26,look:-.3}:a<3.7?{th:-PI/2,lx:26*(1-ease((a-2.1)/1.6)),walkW:1,look:-.3}:{}],

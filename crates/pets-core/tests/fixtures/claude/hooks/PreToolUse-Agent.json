@@ -1,0 +1,21 @@
+{
+  "session_id": "3746a003-5ba1-42b3-a085-009646ebcf00",
+  "transcript_path": "C:\\work\\project",
+  "cwd": "C:\\work\\project",
+  "scratchpad_dir": "C:\\work\\project",
+  "prompt_id": "f1d4e4b5-9dc5-4246-b264-8ab912d261bc",
+  "permission_mode": "bypassPermissions",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "List spike names",
+    "prompt": "<redacted>",
+    "subagent_type": "general-purpose",
+    "model": "haiku",
+    "run_in_background": true
+  },
+  "tool_use_id": "toolu_01NFsNGyUwvT59Y5cqcXKfgU"
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { clampPct, eqHeights, limitBars, progressFraction } from './hud';
+import { clampPct, drawMiniMore, drawRouterBadge, eqHeights, limitBars, progressFraction } from './hud';
+import { recorder } from '../renderer/testing';
 
 describe('hud', () => {
   it('progressFraction treats missing or empty lists as unknown', () => {
@@ -29,5 +30,18 @@ describe('hud', () => {
       for (const h of eqHeights(t, 'dance')) expect(h).toBeGreaterThanOrEqual(1), expect(h).toBeLessThanOrEqual(5);
       for (const h of eqHeights(t, 'doze')) expect(h).toBeLessThanOrEqual(2.5);
     }
+  });
+});
+
+describe('mini pet HUD', () => {
+  it('a stalled or blocked router task has a warning-coloured badge', () => {
+    const fills = (warn: boolean) => { const r = recorder(); drawRouterBadge(r.ctx, 0, 0, warn); return r.log.filter(l => l.startsWith('fillStyle=')); };
+    expect(fills(false)).toContain('fillStyle=#5DCAA5');
+    expect(fills(true)).toContain('fillStyle=#EF9F27');
+  });
+  it('draws a small +N next to the minis', () => {
+    const r = recorder();
+    drawMiniMore(r.ctx, 50, 48, 2, 'x');
+    expect(r.log).toContain('fillText(+2,50,39.5)');
   });
 });

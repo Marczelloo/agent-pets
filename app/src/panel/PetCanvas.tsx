@@ -6,15 +6,19 @@ import { sceneFor, skinFor } from '../stage/sceneFor';
 import { switchScene } from '../stage/roster';
 import type { Look, Session } from '../types';
 
-const W = 96, H = 72;
 let fps = 30, saving = false;
 /** Tryb oszczędny panelu: 10 kl./s i Dynamiczny bez smug. */
 export function setPetSaving(s: boolean): void { saving = s; fps = frameBudget(s).fps; }
 // Skala zwierzaka ze sceny w pasku (u = 0,3 przy 48 px), przeniesiona na płótno wysokości 72 px.
-const U = 0.3 * H / 48, X = 36, Y = H - 10;
+// Mini (subagent pod rodzicem) ma tę samą proporcję co mini-zwierzak w pasku.
+const SIZES = {
+  full: { W: 96, H: 72, U: 0.3 * 72 / 48, X: 36, Y: 62 },
+  mini: { W: 40, H: 30, U: 0.3 * 72 / 48 * 0.42, X: 15, Y: 26 },
+};
 
 /** Ten sam zwierzak co w pasku, większy. Rysuje tylko w przeglądarce (efekt nie działa przy renderze na serwerze). */
-export function PetCanvas({ session, look, music = false }: { session: Session; look: Look; music?: boolean }) {
+export function PetCanvas({ session, look, mini = false, music = false }: { session: Session; look: Look; mini?: boolean; music?: boolean }) {
+  const { W, H, U, X, Y } = SIZES[mini ? 'mini' : 'full'];
   const ref = useRef<HTMLCanvasElement>(null);
   const lookRef = useRef(look);
   lookRef.current = look;
@@ -50,8 +54,8 @@ export function PetCanvas({ session, look, music = false }: { session: Session; 
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-    // agent sesji się nie zmienia; scenę przełącza efekt wyżej
+    // agent sesji i rozmiar się nie zmieniają; scenę przełącza efekt wyżej
   }, []);
 
-  return <canvas ref={ref} className="pet" width={W} height={H} style={{ width: W, height: H }} aria-hidden="true" />;
+  return <canvas ref={ref} className={mini ? 'pet mini' : 'pet'} width={W} height={H} style={{ width: W, height: H }} aria-hidden="true" />;
 }
