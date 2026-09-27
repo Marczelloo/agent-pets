@@ -5,18 +5,21 @@ import { recorder } from '../renderer/testing';
 import { petFor, skinFor } from '../stage/sceneFor';
 import type { Agent } from '../types';
 import { blobPal, SKINS } from './index';
+import { GOGGLE_FRAME, GOGGLE_LENS, archP, floatLift } from '../renderer/draw/float';
 
 pen.font = 'x';
 
 describe('skins for agents', () => {
   it('every agent has a pet', () => {
-    const want: Record<Agent, string> = { claude: 'clawd', codex: 'kodek', opencode: 'opencode', antigravity: 'blob', copilot: 'blob',
+    const want: Record<Agent, string> = { claude: 'clawd', codex: 'kodek', opencode: 'opencode', antigravity: 'antigravity', copilot: 'copilot',
       cursor: 'blob', grok: 'blob', other: 'blob' };
     for (const [a, s] of Object.entries(want)) expect(skinFor(a), a).toBe(s);
   });
   it('pixel and sticker draw new pets like clean; clawd and kodek keep their own art', () => {
     expect(effectiveStyle('pixel', 'opencode')).toBe('clean');
     expect(effectiveStyle('sticker', 'blob')).toBe('clean');
+    expect(effectiveStyle('pixel', 'antigravity')).toBe('clean');
+    expect(effectiveStyle('sticker', 'copilot')).toBe('clean');
     expect(effectiveStyle('neon', 'opencode')).toBe('neon');
     expect(effectiveStyle('pixel', 'clawd')).toBe('pixel');
     expect(effectiveStyle('sticker', 'kodek')).toBe('sticker');
@@ -44,5 +47,32 @@ describe('skins for agents', () => {
     drawPet(oc.ctx, petFor({ agent: 'opencode', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
     expect(oc.log.some(l => l.includes('#F1ECEC'))).toBe(true);
     expect(oc.log.some(l => l.includes('#131010'))).toBe(true);
+  });
+  it('Copilot wears pilot goggles and has light eyes on its dark body', () => {
+    const rec = recorder();
+    drawPet(rec.ctx, petFor({ agent: 'copilot', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
+    expect(rec.log.some(l => l.includes(GOGGLE_FRAME))).toBe(true);
+    expect(rec.log.some(l => l.includes(GOGGLE_LENS))).toBe(true);
+    expect(rec.log.some(l => l.includes(SKINS.copilot.eyeColor!))).toBe(true);
+  });
+  it('Antigravity floats without legs over its shadow and wears the Google colours', () => {
+    expect([SKINS.antigravity.legs.length, SKINS.antigravity.float, SKINS.antigravity.shape]).toEqual([0, true, 'arch']);
+    const lift = (t: number) => floatLift(SKINS.antigravity, t, 0);
+    const ys = [0, .3, .6, .9, 1.2].map(lift);
+    expect(Math.min(...ys)).toBeGreaterThan(3);
+    expect(new Set(ys.map(y => y.toFixed(2))).size).toBeGreaterThan(1);
+    expect(floatLift(SKINS.clawd, .5, 0)).toBe(0);
+    const rec = recorder();
+    drawPet(rec.ctx, petFor({ agent: 'antigravity', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
+    for (const c of ['#4285F4', '#34A853', '#FBBC05', '#EA4335']) expect(rec.log.some(l => l.includes(`addColorStop`) && l.includes(c)), c).toBe(true);
+  });
+  it('the arch has an opening at the bottom', () => {
+    const p = archP(-40, -60, 80, 60, 10);
+    const inside = (x: number, y: number) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+      const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+    expect(inside(0, -50)).toBe(true);
+    expect(inside(0, -3)).toBe(false);
+    expect(inside(-32, -3)).toBe(true);
+    expect(inside(32, -3)).toBe(true);
   });
 });

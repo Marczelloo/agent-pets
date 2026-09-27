@@ -13,6 +13,7 @@ import { drawPixel } from "../models/pixel";
 import { DEFAULT_LOOK } from "../../look";
 import type { Look } from "../../types";
 import { effectiveStyle } from "../effective";
+import { archP, drawGoggles, floatLift, googleFill } from "./float";
 export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
 const lk0=look??DEFAULT_LOOK,lk={...lk0,style:effectiveStyle(lk0.style,c.type)},st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=c.accent??ACCENT[c.type];if(st.sketch)pen.boil=Math.floor(t*st.sketch.boilHz);pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.fx;
 if(st.model==='sticker')return drawSticker(x,c,X,Y,u,t,lk);if(st.model==='pixel')return drawPixel(x,c,X,Y,u,t,lk);
@@ -24,7 +25,7 @@ const hph=c.hp%1;let h=0,sq=0;if(hph<.42){h=Math.sin(PI*hph/.42);sq=.07*Math.cos
 const hw=cl(P.hopW.x);h*=hw;sq*=hw*pen.squash;
 const wb=Math.abs(Math.sin(t*10))*walk,br=Math.sin(t*(2.3-loaf))*.02*(1+cl(P.sleep.x)*1.5),tb=Math.abs(Math.sin(t*20))*.008*cl(P.typeW.x);
 const pil=c.prop==='pillow'?cl(P.propA.x)*loaf:0;
-const hopY=(h*24+wb*2.5+pil*4)*u;
+const lift=floatLift(sk,t,(c.nb??1)*2)*u,hopY=(h*24+wb*2.5+pil*4)*u+lift,fl=sk.float?1-lift/(30*u):1;
 const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=17*u,bot=(sk.legs.length?-12*u:0)*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(st.line.minPx,2.4*u*st.line.scale);
 const hW=(W*Math.abs(co)+Dp*Math.abs(si))/2,XX=X+P.lx.x*u;
 const sc=1+.1*lean,rot=Math.sin(t*4)*.1*wob+Math.sin(t*1.4)*.035*cl(P.think.x)+loaf*.06+pil*.08+P.tilt.x,scx=sc*(1-(sq+br)*.6),scy=sc*(1+sq+br+tb),oy=-hopY+lean*4*u,cr=Math.cos(rot),sr=Math.sin(rot);
@@ -34,7 +35,7 @@ const bodyT=()=>{x.save();x.translate(XX,Y+oy);x.rotate(rot);x.scale(scx,scy);x.
 const worldT=()=>{x.save();x.translate(XX,Y);x.globalAlpha=GA;x.lineWidth=lw;x.lineJoin='round';x.lineCap='round';x.strokeStyle=pen.ol;};
 const pj=(lx: any,lz: any)=>[lx*co+lz*si,-lx*si+lz*co];
 if(st.sketch){x.save();x.strokeStyle='rgba(59,58,56,0.35)';x.lineWidth=Math.max(.8,1.2*u);x.beginPath();for(let i=-2;i<=2;i++){const w=hW*1.1*(1-Math.abs(i)*.18)*(1-h*.3);x.moveTo(XX-w,Y+i*2*u);x.lineTo(XX+w,Y+i*2*u);}x.stroke();x.restore();}else{
-x.save();if(st.softShadow)x.filter=`blur(${Math.max(1,3*u)}px)`;x.fillStyle='rgba(0,0,0,0.16)';x.beginPath();x.ellipse(XX,Y,hW*1.1*(1-h*.3),Math.max(2,7*u)*(1-h*.3),0,0,TAU);x.fill();x.restore();}
+x.save();if(st.softShadow)x.filter=`blur(${Math.max(1,3*u)}px)`;x.fillStyle='rgba(0,0,0,0.16)';x.beginPath();x.ellipse(XX,Y,hW*1.1*(1-h*.3)*fl,Math.max(2,7*u)*(1-h*.3)*fl,0,0,TAU);x.fill();x.restore();}
 worldT();drawPillow(x,c,u,lw);x.restore();
 const shY=top+H*.52,AL=(sk.armLen)*u,thk=9*u,mr=(sk.mitt)*u;
 const arms=[-1,1].map((s: any)=>{const k=s<0?'L':'R',q=pj(s*.46*W,0),sw0=toW(q[0],shY);const a=P['arm'+k].x+P['osc'+k].x*Math.sin(t*c.f+(s<0?1.7:0)),fw=walk*Math.sin(t*10+(s<0?0:PI))*.6;const ox=s*Math.sin(a),oy=Math.cos(a),up=Math.max(0,-oy),oz=.22+.2*up+fw,n=Math.hypot(ox,oy,oz)||1,hq=pj(ox/n,oz/n),pl=Math.hypot(hq[0],oy/n),AE=AL*(1+.75*up);const ah=[sw0[0]+hq[0]*AE*.92,sw0[1]+oy/n*AE*.92];const ik=cl(P['ik'+k].x);const dE=(q[1]+hq[1]*AL*.5)*(1-ik)+ik*10*u,fr=cl((dE+3*u)/(6*u));let sw=sw0;if(q[1]<0){const m=cl(-q[1]/(8*u))*fr,e=toW(Math.sign(q[0]||s)*(hW-3*u),shY);sw=[sw0[0]+(e[0]-sw0[0])*m,sw0[1]+(e[1]-sw0[1])*m];}return {s,k,sw,ah,ik,fr,L:AL*ik+(1-ik)*AE*cl(pl*.97,.3,1),hx:ah[0]*(1-ik)+P['hx'+k].x*u*ik,hy:ah[1]*(1-ik)+P['hy'+k].x*u*ik};});
@@ -50,17 +51,18 @@ worldT();arms.forEach((a: any)=>{if(a.fr<1){hose(x,a,a.L,thk,cm,u,lw);mitt(x,a,m
 bodyT();
 if(sk.antenna){const by=top+2*u,len=15*u,tx=Math.sin(c.aa)*len,ty=by-Math.cos(c.aa)*len;x.beginPath();x.moveTo(0,by);x.lineTo(tx,ty);x.stroke();shp(x,elP(tx,ty,4.5*u,4.5*u),gr>.5?'#E24B4A':'#5DCAA5',u);}
 
-shp(x,rrP(-hW,top,hW*2,H,R),cs,u,{hatch:true});
+const bodyP=sk.shape==='arch'?archP:rrP;
+shp(x,bodyP(-hW,top,hW*2,H,R),cs,u,{hatch:true});
 const fwid=W*Math.abs(co),front=co>=0,fcx=(front?1:-1)*Dp/2*si;
-if(fwid>1.5){shp(x,rrP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2)),front?cm:cb,u);
+if(fwid>1.5){const fp=bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2));shp(x,fp,front?cm:cb,u);if(sk.shape==='arch')googleFill(x,fp);
 x.save();x.globalAlpha=GA*.55;shp(x,rrP(fcx-fwid/2+R*.7+3*u*Math.abs(co),top+4*u,Math.max(.1,fwid-R*1.4-6*u*Math.abs(co)),4.5*u,2.2*u),pal.h,u,{noStroke:1});x.restore();
 if(!front&&sk.backVents&&fwid>6*u){x.save();x.lineWidth=lw*.7;x.beginPath();for(let i=0;i<3;i++){const yy=top+H*(.35+.13*i);x.moveTo(fcx-fwid*.25,yy);x.lineTo(fcx+fwid*.25,yy);}x.stroke();x.restore();}}
 
-const ey=top+H*.42+P.look.x*4.5*u,exs=P.ex.x*4*u*co;
+const ey=top+H*(sk.eyeY??.42)+P.look.x*4.5*u,exs=P.ex.x*4*u*co;
 {const q=toW(fcx+exs,ey);c.face=[q[0]/u,q[1]/u,Math.max(4,sk.eyeX*W*Math.abs(co)/u)];}
 const bl=c.blink>0?Math.sin(PI*(c.blink/.16)):0,sl=cl(P.sleep.x),hp=cl(P.happy.x),dz=cl(P.dizzy.x),sqn=cl(P.squint.x);
 const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFace&&loaf>.5;
-let ecol=st.face?.eyes==='accent'?pen.ol:'#1E1410';
+let ecol=st.face?.eyes==='accent'?pen.ol:sk.eyeColor??'#1E1410';
 if(front&&fwid>4*u){
 if(sk.screenFace){const m=8*u*co,sx0=fcx-fwid/2+m,sy0=top+8*u,sw=fwid-2*m,sh=H-20*u,tw=cl(P.typeW.x);shp(x,rrP(sx0,sy0,sw,sh,9*u*co),'#2C2C2A',u);ecol='#5DCAA5';
 x.save();path(x,rrP(sx0,sy0,sw,sh,9*u*co),0,0);x.clip();
@@ -90,6 +92,7 @@ if(dz>.02){x.globalAlpha=GA*ea*dz;const k=5*u;x.beginPath();x.moveTo(ex-k,ey-k);
 
 if(hp>.02&&sk.blush){x.globalAlpha=GA*ea*hp*.6;x.fillStyle='#F0997B';x.beginPath();x.ellipse(ex+s*6*u*co,ey+14*u,6*u*co,3.5*u,0,0,TAU);x.fill();}
 x.restore();});
+if(sk.goggles){x.save();x.globalAlpha=GA*ea;drawGoggles(x,fcx+exs*.5,top+H*.3,W,co,u);x.restore();}
 // blob: wielka litera nazwy agenta na brzuchu (tekst, nigdy znaczniki)
 if(sk.mark&&c.mark){x.save();x.globalAlpha=GA*ea;x.fillStyle=pal.h;x.font=`bold ${Math.max(6,H*.3)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.translate(fcx,top+H*.76);x.scale(Math.max(.05,co),1);x.fillText(String(c.mark).slice(0,1),0,0);x.restore();}}
 x.globalAlpha=GA;x.strokeStyle=pen.ol;x.lineWidth=lw;

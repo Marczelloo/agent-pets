@@ -10,7 +10,7 @@ setRng(rng.next);
 pen.font = 'x';
 
 describe('każda scena i skórka: bez NaN i wyjątków', () => {
-  for (const skin of ['clawd', 'kodek', 'opencode', 'blob'] as const) for (const scene of Object.keys(SCENES)) {
+  for (const skin of ['clawd', 'kodek', 'opencode', 'blob', 'copilot', 'antigravity'] as const) for (const scene of Object.keys(SCENES)) {
     it(`${skin} / ${scene}`, () => {
       const c = createPet(skin, 'idle');
       setScene(c, scene);
@@ -48,7 +48,7 @@ describe('każda scena i skórka: bez NaN i wyjątków', () => {
 describe('każdy styl × ruch × skórka × scena przez PetPainter: bez NaN, stan płótna przywrócony', () => {
   for (const style of STYLE_IDS) for (const motion of ['calm', 'dynamic'] as const) {
     it(`${style} / ${motion}`, () => {
-      for (const skin of ['clawd', 'kodek', 'opencode', 'blob'] as const) for (const scene of Object.keys(SCENES)) {
+      for (const skin of ['clawd', 'kodek', 'opencode', 'blob', 'copilot', 'antigravity'] as const) for (const scene of Object.keys(SCENES)) {
         const p = new PetPainter(createPet(skin, scene));
         const rec = recorder();
         for (let f = 0; f < 40; f++) p.frame(rec.ctx, { dt: f % 2 ? 0.05 : 1 / 30, t0: 1 + f / 30, X: 60, Y: 40, u: 0.3, look: { style, motion },

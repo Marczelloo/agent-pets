@@ -10,9 +10,9 @@ import { BubblePreview } from './BubblePreview';
 import { PetsCanvas } from './PetsCanvas';
 import { Toggle } from '../Toggle';
 
-const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode'];
+const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode', 'copilot', 'antigravity'];
 /** Zwierzaki do wyboru w podglądzie: każda maskotka i blob agenta bez własnej. */
-const PREVIEW_AGENTS: Agent[] = ['claude', 'codex', 'opencode', 'other'];
+const PREVIEW_AGENTS: Agent[] = ['claude', 'codex', 'opencode', 'copilot', 'antigravity', 'other'];
 const petName = (a: Agent) => (a === 'other' ? t().look.otherPet : t().agent[a]);
 
 export function PetPicker({ agent, onPick }: { agent: Agent; onPick: (a: Agent) => void }) {
@@ -64,7 +64,7 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
       <LookGallery style={pets.style} motion={pets.motion} scene={scene} agent={agent} onPick={s => onChange({ ...pets, style: s })} />
       <p className="label strip-label">{t().look.taskbar}</p>
       <PetsCanvas className="taskbar" scene={scene} u={0.3} width={330} height={48}
-        pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : a === 'opencode' ? 'opencode' : 'codex', look: lookFor(pets, a) }))} />
+        pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : a === 'agent_router' ? 'codex' : a, look: lookFor(pets, a) }))} />
     </section>
     <details className="card overrides">
       <summary>{t().look.perAgent}</summary>

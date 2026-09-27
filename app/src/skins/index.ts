@@ -2,9 +2,11 @@ import { clawd } from './clawd';
 import { kodek } from './kodek';
 import { opencode } from './opencode';
 import { blob } from './blob';
+import { copilot } from './copilot';
+import { antigravity } from './antigravity';
 import type { Skin, SkinId } from './types';
 export type { Skin, SkinId } from './types';
-export const SKINS: Record<SkinId, Skin> = { clawd, kodek, opencode, blob };
+export const SKINS: Record<SkinId, Skin> = { clawd, kodek, opencode, blob, copilot, antigravity };
 
 const hex = (h: number, s: number, l: number) => {
   const a = s * Math.min(l, 1 - l), f = (n: number) => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
