@@ -15,6 +15,7 @@ pub mod router;
 pub mod replay;
 pub mod runtime;
 pub mod settings;
+pub mod stats;
 pub mod statusline_install;
 pub mod store;
 pub mod tail;
