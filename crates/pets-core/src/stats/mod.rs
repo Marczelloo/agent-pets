@@ -2,6 +2,7 @@
 //! w kubełkach godzina (UTC) × model. Tylko liczby, nazwy folderów projektów i modeli; bez treści.
 pub mod active;
 pub mod book;
+pub mod claude;
 
 pub use active::active_tick;
 pub use book::Book;
