@@ -18,8 +18,8 @@ export interface Skin {
   eyeColor?: string;
   /** wysokość oczu jako ułamek wysokości ciała od góry (domyślnie .42) */
   eyeY?: number;
-  /** gogle pilota na czole (Copilot) */
-  goggles?: boolean;
+  /** głowa z logo Copilota: gogle u góry (oprawa, szkło), wizjer pod nimi z oczami, uszy po bokach */
+  pilot?: { frame: string; lens: string; visor: string };
   /** bez nóg, unosi się nad ziemią i płynie zamiast chodzić (Antigravity) */
   float?: boolean;
   /** kształt ciała: zaokrąglony prostokąt (domyślnie) albo łuk „A” z otworem u dołu */

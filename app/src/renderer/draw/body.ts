@@ -13,7 +13,7 @@ import { drawPixel } from "../models/pixel";
 import { DEFAULT_LOOK } from "../../look";
 import type { Look } from "../../types";
 import { effectiveStyle } from "../effective";
-import { archP, drawGoggles, floatLift, googleFill } from "./float";
+import { archP, drawPilot, floatLift, googleFill } from "./float";
 export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
 const lk0=look??DEFAULT_LOOK,lk={...lk0,style:effectiveStyle(lk0.style,c.type)},st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=c.accent??ACCENT[c.type];if(st.sketch)pen.boil=Math.floor(t*st.sketch.boilHz);pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.fx;
 if(st.model==='sticker')return drawSticker(x,c,X,Y,u,t,lk);if(st.model==='pixel')return drawPixel(x,c,X,Y,u,t,lk);
@@ -52,6 +52,9 @@ bodyT();
 if(sk.antenna){const by=top+2*u,len=15*u,tx=Math.sin(c.aa)*len,ty=by-Math.cos(c.aa)*len;x.beginPath();x.moveTo(0,by);x.lineTo(tx,ty);x.stroke();shp(x,elP(tx,ty,4.5*u,4.5*u),gr>.5?'#E24B4A':'#5DCAA5',u);}
 
 const bodyP=sk.shape==='arch'?archP:rrP;
+// uszy hełmu Copilota: wystają po bokach, za ciałem
+const pilot=c.pilot??sk.pilot;
+if(pilot)for(const s of [-1,1])shp(x,elP(s*hW,top+H*.6,5.5*u,9*u),cs,u);
 shp(x,bodyP(-hW,top,hW*2,H,R),cs,u,{hatch:true});
 const fwid=W*Math.abs(co),front=co>=0,fcx=(front?1:-1)*Dp/2*si;
 if(fwid>1.5){const fp=bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2));shp(x,fp,front?cm:cb,u);if(sk.shape==='arch')googleFill(x,fp);
@@ -62,8 +65,9 @@ const ey=top+H*(sk.eyeY??.42)+P.look.x*4.5*u,exs=P.ex.x*4*u*co;
 {const q=toW(fcx+exs,ey);c.face=[q[0]/u,q[1]/u,Math.max(4,sk.eyeX*W*Math.abs(co)/u)];}
 const bl=c.blink>0?Math.sin(PI*(c.blink/.16)):0,sl=cl(P.sleep.x),hp=cl(P.happy.x),dz=cl(P.dizzy.x),sqn=cl(P.squint.x);
 const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFace&&loaf>.5;
-let ecol=st.face?.eyes==='accent'?pen.ol:sk.eyeColor??'#1E1410';
+let ecol=st.face?.eyes==='accent'?pen.ol:c.pilot?.eye??sk.eyeColor??'#1E1410';
 if(front&&fwid>4*u){
+if(pilot)drawPilot(x,fcx+exs*.4,top,fwid,H,u,pilot);
 if(sk.screenFace){const m=8*u*co,sx0=fcx-fwid/2+m,sy0=top+8*u,sw=fwid-2*m,sh=H-20*u,tw=cl(P.typeW.x);shp(x,rrP(sx0,sy0,sw,sh,9*u*co),'#2C2C2A',u);ecol='#5DCAA5';
 x.save();path(x,rrP(sx0,sy0,sw,sh,9*u*co),0,0);x.clip();
 if(tw>.02){x.globalAlpha=GA*tw;x.fillStyle=ecol;const off=(t*18*u)%(6*u);for(let i=0;i<4;i++){const ly=sy0+sh*.66+i*6*u-off;const ww=sw*(.2+.5*(((i*7+Math.floor(t*3))%5)/5));x.fillRect(sx0+6*u*co,ly,ww,2.2*u);}}
@@ -92,7 +96,6 @@ if(dz>.02){x.globalAlpha=GA*ea*dz;const k=5*u;x.beginPath();x.moveTo(ex-k,ey-k);
 
 if(hp>.02&&sk.blush){x.globalAlpha=GA*ea*hp*.6;x.fillStyle='#F0997B';x.beginPath();x.ellipse(ex+s*6*u*co,ey+14*u,6*u*co,3.5*u,0,0,TAU);x.fill();}
 x.restore();});
-if(sk.goggles){x.save();x.globalAlpha=GA*ea;drawGoggles(x,fcx+exs*.5,top+H*.3,W,co,u);x.restore();}
 // blob: wielka litera nazwy agenta na brzuchu (tekst, nigdy znaczniki)
 if(sk.mark&&c.mark){x.save();x.globalAlpha=GA*ea;x.fillStyle=pal.h;x.font=`bold ${Math.max(6,H*.3)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.translate(fcx,top+H*.76);x.scale(Math.max(.05,co),1);x.fillText(String(c.mark).slice(0,1),0,0);x.restore();}}
 x.globalAlpha=GA;x.strokeStyle=pen.ol;x.lineWidth=lw;

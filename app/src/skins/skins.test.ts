@@ -5,7 +5,7 @@ import { recorder } from '../renderer/testing';
 import { petFor, skinFor } from '../stage/sceneFor';
 import type { Agent } from '../types';
 import { blobPal, SKINS } from './index';
-import { GOGGLE_FRAME, GOGGLE_LENS, archP, floatLift } from '../renderer/draw/float';
+import { archP, floatLift } from '../renderer/draw/float';
 
 pen.font = 'x';
 
@@ -48,12 +48,16 @@ describe('skins for agents', () => {
     expect(oc.log.some(l => l.includes('#F1ECEC'))).toBe(true);
     expect(oc.log.some(l => l.includes('#131010'))).toBe(true);
   });
-  it('Copilot wears pilot goggles and has light eyes on its dark body', () => {
+  it('Copilot is the logo head: goggles on top, a visor below with its eyes, ears on the sides', () => {
+    const g = SKINS.copilot.pilot!;
+    expect(g).toBeDefined();
     const rec = recorder();
     drawPet(rec.ctx, petFor({ agent: 'copilot', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
-    expect(rec.log.some(l => l.includes(GOGGLE_FRAME))).toBe(true);
-    expect(rec.log.some(l => l.includes(GOGGLE_LENS))).toBe(true);
-    expect(rec.log.some(l => l.includes(SKINS.copilot.eyeColor!))).toBe(true);
+    for (const c of [g.frame, g.lens, g.visor, SKINS.copilot.eyeColor!]) expect(rec.log.some(l => l.includes(c)), c).toBe(true);
+    // wizjer przed oczami: oczy rysują się na nim, nie pod nim
+    const visor = rec.log.findIndex(l => l.includes(g.visor)), eye = rec.log.findIndex(l => l.includes(SKINS.copilot.eyeColor!));
+    expect(visor).toBeLessThan(eye);
+    expect(SKINS.copilot.eyeY!).toBeGreaterThan(.6);
   });
   it('Antigravity floats without legs over its shadow and wears the Google colours', () => {
     expect([SKINS.antigravity.legs.length, SKINS.antigravity.float, SKINS.antigravity.shape]).toEqual([0, true, 'arch']);

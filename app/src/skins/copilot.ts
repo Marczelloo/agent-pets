@@ -1,11 +1,11 @@
 import type { Skin } from './types';
-/** Copilot: ciemny, zaokrąglony hełm pilota z goglami z logo Copilota na czole; pod nimi małe jasne oczy. */
+/** Copilot: głowa z logo Copilota. Szeroki hełm z kopułą i uszami, u góry gogle, niżej wizjer z dwoma małymi oczami. */
 export const copilot: Skin = {
-  id: 'copilot', pal: { m:'#2B2440',s:'#1F1A30',b:'#252036',h:'#4A4166',g:'#6E6A78',gs:'#57535F' },
-  width: 84, depth: 54, height: 62, radius: 22, armLen: 25, mitt: 5.4,
+  id: 'copilot', pal: { m:'#F3F1F6',s:'#D3CFDA',b:'#E4E1EA',h:'#FFFFFF',g:'#C9C6BD',gs:'#A5A298' },
+  width: 88, depth: 54, height: 64, radius: 30, armLen: 25, mitt: 5.4,
   legs: [[-.25,0],[.25,0]], legW: 15,
-  eyeX: .13, eyeW: 6.5, eyeH: 11, eyeY: .66, eyeColor: '#F2EEFF',
+  eyeX: .09, eyeW: 6, eyeH: 11, eyeY: .72, eyeColor: '#F4EEFF',
   screenFace: false, antenna: false, backVents: false,
   eyeGlint: false, blush: false, frontLegsOnlySitting: false,
-  goggles: true,
+  pilot: { frame: '#24292F', lens: '#8534F3', visor: '#24292F' },
 };

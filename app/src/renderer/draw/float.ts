@@ -2,10 +2,6 @@ import { PI } from "../math";
 import { bbox, path, pen, rrP, shp } from "../pen";
 import type { Skin } from "../../skins/types";
 
-/** Gogle Copilota: jasna oprawa i ciemne soczewki (kształt z logo Copilota). */
-export const GOGGLE_FRAME = '#EDE6FF';
-export const GOGGLE_LENS = '#15121F';
-const GOGGLE_STRAP = '#7C5CC4';
 /** Kolory Google na łuku Antigravity. */
 export const GOOGLE = ['#4285F4', '#34A853', '#FBBC05', '#EA4335'] as const;
 
@@ -41,16 +37,17 @@ export function googleFill(x: CanvasRenderingContext2D, p: number[][]) {
   path(x, p, 0, 0); x.stroke();
 }
 
-/** Gogle pilota na czole: pasek, dwie soczewki w jasnej oprawie i mostek (`co` = obrót przodu). */
-export function drawGoggles(x: CanvasRenderingContext2D, cx: number, cy: number, W: number, co: number, u: number) {
-  const gw = Math.max(.1, W * .3 * co), gh = W * .22, gap = W * .06 * co, inset = Math.min(2.4 * u, gw / 4);
-  x.save(); x.fillStyle = GOGGLE_STRAP; x.fillRect(cx - W * .5 * co, cy - 1.8 * u, W * co, 3.6 * u); x.restore();
-  shp(x, rrP(cx - gap / 2 - 1, cy - 1.6 * u, gap + 2, 3.2 * u, 1.2 * u), GOGGLE_FRAME, u);
+/** Twarz z logo Copilota na przodzie ciała (`fw` = widoczna szerokość przodu): wizjer w dolnej części i dwie duże
+ * soczewki gogli stykające się na środku, u góry. Oczy rysuje potem zwykły kod oczu, na wizjerze. */
+export function drawPilot(x: CanvasRenderingContext2D, cx: number, top: number, fw: number, H: number, u: number,
+  g: { frame: string; lens: string; visor: string }) {
+  shp(x, rrP(cx - fw * .36, top + H * .5, fw * .72, H * .42, H * .17), g.visor, u);
+  const lw = fw * .43, lh = H * .36, ly = top + H * .13, inset = Math.min(3 * u, lw / 5, lh / 5);
   for (const s of [-1, 1]) {
-    const lx = cx + s * (gap / 2 + gw / 2);
-    shp(x, rrP(lx - gw / 2, cy - gh / 2, gw, gh, gh * .45), GOGGLE_FRAME, u);
-    shp(x, rrP(lx - gw / 2 + inset, cy - gh / 2 + inset, gw - 2 * inset, gh - 2 * inset, gh * .35), GOGGLE_LENS, u, { noStroke: 1 });
-    x.save(); x.strokeStyle = '#FFFFFF'; x.globalAlpha *= .7; x.lineWidth = Math.max(.8, 1.6 * u); x.beginPath();
-    x.arc(lx - gw * .12, cy - gh * .05, Math.max(.5, gh * .22), 1.05 * PI, 1.45 * PI); x.stroke(); x.restore();
+    const lx = cx + s * lw / 2;
+    shp(x, rrP(lx - lw / 2, ly, lw, lh, lh * .42), g.frame, u);
+    shp(x, rrP(lx - lw / 2 + inset, ly + inset, lw - 2 * inset, lh - 2 * inset, lh * .32), g.lens, u, { noStroke: 1 });
+    x.save(); x.strokeStyle = '#FFFFFF'; x.globalAlpha *= .75; x.lineWidth = Math.max(.8, 1.8 * u); x.beginPath();
+    x.arc(lx - lw * .1, ly + lh * .42, Math.max(.5, lh * .24), 1.05 * PI, 1.45 * PI); x.stroke(); x.restore();
   }
 }
