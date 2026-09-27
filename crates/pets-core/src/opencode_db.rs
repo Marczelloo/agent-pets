@@ -98,9 +98,10 @@ pub struct DbMessage {
     pub input: u64, pub output: u64, pub reasoning: u64, pub cache_read: u64, pub cache_write: u64, pub cost: f64, pub cwd: Option<String>,
 }
 
-pub fn messages(c: &Connection, session: &str) -> Vec<DbMessage> {
-    let Ok(mut st) = c.prepare(MESSAGES) else { return vec![] };
-    st.query_map([session], |r| {
+/// Wiadomości sesji; `None` przy błędzie odczytu (blokada, inna schema), żeby nie pomylić go z sesją bez wiadomości.
+pub fn messages(c: &Connection, session: &str) -> Option<Vec<DbMessage>> {
+    let mut st = c.prepare(MESSAGES).ok()?;
+    let rows = st.query_map([session], |r| {
         // czas z danych wiadomości, a gdy go brak, z kolumny wiersza
         let created = Some(num(r, 3) as i64).filter(|t| *t > 0).unwrap_or_else(|| num(r, 12) as i64);
         Ok(DbMessage {
@@ -109,14 +110,16 @@ pub fn messages(c: &Connection, session: &str) -> Vec<DbMessage> {
             input: count(r, 5), output: count(r, 6), reasoning: count(r, 7), cache_read: count(r, 8), cache_write: count(r, 9),
             cost: num(r, 10), cwd: text(r, 11),
         })
-    }).map(|rows| rows.flatten().collect()).unwrap_or_default()
+    }).ok()?;
+    let all = rows.collect::<Result<Vec<_>, _>>().ok();
+    all
 }
 
-/// Wywołania narzędzi sesji: (czas, nazwa narzędzia).
-pub fn tools(c: &Connection, session: &str) -> Vec<(i64, String)> {
-    let Ok(mut st) = c.prepare(TOOLS) else { return vec![] };
-    st.query_map([session], |r| Ok((num(r, 0) as i64, text(r, 1).unwrap_or_default())))
-        .map(|rows| rows.flatten().filter(|(_, n)| !n.is_empty()).collect()).unwrap_or_default()
+/// Wywołania narzędzi sesji: (czas, nazwa narzędzia); `None` przy błędzie odczytu.
+pub fn tools(c: &Connection, session: &str) -> Option<Vec<(i64, String)>> {
+    let mut st = c.prepare(TOOLS).ok()?;
+    let rows = st.query_map([session], |r| Ok((num(r, 0) as i64, text(r, 1).unwrap_or_default()))).ok()?;
+    Some(rows.collect::<Result<Vec<_>, _>>().ok()?.into_iter().filter(|(_, n)| !n.is_empty()).collect())
 }
 
 /// Bazy testowe ze schemą opencode (spike S3), wspólne dla testów tego modułu, runtime i statystyk.
@@ -227,13 +230,13 @@ mod tests {
         s.sort_by(|a, b| a.id.cmp(&b.id));
         assert_eq!(s, vec![DbSession { id: "ses_k".into(), updated: 30, parent: true, directory: "C:/work/app".into() },
                            DbSession { id: "ses_p".into(), updated: 20, parent: false, directory: "C:/work/app".into() }]);
-        let m = messages(&c, "ses_p");
+        let m = messages(&c, "ses_p").unwrap();
         assert_eq!(m.len(), 2);
         assert_eq!((m[0].role.as_str(), m[0].created), ("user", 5));
         assert_eq!((m[1].role.as_str(), m[1].provider.as_deref(), m[1].model.as_deref()), ("assistant", Some("openai"), Some("gpt-6-sol")));
         assert_eq!((m[1].input, m[1].output, m[1].reasoning, m[1].cache_read, m[1].cache_write), (1, 2, 3, 4, 5));
         assert_eq!((m[1].completed, m[1].cwd.as_deref()), (Some(506), Some("C:/work/app")));
-        assert_eq!(tools(&c, "ses_p"), vec![(7, "bash".to_string())]);
+        assert_eq!(tools(&c, "ses_p"), Some(vec![(7, "bash".to_string())]));
         assert!(!format!("{s:?}{m:?}{:?}", tools(&c, "ses_p")).contains("SEKRET"));
     }
 
@@ -247,7 +250,7 @@ mod tests {
         let c = open(&old).unwrap();
         assert!(session_usage(&c, &["s"]).is_empty());
         assert_eq!(today(&c, 0), (0, 0.0));
-        assert!(messages(&c, "s").is_empty() && tools(&c, "s").is_empty());
+        assert!(messages(&c, "s").is_none() && tools(&c, "s").is_none(), "błąd to nie pusta sesja");
         let p = db(d.path());
         let w = rusqlite::Connection::open(&p).unwrap();
         session(&w, "ses_a", None, 1, 0.0, [1, 0, 0, 0, 0]);

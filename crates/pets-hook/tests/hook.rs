@@ -158,3 +158,43 @@ fn a_bad_or_missing_event_name_sends_nothing() {
     assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nic nie wysłano");
     ing.stop();
 }
+
+/// Komenda z `integrations::hook_command` uruchomiona prawdziwą powłoką: `hook.exe` w folderze ze spacją,
+/// apostrofem i `&` musi odpowiedzieć Antigravity (przegląd 0.11). PowerShell tylko dla zwykłej ścieżki: wymaga
+/// innej formy (`hook_command_ps`), a powłokę Antigravity potwierdza test na żywo.
+#[test]
+fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
+    use std::os::windows::process::CommandExt;
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("missing.json");
+    let place = |name: &str| {
+        let p = dir.path().join(name).join(".agent-pets").join("hook.exe");
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::copy(env!("CARGO_BIN_EXE_hook"), &p).unwrap();
+        p
+    };
+    let stop = |out: std::process::Output, what: &str| {
+        assert!(String::from_utf8_lossy(&out.stdout).contains(r#"{"decision":"stop"}"#), "{what}: {:?} / {}",
+            String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    };
+    let bash = ["C:/Program Files/Git/bin/bash.exe", "C:/Program Files/Git/usr/bin/bash.exe"].into_iter()
+        .map(std::path::PathBuf::from).find(|p| p.is_file());
+    for name in ["plain", "Jan Kowalski", "O'Neil & Co", "O'Neil", "R&D"] {
+        let cmd = pets_core::integrations::hook_command(&place(name), "antigravity", "Stop");
+        let out = Command::new("cmd").raw_arg(format!("/S /C \"{cmd}\"")).env("AGENT_PETS_ENDPOINT", &missing)
+            .stdin(Stdio::null()).output().unwrap();
+        stop(out, &format!("cmd {name}"));
+        if let Some(b) = &bash {
+            let out = Command::new(b).arg("-c").arg(&cmd).env("AGENT_PETS_ENDPOINT", &missing).stdin(Stdio::null()).output().unwrap();
+            stop(out, &format!("bash {name}"));
+        }
+        let ps = pets_core::integrations::hook_command_ps(&place(name), "copilot", "Stop");
+        let out = Command::new("powershell").args(["-NoProfile", "-Command", &ps]).env("AGENT_PETS_ENDPOINT", &missing)
+            .stdin(Stdio::null()).output().unwrap();
+        assert!(out.status.success(), "powershell {name}: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    let plain = pets_core::integrations::hook_command(&place("plain"), "antigravity", "Stop");
+    let out = Command::new("powershell").args(["-NoProfile", "-Command", &plain]).env("AGENT_PETS_ENDPOINT", &missing)
+        .stdin(Stdio::null()).output().unwrap();
+    stop(out, "powershell plain");
+}

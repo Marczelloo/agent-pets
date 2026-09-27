@@ -48,12 +48,15 @@ pub fn install(settings: &mut Value, hook_exe: &str) {
 }
 
 /// Zmiana pliku z kopią `<nazwa>.agent-pets.bak` i zapisem atomowym. Zepsuty JSON kończy się błędem bez zapisu.
-pub(crate) fn edit_file(path: &Path, f: impl FnOnce(&mut Value)) -> std::io::Result<()> {
+pub(crate) fn edit_file(path: &Path, f: impl FnOnce(&mut Value)) -> std::io::Result<()> { edit_file_opts(path, true, f) }
+
+/// Jak `edit_file`; `backup = false` zostawia istniejącą kopię (np. pierwotny plik sprzed naszej pierwszej zmiany).
+pub(crate) fn edit_file_opts(path: &Path, backup: bool, f: impl FnOnce(&mut Value)) -> std::io::Result<()> {
     let mut v: Value = match std::fs::read_to_string(path) {
         Ok(s) => {
             let v = serde_json::from_str(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-            std::fs::write(path.with_file_name(format!(
-                "{}.agent-pets.bak", path.file_name().unwrap().to_string_lossy())), &s)?;
+            if backup { std::fs::write(path.with_file_name(format!(
+                "{}.agent-pets.bak", path.file_name().unwrap().to_string_lossy())), &s)?; }
             v
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),

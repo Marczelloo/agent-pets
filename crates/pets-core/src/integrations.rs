@@ -77,10 +77,12 @@ fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
     }
 }
 
-/// Komenda hooka dla cmd i bash: ukośniki (bash nie zjada `\`), cudzysłów tylko przy spacji.
+/// Komenda hooka dla cmd i bash: ukośniki (bash nie zjada `\`), cudzysłów przy każdym znaku spoza bezpiecznego
+/// zestawu (spacja, apostrof, `&`, nawiasy…). Zwykła ścieżka zostaje bez cudzysłowu, więc działa też w PowerShellu.
 pub fn hook_command(hook: &Path, agent: &str, event: &str) -> String {
     let p = hook.to_string_lossy().replace('\\', "/");
-    let p = if p.contains(' ') { format!("\"{p}\"") } else { p };
+    let safe = p.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | ':' | '_' | '-'));
+    let p = if safe { p } else { format!("\"{p}\"") };
     format!("{p} --agent {agent} --event {event}")
 }
 
@@ -202,13 +204,18 @@ fn read_antigravity(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>
 
 fn enable_antigravity(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
     if !home.join(".gemini").is_dir() { return Err(detect(AppId::Antigravity, home, lang).note.unwrap_or_default()); }
-    read_antigravity(home, lang)?;
+    let current = read_antigravity(home, lang)?;
     let hook = place_hook(home, hook_src, lang)?;
     let entry = antigravity_entry(&hook);
-    crate::hooks_install::edit_file(&antigravity_hooks(home), |v| { v[ANTIGRAVITY_KEY] = entry; })
+    let ours_now = current.as_ref().and_then(|v| v.get(ANTIGRAVITY_KEY));
+    let done = tr(lang, "Hooki Antigravity zapisane (kopia: hooks.json.agent-pets.bak). Potrzebna wersja Antigravity z hookami.",
+        "Antigravity hooks written (backup: hooks.json.agent-pets.bak). Needs an Antigravity version with hooks.");
+    // naprawa przy każdym starcie: bez zmian nic nie zapisujemy (plik użytkownika i kopia zostają nietknięte)
+    if ours_now == Some(&entry) { return Ok(done.into()); }
+    // kopia tylko pliku sprzed naszej pierwszej zmiany; zmiana naszego wpisu (np. nowa ścieżka) jej nie nadpisuje
+    crate::hooks_install::edit_file_opts(&antigravity_hooks(home), ours_now.is_none(), |v| { v[ANTIGRAVITY_KEY] = entry; })
         .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), antigravity_hooks(home).display()))?;
-    Ok(tr(lang, "Hooki Antigravity zapisane (kopia: hooks.json.agent-pets.bak). Potrzebna wersja Antigravity z hookami.",
-        "Antigravity hooks written (backup: hooks.json.agent-pets.bak). Needs an Antigravity version with hooks.").into())
+    Ok(done.into())
 }
 
 fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, String> {
@@ -217,7 +224,8 @@ fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, String> {
     if v.get(ANTIGRAVITY_KEY).is_none() { return nothing(); }
     let f = antigravity_hooks(home);
     let mut empty = false;
-    crate::hooks_install::edit_file(&f, |v| {
+    // bez nowej kopii: kopia zostaje plikiem sprzed naszej pierwszej zmiany
+    crate::hooks_install::edit_file_opts(&f, false, |v| {
         if let Some(o) = v.as_object_mut() { o.remove(ANTIGRAVITY_KEY); empty = o.is_empty(); }
     }).map_err(|e| e.to_string())?;
     // plik tylko z naszym kluczem: po wyłączeniu nic w nim nie zostało
@@ -447,6 +455,8 @@ mod tests {
         assert_eq!(hook_command(sp, "antigravity", "PreToolUse"),
             r#""C:/Users/Jan Kowalski/.agent-pets/hook.exe" --agent antigravity --event PreToolUse"#);
         let ap = Path::new(r"C:\Users\O'Neil\.agent-pets\hook.exe");
+        assert_eq!(hook_command(ap, "antigravity", "Stop"), r#""C:/Users/O'Neil/.agent-pets/hook.exe" --agent antigravity --event Stop"#);
+        assert!(hook_command(Path::new(r"C:\Users\R&D\hook.exe"), "copilot", "Stop").starts_with('"'));
         assert_eq!(hook_command_ps(ap, "copilot", "Stop"), "& 'C:/Users/O''Neil/.agent-pets/hook.exe' --agent copilot --event Stop");
         assert_eq!(hook_command_ps(sp, "copilot", "Stop"), "& 'C:/Users/Jan Kowalski/.agent-pets/hook.exe' --agent copilot --event Stop");
     }
@@ -529,6 +539,29 @@ mod tests {
         disable(AppId::Antigravity, h.path(), Lang::Pl).unwrap();
         assert_eq!(ag_json(h.path()), json!({"my-linter": mine}));
         assert!(!status(AppId::Antigravity, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn a_repeated_antigravity_enable_leaves_the_file_and_the_first_backup_alone() {
+        let h = home();
+        let f = antigravity_hooks(h.path());
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let original = "{\n  \"zeta\": {},\n  \"my-linter\": {\"Stop\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"./x.sh\"}]}]}\n}";
+        std::fs::write(&f, original).unwrap();
+        let bak = f.with_file_name("hooks.json.agent-pets.bak");
+        enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        let (file, backup) = (std::fs::read(&f).unwrap(), std::fs::read(&bak).unwrap());
+        assert_eq!(backup, original.as_bytes(), "kopia to plik sprzed naszej zmiany");
+        // naprawa przy starcie aplikacji: nic się nie zmieniło, więc nic nie zapisujemy
+        enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        assert_eq!((std::fs::read(&f).unwrap(), std::fs::read(&bak).unwrap()), (file.clone(), backup.clone()));
+        // nowa ścieżka hook.exe (np. po aktualizacji): wpis się zmienia, ale kopia zostaje pierwotna
+        let mut v: Value = serde_json::from_slice(&file).unwrap();
+        v["agent-pets"]["Stop"][0]["hooks"][0]["command"] = json!("C:/old/hook.exe --agent antigravity --event Stop");
+        std::fs::write(&f, serde_json::to_string(&v).unwrap()).unwrap();
+        enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        assert_eq!(std::fs::read(&bak).unwrap(), original.as_bytes());
+        assert!(ag_json(h.path())["agent-pets"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap().contains(".agent-pets"));
     }
 
     #[test]
