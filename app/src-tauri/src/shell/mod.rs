@@ -69,6 +69,17 @@ pub fn attach(parent: Option<isize>, bar: Option<isize>) -> Attach {
     }
 }
 
+/// Co ile ponawiamy osadzenie w pasku, gdy `SetParent` zawiódł (np. tuż po zalogowaniu, gdy Explorer jeszcze startuje).
+pub const EMBED_RETRY_MS: u64 = 2_000;
+
+/// `attach`, a po nieudanym osadzeniu (okno awaryjne nad paskiem) ponowna próba na tym samym pasku co `EMBED_RETRY_MS`.
+pub fn attach_or_retry(parent: Option<isize>, bar: Option<isize>, failed: bool, since_ms: u64) -> Attach {
+    match (attach(parent, bar), bar) {
+        (Attach::Keep, Some(b)) if failed && since_ms >= EMBED_RETRY_MS => Attach::Embed(b),
+        (a, _) => a,
+    }
+}
+
 /// Okno pływające trzeba ustawić, gdy zmienił się cel albo Windows sam zmienił okno (np. `WM_DPICHANGED`
 /// po przejściu na monitor o innej skali przeskalował je od starego rozmiaru).
 pub fn needs_apply(target: Option<placement::Rect>, last: Option<placement::Rect>, actual: Option<placement::Rect>) -> bool {
@@ -214,6 +225,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
     let (mut want, mut n) = (0.0f64, 1u32);
     // rodzic okna sceny: uchwyt paska (0 = okno najwyższego poziomu, None = jeszcze nieustalony)
     let (mut parent, mut embed_failed): (Option<isize>, bool) = (None, false);
+    let mut embed_failed_at: Option<std::time::Instant> = None;
     let mut pending: Vec<Cmd> = Vec::new();
     // ostatni pomiar monitorów i paska (przeciąganie korzysta z niego do sekundy)
     let mut measured: Option<(std::time::Instant, Vec<taskbar::Mon>)> = None;
@@ -256,13 +268,15 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             last_rect = None;
         }
         let hw = taskbar::hwnd(h);
-        match attach(parent, bar.map(|b| b.0 as isize)) {
+        let since = embed_failed_at.map(|t| t.elapsed().as_millis() as u64).unwrap_or(0);
+        match attach_or_retry(parent, bar.map(|b| b.0 as isize), embed_failed, since) {
             Attach::Embed(b) => {
                 // z okna pływającego: w pasku kliknięcia zawsze są nasze
                 pointer::PASSTHROUGH.store(false, Ordering::Relaxed);
                 taskbar::passthrough(hw, false);
                 embed_failed = taskbar::embed(hw, taskbar::hwnd(b)).is_err();
-                if embed_failed { eprintln!("agent-pets: osadzenie w pasku nie powiodło się, okno pływające"); }
+                embed_failed_at = embed_failed.then(std::time::Instant::now);
+                if embed_failed { eprintln!("agent-pets: osadzenie w pasku nie powiodło się, okno nad paskiem do kolejnej próby"); }
                 parent = Some(b);
                 last_layout = None;
             }
@@ -270,6 +284,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 taskbar::detach(hw);
                 parent = Some(0);
                 embed_failed = false;
+                embed_failed_at = None;
                 last_layout = None;
                 last_rect = None;
             }
@@ -377,6 +392,16 @@ mod tests {
         assert_eq!(attach(Some(5), None), Attach::Detach);
         assert_eq!(attach(Some(7), Some(7)), Attach::Keep);
         assert_eq!(attach(Some(0), Some(7)), Attach::Embed(7));
+    }
+
+    #[test]
+    fn a_failed_embed_is_retried_on_the_same_taskbar() {
+        // tuż po zalogowaniu `SetParent` do paska potrafi zawieść; okno nie może zostać nad paskiem na zawsze
+        assert_eq!(attach_or_retry(Some(7), Some(7), false, 60_000), Attach::Keep);
+        assert_eq!(attach_or_retry(Some(7), Some(7), true, EMBED_RETRY_MS - 1), Attach::Keep);
+        assert_eq!(attach_or_retry(Some(7), Some(7), true, EMBED_RETRY_MS), Attach::Embed(7));
+        assert_eq!(attach_or_retry(Some(7), None, true, EMBED_RETRY_MS), Attach::Detach, "floating mode wins");
+        assert_eq!(attach_or_retry(None, Some(7), false, 0), Attach::Embed(7));
     }
 
     #[test]
