@@ -78,6 +78,7 @@ pub struct Overrides {
     #[serde(skip_serializing_if = "Option::is_none")] pub claude_code: Option<LookOverride>,
     #[serde(skip_serializing_if = "Option::is_none")] pub codex: Option<LookOverride>,
     #[serde(skip_serializing_if = "Option::is_none")] pub agent_router: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub opencode: Option<LookOverride>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -487,6 +488,14 @@ mod tests {
         let a = l.settings.apps;
         // opencode zmienia pliki opencode, więc tylko na wyraźne włączenie; furtka to lokalna trasa
         assert_eq!((a.claude_code, a.codex, a.agent_router, a.opencode, a.generic), (true, false, true, false, true));
+    }
+
+    #[test]
+    fn an_opencode_look_override_survives_a_save() {
+        let l = load_str(r#"{"version":1,"pets":{"overrides":{"opencode":{"style":"neon"}}}}"#);
+        assert_eq!(l.settings.pets.overrides.opencode, Some(LookOverride { style: Some(Style::Neon), motion: None }));
+        let v = serde_json::to_value(&l.settings).unwrap();
+        assert_eq!(v["pets"]["overrides"]["opencode"]["style"], "neon");
     }
 
     #[test]

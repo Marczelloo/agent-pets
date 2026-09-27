@@ -16,16 +16,22 @@ export const defaultStage = (): StageSettings => ({
   bubbles: { questions: true, actions: true }, minis: true,
 });
 
-export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId {
+/** Aplikacja, której nadpisanie wyglądu dotyczy sesji; `null` = agent bez własnych ustawień (wygląd domyślny). */
+export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId | null {
   if (s.origin === 'router') return 'agent_router';
-  return s.agent === 'codex' ? 'codex' : 'claude_code';
+  switch (s.agent) {
+    case 'claude': return 'claude_code';
+    case 'codex': return 'codex';
+    case 'opencode': return 'opencode';
+    default: return null;
+  }
 }
 
 /** Ruch „anime” z wcześniejszych wersji to dziś „dynamic” (rdzeń też czyta stary identyfikator). */
 const motionOf = (m: MotionId | 'anime'): MotionId => (m === 'anime' ? 'dynamic' : m);
 
-export function lookFor(p: Pets, app: AppId): Look {
-  const o = p.overrides?.[app] ?? {};
+export function lookFor(p: Pets, app: AppId | null): Look {
+  const o = (app && p.overrides?.[app]) || {};
   return { style: o.style ?? p.style, motion: motionOf(o.motion ?? p.motion) };
 }
 

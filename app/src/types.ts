@@ -1,5 +1,7 @@
 // Lustro modelu z crates/pets-core/src/model.rs (serde: snake_case, Option → null).
-export type Agent = 'claude' | 'codex';
+export type Agent = 'claude' | 'codex' | 'opencode' | 'antigravity' | 'copilot' | 'cursor' | 'grok' | 'other';
+/** Program, w którym działa sesja (`App` w rdzeniu). */
+export type App = 'terminal' | 'claude_desktop' | 'codex_app' | 'vscode' | 't3code' | 'cursor' | 'antigravity' | 'zed' | 'jetbrains' | 'other';
 export type Origin = 'cli' | 'desktop' | 'router';
 export type State = 'thinking' | 'working' | 'needs_you' | 'done' | 'error' | 'idle' | 'sleep' | 'compacting' | 'ended';
 export type Tool = 'edit' | 'bash' | 'read' | 'grep' | 'web' | 'agent' | 'mcp' | 'other';
@@ -21,7 +23,7 @@ export interface Session {
   last_activity: number;
   state_since: number;
   turn_started_at: number | null;
-  jump: { pid: number | null; session_id: string; cwd: string; app: string | null };
+  jump: { pid: number | null; session_id: string; cwd: string; app: App | null; app_name?: string | null; host_pid?: number | null };
   /** zadanie Agent Routera powiązane z tym wątkiem Codexa */
   router_task?: RouterTask | null;
   /** id sesji rodzica; brak = zwykła sesja */
@@ -32,6 +34,10 @@ export interface Session {
   action?: string | null;
   /** tekst pytania, tylko w `needs_you` */
   question?: string | null;
+  /** id modelu (np. `claude-opus-5-5`), od 0.10 */
+  model?: string | null;
+  /** nazwa agenta `other` (z furtki), od 0.10 */
+  agent_name?: string | null;
 }
 
 export type SubKind = 'claude' | 'codex' | 'router';
@@ -50,7 +56,7 @@ export type PointerMsg =
   | { kind: 'context'; x: number; y: number };
 export interface TooltipContent { title: string; subtitle: string; lines: string[] }
 
-export type AppId = 'claude_code' | 'codex' | 'agent_router';
+export type AppId = 'claude_code' | 'codex' | 'agent_router' | 'opencode';
 export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
 export type MotionId = 'calm' | 'dynamic';
 export interface Look { style: StyleId; motion: MotionId }
@@ -58,7 +64,8 @@ export interface Look { style: StyleId; motion: MotionId }
 export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number; react_to_media?: boolean }
 /** Lustro `media::Media` (zdarzenie `pets://media`): czy coś gra w Windows (GSMTC) i w jakiej aplikacji. */
 export interface Media { playing: boolean; app: string | null }
-export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean }
+/** `opencode` i `generic` (furtka) od 0.10; brak w pliku 0.9.1 = wartości domyślne rdzenia. */
+export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean; opencode?: boolean; generic?: boolean }
 export interface Settings {
   version: number;
   apps: AppsSettings;

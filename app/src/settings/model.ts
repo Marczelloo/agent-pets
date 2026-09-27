@@ -3,10 +3,11 @@ import { formatAgo } from '../tooltip/text';
 import type { AppId, AppRow, Diagnostics, Settings } from '../types';
 import { t } from '../i18n';
 
-export const APP_LABEL: Record<AppId, string> = { claude_code: 'Claude Code', codex: 'Codex', agent_router: 'Agent Router' };
-export const appLabel = (id: AppId): string => ({ claude_code: t().agent.claude, codex: t().agent.codex, agent_router: t().origin.router })[id];
+export const APP_LABEL: Record<AppId, string> = { claude_code: 'Claude Code', codex: 'Codex', agent_router: 'Agent Router', opencode: 'opencode' };
+export const appLabel = (id: AppId): string =>
+  ({ claude_code: t().agent.claude, codex: t().agent.codex, agent_router: t().origin.router, opencode: t().agent.opencode })[id];
 export const appHint = (id: AppId): string => t().settings.appHint[id];
-const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id === 'claude_code' || id === 'codex' || id === 'agent_router' ? appLabel(id) : id;
+const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id in APP_LABEL ? appLabel(id as AppId) : id;
 
 export const WIZARD_STEPS = ['apps', 'limits', 'notify', 'look'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
@@ -14,13 +15,17 @@ export type WizardStep = (typeof WIZARD_STEPS)[number];
 /** Jak `Settings::default()` w rdzeniu; używane, gdy aplikacja nie odpowiada (podgląd w przeglądarce). */
 export function defaultSettings(): Settings {
   return {
-    version: 1, apps: { claude_code: true, codex: true, agent_router: true }, claude_statusline: false, claude_plan_usage: false,
+    version: 1, apps: { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true }, claude_statusline: false, claude_plan_usage: false,
     notifications: { needs_you: true, done: true, limits: true }, pets: defaultPets(),
     power_saving: 'auto', autostart: true, language: 'auto', updates: 'notify', stage: defaultStage(),
   };
 }
 
 export const withApp = (s: Settings, id: AppId, on: boolean): Settings => ({ ...s, apps: { ...s.apps, [id]: on } });
+
+/** Furtka (`/v1/events/generic`): brak pola w pliku z 0.9.1 = otwarta, jak w rdzeniu. */
+export const doorOn = (s: Settings): boolean => s.apps.generic !== false;
+export const withDoor = (s: Settings, on: boolean): Settings => ({ ...s, apps: { ...s.apps, generic: on } });
 
 /** Kreator zaczyna z włączonymi tylko tymi aplikacjami, które znaleziono na komputerze. */
 export function defaultAppChoice(rows: AppRow[], s: Settings): Settings {

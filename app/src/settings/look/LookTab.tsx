@@ -9,7 +9,7 @@ import { PreviewStage } from './PreviewStage';
 import { PetsCanvas } from './PetsCanvas';
 import { Toggle } from '../Toggle';
 
-const APPS: AppId[] = ['claude_code', 'codex', 'agent_router'];
+const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode'];
 
 export function MotionSwitch({ motion, onPick }: { motion: MotionId; onPick: (m: MotionId) => void }) {
   return (
@@ -40,7 +40,7 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
       <LookGallery style={pets.style} motion={pets.motion} scene={scene} onPick={s => onChange({ ...pets, style: s })} />
       <p className="label strip-label">{t().look.taskbar}</p>
       <PetsCanvas className="taskbar" scene={scene} u={0.3} width={330} height={48}
-        pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : 'codex', look: lookFor(pets, a) }))} />
+        pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : a === 'opencode' ? 'opencode' : 'codex', look: lookFor(pets, a) }))} />
     </section>
     <details className="card overrides">
       <summary>{t().look.perAgent}</summary>

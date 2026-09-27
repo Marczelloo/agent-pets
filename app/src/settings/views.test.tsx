@@ -12,6 +12,7 @@ const rows: AppRow[] = [
   { id: 'claude_code', detected: { found: true, path: 'C:/h/.claude', note: null }, status: { installed: false, detail: 'Hooki: brak' }, enabled: true },
   { id: 'codex', detected: { found: false, path: null, note: 'Nie znaleziono ~/.codex.' }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: false },
   { id: 'agent_router', detected: { found: true, path: 'C:/h/.agent-router', note: null }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: true },
+  { id: 'opencode', detected: { found: true, path: 'C:/h/.config/opencode', note: null }, status: { installed: false, detail: 'Plugin: brak' }, enabled: false },
 ];
 const diag: Diagnostics = { version: '0.5.0', endpoint_port: 1, settings_path: 's', settings_error: null, hook_exe: null,
   autostart_registered: false, last_seen: {}, apps: [], stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
@@ -143,6 +144,15 @@ describe('SettingsView', () => {
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
     expect(html).toContain('Hooki: brak');
     expect(html).toContain('Agent Router');
+    expect(html).toContain('opencode');
+    expect(html).toContain('Plugin: brak');
+  });
+  it('the apps tab has the door switch, on for a 0.9.1 file', () => {
+    const old = { ...defaultSettings(), apps: { claude_code: true, codex: true, agent_router: true } } as unknown as Settings;
+    const html = renderToString(<SettingsView settings={old} rows={rows} diag={diag} tab="apps" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toMatch(/aria-label="Furtka dla innych agentów"[^>]*checked=""/);
+    expect(html).toContain('hook.exe report');
   });
   it('offers a copyable report in diagnostics', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag" onTab={() => {}}

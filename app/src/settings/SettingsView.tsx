@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, UpdateStatus } from '../types';
 import { LookTab } from './look/LookTab';
 import { StageTab } from './StageTab';
-import { appHint, appLabel, reportText } from './model';
+import { appHint, appLabel, doorOn, reportText, withDoor } from './model';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
@@ -61,7 +61,7 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         {tab === 'apps' && <section className="card">
           {rows.map(r => (
             <div key={r.id}>
-              <Toggle label={appLabel(r.id)} checked={s.apps[r.id]} disabled={!r.detected.found && !s.apps[r.id]}
+              <Toggle label={appLabel(r.id)} checked={!!s.apps[r.id]} disabled={!r.detected.found && !s.apps[r.id]}
                 onChange={on => void onIntegration(r.id, on)}>
                 {r.detected.found ? `${r.detected.path} · ${r.status.detail}` : r.detected.note}
               </Toggle>
@@ -71,6 +71,9 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
               )}
             </div>
           ))}
+          <Toggle label={t().settings.door} checked={doorOn(s)} onChange={on => onChange(withDoor(s, on))}>
+            {t().settings.doorDesc}
+          </Toggle>
         </section>}
 
         {tab === 'look' && <LookTab pets={s.pets} onChange={p => set({ pets: p })} />}

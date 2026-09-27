@@ -18,6 +18,7 @@ const demoRows: AppRow[] = [
   { id: 'claude_code', detected: { found: true, path: 'C:/Users/ja/.claude', note: null }, status: { installed: true, detail: '' }, enabled: true },
   { id: 'codex', detected: { found: true, path: 'C:/Users/ja/.codex', note: null }, status: { installed: true, detail: '' }, enabled: true },
   { id: 'agent_router', detected: { found: true, path: 'C:/Users/ja/.agent-router', note: null }, status: { installed: true, detail: '' }, enabled: true },
+  { id: 'opencode', detected: { found: true, path: 'C:/Users/ja/.config/opencode', note: null }, status: { installed: false, detail: '' }, enabled: false },
 ];
 const demoDiag: Diagnostics = { version: '0.5.0', endpoint_port: 61234, settings_path: 'C:/Users/ja/.agent-pets/settings.json', settings_error: null,
   hook_exe: 'C:/Users/ja/.agent-pets/hook.exe', autostart_registered: true, last_seen: { claude_code: Date.now() - 20_000, codex: Date.now() - 300_000 },

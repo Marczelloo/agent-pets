@@ -12,6 +12,8 @@ pub struct Target {
     pub session_id: String,
     pub cwd: String,
     pub pid: Option<u32>,
+    /// program-gospodarz (VS Code, t3code…): jego okno przed oknem procesu agenta
+    pub host_pid: Option<u32>,
     pub host_session_id: Option<String>,
     pub desktop: bool,
 }
@@ -23,6 +25,7 @@ impl Target {
             session_id: s.id.clone(),
             cwd: if s.cwd.is_empty() { s.jump.cwd.clone() } else { s.cwd.clone() },
             pid: s.jump.pid.or(reg.map(|r| r.pid)),
+            host_pid: s.jump.host_pid,
             host_session_id: reg.and_then(|r| r.host_session_id.clone()),
             // sesja żyje w aplikacji agenta (Claude albo Codex): tylko wtedy deep link ma dokąd prowadzić
             desktop: matches!(s.jump.app, Some(App::ClaudeDesktop | App::CodexApp))
@@ -99,21 +102,17 @@ pub fn plan(t: &Target) -> Vec<Step> {
     if resumable && !safe_id(agent_id(t)) { return vec![Step::Clipboard(resume_command(t))]; }
     let mut out = Vec::new();
     match t.agent {
-        Agent::Claude => {
-            if t.desktop {
-                if let Some(h) = t.host_session_id.as_deref().filter(|h| host_ok(h)) {
-                    out.push(Step::DeepLink(format!("claude://code/continue?session={h}")));
-                }
+        Agent::Claude if t.desktop => {
+            if let Some(h) = t.host_session_id.as_deref().filter(|h| host_ok(h)) {
+                out.push(Step::DeepLink(format!("claude://code/continue?session={h}")));
             }
-            if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); }
         }
-        Agent::Codex => {
-            // `ShellExecute` na zarejestrowanym `codex://` zawsze „się udaje”, więc link tylko dla sesji z aplikacji Codex
-            if t.desktop { out.push(Step::DeepLink(format!("codex://threads/{}", t.session_id))); }
-            if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); }
-        }
-        _ => if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); },
+        // `ShellExecute` na zarejestrowanym `codex://` zawsze „się udaje”, więc link tylko dla sesji z aplikacji Codex
+        Agent::Codex if t.desktop => out.push(Step::DeepLink(format!("codex://threads/{}", t.session_id))),
+        _ => {}
     }
+    if let Some(h) = t.host_pid.filter(|h| Some(*h) != t.pid) { out.push(Step::FocusProcess(h)); }
+    if let Some(pid) = t.pid { out.push(Step::FocusProcess(pid)); }
     if let Some((program, args)) = resume(t).filter(|_| !t.cwd.is_empty() && Path::new(&t.cwd).is_dir()) {
         out.push(Step::OpenTerminal { cwd: t.cwd.clone(), program, args });
     }
@@ -128,7 +127,7 @@ mod tests {
 
     fn t(agent: Agent, desktop: bool) -> Target {
         Target { agent, session_id: "3746a003-5ba1".into(), cwd: std::env::temp_dir().to_string_lossy().into(),
-                 pid: Some(42), host_session_id: Some("local_f1d1d64e-9530".into()), desktop }
+                 pid: Some(42), host_pid: None, host_session_id: Some("local_f1d1d64e-9530".into()), desktop }
     }
 
     #[test]
@@ -171,7 +170,7 @@ mod tests {
 
     #[test]
     fn missing_data_still_ends_in_the_clipboard() {
-        let x = Target { agent: Agent::Claude, session_id: "abc".into(), cwd: String::new(), pid: None, host_session_id: None, desktop: false };
+        let x = Target { agent: Agent::Claude, session_id: "abc".into(), cwd: String::new(), pid: None, host_pid: None, host_session_id: None, desktop: false };
         let p = plan(&x);
         assert_eq!(p.len(), 1);
         assert_eq!(p[0], Step::Clipboard("claude --resume abc".into()));
@@ -192,6 +191,19 @@ mod tests {
         let mut x = t(Agent::Claude, true);
         x.host_session_id = Some("local_x&y".into());
         assert_eq!(plan(&x)[0], Step::FocusProcess(42));
+    }
+
+    #[test]
+    fn the_host_program_window_comes_before_the_agent_process() {
+        let mut x = t(Agent::Claude, false);
+        x.host_pid = Some(7);
+        let p = plan(&x);
+        assert_eq!(&p[..2], &[Step::FocusProcess(7), Step::FocusProcess(42)]);
+        x.host_pid = Some(42);
+        assert_eq!(plan(&x).iter().filter(|s| matches!(s, Step::FocusProcess(_))).count(), 1, "ten sam proces raz");
+        let mut d = t(Agent::Claude, true);
+        d.host_pid = Some(7);
+        assert!(matches!(plan(&d)[0], Step::DeepLink(_)), "deep link zostaje pierwszy");
     }
 
     #[test]
