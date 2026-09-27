@@ -61,6 +61,8 @@ pub struct Runtime {
     apps: crate::settings::Apps,
     last_seen: std::collections::BTreeMap<&'static str, i64>,
     _ingest: Ingest,
+    /// furtka otwarta (`apps.generic`), wspólna z wątkiem endpointu
+    door: std::sync::Arc<std::sync::atomic::AtomicBool>,
     _watcher: Option<notify::RecommendedWatcher>,
 }
 
@@ -70,14 +72,15 @@ impl Runtime {
         let mut links = crate::links::Links::load(&links_path);
         links.prune(crate::time::now_ms());
         let (tx, hooks) = channel();
-        let ingest = Ingest::start(Endpoint::new_token(), tx)?;
+        let door = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(cfg.apps.generic));
+        let ingest = Ingest::start(Endpoint::new_token(), tx, door.clone())?;
         ingest.endpoint().write(&cfg.endpoint_path).context("zapis endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
             hook_state: HookState::default(), lang: cfg.lang, links, links_path,
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
-            _ingest: ingest, _watcher: None,
+            _ingest: ingest, door, _watcher: None,
         };
         rt.sources.lang = rt.lang;
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
@@ -111,6 +114,7 @@ impl Runtime {
             if let Some(p) = self.router.as_mut() { p.reset(); }
         }
         self.apps = apps;
+        self.door.store(apps.generic, std::sync::atomic::Ordering::Relaxed);
         let removed = self.store.retain_sessions(|s| session_on(apps, s));
         removed | self.store.retain_limits(|l| agent_on(apps, l.agent))
     }
@@ -128,6 +132,7 @@ impl Runtime {
             changed |= match msg {
                 Incoming::ClaudeHook(env) => self.on_hook(env),
                 Incoming::ClaudeStatusline(s) => claude::statusline::to_events(&s).into_iter().fold(false, |c, e| self.apply(e) | c),
+                Incoming::Generic(e) => self.apply(e),
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -409,6 +414,24 @@ mod tests {
         assert_eq!(ids, vec!["c1"]);
         assert!(!rt.apply_external(event(Source::Generic, "generic:kilo:b", Kind::Prompt)));
         assert!(!rt.apply_external(event(Source::Opencode, "opencode:b", Kind::Prompt)));
+    }
+
+    #[test]
+    fn a_door_session_starts_working_and_the_switch_closes_the_route() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let send = |ep: &Endpoint| ureq::post(&format!("http://127.0.0.1:{}/v1/events/generic", ep.port))
+            .set("Authorization", &format!("Bearer {}", ep.token))
+            .send_string(r#"{"agent":"kilo","session":"a","state":"working","tool":"bash"}"#)
+            .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
+        assert_eq!(send(&ep), 204);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while rt.store().session("generic:kilo:a").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        let s = rt.store().session("generic:kilo:a").expect("sesja z furtki");
+        assert_eq!((s.agent, s.state, s.tool), (Agent::Other, crate::model::State::Working, Some(crate::model::Tool::Bash)));
+        rt.set_apps(crate::settings::Apps { generic: false, ..Default::default() });
+        assert_eq!(send(&ep), 404);
     }
 
     #[test]

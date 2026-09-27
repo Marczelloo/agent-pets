@@ -17,7 +17,7 @@ fn run_hook(endpoint_path: &std::path::Path, stdin: &str) -> std::process::Outpu
 #[test]
 fn forwards_hook_payload_silently() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true))).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
