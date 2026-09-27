@@ -1,5 +1,6 @@
 //! Adaptery agentów bez własnych logów w rdzeniu: zdarzenia z pluginu (opencode) i z furtki (dowolny agent).
 //! Tekst z zewnątrz jest niezaufany: bez znaków sterujących, przycięty.
+pub mod antigravity;
 pub mod generic;
 pub mod opencode;
 
@@ -17,6 +18,11 @@ pub struct AgentEnvelope {
     pub host: Option<crate::host::Host>,
 }
 
+/// Zdarzenia początku tury, przy których `hook.exe` liczy program (jeden zrzut procesów).
+pub fn host_event(agent: &str, event: &str) -> bool {
+    matches!((agent, event), ("copilot", "SessionStart" | "UserPromptSubmit") | ("antigravity", "PreInvocation"))
+}
+
 /// Tekst z zewnątrz: znaki sterujące zamienione na spacje, obcięte brzegi, najwyżej `max` znaków.
 pub fn clean_text(s: &str, max: usize) -> String {
     let t: String = s.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
@@ -32,6 +38,23 @@ pub fn safe_id(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_program_is_looked_up_only_at_the_start_of_a_turn() {
+        for (a, e, want) in [("copilot", "SessionStart", true), ("copilot", "UserPromptSubmit", true), ("copilot", "PreToolUse", false),
+                             ("copilot", "Stop", false), ("antigravity", "PreInvocation", true), ("antigravity", "PreToolUse", false),
+                             ("antigravity", "Stop", false), ("claude", "SessionStart", false)] {
+            assert_eq!(host_event(a, e), want, "{a} {e}");
+        }
+    }
+
+    #[test]
+    fn an_envelope_without_a_program_reads_back() {
+        let e: AgentEnvelope = serde_json::from_str(r#"{"ts":1,"ppid":null,"event":"Stop","payload":{"a":1}}"#).unwrap();
+        assert_eq!((e.event.as_str(), e.host.is_none(), e.payload["a"].as_i64()), ("Stop", true, Some(1)));
+        let back: AgentEnvelope = serde_json::from_value(serde_json::to_value(&e).unwrap()).unwrap();
+        assert_eq!(back, e);
+    }
 
     #[test]
     fn clean_text_drops_control_characters_and_cuts_by_chars() {

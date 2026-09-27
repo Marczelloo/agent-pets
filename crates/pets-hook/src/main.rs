@@ -6,6 +6,9 @@
 //!
 //! `hook.exe report --agent <id> --session <id> --state <stan> [...]` (furtka, spec 0.10 §8): komenda dla ludzi i skryptów,
 //! nie hook. Jako jedyna wypisuje błąd na stderr i kończy się kodem 2.
+//!
+//! `hook.exe --agent <copilot|antigravity> --event <nazwa>` (spec 0.11 §2): hook Copilota albo Antigravity. Koperta
+//! `AgentEnvelope` do widżetu; na wyjście tylko to, czego wymaga agent (Antigravity: `{}`, przy `Stop` decyzja „stop”).
 use pets_core::claude::{HookEnvelope, StatuslineEnvelope};
 use pets_core::endpoint::Endpoint;
 use pets_core::{host, pid, statusline_install, time};
@@ -84,10 +87,42 @@ fn statusline() {
     if let Ok(out) = child.wait_with_output() { let _ = std::io::stdout().write_all(&out.stdout); }
 }
 
+/// Wartość po `--nazwa` w argumentach.
+fn arg<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str)
+}
+
+/// Hook Copilota albo Antigravity: koperta do widżetu, potem odpowiedź, jakiej wymaga agent (spec 0.11 §2).
+fn agent_hook(agent: &str, event: &str) -> Option<()> {
+    let payload: serde_json::Value = serde_json::from_slice(&read_stdin()).ok()?;
+    let ppid = pid::agent_pid();
+    let host = if pets_core::adapters::host_event(agent, event) {
+        ppid.and_then(|p| host::host_of(&host::ProcTable::snapshot(), p))
+    } else { None };
+    let env = pets_core::adapters::AgentEnvelope { ts: time::now_ms(), ppid, event: event.to_string(), payload, host };
+    post(&format!("/v1/events/{agent}"), serde_json::to_value(&env).ok()?)
+}
+
+fn agent_mode(args: &[String]) {
+    let Some(agent) = arg(args, "--agent").filter(|a| matches!(*a, "copilot" | "antigravity")) else { return };
+    let Some(event) = arg(args, "--event").filter(|e| (1..=32).contains(&e.len()) && e.chars().all(|c| c.is_ascii_alphabetic())) else { return };
+    let _ = std::panic::catch_unwind(|| agent_hook(agent, event));
+    // odpowiedź zawsze, także gdy widżet nie działa albo wejście jest złe: bez niej Antigravity nie skończy pracy
+    if agent == "antigravity" {
+        let mut out = std::io::stdout();
+        let _ = writeln!(out, "{}", pets_core::adapters::antigravity::reply(event));
+        let _ = out.flush();
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("report") { std::process::exit(report(&args[2..])); }
     std::panic::set_hook(Box::new(|_| {}));
+    if args.iter().any(|a| a == "--agent") {
+        agent_mode(&args);
+        std::process::exit(0);
+    }
     if std::env::args().any(|a| a == statusline_install::MARK_ARG) {
         let _ = std::panic::catch_unwind(statusline);
     } else {
