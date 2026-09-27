@@ -107,7 +107,7 @@ pub fn summary(book: &Book, q: &Query, now: i64, tz: &dyn Fn(i64) -> i64) -> Sta
     ranked.sort_by(|a, b| value(&b.1.cell).cmp(&value(&a.1.cell)).then(a.0.cmp(b.0)));
     let podium = ranked.iter().take(3).map(|(n, p)| Place { project: (*n).clone(), value: value(&p.cell), agent: p.agent() }).collect();
     let race = match q.race {
-        RaceBy::Agents => [(StatAgent::Claude, "claude"), (StatAgent::Codex, "codex"), (StatAgent::Router, "router")].iter()
+        RaceBy::Agents => [(StatAgent::Claude, "claude"), (StatAgent::Codex, "codex"), (StatAgent::Router, "router"), (StatAgent::Opencode, "opencode")].iter()
             .filter_map(|(a, k)| agents.get(a).map(|c| value(c)).filter(|&v| v > 0).map(|v| Lane { key: k.to_string(), agent: Some(*a), value: v }))
             .collect(),
         RaceBy::Projects => ranked.iter().take(5).map(|(n, p)| Lane { key: (*n).clone(), agent: Some(p.agent()), value: value(&p.cell) }).collect(),
@@ -264,6 +264,10 @@ mod tests {
         let v = summary(&b, &week(), NOW, &utc);
         assert_eq!(v.race.iter().map(|l| (l.key.as_str(), l.agent)).collect::<Vec<_>>(),
             [("claude", Some(StatAgent::Claude)), ("router", Some(StatAgent::Router))]);
+        put(&mut b, "o", meta(StatAgent::Opencode, "q", false, at(0, 1)), at(0, 1), work(2 * H));
+        let v = summary(&b, &week(), NOW, &utc);
+        assert_eq!(v.race.iter().map(|l| l.key.as_str()).collect::<Vec<_>>(), ["claude", "router", "opencode"]);
+        assert_eq!(v.podium[0].agent, StatAgent::Opencode, "opencode pracował w projekcie najdłużej");
     }
 
     #[test]

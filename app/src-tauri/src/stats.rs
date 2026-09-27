@@ -50,6 +50,14 @@ pub fn run_until_done(sc: &Mutex<Scanner>, step: u64, pause: &dyn Fn() -> bool, 
     }
 }
 
+/// Sesje opencode z jego bazy do księgi (spec 0.11 §4.4): tylko przy włączonej integracji i bez gry na pełnym ekranie.
+/// Zwraca liczbę przeliczonych sesji (0 = nic do zapisu).
+pub fn sync_opencode(sc: &Mutex<Scanner>, db_path: &std::path::Path, on: bool, pause: &dyn Fn() -> bool) -> usize {
+    if !on || pause() { return 0; }
+    let Some(c) = pets_core::opencode_db::open(db_path) else { return 0 };
+    pets_core::stats::opencode::sync(&mut sc.lock().unwrap().book, &c, pause)
+}
+
 /// Księga z dysku; błąd odczytu (np. blokada antywirusa przy starcie) ponawiamy, a gdy nie mija, zwracamy `None`:
 /// wtedy nic nie zapisujemy, żeby pusta księga nie nadpisała historii (przegląd 0.9, I4).
 pub fn open_book(path: &std::path::Path, tries: u32, sleep: &dyn Fn(u64)) -> Option<Book> {
@@ -106,6 +114,12 @@ pub fn spawn(app: AppHandle) {
                     if p.done || t - sent >= PROGRESS_EVERY_MS { let _ = app.emit_to("stats", "stats://progress", p); sent = t; }
                 },
                 &|ms| std::thread::sleep(Duration::from_millis(ms)));
+            let settings = app.state::<crate::settings::SettingsState>();
+            let db = pets_core::opencode_db::db_path(&settings.home);
+            if sync_opencode(&st.scanner, &db, settings.get().apps.opencode, &crate::shell::fullscreen_app) > 0
+                && st.writable.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Err(e) = st.scanner.lock().unwrap().book.save(&path) { eprintln!("agent-pets: statystyki: {e}") }
+            }
             std::thread::sleep(RESCAN);
         }
     });
@@ -177,6 +191,17 @@ mod tests {
         let line = serde_json::json!({"type": "user", "timestamp": "2026-09-27T10:00:00.000Z", "cwd": "C:/w/x", "message": {"content": "x"}}).to_string();
         std::fs::write(p.join("s.jsonl"), format!("{line}\n").repeat(lines)).unwrap();
         (d, vec![std::path::PathBuf::from(p.parent().unwrap())])
+    }
+
+    #[test]
+    fn opencode_stats_need_the_switch_a_database_and_no_game() {
+        let (d, roots) = home_with(1);
+        let sc = Mutex::new(Scanner::new(roots, Book::default()));
+        let db = d.path().join("opencode.db");
+        assert_eq!(sync_opencode(&sc, &db, false, &|| false), 0, "wyłączony opencode");
+        assert_eq!(sync_opencode(&sc, &db, true, &|| false), 0, "brak bazy");
+        assert_eq!(sync_opencode(&sc, &db, true, &|| true), 0, "gra na pełnym ekranie");
+        assert!(sc.lock().unwrap().book.files.is_empty());
     }
 
     #[test]

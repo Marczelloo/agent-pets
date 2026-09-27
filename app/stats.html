@@ -6,17 +6,17 @@
 <style>
 :root{
   --bg:#F3F3F3;--card:#FBFBFB;--line:rgba(0,0,0,.08);--edge:rgba(0,0,0,.14);--txt:#1F1F1F;--mut:#5F5E5A;--seg:#E9E9E9;--segOn:#FFFFFF;
-  --track:rgba(0,0,0,.08);--btnb:rgba(0,0,0,.12);--claude:#D97757;--codex:#1D9E75;--router:#3D6FD6;--up:#1D9E75;--down:#C2410C;
+  --track:rgba(0,0,0,.08);--btnb:rgba(0,0,0,.12);--claude:#D97757;--codex:#1D9E75;--router:#3D6FD6;--opencode:#3A3535;--up:#1D9E75;--down:#C2410C;
   --gold:#E3AE3A;--silver:#B3B8C1;--bronze:#C98A5B;--recBg:rgba(227,174,58,.2);--rec:#8A5A00;
   --cal0:rgba(0,0,0,.06);--cal1:rgba(217,119,87,.28);--cal2:rgba(217,119,87,.5);--cal3:rgba(217,119,87,.75);--cal4:#D97757;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;--seg:#2B2B2B;--segOn:#3D3D3D;
-  --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--up:#5DCAA5;--down:#F08A5D;
+  --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--opencode:#CFC9C9;--up:#5DCAA5;--down:#F08A5D;
   --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06)}}
 :root[data-theme="dark"]{
   --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;--seg:#2B2B2B;--segOn:#3D3D3D;
-  --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--up:#5DCAA5;--down:#F08A5D;
+  --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--opencode:#CFC9C9;--up:#5DCAA5;--down:#F08A5D;
   --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06)}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
 *{box-sizing:border-box}
@@ -62,7 +62,7 @@ canvas.enter{animation:enter .45s cubic-bezier(.2,.8,.3,1.2) both}
 .lane .nm{margin:0;font-weight:400;font-size:12px}
 .trk{height:30px;position:relative;border-bottom:1px dashed var(--edge)}
 .trk .bar{position:absolute;left:0;bottom:3px;height:8px;border-radius:4px;background:var(--mut)}
-.bar.claude{background:var(--claude)}.bar.codex{background:var(--codex)}.bar.router{background:var(--router)}
+.bar.claude{background:var(--claude)}.bar.codex{background:var(--codex)}.bar.router{background:var(--router)}.bar.opencode{background:var(--opencode)}
 .runner{position:absolute;bottom:0;width:36px;height:30px}
 .lane .t{text-align:right;color:var(--mut);font-variant-numeric:tabular-nums}
 .cal{display:grid;grid-template-rows:repeat(7,10px);grid-auto-flow:column;grid-auto-columns:10px;gap:2px}

@@ -18,7 +18,7 @@ describe('stats model', () => {
     expect([formatChange(12.2), formatChange(-5), formatChange(null)]).toEqual(['▲ 12%', '▼ 5%', null]);
   });
   it('names agents and badges', () => {
-    expect(['claude', 'codex', 'router'].map(a => agentName(a as never))).toEqual(['Claude Code', 'Codex', 'Agent Router']);
+    expect(['claude', 'codex', 'router', 'opencode'].map(a => agentName(a as never))).toEqual(['Claude Code', 'Codex', 'Agent Router', 'opencode']);
     expect(badgeText('cache_master')).toBe('Mistrz cache');
   });
   it('folders that are not projects read as "No project"', () => {

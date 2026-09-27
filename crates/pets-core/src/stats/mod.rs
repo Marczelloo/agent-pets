@@ -4,6 +4,8 @@ pub mod active;
 pub mod book;
 pub mod claude;
 pub mod codex;
+#[cfg(feature = "opencode-db")]
+pub mod opencode;
 pub mod scan;
 pub mod summary;
 
@@ -57,7 +59,7 @@ impl Cell {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum StatAgent { Claude, Codex, Router }
+pub enum StatAgent { Claude, Codex, Router, Opencode }
 
 /// Kto i gdzie: agent, projekt (ostatni człon `cwd`), czy to subagent, kiedy plik się zaczął.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

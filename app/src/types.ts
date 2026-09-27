@@ -144,7 +144,7 @@ export interface Diagnostics {
 }
 
 // Statystyki (0.9): lustro `pets_core::stats::summary::StatsView` i `scan::Progress`.
-export type StatAgent = 'claude' | 'codex' | 'router';
+export type StatAgent = 'claude' | 'codex' | 'router' | 'opencode';
 export type StatsPeriod = 'today' | 'week' | 'month' | 'all';
 export type StatsMetric = 'time' | 'tokens';
 export type StatsRace = 'agents' | 'projects';

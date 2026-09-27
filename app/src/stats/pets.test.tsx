@@ -61,3 +61,12 @@ describe('pets in the statistics window', () => {
     expect(html.match(/data-scene="run"/g)).toHaveLength(3);
   });
 });
+
+describe('opencode in the statistics window', () => {
+  it('draws the opencode pet with the opencode look', async () => {
+    const { statSkin, statApp } = await import('./StatPet');
+    expect([statSkin('opencode'), statApp('opencode')]).toEqual(['opencode', 'opencode']);
+    expect([statSkin('router'), statApp('router')]).toEqual(['kodek', 'agent_router']);
+    expect([statSkin('claude'), statApp('claude')]).toEqual(['clawd', 'claude_code']);
+  });
+});
