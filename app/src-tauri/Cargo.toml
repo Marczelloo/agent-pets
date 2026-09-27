@@ -14,7 +14,7 @@ update-test = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-pets-core = { path = "../../crates/pets-core" }
+pets-core = { path = "../../crates/pets-core", features = ["opencode-db"] }
 tauri = { version = "2.11", features = ["tray-icon"] }
 serde.workspace = true
 serde_json.workspace = true

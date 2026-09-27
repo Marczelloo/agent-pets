@@ -11,6 +11,8 @@ pub mod ingest;
 pub mod links;
 pub mod integrations;
 pub mod model;
+#[cfg(feature = "opencode-db")]
+pub mod opencode_db;
 pub mod pid;
 pub mod rehydrate;
 pub mod router;

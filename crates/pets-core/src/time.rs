@@ -2,6 +2,32 @@ pub fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
+/// Lokalna północ dnia, w którym wypada `ts` (ms UTC), z czasem letnim według strefy Windows.
+#[cfg(windows)]
+pub fn local_midnight(ts: i64) -> i64 {
+    use windows_sys::Win32::Foundation::{FILETIME, SYSTEMTIME};
+    use windows_sys::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToFileTime, SystemTimeToTzSpecificLocalTime, TzSpecificLocalTimeToSystemTime};
+    const EPOCH_DIFF_MS: i64 = 11_644_473_600_000;
+    let to_ft = |ms: i64| { let v = ((ms + EPOCH_DIFF_MS) * 10_000) as u64; FILETIME { dwLowDateTime: v as u32, dwHighDateTime: (v >> 32) as u32 } };
+    let from_ft = |f: FILETIME| (((f.dwHighDateTime as u64) << 32 | f.dwLowDateTime as u64) / 10_000) as i64 - EPOCH_DIFF_MS;
+    let utc_day = ts - ts.rem_euclid(86_400_000);
+    unsafe {
+        let mut utc: SYSTEMTIME = std::mem::zeroed();
+        let mut local: SYSTEMTIME = std::mem::zeroed();
+        let mut back: SYSTEMTIME = std::mem::zeroed();
+        let mut ft: FILETIME = std::mem::zeroed();
+        if FileTimeToSystemTime(&to_ft(ts), &mut utc) == 0 { return utc_day; }
+        if SystemTimeToTzSpecificLocalTime(std::ptr::null(), &utc, &mut local) == 0 { return utc_day; }
+        local.wHour = 0; local.wMinute = 0; local.wSecond = 0; local.wMilliseconds = 0;
+        if TzSpecificLocalTimeToSystemTime(std::ptr::null(), &local, &mut back) == 0 { return utc_day; }
+        if SystemTimeToFileTime(&back, &mut ft) == 0 { return utc_day; }
+        from_ft(ft)
+    }
+}
+
+#[cfg(not(windows))]
+pub fn local_midnight(ts: i64) -> i64 { ts - ts.rem_euclid(86_400_000) }
+
 /// Dni od 1970-01-01 dla daty kalendarza gregoriańskiego (algorytm H. Hinnanta).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
