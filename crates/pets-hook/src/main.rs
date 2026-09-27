@@ -3,6 +3,9 @@
 //!
 //! Tryb `--agent-pets-statusline` (przelotka statusline): przekazuje JSON statusline do widżetu, a na wyjście
 //! wypisuje wyłącznie wyjście dotychczasowej komendy statusline użytkownika, bajt w bajt.
+//!
+//! `hook.exe report --agent <id> --session <id> --state <stan> [...]` (furtka, spec 0.10 §8): komenda dla ludzi i skryptów,
+//! nie hook. Jako jedyna wypisuje błąd na stderr i kończy się kodem 2.
 use pets_core::claude::{HookEnvelope, StatuslineEnvelope};
 use pets_core::endpoint::Endpoint;
 use pets_core::{host, pid, statusline_install, time};
@@ -16,20 +19,37 @@ fn read_stdin() -> Vec<u8> {
     buf
 }
 
-fn post(path_suffix: &str, body: serde_json::Value) -> Option<()> {
+fn post(path_suffix: &str, body: serde_json::Value) -> Option<()> { send(path_suffix, body).ok().map(|_| ()) }
+
+/// Kod odpowiedzi widżetu albo powód, dla którego nie odpowiedział.
+fn send(path_suffix: &str, body: serde_json::Value) -> Result<u16, String> {
     let path = std::env::var_os("AGENT_PETS_ENDPOINT").map(PathBuf::from).unwrap_or_else(Endpoint::default_path);
-    let ep = Endpoint::read(&path).ok()?;
+    let ep = Endpoint::read(&path).map_err(|_| format!("Agent Pets is not running (no {})", path.display()))?;
     // Windows ponawia połączenie z zamkniętym portem na localhoście ok. 2 s,
     // a `timeout` nie obejmuje fazy łączenia, więc limit łączenia ustawiamy osobno.
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_millis(150))
         .timeout(Duration::from_millis(300))
         .build();
-    agent.post(&format!("http://127.0.0.1:{}{path_suffix}", ep.port))
+    match agent.post(&format!("http://127.0.0.1:{}{path_suffix}", ep.port))
         .set("Authorization", &format!("Bearer {}", ep.token))
-        .send_json(body)
-        .ok()?;
-    Some(())
+        .send_json(body) {
+        Ok(r) => Ok(r.status()),
+        Err(ureq::Error::Status(c, _)) => Err(match c {
+            404 => "the door for other agents is off (Agent Pets settings, Apps)".into(),
+            400 => "Agent Pets rejected the report".into(),
+            c => format!("Agent Pets answered {c}"),
+        }),
+        Err(_) => Err("Agent Pets is not running".into()),
+    }
+}
+
+fn report(args: &[String]) -> i32 {
+    let sent = pets_core::adapters::generic::report_body(args).and_then(|b| send("/v1/events/generic", b));
+    match sent {
+        Ok(_) => 0,
+        Err(e) => { eprintln!("agent-pets report: {e}"); 2 }
+    }
 }
 
 fn run() -> Option<()> {
@@ -65,6 +85,8 @@ fn statusline() {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("report") { std::process::exit(report(&args[2..])); }
     std::panic::set_hook(Box::new(|_| {}));
     if std::env::args().any(|a| a == statusline_install::MARK_ARG) {
         let _ = std::panic::catch_unwind(statusline);

@@ -63,6 +63,33 @@ pub fn to_event(g: GenericEvent, ts: i64) -> Result<Event, Reject> {
     Ok(e)
 }
 
+/// `hook.exe report --agent <id> --session <id> --state <stan> [--name --tool --title --cwd --model --question --app --pid]`:
+/// ciało dla `/v1/events/generic`, sprawdzone tak jak sprawdzi je furtka (błąd zamiast odrzucenia po drugiej stronie).
+pub fn report_body(args: &[String]) -> Result<serde_json::Value, String> {
+    const TEXT: [&str; 9] = ["agent", "session", "state", "name", "tool", "title", "cwd", "model", "question"];
+    let mut body = serde_json::Map::new();
+    let mut it = args.iter();
+    while let Some(flag) = it.next() {
+        let key = flag.strip_prefix("--").ok_or_else(|| format!("unexpected argument: {flag}"))?;
+        let val = it.next().ok_or_else(|| format!("--{key} needs a value"))?;
+        let v = match key {
+            k if TEXT.contains(&k) => serde_json::Value::String(val.clone()),
+            "app" => serde_json::Value::String(val.clone()),
+            "pid" => serde_json::Value::from(val.parse::<u32>().map_err(|_| format!("--pid must be a number: {val}"))?),
+            _ => return Err(format!("unknown option: --{key}")),
+        };
+        body.insert(key.to_string(), v);
+    }
+    let body = serde_json::Value::Object(body);
+    let g: GenericEvent = serde_json::from_value(body.clone()).map_err(|e| format!("invalid report: {e}"))?;
+    match to_event(g, 0) {
+        Ok(_) => Ok(body),
+        Err(Reject::BadAgent) => Err("--agent must match [a-z0-9-]{1,32}".into()),
+        Err(Reject::Reserved) => Err("--agent names an agent with its own integration; pick another id".into()),
+        Err(Reject::BadSession) => Err("--session must match [A-Za-z0-9_.:-]{1,128} without \"..\"".into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,6 +97,29 @@ mod tests {
 
     fn g(v: serde_json::Value) -> GenericEvent { serde_json::from_value(v).unwrap() }
     fn base(state: &str) -> serde_json::Value { json!({"agent": "kilo", "session": "abc", "state": state}) }
+
+    fn args(v: &[&str]) -> Vec<String> { v.iter().map(|s| s.to_string()).collect() }
+
+    #[test]
+    fn report_builds_the_body_from_the_spec_example() {
+        let body = report_body(&args(&["--agent", "kilo", "--name", "Kilo CLI", "--session", "abc", "--state", "working",
+            "--tool", "edit", "--title", "Refaktor", "--cwd", "C:\\work\\x", "--model", "GLM-5.3", "--app", "vscode", "--pid", "1234"])).unwrap();
+        assert_eq!(body, json!({"agent": "kilo", "name": "Kilo CLI", "session": "abc", "state": "working", "tool": "edit",
+            "title": "Refaktor", "cwd": "C:\\work\\x", "model": "GLM-5.3", "app": "vscode", "pid": 1234}));
+        let q = report_body(&args(&["--agent", "kilo", "--session", "abc", "--state", "needs_you", "--question", "Usunąć?"])).unwrap();
+        assert_eq!(q, json!({"agent": "kilo", "session": "abc", "state": "needs_you", "question": "Usunąć?"}));
+    }
+
+    #[test]
+    fn report_refuses_what_the_door_would_refuse() {
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "abc"])).is_err(), "brak --state");
+        assert!(report_body(&args(&["--agent", "claude", "--session", "abc", "--state", "done"])).is_err(), "Reserved");
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "../x", "--state", "done"])).is_err());
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state", "nope"])).is_err());
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state", "done", "--pid", "x"])).is_err());
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state", "done", "--wat", "1"])).is_err());
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state"])).is_err(), "flaga bez wartości");
+    }
 
     #[test]
     fn a_door_event_becomes_an_other_agent_session() {
