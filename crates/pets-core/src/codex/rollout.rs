@@ -72,6 +72,20 @@ fn limits_from(rl: &Value) -> Vec<Limit> {
     }).collect()
 }
 
+/// Program z `session_meta.originator` (nazwa klienta app-servera Codexa). Spike S2: t3code to `t3code_desktop`.
+fn host(originator: &str, source: Option<&str>) -> (Origin, Option<App>, Option<String>) {
+    let o = originator.trim().to_ascii_lowercase();
+    if o == "codex-tui" || o == "codex_exec" || source == Some("cli") { return (Origin::Cli, Some(App::Terminal), None); }
+    let app = match o.as_str() {
+        // pusty `originator` (stare logi) traktujemy jak dotąd: aplikacja Codex
+        "codex desktop" | "" => App::CodexApp,
+        "codex_vscode" => App::Vscode,
+        "t3code_desktop" => App::T3code,
+        _ => return (Origin::Desktop, Some(App::Other), Some(originator.trim().chars().filter(|c| !c.is_control()).take(40).collect())),
+    };
+    (Origin::Desktop, Some(app), None)
+}
+
 pub struct RolloutParser {
     lang: Lang,
     sid: Option<String>,
@@ -85,6 +99,8 @@ pub struct RolloutParser {
     line: usize,
     /// wątek-dziecko z historią skopiowaną od rodzica (`subagent_history_start_ordinal`): własne linie od tej
     skip_until: usize,
+    /// ostatni wysłany model (`turn_context` przychodzi co turę)
+    model: Option<String>,
 }
 
 impl Default for RolloutParser {
@@ -95,7 +111,7 @@ impl RolloutParser {
     pub fn new() -> Self { Self::default() }
 
     pub fn with_lang(lang: Lang) -> Self {
-        RolloutParser { lang, sid: None, parent: None, skip: false, router: false, titled: false, waiting: false, line: 0, skip_until: 0 }
+        RolloutParser { lang, sid: None, parent: None, skip: false, router: false, titled: false, waiting: false, line: 0, skip_until: 0, model: None }
     }
 
     fn ev(&self, kind: Kind, ts: i64) -> Option<Event> {
@@ -179,13 +195,12 @@ impl RolloutParser {
             let originator = ps("originator").unwrap_or("");
             self.router = originator == "agent-router";
             self.sid = Some(id);
-            let (origin, app) = if self.router { (Origin::Router, None) }
-                else if originator == "codex-tui" || ps("source") == Some("cli") { (Origin::Cli, Some(App::Terminal)) }
-                else { (Origin::Desktop, Some(App::CodexApp)) };
+            let (origin, app, app_name) = if self.router { (Origin::Router, None, None) } else { host(originator, ps("source")) };
             let mut e = self.ev(Kind::SessionStart, ts).unwrap();
             e.data.cwd = ps("cwd").map(String::from);
             e.data.origin = Some(origin);
             e.data.app = app;
+            e.data.app_name = app_name;
             return vec![e];
         }
 
@@ -201,6 +216,14 @@ impl RolloutParser {
         }
 
         match (ty, pt) {
+            ("turn_context", _) => {
+                let Some(m) = ps("model").map(|m| m.trim().chars().take(64).collect::<String>()).filter(|m| !m.is_empty()) else { return vec![] };
+                if self.model.as_deref() == Some(&m) { return vec![]; }
+                self.model = Some(m.clone());
+                let mut e = self.ev(Kind::Meta, ts).unwrap();
+                e.data.model = Some(m);
+                vec![e]
+            }
             ("event_msg", "task_started") => self.one(ts, Kind::Prompt),
             ("event_msg", "task_complete") | ("event_msg", "turn_aborted") => self.with_parent_end(self.one(ts, Kind::TurnEnd), ts),
             ("event_msg", "error") | ("event_msg", "stream_error") => self.one(ts, Kind::Error),
@@ -313,6 +336,35 @@ mod tests {
         let mut p = RolloutParser::new();
         let e = p.parse_line(&meta("codex-tui", json!("cli"), json!("user")));
         assert_eq!((e[0].data.origin, e[0].data.app), (Some(Origin::Cli), Some(App::Terminal)));
+    }
+
+    #[test]
+    fn originator_names_the_program() {
+        let host = |o: &str, src: Value| {
+            let mut p = RolloutParser::new();
+            let e = p.parse_line(&meta(o, src, json!("user")));
+            (e[0].data.origin, e[0].data.app, e[0].data.app_name.clone())
+        };
+        assert_eq!(host("codex-tui", json!("cli")), (Some(Origin::Cli), Some(App::Terminal), None));
+        assert_eq!(host("codex_exec", json!("exec")), (Some(Origin::Cli), Some(App::Terminal), None));
+        assert_eq!(host("whatever", json!("cli")), (Some(Origin::Cli), Some(App::Terminal), None));
+        assert_eq!(host("Codex Desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
+        assert_eq!(host("codex desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
+        assert_eq!(host("codex_vscode", json!("vscode")), (Some(Origin::Desktop), Some(App::Vscode), None));
+        assert_eq!(host("t3code_desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::T3code), None));
+        let long = "x".repeat(60);
+        assert_eq!(host("zed_codex", json!("vscode")), (Some(Origin::Desktop), Some(App::Other), Some("zed_codex".into())));
+        assert_eq!(host(&long, json!("vscode")).2.map(|n| n.chars().count()), Some(40));
+    }
+
+    #[test]
+    fn turn_context_names_the_model() {
+        let mut p = RolloutParser::new();
+        started(&mut p);
+        let e = p.parse_line(&l("turn_context", json!({"model": "gpt-6-sol", "cwd": "C:\\p"})));
+        assert_eq!((e[0].kind, e[0].data.model.as_deref()), (Kind::Meta, Some("gpt-6-sol")));
+        assert!(p.parse_line(&l("turn_context", json!({"model": "gpt-6-sol"}))).is_empty(), "bez zmiany modelu nic nowego");
+        assert!(p.parse_line(&l("turn_context", json!({}))).is_empty());
     }
 
     fn child(p: &mut RolloutParser) -> Vec<Event> {

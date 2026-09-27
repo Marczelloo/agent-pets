@@ -17,6 +17,8 @@ pub struct TranscriptParser {
     last_cwd: Option<String>,
     acc: EventData,
     dirty: bool,
+    /// ostatni wysłany model: zmiana idzie w zdarzeniu, powtórka nie
+    last_model: Option<String>,
 }
 
 fn prompt_text(msg: &serde_json::Value) -> Option<String> {
@@ -35,6 +37,15 @@ fn prompt_text(msg: &serde_json::Value) -> Option<String> {
 
 impl TranscriptParser {
     pub fn new() -> Self { Self::default() }
+
+    /// `<synthetic>` to odpowiedź zastępcza Claude Code (np. po przerwaniu), a nie model.
+    fn note_model(&mut self, model: &str) {
+        let model: String = model.trim().chars().take(64).collect();
+        if model.is_empty() || model == "<synthetic>" || self.last_model.as_deref() == Some(&model) { return; }
+        self.last_model = Some(model.clone());
+        self.acc.model = Some(model);
+        self.dirty = true;
+    }
 
     fn set_title(&mut self, title: &str, rank: u8) {
         if rank >= self.title_rank && !title.is_empty() {
@@ -86,6 +97,7 @@ impl TranscriptParser {
                         let n = |k: &str| u.get(k).and_then(|v| v.as_u64()).unwrap_or(0);
                         let used = n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens");
                         let model = m.get("model").and_then(|v| v.as_str()).unwrap_or("");
+                        self.note_model(model);
                         // użycie większe niż zakładane okno znaczy, że okno jest większe (1M)
                         let max = context_max(model).max(if used > 200_000 { 1_000_000 } else { 0 }).max(used);
                         self.acc.context = Some(Context { used, max });
@@ -141,6 +153,25 @@ mod tests {
         let e = p.parse_line(&line(serde_json::json!({"type": "user", "sessionId": "s", "timestamp": TS,
             "message": {"role": "user", "content": "drugi prompt"}})));
         assert_eq!(e[0].data.title.as_deref(), Some("Agent Pets"));
+    }
+
+    fn assistant(model: &str) -> String {
+        line(serde_json::json!({"type": "assistant", "sessionId": "s", "timestamp": TS,
+            "message": {"model": model, "usage": {"input_tokens": 1}, "content": []}}))
+    }
+
+    #[test]
+    fn assistant_lines_carry_the_model_once() {
+        let mut p = TranscriptParser::new();
+        let e = p.parse_line(&assistant("claude-opus-5-5"));
+        assert_eq!(e[0].data.model.as_deref(), Some("claude-opus-5-5"));
+        let e = p.parse_line(&assistant("claude-opus-5-5"));
+        assert_eq!(e[0].data.model, None, "ten sam model nie jest wysyłany drugi raz");
+        let e = p.parse_line(&assistant("<synthetic>"));
+        assert_eq!(e[0].data.model, None);
+        let long = "m".repeat(100);
+        let e = p.parse_line(&assistant(&long));
+        assert_eq!(e[0].data.model.as_ref().map(|m| m.chars().count()), Some(64));
     }
 
     #[test]
