@@ -122,4 +122,24 @@ export interface Diagnostics {
   autostart_registered: boolean;
   last_seen: Record<string, number>;
   apps: [AppId, boolean, string][];
+  stats_files: number;
+  stats_scanned_bytes: number;
+  stats_total_bytes: number;
 }
+
+// Statystyki (0.9): lustro `pets_core::stats::summary::StatsView` i `scan::Progress`.
+export type StatAgent = 'claude' | 'codex' | 'router';
+export type StatsPeriod = 'today' | 'week' | 'month' | 'all';
+export type StatsMetric = 'time' | 'tokens';
+export type StatsRace = 'agents' | 'projects';
+export type BadgeKind = 'glutton' | 'cache_master' | 'night_owl' | 'marathon';
+export interface StatsPlace { project: string; value: number; agent: StatAgent }
+export interface StatsTiles {
+  tokens: number; tokens_change: number | null; cache_pct: number | null; cache_read: number;
+  active_ms: number; longest_ms: number; sessions: number; subagents: number; questions: number;
+}
+export interface StatsLane { key: string; agent: StatAgent | null; value: number }
+export interface StatsDay { date: string; active_ms: number; level: number }
+export interface StatsBadge { kind: BadgeKind; project: string | null; agent: StatAgent | null; value: number }
+export interface StatsView { empty: boolean; podium: StatsPlace[]; tiles: StatsTiles; race: StatsLane[]; calendar: StatsDay[]; badges: StatsBadge[]; record: boolean }
+export interface StatsProgress { files: number; scanned: number; total: number; done: boolean }

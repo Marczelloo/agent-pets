@@ -36,7 +36,8 @@ describe('settings model', () => {
   it('writes a report without tokens or session titles', () => {
     const d: Diagnostics = { version: '0.5.0', endpoint_port: 61000, settings_path: 'C:/h/.agent-pets/settings.json', settings_error: null,
       hook_exe: 'C:/h/.agent-pets/hook.exe', autostart_registered: true, last_seen: { codex: 1_000 },
-      apps: [['claude_code', true, 'Hooki: zainstalowane'], ['codex', false, 'Nic do instalowania']] };
+      apps: [['claude_code', true, 'Hooki: zainstalowane'], ['codex', false, 'Nic do instalowania']],
+      stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
     const text = reportText(d, 61_000);
     expect(text).toContain('Agent Pets 0.5.0');
     expect(text).toContain('Serwer hooków: port 61000');

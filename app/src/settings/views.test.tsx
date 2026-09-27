@@ -14,7 +14,7 @@ const rows: AppRow[] = [
   { id: 'agent_router', detected: { found: true, path: 'C:/h/.agent-router', note: null }, status: { installed: true, detail: 'Nic do instalowania' }, enabled: true },
 ];
 const diag: Diagnostics = { version: '0.5.0', endpoint_port: 1, settings_path: 's', settings_error: null, hook_exe: null,
-  autostart_registered: false, last_seen: {}, apps: [] };
+  autostart_registered: false, last_seen: {}, apps: [], stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
 const noop = async () => [] as string[];
 afterEach(() => setLang('pl'));
 

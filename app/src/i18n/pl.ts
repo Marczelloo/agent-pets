@@ -1,6 +1,10 @@
 import type { SceneKey } from '../stage/sceneFor';
 import type { AppId, MotionId, StyleId } from '../types';
 
+/** Polska odmiana po liczbie: 1 subagent, 2–4 subagenty, 5+ subagentów. */
+const pln = (n: number, one: string, few: string, many: string) => n === 1 ? one
+  : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
+
 const noun = (n: number) => n === 1 ? 'sesja'
   : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'sesje' : 'sesji';
 
@@ -67,6 +71,7 @@ export const pl = {
     removeInactive: 'Usuń nieaktywne',
     removed: (n: number) => (n === 1 ? 'Usunięto' : `Usunięto ${n}`),
     undo: 'Cofnij',
+    stats: 'Statystyki',
     subagents: (n: number) => `${n} ${n === 1 ? 'subagent' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'subagenty' : 'subagentów'}`,
     child: { router: 'Router', background: 'w tle', runningFor: (d: string) => `Pracuje od ${d}` },
     update: {
@@ -289,6 +294,33 @@ export const pl = {
     sameDefault: 'Jak domyślny',
     styleField: (app: string) => `${app}: styl`,
     motionField: (app: string) => `${app}: ruch`,
+  },
+  stats: {
+    title: 'Statystyki',
+    periods: { today: 'Dziś', week: 'Tydzień', month: 'Miesiąc', all: 'Zawsze' },
+    periodLabel: 'Okres',
+    record: 'Rekord dnia!',
+    podium: { today: 'Projekty dnia', week: 'Projekty tygodnia', month: 'Projekty miesiąca', all: 'Projekty wszech czasów' },
+    metric: { time: 'czas', tokens: 'tokeny' },
+    metricLabel: 'Miara podium',
+    tiles: { tokens: 'Tokeny', cache: 'Z cache', time: 'Czas pracy', sessions: 'Sesje' },
+    vsPrev: 'wobec poprzedniego okresu',
+    cacheRead: (n: string) => `${n} odczytanych`,
+    longest: (d: string) => `najdłuższa sesja ${d}`,
+    subsQuestions: (s: number, q: number) => `${s} ${pln(s, 'subagent', 'subagenty', 'subagentów')} · ${q} ${pln(q, 'pytanie', 'pytania', 'pytań')}`,
+    race: { title: 'Wyścig', agents: 'agenci', projects: 'projekty' },
+    activity: 'Aktywność · 26 tygodni',
+    badges: 'Odznaki',
+    badge: { glutton: 'Żarłok tokenów', cache_master: 'Mistrz cache', night_owl: 'Nocny marek', marathon: 'Maratończyk' },
+    nightOwl: (d: string) => `${d} pracy po 23:00`,
+    noBadges: 'W tym okresie jeszcze bez odznak.',
+    loading: (pct: number) => `Wczytuję historię… ${pct}%`,
+    empty: 'Statystyki pojawią się, gdy agenci zaczną pracować.',
+    emptyStep: 'wolne miejsce',
+    num: { dec: ',', units: ['tys.', 'mln', 'mld'], space: true },
+    hm: (h: number, m: number) => `${h} h ${m} min`,
+    m: (m: number) => `${m} min`,
+    dayTitle: (date: string, d: string) => `${date}: ${d}`,
   },
   demo: {
     titles: [

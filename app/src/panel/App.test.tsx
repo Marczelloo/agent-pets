@@ -72,6 +72,11 @@ describe('PanelView', () => {
     expect(view(true).match(/<canvas/g)?.length, 'rodzic i mini-zwierzak dziecka').toBe(2);
     expect(view(true)).toContain('class="pet mini"');
   });
+  it('has a statistics button next to settings', () => {
+    const html = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null}
+      onJump={() => {}} onSettings={() => {}} onStats={() => {}} />);
+    expect(html).toMatch(/aria-label="Statystyki"[^>]*>📊/);
+  });
   it('after removing, offers undo with the count', () => {
     const view = (n: number) => renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0}
       status={null} focusId={null} onJump={() => {}} undo={{ ids: Array.from({ length: n }, (_, i) => `s${i}`) }} onUndo={() => {}} />);

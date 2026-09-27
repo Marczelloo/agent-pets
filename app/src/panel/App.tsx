@@ -18,6 +18,7 @@ interface ViewProps {
   /** ukryty panel nie rysuje zwierzaków (WebView2 animuje także w ukrytym oknie) */
   animate?: boolean;
   onSettings?: () => void;
+  onStats?: () => void;
   /** wygląd zwierzaków z ustawień (styl, ruch, nadpisania) */
   pets?: Pets;
   update?: UpdateStatus;
@@ -30,7 +31,7 @@ interface ViewProps {
 }
 
 /** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
   return (
@@ -38,6 +39,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
       <header>
         <h1>Agent Pets</h1>
         <span className="count">{t().sessions(sessions.length)}</span>
+        {onStats && <button type="button" className="gear" aria-label={t().panel.stats} title={t().panel.stats} onClick={onStats}>📊</button>}
         {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}>⚙</button>}
       </header>
       {bar && <div className="update" role="status">
@@ -174,7 +176,7 @@ export default function App() {
   };
 
   return <PanelView snap={snap} nowMs={Date.now() + offset} status={status} focusId={focusId} onJump={onJump} animate={shown} pets={pets}
-    onSettings={() => void invoke('settings_open')} update={update}
+    onSettings={() => void invoke('settings_open')} onStats={() => void invoke('stats_open')} update={update}
     onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))}
     onDismiss={ids => void invoke<string[]>('session_dismiss', { ids }).then(removed)}
     onDismissInactive={() => void invoke<string[]>('sessions_dismiss_inactive').then(removed)}
