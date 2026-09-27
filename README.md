@@ -27,6 +27,7 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
 - **Your taskbar, your layout.** Put the pets next to the tray, on the left, anywhere you drag them, or in a floating window on the desktop; pick the monitor, a glass or solid background, the pet size, spacing, order (by start, agent, or those that need you first) and which bars show. Settings → Taskbar.
 - **Speech bubbles.** A pet that waits for you shows what the agent asks ("Allow Bash? npm test", "Question: Which option…"); a new action pops up for 3 s ("Editing App.tsx", "npm test"). Bubbles take the look of their pet; click a question to jump to the session, an action to open the panel.
 - **Subagents.** Claude Code subagents, Codex subagent threads and Agent Router tasks delegated by a session are its children: after 5 s of work a mini pet (55%) stands next to its parent, the panel lists them under the parent with their task, action, time and router health. Router tasks started outside a tracked session stay pets of their own.
+- **Statistics, for fun.** A podium of your projects (by agent work time or tokens) with the winner jumping in a crown and confetti, counters for tokens, cache hits, work time and sessions, a race of your agents, a 26-week activity calendar, and badges: Token glutton, Cache master, Night owl, Marathoner, plus a "Daily record!". Today, week, month or all time. Counted from the transcripts already on your disk, so the history is there from the first start. Open it from the panel (📊) or the tray menu.
 - **Tidy up by hand.** Remove a pet from the taskbar (right-click it) or a session from the panel (✕, or "Remove inactive"), with undo. It comes back on its own as soon as the agent does something new.
 - **Updates itself.** A notification when a new version is out, with an Install button, or silent installs at a quiet moment (no agent working, no full-screen game). Updates are signed and checked before they run.
 - **Windows notifications** when an agent waits for you, finishes a long turn, or passes 90% of a limit.
@@ -59,7 +60,8 @@ The interface is in English and Polish and follows the Windows display language;
 | **Automatic updates** (notify or install at a quiet moment), signed | ✅ from 0.7 | Settings → General |
 | **Taskbar layout**: position, monitor, floating window, background, size, order; remove pets and sessions | ✅ from 0.7 | Settings → Taskbar, right-click a pet |
 | **Speech bubbles** (questions, actions) and **subagents** (mini pets, panel rows, Agent Router tasks as children) | ✅ from 0.8 | Settings → Taskbar → Bubbles and subagents |
-| More agents (opencode, Gemini CLI and others), statistics | ⏳ Next phases | see [Roadmap](#roadmap) |
+| **Statistics**: podium, counters, race, activity calendar, badges | ✅ from 0.9 | 📊 in the panel, or Statistics in the tray menu |
+| More agents (opencode, Gemini CLI and others) | ⏳ Next phases | see [Roadmap](#roadmap) |
 
 ## Install
 
@@ -242,7 +244,7 @@ Agent Router ──~/.agent-router/status.json─────────┘
 - **`hook.exe`** is the Claude Code hook client and, with `--agent-pets-statusline`, the statusline pass-through.
 - **`pets-cli`** runs everything as a terminal app, with record and replay.
 - **`app/`** is the Tauri app. Rust embeds the stage window in the taskbar (`SetParent` into `Shell_TrayWnd`), measures the free space with UI Automation, follows DPI and Explorer restarts, reads the mouse natively and shows the tooltip window. The TypeScript side draws the pets on a Canvas at 30 fps and pauses while the taskbar is hidden or a fullscreen app runs. The renderer is a 1:1 port of the prototype, checked call-by-call against it in tests.
-- **Privacy:** session data stays on your machine. Outgoing connections: the update check (`latest.json` and the installer from this repository's GitHub releases, nothing is sent; off in Settings → General) and the opt-in plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. From transcripts only titles, task progress and token counters are kept, never message content. Bubbles, tooltips and the panel show the file names, commands and search patterns an agent is working on and the question it asks; this text lives only in memory and is never written to disk, logs, the diagnostics report or a `pets-cli --record` file.
+- **Privacy:** session data stays on your machine. Outgoing connections: the update check (`latest.json` and the installer from this repository's GitHub releases, nothing is sent; off in Settings → General) and the opt-in plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. From transcripts only titles, task progress and token counters are kept, never message content. Bubbles, tooltips and the panel show the file names, commands and search patterns an agent is working on and the question it asks; this text lives only in memory and is never written to disk, logs, the diagnostics report or a `pets-cli --record` file. Statistics are kept in `~/.agent-pets/stats.json`: numbers only (tokens, work time, questions, tool calls per hour and model), the project folder names, model names and the paths of the transcripts already read; never message content, commands, file names or session titles.
 
 ## Project layout
 
@@ -269,7 +271,8 @@ tools/              fixture anonymizer and its test, CPU measurement
 7. ~~Looks: seven styles (sticker and pixel art as their own models), dynamic motion, preview of every animation, English UI~~
 8. ~~0.7: automatic updates, removing pets and sessions by hand, taskbar layout (position, monitor, floating window, background, size, order)~~
 9. ~~0.8: speech bubbles above the pets, subagents (Claude Code, Codex, Agent Router tasks as children)~~
-10. **Next:** more agents (opencode, t3code, zcode, Gemini CLI, Grok), statistics
+10. ~~0.9: statistics with a podium, counters, a race, an activity calendar and badges~~
+11. **Next:** more agents (opencode, t3code, zcode, Gemini CLI, Grok)
 
 ## License
 
