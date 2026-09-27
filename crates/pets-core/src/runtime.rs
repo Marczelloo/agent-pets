@@ -136,8 +136,10 @@ impl Runtime {
                 Incoming::ClaudeStatusline(s) => claude::statusline::to_events(&s).into_iter().fold(false, |c, e| self.apply(e) | c),
                 Incoming::Generic(e) => self.apply(e),
                 Incoming::Opencode(v) => self.on_opencode(&v),
-                // adaptery w taskach 3 i 4
-                Incoming::Copilot(_) | Incoming::Antigravity(_) => false,
+                Incoming::Copilot(env) => self.apps.copilot
+                    && crate::adapters::copilot::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
+                // adapter w tasku 4
+                Incoming::Antigravity(_) => false,
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -482,6 +484,29 @@ mod tests {
             assert_eq!(send(agent, "wrong", env), 401, "{agent}");
             assert_eq!(send(agent, &ep.token, r#"{"x":1}"#), 400, "{agent}");
         }
+    }
+
+    fn post_agent(ep: &Endpoint, agent: &str, body: &str) -> u16 {
+        ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
+            .set("Authorization", &format!("Bearer {}", ep.token)).send_string(body)
+            .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 })
+    }
+
+    #[test]
+    fn a_copilot_hook_brings_a_copilot_pet() {
+        let h = home();
+        let mut c = cfg(&h);
+        c.apps.copilot = true;
+        let mut rt = Runtime::start(c).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
+            "payload": {"sessionId": "cop_1", "cwd": "C:/w", "toolName": "bash", "toolArgs": {"command": "cargo test"}}}).to_string();
+        assert_eq!(post_agent(&ep, "copilot", &body), 204);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while rt.store().session("copilot:cop_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        let s = rt.store().session("copilot:cop_1").expect("sesja Copilota");
+        assert_eq!((s.agent, s.jump.pid, s.tool), (Agent::Copilot, Some(std::process::id()), Some(crate::model::Tool::Bash)));
+        assert_eq!(s.action.as_deref(), Some("cargo test"));
     }
 
     #[test]

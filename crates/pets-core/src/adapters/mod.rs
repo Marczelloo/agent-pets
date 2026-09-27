@@ -1,6 +1,7 @@
 //! Adaptery agentów bez własnych logów w rdzeniu: zdarzenia z pluginu (opencode) i z furtki (dowolny agent).
 //! Tekst z zewnątrz jest niezaufany: bez znaków sterujących, przycięty.
 pub mod antigravity;
+pub mod copilot;
 pub mod generic;
 pub mod opencode;
 
@@ -16,6 +17,20 @@ pub struct AgentEnvelope {
     pub payload: serde_json::Value,
     #[serde(default)]
     pub host: Option<crate::host::Host>,
+}
+
+/// Tekst akcji z białej listy argumentów narzędzia: `keys` = (klucz u agenta, klucz Claude'a), a `claude_name` to
+/// narzędzie Claude'a o tym samym tekście. Reszta argumentów (treść plików, diffy) nigdy nie jest czytana.
+pub fn action_from(claude_name: &str, args: Option<&serde_json::Value>, keys: &[(&str, &str)], lang: crate::i18n::Lang) -> Option<String> {
+    let src = args?.as_object()?;
+    let mut only = serde_json::Map::new();
+    for (from, to) in keys {
+        if only.contains_key(*to) { continue; }
+        if let Some(v) = src.get(*from).and_then(|v| v.as_str()) {
+            only.insert(to.to_string(), serde_json::Value::String(v.chars().take(500).collect()));
+        }
+    }
+    crate::action::action_text(claude_name, &serde_json::Value::Object(only), lang).map(|a| clean_text(&a, 80)).filter(|a| !a.is_empty())
 }
 
 /// Zdarzenia początku tury, przy których `hook.exe` liczy program (jeden zrzut procesów).

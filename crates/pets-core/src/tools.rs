@@ -43,6 +43,21 @@ pub fn from_opencode(name: &str) -> Tool {
     }
 }
 
+/// Nazwy narzędzi Copilota: CLI (`bash`, `view`, `edit`…) i tryb agenta VS Code (`run_in_terminal`, `read_file`…).
+/// MCP w CLI to `serwer/narzędzie`, w VS Code `mcp_…`.
+pub fn from_copilot(name: &str) -> Tool {
+    match name {
+        "bash" | "powershell" | "run_in_terminal" | "shell" => Tool::Bash,
+        "edit" | "create" | "str_replace" | "write" | "replace_string_in_file" | "create_file" | "insert_edit_into_file" => Tool::Edit,
+        "view" | "read" | "read_file" => Tool::Read,
+        "grep" | "glob" | "grep_search" | "file_search" | "list_dir" => Tool::Grep,
+        "web_fetch" | "fetch_webpage" | "web_search" => Tool::Web,
+        "task" | "runSubagent" => Tool::Agent,
+        n if n.contains('/') || n.starts_with("mcp_") => Tool::Mcp,
+        _ => Tool::Other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
