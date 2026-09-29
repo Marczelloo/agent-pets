@@ -21,6 +21,11 @@ use std::time::Duration;
 
 fn read_stdin() -> Vec<u8> { read_stdin_max(1 << 20) }
 
+/// JSON z wejścia, także z BOM-em UTF-8: Cursor uruchamia hooki przez pwsh, który go dokleja (sprawdzone na żywo, 0.12).
+fn json_of(buf: &[u8]) -> Option<serde_json::Value> {
+    serde_json::from_slice(buf.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(buf)).ok()
+}
+
 fn read_stdin_max(max: u64) -> Vec<u8> {
     let mut buf = Vec::new();
     let _ = std::io::stdin().take(max).read_to_end(&mut buf);
@@ -64,7 +69,7 @@ fn report(args: &[String]) -> i32 {
 }
 
 fn run() -> Option<()> {
-    let payload: serde_json::Value = serde_json::from_slice(&read_stdin()).ok()?;
+    let payload = json_of(&read_stdin())?;
     // hook Claude'a uruchomiony przez Cursora albo Groka: to nie jest sesja Claude'a
     if pets_core::adapters::caller(&payload, &env_var).is_some() { return None; }
     let ppid = pid::agent_pid();
@@ -80,7 +85,7 @@ fn run() -> Option<()> {
 /// Przelotka statusline: dane do widżetu, a użytkownik widzi dokładnie wyjście swojego statusline.
 fn statusline() {
     let buf = read_stdin();
-    if let Ok(payload) = serde_json::from_slice::<serde_json::Value>(&buf) {
+    if let Some(payload) = json_of(&buf) {
         let env = StatuslineEnvelope { ts: time::now_ms(), payload };
         if let Ok(body) = serde_json::to_value(&env) { let _ = post("/v1/events/claude-statusline", body); }
     }
@@ -105,7 +110,7 @@ fn arg<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 /// Hook innego agenta: koperta do widżetu (spec 0.11 §2, 0.12 §4). Wejście do 16 MB: Cursor wysyła cały prompt
 /// z załącznikami, a `slim` i tak go usuwa, zanim cokolwiek wyjdzie z procesu.
 fn agent_hook(agent: &str, event: &str) -> Option<()> {
-    let mut payload: serde_json::Value = serde_json::from_slice(&read_stdin_max(16 << 20)).ok()?;
+    let mut payload = json_of(&read_stdin_max(16 << 20))?;
     if pets_core::adapters::caller(&payload, &env_var).is_some_and(|c| c.id() != agent) { return None; }
     if agent == "grok" { pets_core::adapters::grok::fill_session(&mut payload, env_var("GROK_SESSION_ID")); }
     pets_core::adapters::slim(&mut payload);

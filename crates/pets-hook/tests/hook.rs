@@ -222,6 +222,18 @@ fn widget() -> (Ingest, std::sync::mpsc::Receiver<Incoming>, tempfile::TempDir, 
 }
 
 #[test]
+fn cursor_input_with_a_utf8_bom_still_reaches_the_widget() {
+    // sprawdzone na żywo: Cursor uruchamia hooki przez pwsh z `$OutputEncoding` UTF-8, więc JSON zaczyna się od BOM
+    let (ing, rx, _dir, p) = widget();
+    let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"],
+        "\u{feff}{\"conversation_id\":\"conv_1\",\"hook_event_name\":\"beforeSubmitPrompt\"}\r\n");
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    assert_eq!(env.payload["conversation_id"], "conv_1");
+    ing.stop();
+}
+
+#[test]
 fn cursor_hooks_are_forwarded_and_always_let_cursor_go_on() {
     let (ing, rx, _dir, p) = widget();
     let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"],
