@@ -94,7 +94,11 @@ pub fn command_line(pid: u32) -> Option<String> {
         if st < 0 { return None; }
         let us = &*(buf.as_ptr() as *const UNICODE_STRING);
         if us.Buffer.is_null() { return None; }
-        Some(String::from_utf16_lossy(std::slice::from_raw_parts(us.Buffer, us.Length as usize / 2)))
+        // tekst musi leżeć w całości w naszym buforze i w tym, co system faktycznie zapisał
+        let (start, end) = (buf.as_ptr() as usize, buf.as_ptr() as usize + buf.len() * 8);
+        let (text, bytes) = (us.Buffer as usize, us.Length as usize);
+        if text < start || text + bytes > end || text + bytes > start + len as usize { return None; }
+        Some(String::from_utf16_lossy(std::slice::from_raw_parts(us.Buffer, bytes / 2)))
     }
 }
 
@@ -110,7 +114,8 @@ pub fn listening_ports(pid: u32) -> Vec<u16> {
         let mut buf = vec![0u32; size as usize / 4 + 64];
         size = (buf.len() * 4) as u32;
         if GetExtendedTcpTable(buf.as_mut_ptr().cast(), &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) != 0 { return Vec::new(); }
-        let n = buf[0] as usize;
+        // liczba wierszy z tabeli, ale nie więcej, niż mieści bufor (wiersz to 6 × u32)
+        let n = (buf[0] as usize).min((buf.len() - 1) / 6);
         let rows = std::slice::from_raw_parts(buf.as_ptr().add(1) as *const MIB_TCPROW_OWNER_PID, n);
         let mut out: Vec<u16> = rows.iter().filter(|r| r.dwOwningPid == pid).map(|r| u16::from_be(r.dwLocalPort as u16)).collect();
         out.sort_unstable();

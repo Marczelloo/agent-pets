@@ -79,8 +79,15 @@ pub fn from_user_status(body: &Value, now: i64) -> Option<Event> {
     event(vec![worst], now)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Server { pub port: u16, pub token: String }
+
+/// Bez tokenu: `{:?}` w logu albo w panice nie może go ujawnić.
+impl std::fmt::Debug for Server {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Server").field("port", &self.port).finish_non_exhaustive()
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Failure {
@@ -153,6 +160,13 @@ mod tests {
     use std::cell::RefCell;
 
     const NOW: i64 = 1_790_340_000_000;
+
+    #[test]
+    fn debug_output_hides_the_token() {
+        let d = format!("{:?}", Server { port: 4242, token: "sekret-123".into() });
+        assert!(d.contains("4242"));
+        assert!(!d.contains("sekret"));
+    }
 
     fn summary() -> Value {
         json!({"response": {"groups": [
