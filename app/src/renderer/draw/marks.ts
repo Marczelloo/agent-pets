@@ -20,15 +20,15 @@ export function droidP(X: number, Y: number, W: number, H: number, _R?: number):
   const arc = (ax: number, ay: number, r: number, a0: number, a1: number) => {
     for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; p.push([ax + Math.cos(a) * r, ay + Math.sin(a) * r]); }
   };
-  // głowa do .34 wysokości (.5 szerokości), szyja do .42, barki na całą szerokość, pas na .8 (.52 szerokości), biodra .6 szerokości
+  // głowa do .34 wysokości (.5 szerokości), szyja do .42, barki na .92 szerokości (tam zaczynają się ramiona), pas na .8 (.52 szerokości), biodra .6 szerokości
   const hw = W * .25, hh = H * .34, hr = Math.min(hw, hh) * .6, nw = W * .11, ny = H * .42 + Y, sr = Math.min(W * .12, H * .1);
-  const wy = Y + H * .8, ww = W * .26, pw = W * .3;
+  const wy = Y + H * .8, ww = W * .26, pw = W * .3, si = W * .04;
   arc(cx + hw - hr, Y + hr, hr, -PI / 2, 0);
   arc(cx + hw - hr * .5, Y + hh - hr * .5, hr * .5, 0, PI / 2);
   p.push([cx + nw, Y + hh], [cx + nw, ny]);
-  arc(X + W - sr, ny + sr, sr, -PI / 2, 0);
+  arc(X + W - si - sr, ny + sr, sr, -PI / 2, 0);
   p.push([cx + ww, wy], [cx + pw, Y + H], [cx - pw, Y + H], [cx - ww, wy]);
-  arc(X + sr, ny + sr, sr, PI, PI * 1.5);
+  arc(X + si + sr, ny + sr, sr, PI, PI * 1.5);
   p.push([cx - nw, ny], [cx - nw, Y + hh]);
   arc(cx - hw + hr * .5, Y + hh - hr * .5, hr * .5, PI / 2, PI);
   arc(cx - hw + hr, Y + hr, hr, PI, PI * 1.5);

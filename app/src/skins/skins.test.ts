@@ -137,6 +137,9 @@ describe('skins for agents', () => {
     };
     const head = at(18), neck = at(39), shoulders = at(52), waist = at(80), hips = at(98);
     expect(neck).toBeGreaterThan(0);
+    // barki nieco węższe niż całe ciało: krawędź tam, gdzie zaczynają się ramiona (.46 szerokości od środka)
+    expect(shoulders).toBeLessThanOrEqual(92.01);
+    expect(shoulders).toBeGreaterThan(88);
     expect(head).toBeLessThan(shoulders * .6);
     expect(neck).toBeLessThan(head * .6);
     expect(waist).toBeLessThan(shoulders * .6);
