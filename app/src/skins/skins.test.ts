@@ -109,13 +109,17 @@ describe('skins for agents', () => {
     const log = draw('cursor');
     for (const c of [f.light, f.edge, SKINS.cursor.eyeColor!]) expect(log.some(l => l.includes(c)), c).toBe(true);
   });
-  it('Grok is a dark ball with a slash and slanted brows', () => {
+  it('Grok is a dark ball with an open ring and a slash, like its logo', () => {
     const g = SKINS.grok;
     expect(g.radius).toBe(g.width / 2);
     expect(Math.abs(g.width - g.height)).toBeLessThanOrEqual(g.width * .1);
+    expect(g.ring).toBe('#F5F5F5');
+    expect('brows' in g).toBe(false);
     const log = draw('grok');
     expect(log.some(l => l.includes(g.slash!))).toBe(true);
-    expect(log.filter(l => l.includes(g.brows!)).length).toBeGreaterThan(0);
+    // pierścień z przerwą w prawym górnym rogu: łuk krótszy niż pełne koło
+    const arcs = log.filter(l => l.startsWith('ellipse(')).map(l => l.slice(8, -1).split(',').map(Number));
+    expect(arcs.some(a => a[6] - a[5] > Math.PI && a[6] - a[5] < 2 * Math.PI - .3)).toBe(true);
   });
   it('ZCode is a panda: ears, patches under the eyes and a headband with a Z', () => {
     const p = SKINS.zcode.panda!;
