@@ -296,9 +296,10 @@ impl Store {
             }
             Kind::ToolStart => Some((State::Working, e.tool.or(Some(Tool::Other)))),
             Kind::ToolEnd => {
-                // spóźniony koniec narzędzia (Cursor po przerwanej turze) nie wznawia skończonej tury
+                // spóźniony koniec narzędzia (Cursor po przerwanej turze) nie wznawia skończonej tury; Idle i Sleep tu nie
+                // należą: w nie przechodzi też tura z narzędziem dłuższym niż próg bezczynności i koniec narzędzia ją budzi
                 let now = self.pending.get(&e.session_id).map(|p| p.0).unwrap_or(s.state);
-                if matches!(now, State::Done | State::Error | State::Idle | State::Sleep | State::Ended) { None }
+                if matches!(now, State::Done | State::Error | State::Ended) { None }
                 else { Some((State::Thinking, None)) }
             }
             Kind::NeedsInput => Some((if child { State::Thinking } else { State::NeedsYou }, None)),
@@ -612,6 +613,20 @@ mod tests {
         s.apply(&ev(Kind::ToolEnd, 12_100));
         s.tick(13_000, &alive);
         assert_eq!(st(&s).0, State::Done);
+    }
+
+    /// narzędzie dłuższe niż próg bezczynności (długi build): zwierzak zasnął w trakcie tury, koniec narzędzia ją wznawia
+    #[test]
+    fn a_tool_end_after_a_long_tool_wakes_the_turn_again() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.apply(&tool(Tool::Bash, 1000));
+        s.tick(2000, &alive);
+        s.tick(1000 + 11 * 60_000, &alive);
+        assert_ne!(st(&s).0, State::Working, "próg bezczynności minął");
+        s.apply(&ev(Kind::ToolEnd, 1000 + 12 * 60_000));
+        s.tick(1000 + 12 * 60_000 + 1000, &alive);
+        assert_eq!(st(&s).0, State::Thinking);
     }
 
     #[test]
