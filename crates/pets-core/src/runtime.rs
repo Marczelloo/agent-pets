@@ -151,8 +151,8 @@ impl Runtime {
                     && crate::adapters::cursor::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
                 Incoming::Grok(env) => self.apps.grok
                     && crate::adapters::grok::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
-                // adapter w kolejnym kroku 0.12
-                Incoming::Zcode(_) => false,
+                Incoming::Zcode(env) => self.apps.zcode
+                    && crate::adapters::zcode::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -573,6 +573,24 @@ mod tests {
         ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
             .set("Authorization", &format!("Bearer {}", ep.token)).send_string(body)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 })
+    }
+
+    #[test]
+    fn a_zcode_hook_brings_a_zcode_pet_only_when_zcode_is_on() {
+        for on in [true, false] {
+            let h = home();
+            let mut c = cfg(&h);
+            c.apps.zcode = on;
+            let mut rt = Runtime::start(c).unwrap();
+            let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+            let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
+                "payload": {"sessionId": "zc_1", "toolName": "Bash", "toolInput": {"command": "npm test"}}}).to_string();
+            assert_eq!(post_agent(&ep, "zcode", &body), if on { 204 } else { 404 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            while rt.store().session("zcode:zc_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+            let s = rt.store().session("zcode:zc_1");
+            assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Zcode, Some(crate::model::Tool::Bash))), "zcode {on}");
+        }
     }
 
     #[test]

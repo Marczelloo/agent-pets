@@ -5,6 +5,7 @@ pub mod copilot;
 pub mod cursor;
 pub mod generic;
 pub mod grok;
+pub mod zcode;
 pub mod opencode;
 
 use serde::{Deserialize, Serialize};

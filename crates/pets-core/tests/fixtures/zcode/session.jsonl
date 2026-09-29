@@ -1,0 +1,8 @@
+{"ts":1790000000000,"ppid":4242,"event":"SessionStart","payload":{"sessionId":"zc_1","hookEventName":"SessionStart","cwd":"C:/work/app","model":"glm-5"},"host":{"app":"zcode","name":null,"pid":900}}
+{"ts":1790000000100,"ppid":4242,"event":"UserPromptSubmit","payload":{"sessionId":"zc_1","hookEventName":"UserPromptSubmit","cwd":"C:/work/app"}}
+{"ts":1790000000200,"ppid":4242,"event":"PreToolUse","payload":{"sessionId":"zc_1","hookEventName":"PreToolUse","cwd":"C:/work/app","tool_name":"Read","tool_input":{"file_path":"C:/work/app/src/main.ts"}}}
+{"ts":1790000000300,"ppid":4242,"event":"PostToolUse","payload":{"sessionId":"zc_1","hookEventName":"PostToolUse","cwd":"C:/work/app","tool_name":"Read"}}
+{"ts":1790000000400,"ppid":4242,"event":"PermissionRequest","payload":{"sessionId":"zc_1","hookEventName":"PermissionRequest","cwd":"C:/work/app","toolName":"Bash","toolInput":{"command":"npm test"},"reason":"SEKRET-123"}}
+{"ts":1790000000500,"ppid":4242,"event":"PreToolUse","payload":{"sessionId":"zc_1","hookEventName":"PreToolUse","cwd":"C:/work/app","toolName":"Bash","toolInput":{"command":"npm test"}}}
+{"ts":1790000000600,"ppid":4242,"event":"PostToolUseFailure","payload":{"sessionId":"zc_1","hookEventName":"PostToolUseFailure","cwd":"C:/work/app","toolName":"Bash","isInterrupt":true}}
+{"ts":1790000000700,"ppid":4242,"event":"Stop","payload":{"sessionId":"zc_1","hookEventName":"Stop","cwd":"C:/work/app"}}
