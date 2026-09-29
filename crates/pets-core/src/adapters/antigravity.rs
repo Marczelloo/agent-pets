@@ -27,8 +27,11 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     let canceled = s("terminationReason").is_some_and(|r| r.to_ascii_lowercase().contains("cancel"));
     let (kind, t) = match env.event.as_str() {
         "PreInvocation" => (Kind::Prompt, None),
+        // `PreToolUse` nie rejestrujemy (bramka zgód, spec 0.12.1); zostaje dla wpisów sprzed naprawy przy starcie
         "PreToolUse" => (Kind::ToolStart, Some(from_antigravity(tool))),
-        "PostToolUse" => (Kind::ToolEnd, None),
+        // narzędzie już się skończyło, ale pokazujemy je jako pracę z tekstem akcji: model woła potem `PreInvocation`
+        // (myśli) albo kolejne narzędzie. Para start + koniec naraz nie pokazałaby nic (koniec kasuje czekający start).
+        "PostToolUse" => (Kind::ToolStart, Some(from_antigravity(tool))),
         "Stop" if failed => (Kind::Error, None),
         // przerwane przez użytkownika: koniec tury, choćby `fullyIdle` nie przyszło
         "Stop" if canceled => (Kind::TurnEnd, None),
@@ -82,7 +85,7 @@ mod tests {
     #[test]
     fn a_recorded_conversation_walks_through_its_states() {
         let kinds: Vec<Kind> = fixture().iter().flat_map(|e| events(e, Lang::Pl)).map(|e| e.kind).collect();
-        assert_eq!(kinds, vec![Kind::Prompt, Kind::ToolStart, Kind::ToolEnd, Kind::ToolStart, Kind::ToolEnd, Kind::Prompt, Kind::TurnEnd]);
+        assert_eq!(kinds, vec![Kind::Prompt, Kind::ToolStart, Kind::ToolStart, Kind::Prompt, Kind::TurnEnd]);
     }
 
     #[test]
@@ -101,10 +104,35 @@ mod tests {
         let f = fixture();
         let view = one(f[1].clone());
         assert_eq!((view.tool, view.data.action.as_deref()), (Some(Tool::Read), Some("Czyta main.ts")));
-        let run = one(f[3].clone());
+        let run = one(f[2].clone());
         assert_eq!((run.tool, run.data.action.as_deref()), (Some(Tool::Bash), Some("npm test")));
         let edit = one(env("PreToolUse", json!({"conversationId": "c", "toolCall": {"name": "replace_file_content", "args": {"TargetFile": "C:/a/lib.rs"}}})));
         assert_eq!((edit.tool, edit.data.action.as_deref()), (Some(Tool::Edit), Some("Edytuje lib.rs")));
+    }
+
+    /// Bez `PreToolUse` (Antigravity bierze `{}` za odmowę, a `ask` wymusza pytanie) narzędzie widać dopiero po jego końcu:
+    /// `PostToolUse` to praca z tekstem akcji, aż model znów pomyśli (`PreInvocation`) albo skończy turę.
+    #[test]
+    fn a_finished_tool_shows_what_it_did() {
+        let e = one(env("PostToolUse", json!({"conversationId": "c", "toolCall": {"name": "replace_file_content", "args": {"TargetFile": "C:/a/lib.rs"}}})));
+        assert_eq!((e.kind, e.tool, e.data.action.as_deref()), (Kind::ToolStart, Some(Tool::Edit), Some("Edytuje lib.rs")));
+    }
+
+    /// Szybkie narzędzie między dwoma wywołaniami modelu: zwierzak i tak chwilę pracuje (minimalny czas stanu), potem myśli.
+    #[test]
+    fn a_quick_tool_between_model_calls_still_shows_as_work() {
+        use crate::store::{Store, Timing};
+        let mut s = Store::new(Timing::default());
+        let at = |ev: &str, ts: i64, p: Value| { let mut e = env(ev, p); e.ts = ts; events(&e, Lang::Pl) };
+        let call = json!({"conversationId": "c", "toolCall": {"name": "view_file", "args": {"AbsolutePath": "C:/a/x.ts"}}});
+        for (ev, ts, p) in [("PreInvocation", 1_000, json!({"conversationId": "c"})), ("PostToolUse", 2_000, call),
+                            ("PreInvocation", 2_100, json!({"conversationId": "c"}))] {
+            for e in at(ev, ts, p) { s.apply(&e); }
+        }
+        let x = s.session("antigravity:c").unwrap();
+        assert_eq!((x.state, x.tool), (State::Working, Some(Tool::Read)));
+        s.tick(2_700, &|_| true);
+        assert_eq!(s.session("antigravity:c").unwrap().state, State::Thinking);
     }
 
     #[test]

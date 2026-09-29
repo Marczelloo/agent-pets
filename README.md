@@ -266,7 +266,7 @@ Each hook runs `~/.agent-pets/hook.exe`, which sends the session state, the kind
 
 Turn Antigravity on in Settings → Apps (or in the wizard). It needs an Antigravity version with hooks (Antigravity 2.0, the CLI, or a recent IDE). Agent Pets adds one entry, `agent-pets`, to `~/.gemini/config/hooks.json` and keeps a copy of the file first (`hooks.json.agent-pets.bak`); your own hooks in that file stay as they are. Turning Antigravity off removes only that entry.
 
-Antigravity's hooks report thinking, tool calls, the end of a turn and errors, with the model name, so its pet thinks, works, finishes and shows errors. They do not report when Antigravity waits for your approval, so this pet never shows "needs you". The hook answers Antigravity with an empty decision, so your approval settings stay as they are.
+Antigravity's hooks report thinking, tool calls, the end of a turn and errors, with the model name, so its pet thinks, works, finishes and shows errors. They do not report when Antigravity waits for your approval, so this pet never shows "needs you". Agent Pets does not hook `PreToolUse`: in Antigravity that hook is a permission gate where every answer decides something (an empty one denies the tool, `ask` forces a prompt), so the pet shows a tool once it has run, from `PostToolUse`, and your approval settings stay as they are. Before 0.12.1 the `PreToolUse` entry made newer Antigravity versions deny every tool call; the app removes it the first time it starts.
 
 ### Cursor
 

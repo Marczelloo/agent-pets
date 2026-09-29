@@ -96,7 +96,8 @@ pub fn hook_command_ps(hook: &Path, agent: &str, event: &str) -> String {
 /// Zdarzenia Copilota: PascalCase dla tych, które zna też VS Code, camelCase dla tych tylko z CLI (spec 0.11 §3.1).
 pub const COPILOT_EVENTS: [&str; 11] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart",
     "SubagentStop", "Stop", "sessionEnd", "notification", "errorOccurred", "postToolUseFailure"];
-pub const ANTIGRAVITY_EVENTS: [&str; 4] = ["PreInvocation", "PreToolUse", "PostToolUse", "Stop"];
+/// Bez `PreToolUse`: to bramka zgód, na którą każda odpowiedź coś decyduje (`{}` odmawia, `ask` wymusza pytanie).
+pub const ANTIGRAVITY_EVENTS: [&str; 3] = ["PreInvocation", "PostToolUse", "Stop"];
 /// Klucz naszego hooka w `hooks.json` Antigravity.
 const ANTIGRAVITY_KEY: &str = "agent-pets";
 
@@ -852,6 +853,22 @@ mod tests {
         enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         assert_eq!(std::fs::read(&bak).unwrap(), original.as_bytes());
         assert!(ag_json(h.path())["agent-pets"]["Stop"][0]["command"].as_str().unwrap().contains(".agent-pets"));
+    }
+
+    /// `PreToolUse` to w Antigravity bramka zgód bez odpowiedzi „bez zdania”: `{}` odmawia, `ask` wymusza pytanie. Nie
+    /// rejestrujemy go, a wpis z 0.11–0.12.0 znika przy pierwszym starcie (naprawa podmienia cały nasz klucz).
+    #[test]
+    fn antigravity_never_hooks_the_permission_gate() {
+        assert!(!ANTIGRAVITY_EVENTS.contains(&"PreToolUse"));
+        let h = home();
+        let f = antigravity_hooks(h.path());
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let old = json!({"matcher": "*", "hooks": [{"type": "command", "command": "C:/x/hook.exe --agent antigravity --event PreToolUse", "timeout": 5}]});
+        std::fs::write(&f, serde_json::to_string(&json!({"agent-pets": {"PreToolUse": [old]}})).unwrap()).unwrap();
+        enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        let v = ag_json(h.path());
+        assert!(v["agent-pets"].get("PreToolUse").is_none(), "{v}");
+        assert!(v["agent-pets"]["PostToolUse"].is_array());
     }
 
     #[test]
