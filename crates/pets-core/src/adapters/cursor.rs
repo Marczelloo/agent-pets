@@ -34,7 +34,9 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     let p = &env.payload;
     let s = |k: &str| p.get(k).and_then(|v| v.as_str());
     let text = |k: &str, max: usize| s(k).map(|x| clean_text(x, max)).filter(|x| !x.is_empty());
-    let Some(sid) = s("conversation_id").or_else(|| s("session_id")).filter(|x| safe_id(x)) else { return vec![] };
+    // `draft-…`: szkic nowego czatu, który nigdy nie dostaje dalszych zdarzeń (sprawdzone na żywo)
+    let Some(sid) = s("conversation_id").or_else(|| s("session_id")).filter(|x| safe_id(x) && !x.starts_with("draft-"))
+        else { return vec![] };
     let top = format!("cursor:{sid}");
     let (kind, id, t) = match env.event.as_str() {
         "sessionStart" => (Kind::SessionStart, top.clone(), None),
@@ -179,6 +181,42 @@ mod tests {
                 "subagent_id": "sub_1", "subagent_type": "explore"});
             for e in events(&env(ev, p), Lang::Pl) { assert!(!format!("{e:?}").contains("SEKRET"), "{ev}: {e:?}"); }
         }
+    }
+
+    /// Nagranie z Cursora 3.22 (zanonimizowane): przerwana tura z Shell, szkic nowego czatu, druga tura z narzędziami
+    /// równolegle, przerwana, po której przychodzą spóźnione `postToolUseFailure`. Koperty idą tą samą drogą co w hook.exe.
+    #[test]
+    fn a_live_cursor_recording_leaves_two_finished_pets_with_their_folder() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cursor/live-3.22.jsonl");
+        let mut store = crate::store::Store::new(crate::store::Timing::default());
+        let (mut last, mut tools) = (0, vec![]);
+        for l in std::fs::read_to_string(p).unwrap().lines() {
+            let mut e: AgentEnvelope = serde_json::from_str(l).unwrap();
+            fill_cwd(&mut e.payload);
+            super::super::slim(&mut e.payload);
+            for ev in events(&e, Lang::Pl) {
+                if ev.kind == Kind::ToolStart { tools.push(ev.tool); }
+                store.apply(&ev);
+            }
+            last = e.ts;
+        }
+        store.tick(last + 1000, &|_| true);
+        let mut ids: Vec<&str> = store.sessions().iter().map(|s| s.id.as_str()).collect();
+        ids.sort();
+        assert_eq!(ids, ["cursor:conv_live_1", "cursor:conv_live_2"]);
+        for id in ids { assert_eq!(store.session(id).unwrap().state, State::Done, "{id}"); }
+        assert_eq!(store.session("cursor:conv_live_2").unwrap().cwd, "C:/w/app");
+        for t in [Tool::Bash, Tool::Grep, Tool::Read] { assert!(tools.contains(&Some(t)), "{t:?}"); }
+    }
+
+    /// nowy czat zaczyna się od `sessionStart` z id `draft-…`, a prompt idzie już pod prawdziwym id (sprawdzone na żywo)
+    #[test]
+    fn a_draft_conversation_makes_no_pet() {
+        for ev in ["sessionStart", "beforeSubmitPrompt", "stop"] {
+            let p = json!({"conversation_id": "draft-f9a1", "session_id": "draft-f9a1"});
+            assert!(events(&env(ev, p), Lang::Pl).is_empty(), "{ev}");
+        }
+        assert!(!events(&env("sessionStart", json!({"conversation_id": "bb89"})), Lang::Pl).is_empty());
     }
 
     #[test]
