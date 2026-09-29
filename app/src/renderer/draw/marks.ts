@@ -1,10 +1,10 @@
 import { path, pen, elP, rrP, shp } from "../pen";
 import type { Skin } from "../../skins/types";
 
-/** Kolor przez styl, jak każde wypełnienie (Ink szary, Pastel jaśniejszy). */
+/** Color through style like any fill (Ink gray, Pastel lighter). */
 const tone = (c: string) => pen.st.fillFor ? pen.st.fillFor(c) : c;
 
-/** Sześciokąt Cursora: prostokąt ze ściętymi bokami (płaska góra i dół, żeby nogi dotykały ciała). `R` pominięte. */
+/** Cursor hexagon: rectangle with cut sides (flat top and bottom so legs meet the body). `R` ignored. */
 export function hexP(X: number, Y: number, W: number, H: number, _R?: number): number[][] {
   if (W < 0) { X += W; W = -W; }
   W = Math.max(W, .01); H = Math.max(H, .01);
@@ -12,10 +12,10 @@ export function hexP(X: number, Y: number, W: number, H: number, _R?: number): n
   return [[X + c, Y], [X + W - c, Y], [X + W, Y + H / 2], [X + W - c, Y + H], [X + c, Y + H], [X, Y + H / 2]];
 }
 
-/** Połowa szerokości barków Groka (ułamek szerokości ciała); tam też zaczepione są ramiona */
+/** Half of Grok's shoulder width (fraction of body width); arms attach there too */
 export const DROID_SHOULDER = .4;
 
-/** Sylwetka Groka-humanoida: mała zaokrąglona głowa, szyja, szerokie barki, klatka zwężająca się do pasa i biodra. `R` pominięte. */
+/** Grok humanoid silhouette: small rounded head, neck, broad shoulders, torso narrowing to waist and hips. `R` ignored. */
 export function droidP(X: number, Y: number, W: number, H: number, _R?: number): number[][] {
   if (W < 0) { X += W; W = -W; }
   W = Math.max(W, .01); H = Math.max(H, .01);
@@ -23,7 +23,7 @@ export function droidP(X: number, Y: number, W: number, H: number, _R?: number):
   const arc = (ax: number, ay: number, r: number, a0: number, a1: number) => {
     for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; p.push([ax + Math.cos(a) * r, ay + Math.sin(a) * r]); }
   };
-  // głowa do .34 wysokości (.5 szerokości), szyja do .42, barki na .8 szerokości (tam zaczynają się ramiona), pas na .8 (.44 szerokości), biodra .54 szerokości
+  // head to .34 height (.5 width), neck to .42, shoulders at .8 width (arms start there), waist at .8 (.44 width), hips .54 width
   const hw = W * .25, hh = H * .34, hr = Math.min(hw, hh) * .6, nw = W * .11, ny = H * .42 + Y, sr = Math.min(W * .12, H * .1);
   const wy = Y + H * .8, ww = W * .22, pw = W * .27, si = W * (.5 - DROID_SHOULDER);
   arc(cx + hw - hr, Y + hr, hr, -PI / 2, 0);
@@ -38,12 +38,12 @@ export function droidP(X: number, Y: number, W: number, H: number, _R?: number):
   return p;
 }
 
-/** Uszy pandy: za ciałem, na górze, jak uszy hełmu Copilota. */
+/** Panda ears: behind the body at the top, like Copilot helmet ears. */
 export function drawEars(x: CanvasRenderingContext2D, sk: Skin, hW: number, top: number, u: number) {
   if (sk.panda) for (const s of [-1, 1]) shp(x, elP(s * hW * .62, top + 3 * u, 9 * u, 9 * u), sk.panda.ears, u);
 }
 
-/** Wypełnienie w obrysie przodu, potem ponownie kontur (wypełnienie go przykryło). */
+/** Fill inside the front outline, then draw the outline again (the fill covered it). */
 function inside(x: CanvasRenderingContext2D, fp: number[][], draw: () => void) {
   x.save(); path(x, fp, 0, 0); x.clip(); draw(); x.restore();
   path(x, fp, 0, 0); x.stroke();
@@ -52,7 +52,7 @@ function inside(x: CanvasRenderingContext2D, fp: number[][], draw: () => void) {
 export interface Face { cx: number; top: number; fw: number; H: number; u: number; co: number; ey: number; eyes: number[]; eh: number }
 
 /**
- * Znaki na przodzie ciała, po ciele i przed oczami: fasetka Cursora, wizor i logo Groka, łaty i opaska pandy ZCode.
+ * Markings on the body front, after the body and before the eyes: Cursor facet, Grok visor and logo, ZCode panda patches and band.
  * `fp` = obrys przodu.
  */
 export function drawMarks(x: CanvasRenderingContext2D, sk: Skin, fp: number[][], f: Face) {
@@ -65,18 +65,18 @@ export function drawMarks(x: CanvasRenderingContext2D, sk: Skin, fp: number[][],
     });
   }
   if (sk.droid) {
-    // czarna szyja między głową a barkami
+    // black neck between head and shoulders
     const d = sk.droid, vw = fw * .4, vy = top + H * .05, vh = H * .22;
     inside(x, fp, () => {
       shp(x, rrP(cx - fw * .14, top + H * .33, fw * .28, H * .1, 0), d.visor, u, { noStroke: 1 });
-      // czarny pas nad biodrami, jak u robota
+      // black belt above the hips, like the robot
       shp(x, rrP(cx - fw * .35, top + H * .79, fw * .7, H * .07, 0), d.visor, u, { noStroke: 1 });
     });
-    // wizor na głowie
+    // visor on the head
     shp(x, rrP(cx - vw / 2, vy, vw, vh, Math.min(vh * .45, vw / 2)), d.visor, u);
-    // odblask na szybie wizora
+    // reflection on the visor glass
     x.save(); x.globalAlpha *= .5; shp(x, rrP(cx - vw * .32, vy + vh * .12, vw * .22, vh * .1, vh * .05), '#5A5A5E', u, { noStroke: 1 }); x.restore();
-    // logo Groka: pierścień z przerwą w prawym górnym rogu, kreska wychodzi przez przerwę
+    // Grok logo: ring with a gap at upper right, a stroke extending through the gap
     const r = Math.min(fw * .1, H * .075);
     x.save(); x.translate(cx, top + H * .6); x.scale(Math.max(.05, co), 1);
     x.strokeStyle = tone(d.logo); x.lineWidth = Math.max(1, r * .28); x.lineCap = 'butt';

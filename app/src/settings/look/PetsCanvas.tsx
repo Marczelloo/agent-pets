@@ -8,12 +8,12 @@ import { backing, subscribe } from './loop';
 
 export interface PreviewPet { agent: Agent; look: Look }
 let saving = false;
-/** Tryb oszczędny w podglądzie: Dynamiczny bez smug (fps ustawia `setLoopSaving`). */
+/** Preview power saving mode: Dynamic without trails (`setLoopSaving` sets fps). */
 export function setPreviewSaving(v: boolean): void { saving = v; }
 
 interface Props { pets: PreviewPet[]; scene: SceneKey; u: number; width: number; height: number; className?: string }
 
-/** Kilka zwierzaków na jednym płótnie (karta galerii, pasek w prawdziwym rozmiarze). */
+/** Several pets on one canvas (gallery card, taskbar at actual size). */
 export function PetsCanvas({ pets, scene, u, width, height, className }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const live = useRef({ pets, scene });

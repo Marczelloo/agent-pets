@@ -1,4 +1,4 @@
-// Nakładki wspólne dla modeli (wektorowego i naklejki): dymek „!”, myślenie, zawroty, strona z siatki, cząsteczki.
+// Overlays shared by vector and sticker models: "!" bubble, thoughts, dizziness, net page, particles.
 import { PI, cl } from "../math";
 import { PAPER, SPIN, COL } from "../palette";
 import { pen, rrP, shp, lines } from "../pen";
@@ -7,7 +7,7 @@ import { pagePos } from "../scenes";
 import { morph } from "../fold";
 import type { Pet } from "../pet";
 
-/** W przestrzeni bryły (nad głową): `top` i `hW` jak w body.ts. */
+/** In body space (above the head): `top` and `hW` as in body.ts. */
 export function drawHeadFx(x: any,c: Pet,u: number,t: number,top: number,hW: number,GA: number){const P=c.p,dz=cl(P.dizzy.x);
 drawPhones(x,c,u,top,hW,GA);
 const bs=Math.max(0,P.bubble.x);if(bs>.02){x.save();x.translate(-hW*.62,top-20*u);x.scale(bs,bs);shp(x,[[5*u,8*u],[10*u,18*u],[-2*u,9*u]],'#D97757',u);shp(x,rrP(-12*u,-13*u,24*u,24*u,7*u),'#D97757',u);x.fillStyle='#FFFFFF';x.font=`500 ${Math.max(8,17*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.fillText('!',0,0);x.restore();}
@@ -15,15 +15,15 @@ const tk=cl(P.think.x);if(tk>.02){x.save();x.globalAlpha=GA*tk;const an=t*2.2;x.
 if(dz>.02){x.save();x.globalAlpha=GA*dz;x.fillStyle='#EF9F27';x.font=`${Math.max(8,14*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';for(let i=0;i<3;i++){const an=t*3+i*2.09;x.fillText('✶',Math.cos(an)*34*u,top-8*u+Math.sin(an)*6*u);}x.restore();}}
 
 const PHONES='#3B3A38';
-/** Słuchawki (scena `vibe`): pałąk nad głową, muszle po bokach; zjeżdżają z góry przy `phA` 0→1. */
+/** Headphones (`vibe` scene): band over the head, cups at sides; slide down as `phA` goes 0→1. */
 function drawPhones(x: any,c: Pet,u: number,top: number,hW: number,GA: number){const ph=cl(c.phA||0);if(ph<.02)return;
 const cy=top+16*u-(1-ph)*14*u;x.save();x.globalAlpha=GA*ph;phones(x,cy,hW+2*u,cy-top+9*u,u);x.restore();}
-/** Kształt słuchawek: pałąk (pół elipsy nad `cy`) i muszle na końcach. */
+/** Headphone shape: band (half-ellipse over `cy`) and cups at the ends. */
 function phones(x: any,cy: number,rx: number,ry: number,u: number){const bw=Math.max(1.5,4.5*u),ow=Math.max(1,x.lineWidth||2*u);
 x.lineCap='round';x.beginPath();x.ellipse(0,cy,rx,ry,0,PI,2*PI);x.strokeStyle=pen.ol;x.lineWidth=bw+2*ow;x.stroke();x.strokeStyle=PHONES;x.lineWidth=bw;x.stroke();
 x.lineWidth=ow;x.strokeStyle=pen.ol;[-1,1].forEach((s: number)=>{shp(x,rrP(s*rx-5.5*u,cy-10*u,11*u,20*u,4.5*u),PHONES,u);shp(x,rrP(s*rx-3*u,cy-6*u,6*u,12*u,2.5*u),pen.accent||'#D97757',u,{noStroke:1});});}
 
-/** W przestrzeni świata (względem podstawy zwierzaka): strona z siatki i cząsteczki. */
+/** In world space (relative to pet base): net page and particles. */
 export function drawWorldFx(x: any,c: Pet,arms: any[],u: number,lw: number,GA: number){const P=c.p,tg=c.tg||{};
 if(c.hold==='net'&&tg._page!=null){const a=tg._page;if(a<1.33){const pp=pagePos(a);drawWebPage(x,pp[0]*u,pp[1]*u,1,u,lw,.15*Math.sin(a*3));}
 if(a>1.2&&a<1.6){const k=(a-1.2)/.4,Rr=arms[1],ph=P.pole.x;x.globalAlpha=GA*(1-k)*.8;x.strokeStyle='#B4B2A9';x.lineWidth=Math.max(1,2*u);for(let i=0;i<2;i++){x.beginPath();x.arc(Rr.hx,Rr.hy,(64+i*10)*u,ph-PI/2+.25,ph-PI/2+1.1);x.stroke();}}}

@@ -1,19 +1,19 @@
-// Które dymki pokazać teraz (spec 0.8, 2.1): pytanie każdej czekającej sesji, a gdy nikt nie czeka,
-// najwyżej jeden dymek z nową akcją na 3 s. Tylko zwierzaki widoczne na scenie, nigdy dzieci.
+// Which bubbles to show now (spec 0.8, 2.1): a question for each waiting session, or when none wait,
+// at most one new-action bubble for 3 s. Only pets visible on the stage, never children.
 import { t } from '../i18n';
 import type { BubbleKind } from '../renderer/bubble';
 import type { Look, Session, Snapshot } from '../types';
 
-/** Dymek, który pojawia się sam, jest krótki; pełny tekst pokazuje się po najechaniu na zwierzaka. */
+/** A bubble that appears by itself is short; the full text appears on pet hover. */
 export const SHORT_CHARS = 32;
 export const shorten = (s: string) => { const c = Array.from(s); return c.length <= SHORT_CHARS ? s : c.slice(0, SHORT_CHARS).join('').trimEnd() + '…'; };
 
-export interface BubbleWant { id: string; kind: BubbleKind; /** krótki tekst dymku */ text: string; /** pełny tekst (po najechaniu) */ full: string;
-  /** środek zwierzaka, px CSS sceny */ x: number; look: Look }
+export interface BubbleWant { id: string; kind: BubbleKind; /** short bubble text */ text: string; /** full text (on hover) */ full: string;
+  /** pet center, stage CSS px */ x: number; look: Look }
 export interface BubbleSwitches { questions: boolean; actions: boolean }
 
 export class Picker {
-  /** ostatni widziany tekst akcji każdej sesji (ta sama akcja po sobie nie daje nowego dymka) */
+  /** last action text seen for each session (repeating the same action does not create a new bubble) */
   private seen = new Map<string, string | null>();
   private current: { id: string; text: string; until: number } | null = null;
   private primed = false;
@@ -23,7 +23,7 @@ export class Picker {
   update(snap: Snapshot, pets: { id: string; x: number }[], looks: (s: Session) => Look, on: BubbleSwitches, now: number): BubbleWant[] {
     const at = new Map(pets.map(p => [p.id, p.x]));
     const own = snap.sessions.filter(s => !s.parent);
-    // nowe akcje: najnowsza zastępuje poprzedni dymek; przy starcie tylko zapamiętujemy stan
+    // new actions: the newest replaces the previous bubble; at startup only remember state
     let fresh: Session | null = null;
     for (const s of own) {
       const a = s.action ?? null;

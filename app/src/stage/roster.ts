@@ -6,7 +6,7 @@ export interface Entry { session: Session; pet: Pet; scene: SceneKey; born: numb
 
 const FADE_IN = .3, BYE_WAVE = .7, BYE_FADE = .8;
 
-/** Przesunięcie fazy animacji z id sesji, żeby zwierzaki nie ruszały się synchronicznie. */
+/** Animation phase offset from the session ID so pets do not move in sync. */
 function phaseOf(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
@@ -15,7 +15,7 @@ function phaseOf(id: string): number {
 
 const CALM_EXIT: ReadonlySet<SceneKey> = new Set(['idle', 'sleep', 'bye']);
 
-/** Zmiana sceny; agent rusza do pracy (albo czeka na Ciebie) w słuchawkach → lecą w bok; koniec muzyki albo sesji → zdejmuje je spokojnie. */
+/** Scene change: headphones fly aside when an agent starts working or waits for you; at music or session end, it removes them calmly. */
 export function switchScene(pet: Pet, from: SceneKey, to: SceneKey): void {
   if (MUSIC_SCENES.has(from) && !MUSIC_SCENES.has(to) && !CALM_EXIT.has(to)) throwPhones(pet);
   setScene(pet, to);
@@ -26,7 +26,7 @@ export class Roster {
 
   get(id: string): Entry | undefined { return this.entries.get(id); }
 
-  /** `sceneOf`: poza wybrana przez scenę (rodzic „deleguje”, pożegnanie mini, muzyka); domyślnie według stanu. */
+  /** `sceneOf`: pose selected by the stage (parent delegates, mini farewell, music); defaults to session state. */
   sync(sessions: Session[], t: number, sceneOf: (s: Session) => SceneKey = s => sceneFor(s)): void {
     const seen = new Set<string>();
     for (const s of sessions) {

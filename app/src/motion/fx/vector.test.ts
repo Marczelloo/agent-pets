@@ -31,7 +31,7 @@ describe('vector dynamic effects', () => {
     for (const bg of ['speed', 'rays', 'purple', 'wind']) {
       const r = recorder(); vectorBack(r.ctx, pet({ _bg: bg }), G());
       expect(SLOT).toEqual({ w: 150, h: 145 });
-      expect(r.log, bg).toContain('rect(37.5,-0.5,45,43.5)'); // 150u × 145u wokół podstawy (60, 40) przy u = 0,3
+      expect(r.log, bg).toContain('rect(37.5,-0.5,45,43.5)'); // 150u × 145u around base (60, 40) at u = 0.3
       expect(r.log).toContain('clip()'); ok(r.log);
       const s = recorder(); vectorBack(s.ctx, pet({ _bg: bg }), G({ env: { ...ENV, bg: false } }));
       expect(s.log, bg).toEqual([]);
@@ -56,7 +56,7 @@ describe('vector dynamic effects', () => {
   it('the thinking orbit carries three symbols around the head, big enough for the taskbar', () => {
     const r = recorder(); vectorFront(r.ctx, pet({ _orbit: 1 }), G());
     expect(r.log.filter(l => l.startsWith('fillText(?')).length).toBe(1);
-    expect(r.log.filter(l => l.startsWith('arc(')).length).toBeGreaterThanOrEqual(3); // trybik (i otwór) + żarówka
+    expect(r.log.filter(l => l.startsWith('arc(')).length).toBeGreaterThanOrEqual(3); // gear (and hole) + bulb
     const fonts = r.log.filter(l => l.startsWith('font=')).map(l => parseFloat(l.split(' ')[1]));
     expect(Math.min(...fonts)).toBeGreaterThanOrEqual(9);
   });
@@ -65,9 +65,9 @@ describe('vector dynamic effects', () => {
     const arcs = r.log.filter(l => l.startsWith('arc(')).map(l => l.slice(4, -1).split(',').map(Number));
     const glass = arcs.find(a => a[2] >= 14 * 0.3 - 1e-6)!;
     expect(glass).toBeDefined();
-    expect(Math.hypot(glass[0] - (60 + 30 * 0.3), glass[1] - (40 - 30 * 0.3))).toBeLessThan(25 * 0.3); // przy prawej dłoni (30, −30)
+    expect(Math.hypot(glass[0] - (60 + 30 * 0.3), glass[1] - (40 - 30 * 0.3))).toBeLessThan(25 * 0.3); // by the right hand (30, −30)
     expect(r.log).toContain('clip()');
-    expect(r.log.filter(l => l.startsWith('fillRect(')).length).toBeGreaterThanOrEqual(3); // linie kodu w szkle
+    expect(r.log.filter(l => l.startsWith('fillRect(')).length).toBeGreaterThanOrEqual(3); // code lines in the lens
   });
   it('face overlays sit at the face anchor', () => {
     for (const face of ['glasses', 'sparkle', 'teeth']) {
@@ -99,7 +99,7 @@ describe('vector dynamic effects', () => {
   it('particles and words stay where they were emitted in the slot: a dashing pet does not drag them along', () => {
     const c = pet(); c.p.lx.x = 40; emit(c, 'spark', 10, -40, { life: 0.01 }); word(c, 'シュッ', 10, -80);
     const r = recorder(); vectorFront(r.ctx, c, G());
-    const xs = r.log.filter(l => l.startsWith('translate(')).map(l => +l.slice(10).split(',')[0]); // cząsteczka rysowana po translate(px, py)
+    const xs = r.log.filter(l => l.startsWith('translate(')).map(l => +l.slice(10).split(',')[0]); // particle drawn after translate(px, py)
     expect(xs).toEqual([63]);
     const tx = r.log.filter(l => l.startsWith('fillText(')).map(l => +l.split(',')[1]);
     expect(tx).toEqual([63]);

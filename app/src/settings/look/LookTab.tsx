@@ -11,7 +11,7 @@ import { PetsCanvas } from './PetsCanvas';
 import { Toggle } from '../Toggle';
 
 const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode', 'copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
-/** Zwierzaki do wyboru w podglądzie: każda maskotka i blob agenta bez własnej. */
+/** Pets available in preview: every mascot and a blob for agents without one. */
 export const PREVIEW_AGENTS: Agent[] = ['claude', 'codex', 'opencode', 'copilot', 'antigravity', 'cursor', 'grok', 'zcode', 'other'];
 const petName = (a: Agent) => (a === 'other' ? t().look.otherPet : t().agent[a]);
 
@@ -37,7 +37,7 @@ export function MotionSwitch({ motion, onPick }: { motion: MotionId; onPick: (m:
   );
 }
 
-/** Zakładka „Wygląd”: ruch, scena podglądu, galeria stylów, pasek w prawdziwym rozmiarze, nadpisania per agent. */
+/** Appearance tab: motion, preview scene, style gallery, taskbar at actual size, per-agent overrides. */
 export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) => void }) {
   const [scene, setScene] = useState<SceneKey>('edit');
   const [cycle, setCycle] = useState(false);

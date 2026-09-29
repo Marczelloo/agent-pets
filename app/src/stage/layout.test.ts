@@ -181,7 +181,7 @@ describe('layout with mini pets', () => {
       }
       const tight = layout({ sessions: all, hasLimits: false, maxWidth: contentWidth(2, false, false) + 3 * M - 1, minis: minisFrom(all), minisLeft });
       expect(tight.pets.map(p => [p.id, p.minis.length])).toEqual([['q', 3]]);
-      // żadna grupa się nie mieści: rodzice bez mini zamiast pustej sceny
+      // no group fits: parents without minis instead of an empty stage
       const tiny = layout({ sessions: all, hasLimits: false, maxWidth: contentWidth(2, false, false) + 1, minis: minisFrom(all), minisLeft });
       expect(tiny.pets.map(p => [p.id, p.minis.length])).toEqual([['p', 0], ['q', 0]]);
     }

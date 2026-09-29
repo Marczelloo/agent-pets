@@ -7,7 +7,7 @@ const KIND: Record<App, Kind> = {
   claude_desktop: 'window', codex_app: 'window', t3code: 'window', other: 'window',
 };
 
-/** Ogólny symbol programu (bez logo marek): okno terminala, okno edytora albo okno aplikacji. */
+/** Generic app icon (no brand logos): terminal, editor, or app window. */
 export function HostIcon({ app }: { app: App }) {
   const kind = KIND[app] ?? 'window';
   return (

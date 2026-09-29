@@ -9,7 +9,7 @@ export const appLabel = (id: AppId): string =>
   ({ claude_code: t().agent.claude, codex: t().agent.codex, agent_router: t().origin.router, opencode: t().agent.opencode,
      copilot: APP_LABEL.copilot, antigravity: t().agent.antigravity, cursor: APP_LABEL.cursor, grok: APP_LABEL.grok, zcode: APP_LABEL.zcode })[id];
 export const appHint = (id: AppId): string => t().settings.appHint[id];
-/** Integracje bez sprawdzenia na żywo: plakietka „eksperymentalne” i nigdy nie włączane tylko dlatego, że je wykryto. */
+/** Integrations without a live check: mark "experimental" and never enable merely because they were detected. */
 export const EXPERIMENTAL: AppId[] = ['cursor', 'grok', 'zcode'];
 export const appBadge = (id: AppId): string | undefined => EXPERIMENTAL.includes(id) ? t().settings.experimental : undefined;
 const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id in APP_LABEL ? appLabel(id as AppId) : id;
@@ -17,7 +17,7 @@ const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings
 export const WIZARD_STEPS = ['apps', 'limits', 'notify', 'look'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
-/** Jak `Settings::default()` w rdzeniu; używane, gdy aplikacja nie odpowiada (podgląd w przeglądarce). */
+/** Like core `Settings::default()`; used when the app does not respond (browser preview). */
 export function defaultSettings(): Settings {
   return {
     version: 1, apps: { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
@@ -29,18 +29,18 @@ export function defaultSettings(): Settings {
 
 export const withApp = (s: Settings, id: AppId, on: boolean): Settings => ({ ...s, apps: { ...s.apps, [id]: on } });
 
-/** Furtka (`/v1/events/generic`): brak pola w pliku z 0.9.1 = otwarta, jak w rdzeniu. */
+/** Bridge (`/v1/events/generic`): missing field in a 0.9.1 file = open, as in core. */
 export const doorOn = (s: Settings): boolean => s.apps.generic !== false;
 export const withDoor = (s: Settings, on: boolean): Settings => ({ ...s, apps: { ...s.apps, generic: on } });
 
-/** Kreator zaczyna z włączonymi tylko tymi aplikacjami, które znaleziono na komputerze. */
+/** The wizard initially enables only apps found on the computer. */
 export function defaultAppChoice(rows: AppRow[], s: Settings): Settings {
   return rows.reduce((acc, r) => withApp(acc, r.id, r.detected.found && !EXPERIMENTAL.includes(r.id)), s);
 }
 
 export const clampMaxVisible = (n: number) => (Number.isFinite(n) ? Math.min(8, Math.max(1, Math.round(n))) : 5);
 
-/** Tekst „Skopiuj raport”: stan widżetu bez tokenów, treści i tytułów sesji. */
+/** "Copy report" text: widget state without tokens, content, or session titles. */
 export function reportText(d: Diagnostics, nowMs: number): string {
   const lines = [
     `Agent Pets ${d.version}`,

@@ -1,4 +1,4 @@
-// Narzędzia tylko dla testów: deterministyczna losowość, nagrywający kontekst 2D i loader prototypu v6.
+// Test-only tools: deterministic randomness, recording 2D context, and v6 prototype loader.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -6,7 +6,7 @@ import { createPet, setMotion, type Pet } from './pet';
 import { MOTIONS } from '../motion';
 import { tick } from '../motion/tick';
 
-/** LCG z trybu filmstrip prototypu (`prototype/pets.js`, linia 245). */
+/** LCG from the prototype's filmstrip mode (`prototype/pets.js`, line 245). */
 export function seeded(seed: number) {
   let s = seed;
   return {
@@ -15,7 +15,7 @@ export function seeded(seed: number) {
   };
 }
 
-/** Kontekst 2D, który zapisuje każde wywołanie i przypisanie (liczby zaokrąglone do 0,001). */
+/** 2D context recording every call and assignment (numbers rounded to 0.001). */
 export function recorder() {
   const log: string[] = [];
   const props: Record<string, unknown> = {
@@ -51,7 +51,7 @@ export interface ProtoApi {
 
 const PROTO = fileURLToPath(new URL('../../../prototype/pets.js', import.meta.url));
 
-/** Ładuje prototyp v6 w piaskownicy `vm` z atrapami DOM; `Math.random` pochodzi z `rng`. */
+/** Load the v6 prototype in a `vm` sandbox with DOM stubs; `Math.random` comes from `rng`. */
 export function loadPrototype(rng: () => number): ProtoApi {
   const noop = () => {};
   const el = (): Record<string, unknown> => ({
@@ -72,14 +72,14 @@ export function loadPrototype(rng: () => number): ProtoApi {
   if (!prototypeSource.includes(hipMutation)) throw new Error('Prototype v6 HIP mutation patch target not found');
   // Fix the HIP mutation bug in prototype v6 before evaluating it.
   const patchedSource = prototypeSource.replace(hipMutation, 'Object.assign({},sw?{armL:1.1}:HIP,');
-  // Każdy kontekst `vm` ma własny obiekt Math, więc podmiana nie wycieka do testów.
+  // Each `vm` context has its own Math object, so the replacement does not leak into tests.
   const src = 'Math.random=__rng;' + patchedSource +
     ';globalThis.__p={S,mkC,stepC,drawC,setSK:v=>{SK=v},setBoil:v=>{BOIL=v}};';
   vm.runInNewContext(src, sandbox);
   return sandbox.__p as ProtoApi;
 }
 
-/** Zwierzak w ruchu Dynamiczny liczony przez `tick` przy 60 kl./s przez `secs` sekund; `each` po każdym kroku. */
+/** Dynamic pet advanced by `tick` at 60 fps for `secs` seconds; `each` runs after every step. */
 export function simulate(skin: 'clawd' | 'kodek', scene: string, secs: number, each?: (c: Pet, T: number) => void): Pet {
   const c = createPet(skin, scene);
   setMotion(c, true);
@@ -88,11 +88,11 @@ export function simulate(skin: 'clawd' | 'kodek', scene: string, secs: number, e
   return c;
 }
 
-/** Kontekst 2D, który śledzi przekształcenia i zapamiętuje najwyższy punkt rysunku w układzie ekranu (`top()`). */
+/** 2D context that tracks transforms and records the highest point of the drawing in screen coordinates (`top()`). */
 export function extent() {
   type M = [number, number, number, number, number, number];
   let m: M = [1, 0, 0, 1, 0, 0], top = Infinity, where = '', font = 10, base = 'alphabetic';
-  /** górna krawędź napisu wg rozmiaru czcionki i linii bazowej */
+  /** text top edge from font size and baseline */
   const textTop = (y: number) => y - font * (base === 'top' ? 0 : base === 'middle' ? 0.5 : base === 'bottom' ? 1 : 0.8);
   const stack: M[] = [];
   const mul = (a: M, b: M): M => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];

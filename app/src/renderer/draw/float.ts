@@ -2,13 +2,13 @@ import { PI } from "../math";
 import { rrP, seg, shp } from "../pen";
 import type { Skin } from "../../skins/types";
 
-/** Wysokość lewitacji (w jednostkach `u`): skóra z `float` unosi się 7 u nad ziemią i faluje o ±2,2 u. */
+/** Hover height (in `u`): a skin with `float` rises 7 u above the ground and bobs by ±2.2 u. */
 export function floatLift(sk: Skin, t: number, seed: number): number {
   return sk.float ? 7 + 2.2 * Math.sin(t * 2.6 + seed) : 0;
 }
 
-/** Ludzik Androida: głowa-kopułka (półelipsa) nad tułowiem, rozdzielone szczeliną; tułów z zaokrąglonymi dolnymi rogami
- * (promień `R`). Zwraca dwa obrysy: [głowa, tułów]. */
+/** Android mascot: dome head (half-ellipse) above the torso, separated by a gap; torso with rounded lower corners
+ * (radius `R`). Returns two outlines: [head, torso]. */
 export function androidP(X: number, Y: number, W: number, H: number, R: number): number[][][] {
   if (W < 0) { X += W; W = -W; }
   W = Math.max(W, .01); H = Math.max(H, .01);
@@ -20,8 +20,8 @@ export function androidP(X: number, Y: number, W: number, H: number, R: number):
   return [head, torso];
 }
 
-/** Twarz z logo Copilota na przodzie ciała (`fw` = widoczna szerokość przodu): wizjer w dolnej części i dwie duże
- * soczewki gogli stykające się na środku, u góry. Oczy rysuje potem zwykły kod oczu, na wizjerze. */
+/** Copilot logo face on the body front (`fw` = visible front width): visor at the bottom and two large
+ * goggle lenses meeting at the center above. Regular eye code then draws the eyes on the visor. */
 export function drawPilot(x: CanvasRenderingContext2D, cx: number, top: number, fw: number, H: number, u: number,
   g: { frame: string; lens: string; visor: string }) {
   shp(x, rrP(cx - fw * .36, top + H * .34, fw * .72, H * .44, H * .17), g.visor, u);
@@ -35,7 +35,7 @@ export function drawPilot(x: CanvasRenderingContext2D, cx: number, top: number, 
   }
 }
 
-/** Dwie antenki ludzika Androida: z kopułki głowy (`top`, szerokość `fw`) na ukos w górę; `wig` kołysze końcami. */
+/** Android mascot's two antennae: angled upward from the head dome (`top`, width `fw`); `wig` sways their tips. */
 export function drawAndroidAntennas(x: CanvasRenderingContext2D, cx: number, top: number, fw: number, H: number, u: number, col: string, lw: number, wig: number) {
   const hh = Math.min(fw * .46, H * .44);
   for (const s of [-1, 1]) {

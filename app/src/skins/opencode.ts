@@ -1,5 +1,5 @@
 import type { Skin } from './types';
-/** opencode: prawie czarny kanciasty cyklop, jak tło logo; jedyne oko to „o” z logo opencode (jasna ramka, otwór u góry, powieka w kolorze ciała). */
+/** opencode: nearly black angular cyclops like the logo background; its eye is the logo's "o" (light rim, top opening, body-colored lid). */
 export const opencode: Skin = {
   id: 'opencode', pal: { m:'#211E1E',s:'#171414',b:'#1C1919',h:'#3A3535',g:'#6B6868',gs:'#555252' },
   width: 80, depth: 52, height: 66, radius: 3, armLen: 26, mitt: 5.5,

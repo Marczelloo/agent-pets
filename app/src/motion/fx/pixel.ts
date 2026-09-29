@@ -1,5 +1,5 @@
-// Efekty Dynamiczny na siatce modelu pikselowego (spec 8.2 + 6): te same warstwy co wektorowe, ale każda figura to
-// komórki siatki — linie Bresenhamem, koła i elipsy na komórkach, cząsteczki i słowa jako bitmapy.
+// Dynamic effects on the pixel model grid (spec 8.2 + 6): same layers as vector, but each shape uses
+// grid cells: Bresenham lines, cell-based circles and ellipses, particles and words as bitmaps.
 import { PI, TAU, cl, hr } from '../../renderer/math';
 import { gridPx } from '../../renderer/models/pixel';
 import { pen } from '../../renderer/pen';
@@ -10,11 +10,11 @@ import type { FxCtx } from './index';
 
 const AMBER = '#EF9F27', WHITE = '#FFFFFF', RED = '#E24B4A', BLUE = '#5B8DEF', PURPLE = '#7F77DD', TEAL = '#5DCAA5', GREY = '#B4B2A9';
 
-/** Siatka: komórka `g` px (całkowite piksele urządzenia), początek przyciągnięty do piksela urządzenia. */
-/** `off` = przesunięcie początku w u: `lx` zwierzaka dla nakładek na ciele, 0 dla cząsteczek i słów (żyją w miejscu zwierzaka). */
+/** Grid: `g` px cells (whole device pixels), origin snapped to a device pixel. */
+/** `off` = origin offset in u: pet `lx` for body overlays, 0 for particles and words (they stay at the pet's location). */
 function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet, off = c.p.lx.x) {
   const G = gridPx(g.u, g.dpr) / g.dpr, snap = (v: number) => Math.round(v * g.dpr) / g.dpr;
-  const U = (v: number) => Math.round(v * g.u / G), X0 = snap(g.X) + U(off) * G, Y0 = snap(g.Y); // ta sama siatka co ciało (models/pixel.ts)
+  const U = (v: number) => Math.round(v * g.u / G), X0 = snap(g.X) + U(off) * G, Y0 = snap(g.Y); // same grid as the body (models/pixel.ts)
   const cell = (cx: number, cy: number, w: number, h: number, col: string) => { if (w > 0 && h > 0) { x.fillStyle = col; x.fillRect(X0 + cx * G, Y0 + cy * G, w * G, h * G); } };
   const line = (x0: number, y0: number, x1: number, y1: number, col: string) => {
     let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), e = dx + dy, n = 0; const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -25,7 +25,7 @@ function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet, off = c.p.lx.x) {
       if (fill) cell(cx - w, cy + j, 2 * w + 1, 1, col); else { cell(cx - w, cy + j, 1, 1, col); cell(cx + w, cy + j, 1, 1, col); } }
     if (!fill) for (let i = -rx; i <= rx; i++) { const h = Math.round(ry * Math.sqrt(Math.max(0, 1 - (i / (rx || 1)) ** 2))); cell(cx + i, cy - h, 1, 1, col); cell(cx + i, cy + h, 1, 1, col); }
   };
-  /** Napis bitmapową czcionką: piksel glifu rośnie z u (jak czcionka wektorowa, ≈ 30u wysokości), co najmniej 9 px w pasku. */
+  /** Bitmap-font text: glyph pixels scale with u (like vector font, ≈ 30u high), at least 9 px in the taskbar. */
   const text = (str: string, xu: number, yu: number, col: string) => {
     const P = Math.max(Math.ceil(9 / 7 * g.dpr), Math.round(30 / 7 * g.u * g.dpr)) / g.dpr, chars = [...str];
     const width = chars.reduce((a, ch) => a + glyphWidth(ch) + 1, -1), gy = Y0 + U(yu) * G - 3 * P;
@@ -37,7 +37,7 @@ function grid(x: CanvasRenderingContext2D, g: FxCtx, c: Pet, off = c.p.lx.x) {
     for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) pass(pen.ol, ox, oy);
     pass(col, 0, 0);
   };
-  /** Mały obrazek z pikseli rozmiaru napisów (`P`), wyśrodkowany w (xu, yu); znaki wg palety `pal`. */
+  /** Small image made of text-size pixels (`P`), centered at (xu, yu); characters use palette `pal`. */
   const icon = (rows: string[], xu: number, yu: number, pal: Record<string, string>) => {
     const P = Math.max(Math.ceil(9 / 7 * g.dpr), Math.round(30 / 7 * g.u * g.dpr)) / g.dpr;
     const gx = X0 + U(xu) * G - Math.round(rows[0].length / 2) * P, gy = Y0 + U(yu) * G - Math.round(rows.length / 2) * P;
@@ -54,7 +54,7 @@ export function pixelBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const rays = (n: number, r0: number, r1: number, col: string) => { for (let i = 0; i < n; i++) { const a = TAU * (i + hr(i + seed) * 0.6) / n;
     line(Math.round(Math.cos(a) * U(r0)), cy + Math.round(Math.sin(a) * U(r0) * 0.8), Math.round(Math.cos(a) * U(r1)), cy + Math.round(Math.sin(a) * U(r1) * 0.8), col); } };
   if (g.flash || g.glow > 0) { x.save(); if (!g.flash) x.globalAlpha = g.alpha * g.glow; ring(0, cy, U(60), U(50), WHITE, true); rays(12, 36, 62, pen.ol); x.restore(); }
-  if (g.flash) { /* tylko błysk */ } else if (bg === 'speed' || bg === 'purple') { x.globalAlpha = g.alpha * 0.4; rays(14, 52, 72, bg === 'purple' ? PURPLE : pen.ol); }
+  if (g.flash) { /* flash only */ } else if (bg === 'speed' || bg === 'purple') { x.globalAlpha = g.alpha * 0.4; rays(14, 52, 72, bg === 'purple' ? PURPLE : pen.ol); }
   else if (bg === 'rays') { x.globalAlpha = g.alpha * 0.35; rays(10, 10, 75, AMBER); }
   else if (bg === 'wind') { x.globalAlpha = g.alpha * 0.45; for (let i = 0; i < 6; i++) { const off = Math.round(((g.t * 160 + i * 37) % 150) / 150 * U(150)); cell(U(-75) + off, cy + U(-40 + i * 14), U(22), 1, pen.ol); } }
   if (gr) { x.globalAlpha = g.alpha * cl(tg._groundK ?? 1); const col = gr === 'seal' ? RED : TEAL, gx = U(tg._groundX ?? 0);
@@ -62,7 +62,7 @@ export function pixelBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   x.restore();
 }
 
-/** Symbole myśli (w pikselach napisów): trybik, żarówka zgaszona i zapalona. */
+/** Thought symbols (in text pixels): gear, unlit bulb, and lit bulb. */
 const ICON = {
   gear: ['.g.g.', 'ggggg', '.gwg.', 'ggggg', '.g.g.'],
   bulb: ['.www.', 'wwwww', 'wwwww', '.www.', '.ggg.'],
@@ -78,7 +78,7 @@ const PAL: Record<string, string> = { a: AMBER, g: GREY, k: '#2B1D16', l: '#F1EF
 export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void {
   const s: FxState | undefined = c.fx; if (!s) return;
   const tg = c.tg || {}, { G, U, cell, line, ring, text, icon } = grid(x, g, c), hands: number[][] = c.hand ?? [];
-  const [fx0, fy0, gp] = (c.face as number[]) ?? [0, -45, 12], fx = Math.floor(fx0 * g.u / G + 1e-6), fy = U(fy0), gap = Math.max(2, U(gp)); // kotwica leży na środku komórki (+½): floor, nie round
+  const [fx0, fy0, gp] = (c.face as number[]) ?? [0, -45, 12], fx = Math.floor(fx0 * g.u / G + 1e-6), fy = U(fy0), gap = Math.max(2, U(gp)); // anchor is at the cell center (+½): floor, not round
   const slot = grid(x, g, c, 0);
   const sprite = (rows: string[], cx: number, cy: number, col?: string, put = cell) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] !== '.') put(cx + i, cy + j, 1, 1, col && r[i] === 'c' ? col : PAL[r[i]]); });
   x.save(); x.globalAlpha = g.alpha;
@@ -124,9 +124,9 @@ export function pixelFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
     else sprite(SPR[p.k]!, px - 1, py - 1, p.k === 'helper' ? g.accent : undefined, slot.cell);
     x.restore();
   }
-  // „!” obok głowy: glif pikselowy jest wysoki (≥ 9 px), więc stoi niżej niż wektorowy, żeby przy skokach nie wyjść z paska
+  // "!" by the head: the pixel glyph is tall (≥ 9 px), so it sits lower than vector to stay in the taskbar during jumps
   if (tg._bang) text('!', fx0 + 34, fy0 - 20 - Math.round(Math.abs(Math.sin(g.t * 8)) * 2) * 3, AMBER);
-  // słowa pikselowe stoją w miejscu: glif jest wyższy niż wektorowy i unosząc się wyszedłby ponad pasek
+  // pixel words stay in place: the glyph is taller than vector and would rise beyond the taskbar
   for (const w of s.words) slot.text(w.text, w.x, w.y + w.life * WORD_RISE, AMBER);
   x.restore();
 }

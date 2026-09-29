@@ -1,4 +1,4 @@
-// Jedna pętla klatek dla wszystkich podglądów; stoi, gdy okno jest ukryte albo nikt nie rysuje.
+// One frame loop for all previews; pauses when the window is hidden or nothing is drawing.
 type Fn = (dt: number) => void;
 const subs = new Set<Fn>();
 let raf = 0, last = 0, acc = 0, fps = 30;
@@ -22,7 +22,7 @@ export function subscribe(fn: Fn): () => void {
   return () => { subs.delete(fn); if (!subs.size) { cancelAnimationFrame(raf); raf = 0; } };
 }
 
-/** Rozmiar płótna w całych pikselach urządzenia i odpowiadający mu rozmiar CSS (ostre przy 125 %, 150 %). */
+/** Canvas size in whole device pixels and matching CSS size (sharp at 125%, 150%). */
 export function backing(css: number, dpr: number): { px: number; css: number } {
   const px = Math.round(css * dpr);
   return { px, css: px / dpr };

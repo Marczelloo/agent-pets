@@ -6,8 +6,8 @@ const html = readFileSync(fileURLToPath(new URL('../../tooltip.html', import.met
 
 describe('tooltip.html', () => {
   it('measures the box at its natural width, not the width of the previous tooltip window', () => {
-    // Okno tooltipa ma rozmiar poprzedniej treści. Bez max-content szerokość pudełka ograniczałaby
-    // szerokość okna, więc każdy kolejny tooltip byłby najwyżej tak szeroki jak poprzedni.
+    // Tooltip window has the previous content's size. Without max-content, the box width would be limited by
+    // window width, so each new tooltip could be no wider than the previous one.
     const rule = html.match(/#tip\{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toContain('width:max-content');
     expect(rule).toContain('max-width:264px');

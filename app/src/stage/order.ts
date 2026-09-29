@@ -1,6 +1,6 @@
 import type { Session, StageOrder, State } from '../types';
 
-/** Po tylu ms w nowej grupie sesja zmienia miejsce (zwierzaki nie skaczą przy każdej zmianie stanu). */
+/** After this many ms in a new group, the session moves (pets do not jump at every state change). */
 export const SETTLE_MS = 3000;
 
 const GROUP: Record<State, number> = {
@@ -10,7 +10,7 @@ const GROUP: Record<State, number> = {
 const agentRank = (s: Session) => (s.origin === 'router' ? 2 : s.agent === 'codex' ? 1 : 0);
 const byStart = (a: Session, b: Session) => a.started_at - b.started_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-/** Kolejność zwierzaków w scenie według ustawienia; dla `attention` z histerezą `SETTLE_MS`. */
+/** Pet order on stage by setting; `attention` uses `SETTLE_MS` hysteresis. */
 export class Orderer {
   private seen = new Map<string, { shown: number; pending: number | null; at: number }>();
 
@@ -33,15 +33,15 @@ export class Orderer {
     return m;
   }
 
-  /** Kolejność rysowania od lewej. */
+  /** Drawing order from the left. */
   display(v: Session[], now: number): Session[] {
     const r = this.rank(v, now);
     return [...v].sort((a, b) => r.get(a.id)! - r.get(b.id)! || byStart(a, b));
   }
 
   /**
-   * Kolejność do zwijania w „+N”: najważniejsze na końcu (zostają widoczne). Przy `attention` to grupa;
-   * przy `start` i `agent` jak w 0.6: najnowsze zostają.
+   * Order for collapsing into "+N": most important last (they stay visible). With `attention`, use the group;
+   * with `start` and `agent`, as in 0.6: the newest stay.
    */
   priority(v: Session[], now: number): Session[] {
     if (this.mode !== 'attention') return [...v].sort(byStart);

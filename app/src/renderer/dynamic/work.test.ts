@@ -15,7 +15,7 @@ describe('dynamic work scenes', () => {
     const { seen, stats } = flags('clawd', 'edit', 7);
     expect(seen.some(s => s._barrage)).toBe(true);
     const hits = seen.filter(s => s._barrage).map(s => Math.max(s.hyL as number, s.hyR as number));
-    expect(Math.max(...hits)).toBeGreaterThan(-36); // pięść dochodzi do klawiatury (y ≈ −30)
+    expect(Math.max(...hits)).toBeGreaterThan(-36); // fist reaches the keyboard (y ≈ −30)
     expect(stats.key).toBeGreaterThanOrEqual(15);
     expect(stats.spark).toBeGreaterThanOrEqual(5);
     expect(Object.keys(stats).filter(k => k.startsWith('word:'))).toEqual(['word:BAM!']);
@@ -24,7 +24,7 @@ describe('dynamic work scenes', () => {
   });
   it('edit: the final punch winds up (hand up and back) before it strikes', () => {
     const { seen } = flags('clawd', 'edit', 7);
-    const fin = seen.filter(s => s.act === 'finałowy cios');
+    const fin = seen.filter(s => s.act === 'final strike');
     const top = Math.min(...fin.map(s => s.hyR as number)), bottom = Math.max(...fin.map(s => s.hyR as number));
     expect(top).toBeLessThan(-70);
     expect(bottom).toBeGreaterThan(-34);
@@ -32,7 +32,7 @@ describe('dynamic work scenes', () => {
   });
   it('edit: the final punch is readable — ≥ 0.2 s wind-up, hit-stop with BAM!, and the pose held ≥ 0.6 s', () => {
     const { seen, stats } = flags('clawd', 'edit', 8);
-    const fin = seen.filter(s => s.act === 'finałowy cios');
+    const fin = seen.filter(s => s.act === 'final strike');
     const topAt = fin.findIndex(s => (s.hyR as number) < -70);
     expect(topAt).toBeGreaterThanOrEqual(12);
     const struck = fin.findIndex(s => (s.hyR as number) > -36);
@@ -54,7 +54,7 @@ describe('dynamic work scenes', () => {
   });
   it('bash: at least 4 distinct hand seals, then a poof of smoke and the command runs', () => {
     const { seen, stats } = flags('kodek', 'bash', 4.5);
-    const seals = seen.filter(s => s.act === 'pieczęcie rąk');
+    const seals = seen.filter(s => s.act === 'hand seals');
     const poses: number[][] = [];
     for (const s of seals) { const p = [s.hxL as number, s.hyL as number, s.hxR as number, s.hyR as number];
       if (!poses.some(q => Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2], q[3] - p[3]) < 6)) poses.push(p); }
@@ -72,7 +72,7 @@ describe('dynamic work scenes', () => {
   });
   it('grep: a detective walks along the board with a big magnifier, a hit stops everything with "!" and an impact frame', () => {
     const { seen, stats } = flags('kodek', 'grep', 6);
-    const look = seen.filter(s => s.act === 'szuka z lupą');
+    const look = seen.filter(s => s.act === 'searches with a magnifier');
     expect(look.every(s => s._lens === 1)).toBe(true);
     const lx = look.map(s => s.lx as number);
     expect(Math.max(...lx) - Math.min(...lx)).toBeGreaterThan(12);
@@ -91,7 +91,7 @@ describe('dynamic work scenes', () => {
     expect(turns).toBeGreaterThanOrEqual(3);
     expect(stats.bolt).toBeGreaterThanOrEqual(5);
     expect(seen.some(s => s._hold === 'sheet')).toBe(true);
-    expect(Math.min(...seen.filter(s => s.act === 'ogląda stronę').map(s => Math.abs(s.lx as number)))).toBeLessThan(8); // wrócił na miejsce
+    expect(Math.min(...seen.filter(s => s.act === 'examines a page').map(s => Math.abs(s.lx as number)))).toBeLessThan(8); // returned to its place
   });
   it('agent: a seal on the ground, a cloud of smoke and a mini helper running off', () => {
     const { c, seen, stats } = flags('kodek', 'agent', 3);
@@ -104,7 +104,7 @@ describe('dynamic work scenes', () => {
   });
   it('mcp: clap (hands meet), glowing transmutation circle, the tool rises from sparks', () => {
     const { seen, stats } = flags('clawd', 'mcp', 3);
-    const clap = seen.filter(s => s.act === 'klaśnięcie');
+    const clap = seen.filter(s => s.act === 'clap');
     expect(Math.min(...clap.map(s => Math.abs((s.hxR as number) - (s.hxL as number))))).toBeLessThan(12);
     expect(seen.some(s => s._ground === 'circle')).toBe(true);
     expect(seen.some(s => s._hold === 'wrench')).toBe(true);

@@ -8,15 +8,15 @@ const POSITIONS: StagePosition[] = ['right', 'left', 'custom', 'floating'];
 const BACKGROUNDS: StageBackground['kind'][] = ['none', 'glass', 'solid'];
 const ALIGNS: StageAlign[] = ['left', 'center', 'right'];
 const ORDERS: StageOrder[] = ['start', 'attention', 'agent'];
-/** Jak `SIZE_TASKBAR_MAX` i `SIZE` w rdzeniu. */
+/** Like core `SIZE_TASKBAR_MAX` and `SIZE`. */
 const SIZE_MIN = 70, SIZE_TASKBAR = 100, SIZE_FLOAT = 300;
 const DEFAULT_OPACITY = { none: 0, glass: 12, solid: 90 } as const;
 const AUTO_COLOR = { glass: '#FFFFFF', solid: '#202020' } as const;
 
-/** „Przywróć domyślne” w karcie „Pasek”: tylko ustawienia sceny (limit zwierzaków zostaje). */
+/** "Restore defaults" on the Taskbar tab: stage settings only (pet limit stays). */
 export const resetStage = (s: Settings): Settings => ({ ...s, stage: defaultStage() });
 
-/** Przełącznik z sekcji „Dymki i subagenci”. */
+/** Toggle from the "Bubbles and subagents" section. */
 export function withBubbles(s: Settings, key: 'questions' | 'actions' | 'minis', on: boolean): Settings {
   const st = s.stage ?? defaultStage();
   return key === 'minis' ? { ...s, stage: { ...st, minis: on } } : { ...s, stage: { ...st, bubbles: { ...st.bubbles, [key]: on } } };
@@ -53,13 +53,13 @@ function Slider({ label, value, min, max, text, desc, onChange }: {
 interface Props {
   settings: Settings;
   monitors: MonitorInfo[];
-  /** tryb „po lewej” bez miejsca po lewej (ikony wyrównane do lewej): scena stoi przy zasobniku */
+  /** left-side mode with no room on the left (icons left-aligned): stage stays near the tray */
   leftFallback: boolean;
   onChange: (s: Settings) => void;
   onMove: () => void;
 }
 
-/** Karta „Pasek”: pozycja, monitor, tło, rozmiar, odstępy, wyrównanie, kolejność i widoczne elementy. */
+/** Taskbar tab: position, monitor, background, size, spacing, alignment, order, and visible items. */
 export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove }: Props) {
   const st = s.stage;
   const x = t().stage;

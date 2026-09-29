@@ -1,6 +1,6 @@
-// Lustro modelu z crates/pets-core/src/model.rs (serde: snake_case, Option → null).
+// Mirrors the model in crates/pets-core/src/model.rs (serde: snake_case, Option → null).
 export type Agent = 'claude' | 'codex' | 'opencode' | 'antigravity' | 'copilot' | 'cursor' | 'grok' | 'zcode' | 'other';
-/** Program, w którym działa sesja (`App` w rdzeniu). */
+/** App running the session (`App` in core). */
 export type App = 'terminal' | 'claude_desktop' | 'codex_app' | 'vscode' | 't3code' | 'cursor' | 'antigravity' | 'zed' | 'jetbrains' | 'zcode' | 'other';
 export type Origin = 'cli' | 'desktop' | 'router';
 export type State = 'thinking' | 'working' | 'needs_you' | 'done' | 'error' | 'idle' | 'sleep' | 'compacting' | 'ended';
@@ -24,21 +24,21 @@ export interface Session {
   state_since: number;
   turn_started_at: number | null;
   jump: { pid: number | null; session_id: string; cwd: string; app: App | null; app_name?: string | null; host_pid?: number | null };
-  /** zużycie z bazy agenta (od 0.11, tylko opencode) */
+  /** usage from the agent database (since 0.11, opencode only) */
   usage?: Usage | null;
-  /** zadanie Agent Routera powiązane z tym wątkiem Codexa */
+  /** Agent Router task linked to this Codex thread */
   router_task?: RouterTask | null;
-  /** id sesji rodzica; brak = zwykła sesja */
+  /** parent session ID; absent = ordinary session */
   parent?: string | null;
-  /** tylko u dzieci (subagentów) */
+  /** only for child sessions (subagents) */
   sub?: SubInfo | null;
-  /** bieżący tekst akcji (tylko w pamięci rdzenia i okien) */
+  /** current action text (only in core and window memory) */
   action?: string | null;
-  /** tekst pytania, tylko w `needs_you` */
+  /** question text, only in `needs_you` */
   question?: string | null;
-  /** id modelu (np. `claude-opus-5-5`), od 0.10 */
+  /** model ID (e.g. `claude-opus-5-5`), since 0.10 */
   model?: string | null;
-  /** nazwa agenta `other` (z furtki), od 0.10 */
+  /** `other` agent name (from the bridge), since 0.10 */
   agent_name?: string | null;
 }
 
@@ -48,12 +48,12 @@ export interface SubInfo { kind: SubKind; agent_type: string | null; description
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
 export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null }
-/** Tokeny i koszt sesji z bazy agenta (od 0.11 tylko opencode); `account` = konto, którego limity dotyczą sesji. */
+/** Session tokens and cost from the agent database (opencode only since 0.11); `account` = account whose limits apply. */
 export interface Usage { tokens: number; cost: number; account: Agent | null }
-/** Suma dnia (od lokalnej północy) dla agenta. */
+/** Agent's daily total (since local midnight). */
 export interface AgentUsage { agent: Agent; tokens_today: number; cost_today: number }
 export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[] }
-/** Układ od Rusta; `mode` i `light` od 0.7 (brak = pasek, ciemny). */
+/** Layout from Rust; `mode` and `light` since 0.7 (absent = taskbar, dark). */
 export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean }
 export type PointerMsg =
   | { kind: 'move'; x: number; y: number }
@@ -66,11 +66,11 @@ export type AppId = 'claude_code' | 'codex' | 'agent_router' | 'opencode' | 'cop
 export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
 export type MotionId = 'calm' | 'dynamic';
 export interface Look { style: StyleId; motion: MotionId }
-/** `react_to_media` od 0.9.1 (brak = włączone): bezczynny zwierzak słucha muzyki grającej w systemie. */
+/** `react_to_media` since 0.9.1 (absent = enabled): an idle pet listens to system music. */
 export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number; react_to_media?: boolean }
-/** Lustro `media::Media` (zdarzenie `pets://media`): czy coś gra w Windows (GSMTC) i w jakiej aplikacji. */
+/** Mirrors `media::Media` (`pets://media` event): whether something is playing in Windows (GSMTC), and in which app. */
 export interface Media { playing: boolean; app: string | null }
-/** `opencode` i `generic` (furtka) od 0.10, `copilot` i `antigravity` od 0.11, `cursor`, `grok`, `zcode` od 0.12; brak w starszym pliku = wartości domyślne rdzenia. */
+/** `opencode` and `generic` (bridge) since 0.10, `copilot` and `antigravity` since 0.11, `cursor`, `grok`, `zcode` since 0.12; absent in older files = core defaults. */
 export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean; opencode?: boolean; generic?: boolean; copilot?: boolean; antigravity?: boolean;
   cursor?: boolean; grok?: boolean; zcode?: boolean }
 export interface Settings {
@@ -96,18 +96,18 @@ export type UpdateStatus =
   | { state: 'available'; version: string; notes: string | null }
   | { state: 'downloading'; version: string; pct: number | null }
   | { state: 'ready'; version: string }
-  /** `verify`: problem z samą aktualizacją (panel i ustawienia); inaczej błąd sprawdzania (tylko ustawienia) */
+  /** `verify`: problem with the update itself (panel and settings); otherwise a check error (settings only) */
   | { state: 'error'; message: string; verify: boolean };
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';
 export type StageOrder = 'start' | 'attention' | 'agent';
 export interface StageBackground { kind: 'none' | 'glass' | 'solid'; color?: string | null; opacity?: number | null; radius: number }
-/** Lustro `settings::Stage` z rdzenia (karta „Pasek”). */
+/** Mirrors core `settings::Stage` (Taskbar tab). */
 export interface StageSettings {
   position: StagePosition;
-  /** kotwica w pasku jako ułamek szerokości paska (0–1) */
+  /** taskbar anchor as a fraction of taskbar width (0–1) */
   custom_at?: number | null;
-  /** kotwica okna pływającego (px CSS względem obszaru roboczego monitora) */
+  /** floating window anchor (CSS px relative to the monitor work area) */
   floating_at?: { x: number; y: number } | null;
   monitor: string;
   background: StageBackground;
@@ -118,11 +118,11 @@ export interface StageSettings {
   order: StageOrder;
   show: { progress: boolean; limits: boolean; badge: boolean };
   bubbles: { questions: boolean; actions: boolean };
-  /** mini-zwierzaki subagentów pracujących dłużej niż 5 s */
+  /** mini pets for subagents working longer than 5 s */
   minis: boolean;
 }
 export type Language = 'auto' | 'pl' | 'en';
-/** `lang`: język tekstów z Rusta (ustawienie albo język Windows), dla `auto` w UI. */
+/** `lang`: language of Rust text (setting or Windows language), for UI `auto`. */
 export interface SettingsView { settings: Settings; first_run: boolean; load_error: string | null; lang?: 'pl' | 'en'; system_lang?: 'pl' | 'en' }
 export interface AppRow {
   id: AppId;

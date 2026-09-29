@@ -13,13 +13,13 @@ const flags = (skin: 'clawd' | 'kodek', scene: string, secs: number) => {
 describe('dynamic state scenes', () => {
   it('thinking: Shikamaru — sits with hands joined, eyes closed, symbols orbit the head, then the bulb lights up', () => {
     const { seen, stats } = flags('clawd', 'thinking', 7);
-    const med = seen.filter(s => s.act === 'medytuje'), calm = med.filter(s => (s.aT as number) > 0.6); // po wejściu w pozę
+    const med = seen.filter(s => s.act === 'meditates'), calm = med.filter(s => (s.aT as number) > 0.6); // after entering the pose
     expect(med.length).toBeGreaterThan(0);
     expect(med.every(s => s._orbit === 1)).toBe(true);
     expect(Math.min(...calm.map(s => s.sit as number))).toBeGreaterThan(0.8);
-    expect(calm.every(s => (s.sleepX as number) > 0.5)).toBe(true); // oczy zamknięte
-    expect(calm.every(s => Math.abs((s.hxR as number) - (s.hxL as number)) < 20)).toBe(true); // dłonie złożone przed sobą
-    const idea = seen.filter(s => s.act === 'wpada na pomysł');
+    expect(calm.every(s => (s.sleepX as number) > 0.5)).toBe(true); // eyes closed
+    expect(calm.every(s => Math.abs((s.hxR as number) - (s.hxL as number)) < 20)).toBe(true); // hands joined in front
+    const idea = seen.filter(s => s.act === 'gets an idea');
     expect(Math.max(...idea.map(s => s._idea as number))).toBe(1);
     expect(stats.spark).toBeGreaterThanOrEqual(5);
   });
@@ -48,10 +48,10 @@ describe('dynamic state scenes', () => {
     expect(Math.max(...seen.map(s => Math.abs(s.th as number)))).toBeGreaterThan(Math.PI);
     expect(stats.note).toBeGreaterThanOrEqual(3);
     const acts = new Set(seen.map(s => s.act));
-    expect(acts.has('trening: pompki') && acts.has('trening: przysiady')).toBe(true);
-    const loaf = seen.filter(s => s.act === 'trening: pompki').map(s => s.loaf as number);
+    expect(acts.has('training: push-ups') && acts.has('training: squats')).toBe(true);
+    const loaf = seen.filter(s => s.act === 'training: push-ups').map(s => s.loaf as number);
     expect(Math.max(...loaf) - Math.min(...loaf)).toBeGreaterThan(0.4);
-    const sit = seen.filter(s => s.act === 'trening: przysiady').map(s => s.sit as number);
+    const sit = seen.filter(s => s.act === 'training: squats').map(s => s.sit as number);
     expect(Math.max(...sit) - Math.min(...sit)).toBeGreaterThan(0.4);
   });
   it('sleep: a snot bubble grows and shrinks, then a dream bubble with a little scene', () => {
@@ -74,7 +74,7 @@ describe('dynamic state scenes', () => {
   it('bye: a roadrunner escape — wind-up back, dash with a dust cloud and シュッ, gone within the slot', () => {
     const { seen, stats } = flags('clawd', 'bye', 3);
     const lx = seen.map(s => s.lx as number);
-    expect(Math.min(...lx)).toBeLessThan(-3);        // zamach w tył
+    expect(Math.min(...lx)).toBeLessThan(-3);        // wind-up backward
     expect(lx.at(-1)!).toBeGreaterThanOrEqual(45);
     expect(Math.max(...lx)).toBeLessThanOrEqual(50);
     expect(stats.dust).toBeGreaterThanOrEqual(6);

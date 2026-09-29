@@ -1,7 +1,7 @@
 import type { Session, StageLayout } from '../types';
 import { MINI_SCALE } from './minis';
 
-// Wymiary w pikselach CSS przy u = 0,3 (wysokość paska 48). Uzasadnienie: plan fazy 2, task 6.
+// Dimensions in CSS pixels at u = 0.3 (taskbar height 48). Rationale: phase 2 plan, task 6.
 export const SLOT = 74;
 export const LEFT_REACH = 24;
 export const RIGHT_REACH = 42;
@@ -9,12 +9,12 @@ export const PAD = 2;
 export const BADGE_W = 24;
 export const LIMITS_W = 26;
 export const MAX_PETS = 5;
-/** Plakietka „+N” dzieci przy mini-zwierzakach (px CSS przy zoom 1). */
+/** Children's "+N" badge beside mini pets (CSS px at zoom 1). */
 export const MINI_MORE_W = 16;
-/** Sufit rozmiaru w pasku (%): przy 100% zwierzak z efektami zajmuje całą wysokość paska 48 px. */
+/** Taskbar size cap (%): at 100%, a pet with effects fills the entire 48 px taskbar height. */
 export const SIZE_TASKBAR_MAX = 100;
 
-/** Wymiary sceny po zastosowaniu rozmiaru (`zoom`), odstępu i marginesu z karty „Pasek”. */
+/** Stage dimensions after applying size (`zoom`), spacing, and margin from the Taskbar tab. */
 export interface Geo { zoom: number; slot: number; left: number; right: number; pad: number; badgeW: number; limitsW: number }
 
 export function geometry(zoom: number, gap: number, padding: number): Geo {
@@ -24,13 +24,13 @@ export function geometry(zoom: number, gap: number, padding: number): Geo {
 
 const BASE: Geo = geometry(1, 0, PAD);
 
-/** Skala sceny: w pasku rozmiar (≤ 100 %) × wysokość paska / 48; okno pływające ma już wysokość 48 × rozmiar. */
+/** Stage scale: in taskbar, size (≤ 100%) × taskbar height / 48; a floating window already has height 48 × size. */
 export function zoomOf(l: StageLayout, size: number): number {
   const h = l.height_css / 48;
   return l.mode === 'floating' ? h : Math.min(size, SIZE_TASKBAR_MAX) / 100 * h;
 }
 
-/** Zwierzak rodzica albo zwykłej sesji z jego mini-zwierzakami (środki w px CSS sceny). */
+/** Parent or ordinary session pet with its minis (centers in stage CSS px). */
 export interface PetAt { id: string; x: number; minis: { id: string; x: number }[]; miniMore: { x: number; n: number } | null }
 
 export interface LayoutOut {
@@ -49,21 +49,21 @@ export interface LayoutIn {
   maxWidth: number;
   maxPets?: number;
   geo?: Geo;
-  /** kolejność rysowania (domyślnie według startu) */
+  /** drawing order (defaults to start order) */
   order?: (s: Session[]) => Session[];
-  /** kolejność ważności do zwijania w „+N”: najważniejsze na końcu (domyślnie według startu, najnowsze zostają) */
+  /** priority order for collapsing into "+N": most important last (defaults to start order, newest stay) */
   priority?: (s: Session[]) => Session[];
   showBadge?: boolean;
   showLimits?: boolean;
-  /** mini-zwierzaki rodzica (dzieci widoczne jako mini i liczba pozostałych) */
+  /** parent's mini pets (children visible as minis and count of the rest) */
   minis?: (parent: Session) => { shown: Session[]; more: number };
-  /** mini stoją po lewej rodzica (scena rośnie w lewo, kotwica z prawej) */
+  /** minis stand left of the parent (stage grows left, anchor on right) */
   minisLeft?: boolean;
 }
 
 const URGENT = new Set(['needs_you', 'error']);
 
-/** `extra`: łączna szerokość mini-zwierzaków i ich plakietek. */
+/** `extra`: combined width of mini pets and their badges. */
 export function contentWidth(n: number, badge: boolean, limits: boolean, g: Geo = BASE, extra = 0): number {
   let w = 0;
   if (badge) w += g.badgeW;
@@ -96,7 +96,7 @@ export function layout(inp: LayoutIn): LayoutOut {
   const g = inp.geo ?? BASE;
   const showBadge = inp.showBadge ?? true;
   const hasLimits = inp.hasLimits && (inp.showLimits ?? true);
-  // dzieci (subagenci) stoją przy rodzicu jako mini; „najwięcej widocznych” i „+N” liczą tylko rodziców
+  // children (subagents) stand beside their parent as minis; "most visible" and "+N" count only parents
   const own = inp.sessions.filter(s => !s.parent);
   const ranked = (inp.priority ?? startOrder)(own);
   const miniSlot = SLOT * g.zoom * MINI_SCALE, moreW = MINI_MORE_W * g.zoom;
@@ -107,14 +107,14 @@ export function layout(inp: LayoutIn): LayoutOut {
     return m;
   };
   const extraOf = (s: Session) => { const m = minisOf(s); return m.shown.length * miniSlot + (m.more > 0 ? moreW : 0); };
-  // szerokość grupy (rodzic i jego mini) liczy się do miejsca w pasku
+  // group width (parent and minis) counts toward taskbar space
   const plain = capacity(ranked.length, hasLimits, inp.maxWidth, inp.maxPets, g, showBadge);
   let cap = plain;
   for (; cap > 0; cap--) {
     const v = pickVisible(ranked, cap).visible;
     if (contentWidth(cap, showBadge && cap < ranked.length, hasLimits, g, v.reduce((w, s) => w + extraOf(s), 0)) <= inp.maxWidth) break;
   }
-  // żadna grupa z mini się nie mieści: rodzice bez mini zamiast pustej sceny
+  // no group with minis fits: show parents without minis instead of an empty stage
   if (cap === 0 && plain > 0) { cap = plain; for (const s of ranked) groups.set(s.id, { shown: [], more: 0 }); }
   const { visible: kept, hidden } = pickVisible(ranked, cap);
   const visible = (inp.order ?? startOrder)(kept);
@@ -131,7 +131,7 @@ export function layout(inp: LayoutIn): LayoutOut {
   const ml = LEFT_REACH * g.zoom * MINI_SCALE;
   const pets: PetAt[] = visible.map(s => {
     const m = minisOf(s), extra = extraOf(s);
-    // grupa: [plakietka][mini…][rodzic] przy kotwicy z prawej, [rodzic][mini…][plakietka] przy lewej
+    // group: [badge][minis…][parent] with a right anchor, [parent][minis…][badge] with a left anchor
     const px = inp.minisLeft ? x + extra + g.left : x + g.left;
     const from = inp.minisLeft ? x + extra - miniSlot : px + g.right;
     const step = inp.minisLeft ? -miniSlot : miniSlot;

@@ -1,11 +1,11 @@
-// Pikselowe rekwizyty i znaczki dla modelu Pixel-art. Znak = kolor z PROP_PAL, '.' = przezroczyste.
+// Pixel props and badges for the Pixel-art model. Character = color from PROP_PAL, '.' = transparent.
 export const PROP_PAL: Record<string, string> = {
   k: '#2B1D16', l: '#D3D1C7', m: '#B4B2A9', s: '#888780', d: '#2C2C2A', t: '#5DCAA5',
   c: '#D97757', p: '#FAF9F5', b: '#85B7EB', y: '#EF9F27', w: '#FFFFFF', h: '#F2AE92', g: '#8C887E',
 };
 
 export const SPRITES: Record<string, string[]> = {
-  // rzeczy „na sobie” z odznak statystyk (0.9); opaska, śliniaczek i szalik to prostokąty w pixel.ts
+  // worn items from stats badges (0.9); headband, bib, and scarf are rectangles in pixel.ts
   crown: [
     'y..y..y',
     'yy.y.yy',
@@ -146,8 +146,8 @@ export const SPRITES: Record<string, string[]> = {
 };
 SPRITES.sheet = SPRITES.paper;
 
-/** Kotwica rekwizytu: lewy dolny róg w jednostkach u względem podstawy zwierzaka; piksel sprite'a = 5u, więc
- * klawiatura biurka (wiersz 8, y ≈ −30u) i terminala (wiersz 14) leży pod dłońmi scen pisania. */
+/** Prop anchor: lower left corner in u relative to the pet base; one sprite pixel = 5u, so
+ * desk keyboard (row 8, y ≈ −30u) and terminal (row 14) lie beneath the hands in typing scenes. */
 export const PROP_ANCHOR: Record<string, [number, number]> = {
   desk: [-20, 0], crt: [60, 0], board: [64, 0], machine: [64, 0], pillow: [-72, 0],
 };

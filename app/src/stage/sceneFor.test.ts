@@ -31,7 +31,7 @@ describe('sceneFor', () => {
   it('picks the skin by agent', () => {
     expect(skinFor('claude')).toBe('clawd');
     expect(skinFor('codex')).toBe('kodek');
-    expect(skinFor('gemini')).toBe('blob'); // 0.10: nieznany agent to blob, nie Clawd
+    expect(skinFor('gemini')).toBe('blob'); // 0.10: unknown agent uses a blob, not Clawd
     expect(['cursor', 'grok', 'zcode'].map(skinFor)).toEqual(['cursor', 'grok', 'zcode']); // 0.12: koniec bloba dla Cursora i Groka
   });
 });

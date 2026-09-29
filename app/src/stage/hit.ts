@@ -12,7 +12,7 @@ export function hitTest(out: LayoutOut, x: number, y: number, height: number): T
   const miniSlot = SLOT * g.zoom * MINI_SCALE, ml = LEFT_REACH * g.zoom * MINI_SCALE, half = MINI_MORE_W * g.zoom / 2;
   for (const p of out.pets) {
     for (const m of p.minis) if (x >= m.x - ml && x < m.x - ml + miniSlot) return { kind: 'mini', id: m.id, parent: p.id, x: m.x };
-    // „+N” dzieci należy do rodzica
+    // children's "+N" belongs to the parent
     if (p.miniMore && x >= p.miniMore.x - half && x < p.miniMore.x + half) return { kind: 'pet', id: p.id, x: p.x };
   }
   for (let i = 0; i < out.pets.length; i++) {
@@ -24,19 +24,19 @@ export function hitTest(out: LayoutOut, x: number, y: number, height: number): T
   return null;
 }
 
-/** Okno pływające: czy kursor jest nad pustym miejscem (kliknięcie ma trafić do okna pod spodem). */
+/** Floating window: whether the cursor is over empty space (the click should reach the window below). */
 export function passthroughAt(out: LayoutOut, x: number, y: number, height: number, hasBg: boolean): boolean {
   if (x < 0 || x > out.width || y < 0 || y > height) return true;
   return !hasBg && hitTest(out, x, y, height) == null;
 }
 
-/** Klik w scenę otwiera panel: na sesji klikniętego zwierzaka (mini: na wierszu dziecka) albo ogólnie dla „+N” i limitów. */
+/** Clicking the stage opens the panel: focused on the clicked pet's session (mini: child row), or generally for "+N" and limits. */
 export function clickAction(t: Target): { focus: string | null } | null {
   if (!t) return null;
   return { focus: t.kind === 'pet' || t.kind === 'mini' ? t.id : null };
 }
 
-/** Prawy klik: menu zwierzaka; na mini-zwierzaku menu jego rodzica (dziecka nie da się ukryć osobno). */
+/** Right click: pet menu; on a mini, its parent's menu (the child cannot be hidden separately). */
 export function menuTarget(t: Target): string | null {
   if (t?.kind === 'pet') return t.id;
   if (t?.kind === 'mini') return t.parent;

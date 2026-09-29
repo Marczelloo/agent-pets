@@ -6,12 +6,12 @@ import { StatPet } from './StatPet';
 
 export interface RaceProps {
   lanes: StatsLane[]; race: StatsRace; format: (v: number) => string; pets: Pets;
-  /** czas od początku animacji pasków (ms); Infinity = paski od razu pełne */
+  /** time since bar animation began (ms); Infinity = bars fill immediately */
   elapsed: number;
   animate: boolean;
 }
 
-/** Wyścig: pasek rośnie do wartości, na jego końcu biegnie zwierzak agenta. */
+/** Race: a bar grows to its value with the agent's pet running at its end. */
 export function Race({ lanes, race, format, pets, elapsed, animate }: RaceProps) {
   const max = Math.max(1, ...lanes.map(l => l.value));
   const reduced = reducedMotion();

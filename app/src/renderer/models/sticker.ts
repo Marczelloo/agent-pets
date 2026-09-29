@@ -1,5 +1,5 @@
-// Model naklejki (spec wyglądu v2, 5): zawsze przodem jak na ikonie aplikacji — okrągłe bryły, gruby kontur,
-// krótkie nóżki i łapki-kapsułki; rekwizyty, przedmioty i nakładki wspólne z modelem wektorowym.
+// Sticker model (appearance spec v2, 5): always facing forward like the app icon, round bodies, thick outline,
+// short legs and capsule paws; props, objects, and overlays shared with the vector model.
 import { SKINS } from '../../skins';
 import type { Look } from '../../types';
 import { PI, TAU, cl, lerpC } from '../math';
@@ -11,7 +11,7 @@ import { elP, pen, rrP, seg, shp } from '../pen';
 import type { Pet } from '../pet';
 import { rig, type Rig } from './rig';
 
-/** Kształty naklejki w jednostkach u (wzorzec: app-icon.png). */
+/** Sticker shapes in u units (reference: app-icon.png). */
 export const STICKER = {
   clawd: { w: 100, h: 76, r: 18, ears: { w: 14, h: 22, y: .5 }, legs: [-.3, -.1, .1, .3], legW: 11, legH: 12, arm: 17, mitt: 7 },
   kodek: { w: 94, h: 76, r: 32, screen: { m: 8, top: 10, bottom: 12, r: 18 }, phones: { rx: 8, ry: 14 }, antenna: 16, legs: [-.22, .22], legW: 16, legH: 12, arm: 16, mitt: 6.5 },
@@ -20,7 +20,7 @@ export const STICKER = {
 const EYE = '#1E1410', TEAL = '#5DCAA5', SCREEN = '#2C2C2A', PHONE = '#C9C7C1', PHONE_IN = '#A5A298', BLUSH = '#F0997B';
 
 export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: number, u: number, t: number, _look: Look): void {
-  // tylko Clawd i Kodek: inne skórki rysują się w Sticker jak w Clean (`effectiveStyle`)
+  // only Clawd and Codex: other skins render in Sticker as Clean (`effectiveStyle`)
   const skin = c.type as 'clawd' | 'kodek', sk = SKINS[skin], pal = sk.pal, S = STICKER[skin];
   const r = rig(c, X, Y, u, t, { w: S.w, h: S.h, arm: S.arm });
   const tg = c.tg || {}, P = c.p;
@@ -29,14 +29,14 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
   const world = () => { x.save(); x.translate(r.XX, Y); x.globalAlpha = GA; x.lineWidth = lw; x.lineJoin = 'round'; x.lineCap = 'round'; x.strokeStyle = pen.ol; };
   const body = () => { world(); x.translate(0, r.oy); x.rotate(r.rot * .5); x.scale(r.sx, r.sy); };
 
-  // cień i poduszka
+  // shadow and pillow
   world();
   x.save(); x.fillStyle = 'rgba(0,0,0,0.16)'; x.beginPath();
   x.ellipse(0, 0, W * .55 * (1 - r.hopH * .3), Math.max(2, 7 * u) * (1 - r.hopH * .3), 0, 0, TAU); x.fill(); x.restore();
   drawPillow(x, c, u, lw);
   x.restore();
 
-  // nóżki i bryła
+  // legs and body
   body();
   const legLen = S.legH * u * (1 - r.down);
   if (legLen > 1) S.legs.forEach((lx, i) => {
@@ -80,7 +80,7 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
   }
   x.restore();
 
-  // rekwizyty, łapki, przedmioty, rękawice
+  // props, paws, objects, gloves
   world();
   drawProp(x, c, u, t, lw);
   const thick = S.mitt * 1.6 * u, mr = S.mitt * u;
@@ -90,15 +90,15 @@ export function drawSticker(x: CanvasRenderingContext2D, c: Pet, X: number, Y: n
   r.arms.forEach(a => shp(x, elP(a.hx, a.hy, mr * (a.s > 0 && tg._big ? 1.3 : 1), mr * .9), cm, u));
   x.restore();
 
-  // nakładki nad głową i w świecie
-  // dymek na tej wysokości co w modelu wektorowym: naklejka jest wyższa, a dymek przy skokach nie może wyjść z paska
+  // overlays above the head and in world space
+  // bubble at the same height as in the vector model: the sticker is taller, and the bubble must stay in the taskbar during jumps
   body();
   if (c.wear) drawWear(x, c.wear, { x: 0, top, w: W, h: H, rot: 0 }, u, lw);
   drawHeadFx(x, c, u, t, top + (S.h - sk.height) * u, W / 2, GA); x.restore();
   world(); drawWorldFx(x, c, r.arms, u, lw, GA); x.restore();
 }
 
-/** Refleks u góry bryły (jak na ikonie). */
+/** Highlight at the top of the body (as on the icon). */
 function highlight(x: CanvasRenderingContext2D, W: number, top: number, u: number) {
   x.save(); x.globalAlpha *= .3;
   shp(x, rrP(-W * .34, top + 5 * u, W * .68, 5 * u, 2.5 * u), '#FFFFFF', u, { noStroke: 1, raw: 1 });
@@ -107,7 +107,7 @@ function highlight(x: CanvasRenderingContext2D, W: number, top: number, u: numbe
 
 type Eyes = { open: number; blink: number; sleep: number; happy: number; dizzy: number; squint: number };
 
-/** Kotwica twarzy w układzie świata jak `body()`: skala, przechył rot·0,5, skok (u, względem podstawy). */
+/** Face anchor in world coordinates like `body()`: scale, tilt rot·0.5, jump (u, relative to base). */
 function faceAnchor(r: Rig, px: number, py: number, gap: number, u: number): number[] {
   const a = r.rot * .5, X = px * r.sx, Yl = py * r.sy;
   return [(X * Math.cos(a) - Yl * Math.sin(a)) / u, (X * Math.sin(a) + Yl * Math.cos(a) + r.oy) / u, gap * r.sx / u];
@@ -130,7 +130,7 @@ function kodekEye(x: CanvasRenderingContext2D, ex: number, ey: number, u: number
   x.restore();
 }
 
-/** Sen, radość („^^”), zawroty i zmrużenie: kreski w kolorze oka. */
+/** Sleep, joy ("^^"), dizziness, and squint: strokes in eye color. */
 function lids(x: CanvasRenderingContext2D, ex: number, ey: number, u: number, e: Eyes, GA: number) {
   if (e.sleep > .02) { x.globalAlpha = GA * e.sleep; x.beginPath(); x.arc(ex, ey - 2 * u, 4.5 * u, .15 * PI, .85 * PI); x.stroke(); }
   if (e.happy > .02) { x.globalAlpha = GA * e.happy; x.beginPath(); x.arc(ex, ey + 4 * u, 4.5 * u, 1.15 * PI, 1.85 * PI); x.stroke(); }

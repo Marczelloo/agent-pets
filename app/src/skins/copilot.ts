@@ -1,5 +1,5 @@
 import type { Skin } from './types';
-/** Copilot: głowa z logo Copilota. Szeroki hełm z brązowej skóry, z kopułą i uszami, u góry gogle, niżej wizjer z dwoma małymi oczami. */
+/** Copilot: head based on the Copilot logo. Wide brown leather helmet with dome and ears, goggles above a visor with two small eyes. */
 export const copilot: Skin = {
   id: 'copilot', pal: { m:'#8A5A3B',s:'#6B4329',b:'#7A4E32',h:'#A8744F',g:'#5C3B27',gs:'#472D1D' },
   width: 88, depth: 54, height: 64, radius: 30, armLen: 25, mitt: 5.4,

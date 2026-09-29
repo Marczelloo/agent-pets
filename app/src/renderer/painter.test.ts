@@ -72,7 +72,7 @@ describe('PetPainter', () => {
       p.frame(recorder().ctx, { ...frame, look: { style, motion: 'dynamic' } });
       p.pet.p.lx.v = 800;
       const r = recorder();
-      p.frame(r.ctx, { ...frame, t0: 1.05, dt: 0.001, look: { style, motion: 'dynamic' } }); // krok prawie zerowy: prędkość zostaje
+      p.frame(r.ctx, { ...frame, t0: 1.05, dt: 0.001, look: { style, motion: 'dynamic' } }); // near-zero step: velocity remains
       const sx = r.log.filter(l => l.startsWith('scale(')).map(l => +l.slice(6, -1).split(',')[0]);
       expect(sx.some(v => v > 1.1), style).toBe(style !== 'pixel');
     }

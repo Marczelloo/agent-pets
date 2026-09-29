@@ -13,8 +13,8 @@ import { effectiveStyle } from './effective';
 export interface PaintFrame { dt: number; t0: number; X: number; Y: number; u: number; look: Look; animate: boolean; saving: boolean; reduced: boolean; dpr: number }
 
 /**
- * Jedno wejście rysowania zwierzaka: zegar ruchu, model stylu i efekty Dynamiczny. Zawsze wprost na scenę,
- * bez warstwy poza ekranem i bez duchów (spec wyglądu v2, 3 i 8).
+ * Single entry point for drawing a pet: motion clock, style model, and Dynamic effects. Always directly on the stage,
+ * without an offscreen layer or ghosting (appearance spec v2, 3 and 8).
  */
 export class PetPainter {
   constructor(readonly pet: Pet) {}
@@ -24,7 +24,7 @@ export class PetPainter {
     setMotion(pet, base.fx);
     const t = tick(pet, f.dt, f.t0, base, f.animate);
     pen.dpr = f.dpr;
-    // zwierzak zatrzymany (oszczędzanie): bez efektów — cząsteczki i nakładki zawisłyby w miejscu
+    // paused pet (power saving): no effects, since particles and overlays would freeze in place
     if (!env.fx || !f.animate) { if (pet.fx) { pet.fx.parts = []; pet.fx.words = []; } drawPet(x, pet, f.X, f.Y, f.u, t, f.look); return; }
     const st = STYLES[effectiveStyle(f.look.style, pet.type)] ?? STYLES.clean, s = fxState(pet), pixel = st.model === 'pixel';
     s.env = env;

@@ -4,10 +4,10 @@ import type { Bridge } from './bridge';
 import { clickAction, hitTest, menuTarget } from './hit';
 import type { LayoutOut } from './layout';
 
-/** `media`: tylko gdy użytkownik pozwala zwierzakom reagować na muzykę */
+/** `media`: only when the user allows pets to react to music */
 interface View { out: LayoutOut; snap: Snapshot; height: number; nowMs: number; media?: Media | null }
 
-/** Tooltip po najechaniu; treść odświeża się co sekundę (czas od ostatniej aktywności). */
+/** Hover tooltip; content refreshes each second (time since last activity). */
 export class Hover {
   private x = -1;
   private y = -1;

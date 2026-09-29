@@ -1,4 +1,4 @@
-// Bitmapowa czcionka napisów modelu pikselowego (BAM!, POOF!, NICE!, !): 7 wierszy, szerokość wg najdalszego piksela, odstęp 1 komórka.
+// Bitmap font for pixel-model captions (BAM!, POOF!, NICE!, !): 7 rows, width to the furthest pixel, 1-cell spacing.
 export const GLYPHS: Record<string, string[]> = {
   'B': ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
   'A': ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],

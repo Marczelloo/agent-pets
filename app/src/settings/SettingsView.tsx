@@ -20,16 +20,16 @@ interface Props {
   onChange: (s: Settings) => void;
   onIntegration: (id: AppId, on: boolean) => Promise<string>;
   message: string | null;
-  /** stan aktualizacji (wynik „Sprawdź teraz”) */
+  /** update state (result of "Check now") */
   update?: UpdateStatus;
   onCheck?: () => void;
-  /** karta „Pasek” */
+  /** Taskbar tab */
   monitors?: MonitorInfo[];
   leftFallback?: boolean;
   onMove?: () => void;
 }
 
-/** Wynik ręcznego sprawdzenia obok przycisku. */
+/** Manual check result beside the button. */
 function checkResult(u: UpdateStatus | undefined): string | null {
   switch (u?.state) {
     case 'checking': return t().settings.checking;
@@ -40,10 +40,10 @@ function checkResult(u: UpdateStatus | undefined): string | null {
   }
 }
 
-/** Okno ustawień: zakładki po lewej jak w Ustawieniach Windows 11, zmiany działają od razu. */
-/** Aplikacje, którym dopisujemy hooki do ich plików: akapit mówi, co i gdzie. */
+/** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
+/** Apps whose files receive hooks: the paragraph explains what and where. */
 const HOOK_FILES: AppId[] = ['copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
-/** Czego zwierzak tej aplikacji nie pokaże. */
+/** What this app's pet will not show. */
 const NOTE: Partial<Record<AppId, () => string>> = {
   antigravity: () => t().settings.antigravityNote, cursor: () => t().settings.cursorNote, zcode: () => t().settings.zcodeNote,
 };

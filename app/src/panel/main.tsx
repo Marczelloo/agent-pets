@@ -4,7 +4,7 @@ import { demoChildren, demoLimits, demoSessions } from '../stage/demo';
 import App, { PanelView } from './App';
 import { setPreviewLang, t } from '../i18n';
 
-/** Podgląd w zwykłej przeglądarce (`pnpm dev`, /panel.html): dane pokazowe zamiast rdzenia. */
+/** Preview in a regular browser (`pnpm dev`, /panel.html): demo data instead of core. */
 function Demo() {
   const [now, setNow] = useState(Date.now());
   const [status, setStatus] = useState<string | null>(null);

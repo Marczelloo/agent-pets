@@ -1,22 +1,22 @@
-// Wygląd zwierzaka (styl rysowania i ruch): domyślny dla wszystkich i nadpisania per agent. Lustro `Pets` z rdzenia.
+// Pet appearance (drawing style and motion): a shared default and per-agent overrides. Mirrors core `Pets`.
 import type { AppId, Look, MotionId, Pets, Session, StageSettings, StyleId } from './types';
 
 export const STYLE_IDS: StyleId[] = ['sticker', 'sketch', 'clean', 'pixel', 'neon', 'ink', 'pastel'];
 export const MOTION_IDS: MotionId[] = ['calm', 'dynamic'];
-/** Wygląd bez ustawień: dokładnie rysunek prototypu v6 (testy parytetu). */
+/** Appearance without settings: exactly the v6 prototype drawing (parity tests). */
 export const DEFAULT_LOOK: Look = { style: 'clean', motion: 'calm' };
 
-/** Jak `Pets::default()` w rdzeniu. */
+/** Like core `Pets::default()`. */
 export const defaultPets = (): Pets => ({ style: 'sticker', motion: 'calm', overrides: {}, max_visible: 5, react_to_media: true });
 
-/** Jak `Stage::default()` w rdzeniu: scena przy zasobniku, bez tła, jak w 0.6. */
+/** Like core `Stage::default()`: a tray-adjacent stage without a background, as in 0.6. */
 export const defaultStage = (): StageSettings => ({
   position: 'right', monitor: 'primary', background: { kind: 'none', radius: 12 },
   size: 100, gap: 0, padding: 2, align: 'right', order: 'start', show: { progress: true, limits: true, badge: true },
   bubbles: { questions: true, actions: true }, minis: true,
 });
 
-/** Aplikacja, której nadpisanie wyglądu dotyczy sesji; `null` = agent bez własnych ustawień (wygląd domyślny). */
+/** App whose appearance override applies to the session; `null` = agent without custom settings (default appearance). */
 export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId | null {
   if (s.origin === 'router') return 'agent_router';
   switch (s.agent) {
@@ -32,7 +32,7 @@ export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId | null {
   }
 }
 
-/** Ruch „anime” z wcześniejszych wersji to dziś „dynamic” (rdzeń też czyta stary identyfikator). */
+/** The old `anime` motion is now `dynamic` (core also reads the old identifier). */
 const motionOf = (m: MotionId | 'anime'): MotionId => (m === 'anime' ? 'dynamic' : m);
 
 export function lookFor(p: Pets, app: AppId | null): Look {
@@ -40,7 +40,7 @@ export function lookFor(p: Pets, app: AppId | null): Look {
   return { style: o.style ?? p.style, motion: motionOf(o.motion ?? p.motion) };
 }
 
-/** `null` = „Jak domyślny”: usuwa pole, a puste nadpisanie znika. */
+/** `null` = "Use default": removes the field, and an empty override disappears. */
 export function withOverride(p: Pets, app: AppId, field: keyof Look, v: StyleId | MotionId | null): Pets {
   const cur: Partial<Look> = { ...(p.overrides?.[app] ?? {}) };
   if (v == null) delete cur[field]; else (cur as Record<string, string>)[field] = v;

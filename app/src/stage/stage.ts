@@ -40,7 +40,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   const bg = document.getElementById('bg');
   let budget = frameBudget(false), saving = false, reduced = reducedMotion();
   const painters = new WeakMap<Entry, PetPainter>();
-  /** kiedy (T) dziecko pierwszy raz stanęło jako mini: do efektu wejścia */
+  /** when (T) a child first appeared as a mini: for the entrance effect */
   const miniBorn = new Map<string, number>();
   const hover = new Hover(bridge, () => ({ out, snap, height: lay.height_css, nowMs: Date.now() + clockOffset, media: music() ? media : null }));
   let through: boolean | null = null;
@@ -52,8 +52,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       if (on !== through) { through = on; bridge.setPassthrough?.(on); }
     },
   };
-  // co sekundę: czas w tooltipie, a przy kolejności „uwaga” przesunięcia po histerezie
-  // (mini-zwierzak pojawia się po 5 s pracy dziecka, także bez nowych zdarzeń)
+  // every second: time in the tooltip and, for attention order, movement after hysteresis
+  // (a mini pet appears after the child has worked for 5 s, even without new events)
   setInterval(() => { if (stage.order === 'attention' || snap.sessions.some(s => s.parent)) relayout(); hover.refresh(); reduced = reducedMotion(); }, 1000);
 
   const paintBg = () => {
@@ -71,7 +71,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       showBadge: stage.show.badge, showLimits: stage.show.limits,
       minis: p => minisOf(p, snap.sessions, now, on), minisLeft: minisLeftOf(stage),
     });
-    // rodzic z młodym dzieckiem (bez mini) ma pozę „deleguje”; mini żegna się po swojemu; bezczynny rodzic słucha muzyki
+    // a parent with a young child (no mini) delegates; minis say goodbye separately; an idle parent listens to music
     roster.sync(snap.sessions, T, s => s.parent ? miniScene(s, now) : parentScene(s, snap.sessions, now, on, music()));
     const shownMinis = new Set(out.pets.flatMap(p => p.minis.map(m => m.id)));
     for (const id of shownMinis) if (!miniBorn.has(id)) miniBorn.set(id, T);
@@ -109,7 +109,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
       e.pet.alpha = roster.alpha(e, T);
       painter.frame(x, { dt, t0: T + e.phase, X: p.x, Y, u, look: lookFor(pets, appFor(e.session)), animate: budget.animate(e.session.state),
         saving, reduced, dpr: devicePixelRatio || 1 });
-      // HUD w skali sceny: rysowany w układzie 1× i powiększony o `z`
+      // HUD in stage scale: drawn at 1× and enlarged by `z`
       x.save(); x.translate(p.x, h - 4 * h / 48); x.scale(z, z);
       if (stage.show.progress) drawProgress(x, 0, 0, e.session, T, e.scene === 'vibe' ? 'dance' : e.scene === 'doze' ? 'doze' : null);
       x.restore();
@@ -121,7 +121,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     setTimeout(frame, Math.max(0, 1000 / budget.fps - (performance.now() - now)));
   }
 
-  /** Mini-zwierzaki rodzica: skórka i styl agenta dziecka, 55% rozmiaru, efekt wejścia i szybkie pożegnanie. */
+  /** Parent's mini pets: child agent skin and style, 55% size, entrance effect, and quick farewell. */
   function drawMinis(p: LayoutOut['pets'][number], z: number, u: number, Y: number, h: number, dt: number) {
     const nowMs = Date.now() + clockOffset, mu = u * MINI_SCALE;
     for (const m of p.minis) {

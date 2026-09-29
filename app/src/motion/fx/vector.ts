@@ -1,12 +1,12 @@
-// Efekty Dynamiczny dla modeli wektorowego i naklejki: tło akcji, krąg na ziemi, błysk za zwierzakiem (tył);
-// cząsteczki, smugi, wachlarz pięści, nakładki twarzy, kule, onomatopeje (przód). Tylko geometria bieżącej klatki.
+// Dynamic effects for vector and sticker models: action background, ground circle, flash behind the pet (back);
+// particles, trails, fist fan, face overlays, orbs, and sound words (front). Current-frame geometry only.
 import { PI, TAU, cl, hr } from '../../renderer/math';
 import { pen } from '../../renderer/pen';
 import type { FxState, Particle } from '../../renderer/dynamic/state';
 import type { Pet } from '../../renderer/pet';
 import type { FxCtx } from './index';
 
-export const SLOT = { w: 150, h: 145 }; // do Y + 10u: krąg na ziemi mieści się cały
+export const SLOT = { w: 150, h: 145 }; // through Y + 10u: the ground circle fits entirely
 const AMBER = '#EF9F27', WHITE = '#FFFFFF', RED = '#E24B4A', BLUE = '#5B8DEF', PURPLE = '#7F77DD', TEAL = '#5DCAA5';
 
 const rays = (x: CanvasRenderingContext2D, cx: number, cy: number, r0: number, r1: number, n: number, seed: number) => {
@@ -28,13 +28,13 @@ export function vectorBack(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void 
   const cx = XX, cy = Y - 40 * u, seed = Math.floor(g.t * 12), k = cl(tg._bgK ?? 1);
   x.lineCap = 'round';
   if (g.flash || g.glow > 0) {
-    // klatka uderzenia: białe tło z promieniami; potem to samo wygasa (alfa = glow)
+    // impact frame: white background with rays; then the same fades (alpha = glow)
     x.save(); if (!g.flash) x.globalAlpha = g.alpha * g.glow;
     x.fillStyle = WHITE; x.beginPath(); x.arc(cx, cy, 70 * u, 0, TAU); x.fill();
     x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 2 * u); rays(x, cx, cy, 34 * u, 78 * u, 14, g.flash ? seed : 0);
     x.restore();
   }
-  if (g.flash) { /* tylko błysk */ } else if (bg === 'speed' || bg === 'purple') {
+  if (g.flash) { /* flash only */ } else if (bg === 'speed' || bg === 'purple') {
     x.globalAlpha = g.alpha * k * 0.35;
     x.strokeStyle = bg === 'purple' ? PURPLE : pen.ol; x.lineWidth = Math.max(1, 1.6 * u);
     rays(x, cx, cy, 52 * u, 80 * u, 18, seed);
@@ -114,7 +114,7 @@ function face(x: CanvasRenderingContext2D, c: Pet, g: FxCtx, XX: number, Y: numb
   x.restore();
 }
 
-/** Myśli (Shikamaru): „?”, trybik i żarówka krążą wokół głowy; `idea` zapala nad głową dużą żarówkę z promieniami. */
+/** Thoughts (Shikamaru): "?", gear, and bulb orbit the head; `idea` lights a large bulb with rays above it. */
 function thinking(x: CanvasRenderingContext2D, g: FxCtx, fx: number, fy: number, k: number, idea: number) {
   const u = g.u, S = 24 * u, cy = fy - 40 * u;
   x.save(); x.lineWidth = Math.max(1, 1.6 * u); x.strokeStyle = pen.ol;
@@ -147,7 +147,7 @@ function bulb(x: CanvasRenderingContext2D, bx: number, by: number, r: number, li
   x.fillStyle = '#B4B2A9'; x.beginPath(); x.rect(bx - r * 0.45, by + r * 0.85, r * 0.9, r * 0.55); x.fill(); x.stroke();
 }
 
-/** Wielka lupa detektywa przy prawej dłoni: szkło z powiększonymi liniami kodu, obręcz, rączka, błysk. */
+/** Large detective magnifier at the right hand: lens with enlarged code lines, rim, handle, glint. */
 function lens(x: CanvasRenderingContext2D, g: FxCtx, hx: number, hy: number, k: number) {
   const u = g.u, r = 20 * u * k, cx = hx + 10 * u, cy = hy - 14 * u;
   if (r < u) return;
@@ -202,9 +202,9 @@ export function vectorFront(x: CanvasRenderingContext2D, c: Pet, g: FxCtx): void
   if (tg._shock) { x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 1.6 * u); x.beginPath();
     for (let i = 0; i < 6; i++) { const a = -PI * (0.1 + 0.8 * i / 5), j = Math.floor(g.t * 12) % 2 ? 2 : 0; x.moveTo(fx + Math.cos(a) * (24 + j) * u, fy - 14 * u + Math.sin(a) * (24 + j) * u); x.lineTo(fx + Math.cos(a) * (32 + j) * u, fy - 14 * u + Math.sin(a) * (32 + j) * u); }
     x.stroke(); }
-  // cząsteczki i słowa żyją w miejscu zwierzaka (g.X), nie jadą z nim przy `lx` (np. kurz za uciekającym)
+  // particles and words stay at the pet's location (g.X), not moving with `lx` (e.g. dust behind a running pet)
   for (const p of s.parts) particle(x, p, u, g.X, Y);
-  if (tg._bang) { const yy = fy - 20 * u - Math.abs(Math.sin(g.t * 8)) * 6 * u; // środek „!”: mieści się w pasku także przy skokach
+  if (tg._bang) { const yy = fy - 20 * u - Math.abs(Math.sin(g.t * 8)) * 6 * u; // center of "!": stays within the taskbar even during jumps
     x.fillStyle = AMBER; x.strokeStyle = pen.ol; x.lineWidth = Math.max(1, 2 * u); x.font = `900 ${Math.max(12, 34 * u)}px ${pen.font}`; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.strokeText('!', fx + 34 * u, yy); x.fillText('!', fx + 34 * u, yy); }
   for (const w of s.words) {

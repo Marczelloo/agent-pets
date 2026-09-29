@@ -41,10 +41,10 @@ describe('styles', () => {
     const log = trace('sketch'), clean = trace('clean');
     expect(log.filter(l => l === 'stroke()').length).toBeGreaterThan(clean.filter(l => l === 'stroke()').length * 2.5);
     expect(log).toContain(`strokeStyle=${STYLES.sketch.ink('#D97757')}`);
-    expect(log.some(l => /^globalAlpha=0\.[0-6]\d*$/.test(l))).toBe(true); // tło pod kreskowaniem, nie pełne
+    expect(log.some(l => /^globalAlpha=0\.[0-6]\d*$/.test(l))).toBe(true); // background beneath hatching, not opaque
   });
   it('sketch v2 boils at 12 Hz on the pet clock', () => {
-    // takt drgania bierze się z zegara zwierzaka, nie z tego, co ustawił wołający
+    // jitter beat comes from the pet clock, not the caller's value
     const c = createPet('clawd', 'idle');
     const at = (boil: number) => { pen.boil = boil; const r = recorder(); drawPet(r.ctx, c, 60, 40, .3, 1.5, { style: 'sketch', motion: 'calm' }); return r.log.join(); };
     expect(at(0)).toBe(at(999));

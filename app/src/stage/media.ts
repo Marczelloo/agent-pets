@@ -1,4 +1,4 @@
-// Nazwa aplikacji, która gra, z identyfikatora AUMID od Windows (GSMTC).
+// Name of the playing app from its Windows AUMID (GSMTC).
 
 const KNOWN: [RegExp, string][] = [
   [/spotify/i, 'Spotify'],
@@ -22,7 +22,7 @@ const KNOWN: [RegExp, string][] = [
 ];
 
 /**
- * Czytelna nazwa aplikacji: znane odtwarzacze i przeglądarki po nazwie, inne z AUMID
+ * Readable app name: known players and browsers by name, others from AUMID
  * (`Firma.Aplikacja_hash!App` → `Aplikacja`, `C:\…\app.exe` → `app`). Sam hash (np. Firefox) → `null`.
  */
 export function mediaAppName(aumid: string | null | undefined): string | null {

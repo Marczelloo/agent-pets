@@ -9,7 +9,7 @@ import { sketch } from './sketch';
 import { sticker } from './sticker';
 import type { StyleDef } from './types';
 export type { StyleDef } from './types';
-/** Kolor agenta (poświata Neonu, oczy, akcenty). */
+/** Agent color (Neon glow, eyes, accents). */
 export const ACCENT: Record<SkinId, string> = { clawd: '#D97757', kodek: '#5DCAA5', opencode: '#CFC9C9', blob: '#8C887E', copilot: '#5BA8E6', antigravity: '#3DDC84',
   cursor: '#D0D0D0', grok: '#9A9AA6', zcode: '#2F6BFF' };
 export const STYLES: Record<StyleId, StyleDef> = {

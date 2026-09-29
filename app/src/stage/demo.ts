@@ -8,7 +8,7 @@ const CYCLE: [State, Tool | null][] = [
 ];
 const BASE = Date.now() - 60_000;
 
-/** `count` sesji; każda co 6 s przechodzi do następnego stanu z `CYCLE`, chyba że `only` przypina wszystkie do jednego stanu. */
+/** `count` sessions; each moves to the next `CYCLE` state every 6 s, unless `only` pins all to one state. */
 export function demoSessions(count: number, nowMs: number, only?: [State, Tool | null] | null): Session[] {
   return Array.from({ length: count }, (_, i) => {
     const phase = Math.floor(nowMs / 6000) + i * 3;
@@ -28,7 +28,7 @@ export function demoSessions(count: number, nowMs: number, only?: [State, Tool |
   });
 }
 
-/** Subagenci pierwszej sesji pokazowej (podgląd panelu): Explore, zadanie routera, które ucichło, i skończony w tle. */
+/** Subagents of the first demo session (panel preview): Explore, a stalled router task, and one finished in the background. */
 export function demoChildren(nowMs: number): Session[] {
   const [a, b, c] = t().demo.subtasks, parent = 'demo-1';
   const kid = (n: number, over: Partial<Session>): Session => ({

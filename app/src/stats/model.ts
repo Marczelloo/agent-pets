@@ -1,4 +1,4 @@
-// Formatowanie liczb okna statystyk (spec 0.9, 3.1): krótko i po polsku albo angielsku.
+// Stats window number formatting (spec 0.9, 3.1): compact, in Polish or English.
 import { t } from '../i18n';
 import type { BadgeKind, StatAgent, StatsProgress } from '../types';
 
@@ -23,7 +23,7 @@ export function formatHours(ms: number): string {
 
 export const formatPct = (x: number): string => `${Math.round(x)}%`;
 
-/** ▲ 12% albo ▼ 5%; brak porównania to `null`. */
+/** ▲ 12% or ▼ 5%; no comparison is `null`. */
 export const formatChange = (x: number | null): string | null => (x == null ? null : `${x >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(x))}%`);
 
 export function agentName(a: StatAgent): string {
@@ -32,8 +32,8 @@ export function agentName(a: StatAgent): string {
 
 export const badgeText = (k: BadgeKind): string => t().stats.badge[k];
 
-/** Nazwa projektu do pokazania; `:no-project` (rozmowa bez folderu, katalog domowy albo tymczasowy) to „Bez projektu”. */
+/** Project display name; `:no-project` (conversation without a folder, home or temporary directory) is "No project". */
 export const projectName = (p: string): string => (p === ':no-project' ? t().stats.noProject : p);
 
-/** Postęp pierwszego skanu w procentach (pusta kolejka = 100). */
+/** Initial scan progress in percent (empty queue = 100). */
 export const scanPct = (p: StatsProgress): number => (p.total > 0 ? Math.min(100, Math.floor((p.scanned * 100) / p.total)) : 100);

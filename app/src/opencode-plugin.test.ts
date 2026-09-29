@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// plugin to zwykły moduł JS instalowany do opencode; testujemy dokładnie ten plik
+// the plugin is a regular JS module installed into opencode; test this exact file
 const PLUGIN = new URL('../../crates/pets-core/assets/opencode-plugin.js', import.meta.url).href;
 const CONTRACT = ['v', 'ts', 'pid', 'event', 'session', 'cwd', 'status', 'tool', 'title', 'model', 'question', 'input', 'parent'];
 
@@ -60,7 +60,7 @@ describe('opencode plugin', () => {
   });
 
   it('swallows a failing fetch', async () => {
-    fetchMock.mockImplementation(() => { throw new Error('port zamknięty'); });
+    fetchMock.mockImplementation(() => { throw new Error('port closed'); });
     const h = await load();
     await expect(h.event({ event: { type: 'session.error', properties: { sessionID: 's' } } })).resolves.toBeUndefined();
     fetchMock.mockImplementation(() => Promise.reject(new Error('timeout')));

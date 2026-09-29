@@ -1,6 +1,6 @@
 import type { Skin } from './types';
-/** Grok: mały biały humanoid (głowa, szyja, barki, klatka do czarnego pasa, biodra, długie nogi z czarnymi kolanami i stopami)
- *  z czarnym wizorem, na nim dwa proste białe oczy; logo Groka na klatce, czarne dłonie. */
+// Grok: small white humanoid (head, neck, shoulders, torso to black belt, hips, long legs with black knees and feet)
+// with a black visor bearing two plain white eyes; Grok logo on the chest, black hands.
 export const grok: Skin = {
   id: 'grok', pal: { m:'#ECECEA',s:'#BDBDB9',b:'#D4D4D0',h:'#FFFFFF',g:'#C4C4C0',gs:'#A2A29E' },
   width: 66, depth: 40, height: 62, radius: 26, armLen: 27, mitt: 4.8, armThk: 7,

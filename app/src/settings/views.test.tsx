@@ -104,7 +104,7 @@ describe('SettingsView', () => {
     expect(html).toContain('Osobno dla agentów');
     expect(html).toContain('Jak domyślny');
     expect(html).toContain('Tak wygląda w pasku');
-    expect(html).not.toContain('Najwięcej zwierzaków w pasku'); // przeniesione do karty „Pasek”
+    expect(html).not.toContain('Najwięcej zwierzaków w pasku'); // moved to the Taskbar tab
   });
   it('taskbar tab: position, monitor, background, size, spacing, pet limit, alignment, order, elements and reset', () => {
     const monitors = [{ id: 'primary-dev', primary: true, width: 2560, height: 1440, index: 1, has_bar: true }, { id: 'second', primary: false, width: 1920, height: 1080, index: 2, has_bar: true }];

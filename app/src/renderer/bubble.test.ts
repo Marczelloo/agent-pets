@@ -4,7 +4,7 @@ import type { Look } from '../types';
 import { BUBBLE_MAX_W, drawBubble, layoutLines, measureBubble, type BubbleKind } from './bubble';
 import { recorder } from './testing';
 
-/** Kontekst z `measureText` proporcjonalnym do długości tekstu (nagrywający zwraca stałą). */
+/** Context with `measureText` proportional to text length (the recorder returns a constant). */
 function measuring() {
   const r = recorder();
   const ctx = new Proxy(r.ctx as unknown as Record<string, unknown>, {
@@ -35,8 +35,8 @@ describe('speech bubbles', () => {
   it('pixel art uses only whole device-pixel rectangles, frame on the pixel grid', () => {
     for (const dpr of [1, 1.25, 1.5, 2]) for (const kind of KINDS) {
       const { ctx, log } = measuring();
-      const box = measureBubble(ctx, 'Zgoda na Bash? npm test', look('pixel'), 1);
-      drawBubble(ctx, 13.37, 2.2, 'Zgoda na Bash? npm test', kind, look('pixel'), box.w * 0.3, 1, dpr);
+      const box = measureBubble(ctx, 'Approve Bash? npm test', look('pixel'), 1);
+      drawBubble(ctx, 13.37, 2.2, 'Approve Bash? npm test', kind, look('pixel'), box.w * 0.3, 1, dpr);
       const calls = log.filter(l => /^[a-zA-Z]+\(/.test(l)).map(l => l.slice(0, l.indexOf('(')));
       expect(new Set(calls)).toEqual(new Set(['save', 'restore', 'fillRect']));
       for (const l of log.filter(l => l.startsWith('fillRect('))) {
@@ -80,8 +80,8 @@ describe('speech bubbles', () => {
   it('a pixel bubble is measured at the screen scale it is drawn at', () => {
     for (const dpr of [1, 1.25, 1.5, 2]) {
       const { ctx, log } = measuring();
-      const box = measureBubble(ctx, 'Zgoda na Bash? npm test', look('pixel'), 1, dpr);
-      drawBubble(ctx, 0, 0, 'Zgoda na Bash? npm test', 'question', look('pixel'), 20, 1, dpr);
+      const box = measureBubble(ctx, 'Approve Bash? npm test', look('pixel'), 1, dpr);
+      drawBubble(ctx, 0, 0, 'Approve Bash? npm test', 'question', look('pixel'), 20, 1, dpr);
       const rects = log.filter(l => l.startsWith('fillRect(')).map(l => l.slice(9, -1).split(',').map(Number));
       const right = Math.max(...rects.map(([x, , w]) => x + w)), bottom = Math.max(...rects.map(([, y, , h]) => y + h));
       expect(Math.abs(box.w - right), `w @${dpr}`).toBeLessThan(0.51);

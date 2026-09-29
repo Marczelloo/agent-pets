@@ -62,10 +62,10 @@ describe('skins for agents', () => {
     const rec = recorder();
     drawPet(rec.ctx, petFor({ agent: 'copilot', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
     for (const c of [g.frame, g.lens, g.visor, SKINS.copilot.eyeColor!]) expect(rec.log.some(l => l.includes(c)), c).toBe(true);
-    // wizjer przed oczami: oczy rysują się na nim, nie pod nim
+    // visor before the eyes: eyes are drawn on it, not beneath it
     const visor = rec.log.findIndex(l => l.includes(g.visor)), eye = rec.log.findIndex(l => l.includes(SKINS.copilot.eyeColor!));
     expect(visor).toBeLessThan(eye);
-    // oczy nad linią ramion (H·0,52): przy biurku ręce i blat nie zasłaniają twarzy
+    // eyes above shoulder line (H·0.52): hands and desk do not cover the face
     expect(SKINS.copilot.eyeY!).toBeLessThan(.52);
   });
   it('Antigravity is the green Android robot floating over its shadow, legs hanging', () => {
@@ -77,8 +77,8 @@ describe('skins for agents', () => {
     expect(floatLift(SKINS.clawd, .5, 0)).toBe(0);
     const rec = recorder();
     drawPet(rec.ctx, petFor({ agent: 'antigravity', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
-    expect(rec.log).toContain('fillStyle=rgb(61,220,132)'); // #3DDC84, zieleń Androida
-    expect(rec.log).toContain('fillStyle=#FFFFFF'); // białe oczy
+    expect(rec.log).toContain('fillStyle=rgb(61,220,132)'); // #3DDC84, Android green
+    expect(rec.log).toContain('fillStyle=#FFFFFF'); // white eyes
   });
   it('the Android robot is a smooth dome over a torso, split by a gap', () => {
     const [head, torso] = androidP(-40, -60, 80, 60, 10);
@@ -86,7 +86,7 @@ describe('skins for agents', () => {
     expect(Math.max(...ys(head))).toBeLessThan(Math.min(...ys(torso)));
     expect(Math.min(...ys(head))).toBeCloseTo(-60);
     expect(Math.max(...ys(torso))).toBeCloseTo(0);
-    // kopułka gładka: kolejne punkty łuku blisko siebie
+    // smooth dome: consecutive arc points close together
     for (let i = 1; i < head.length; i++) expect(Math.hypot(head[i][0] - head[i - 1][0], head[i][1] - head[i - 1][1])).toBeLessThan(5);
   });
   it('the Android robot keeps visible eyes when the style bleaches its body', () => {
@@ -122,19 +122,19 @@ describe('skins for agents', () => {
     const g = SKINS.grok, d = g.droid!;
     expect(d).toEqual({ visor: '#0E0E10', logo: '#1A1A1A', hands: '#222222' });
     expect(g.pal.m).toBe('#ECECEA');
-    // stojąc (tułów + nogi) jest wyższy niż szeroki
+    // standing (torso + legs) is taller than wide
     expect(g.height + g.legLen!).toBeGreaterThan(g.width);
     expect(g.eyeColor).toBe('#FFFFFF');
     expect(g.eyeY!).toBeLessThan(.36);
     const log = draw('grok');
     for (const c of [d.visor, d.logo, d.hands]) expect(log.some(l => l.includes(c)), c).toBe(true);
-    // logo: pierścień z przerwą w prawym górnym rogu (łuk krótszy niż pełne koło)
+    // logo: ring with a gap at upper right (arc shorter than a full circle)
     const arcs = log.filter(l => l.startsWith('ellipse(')).map(l => l.slice(8, -1).split(',').map(Number));
     expect(arcs.some(a => a[6] - a[5] > Math.PI && a[6] - a[5] < 2 * Math.PI - .3)).toBe(true);
   });
   it("Grok's silhouette is a humanoid: a narrower head on a neck above broad shoulders, narrowing to the waist", () => {
     const p = droidP(0, 0, 100, 100);
-    // szerokość sylwetki na wysokości y: skrajne przecięcia krawędzi z poziomą linią
+    // silhouette width at y: outermost intersections with a horizontal line
     const at = (y: number) => {
       const xs: number[] = [];
       p.forEach((a, i) => { const b = p[(i + 1) % p.length]; if (a[1] !== b[1] && (a[1] - y) * (b[1] - y) <= 0) xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1])); });
@@ -142,7 +142,7 @@ describe('skins for agents', () => {
     };
     const head = at(18), neck = at(39), shoulders = at(52), waist = at(80), hips = at(98);
     expect(neck).toBeGreaterThan(0);
-    // barki wyraźnie węższe niż całe ciało (.8 szerokości); ramiona zaczepione na ich krawędzi
+    // shoulders clearly narrower than the body (.8 width); arms attach at their edge
     expect(DROID_SHOULDER).toBe(.4);
     expect(shoulders).toBeLessThanOrEqual(80.01);
     expect(shoulders).toBeGreaterThan(76);
@@ -157,13 +157,13 @@ describe('skins for agents', () => {
     const g = SKINS.grok;
     expect(g.legLen!).toBeGreaterThanOrEqual(26);
     expect(g.armThk!).toBeLessThan(9);
-    // w idle siedzi (nogi schowane) — nogi widać na stojąco
+    // sits when idle (legs hidden); legs visible when standing
     const log = draw('grok', 'thinking');
-    // dwie dłonie, dwa kolana, dwie stopy
+    // two hands, two knees, two feet
     expect(log.filter(l => l === `fillStyle=${g.droid!.hands}`).length).toBeGreaterThanOrEqual(6);
   });
   it('every pet keeps its eyes upright (no tilt), and other pets keep their own hands', () => {
-    // Grok też: skośne oczy odrzucone przez użytkownika
+    // Grok too: angled eyes rejected by the user
     for (const s of Object.keys(SKINS) as (keyof typeof SKINS)[]) expect('eyeTilt' in SKINS[s], s).toBe(false);
     for (const s of ['clawd', 'kodek', 'copilot', 'cursor', 'zcode'] as const) {
       expect(SKINS[s].droid, s).toBeUndefined();
@@ -177,7 +177,7 @@ describe('skins for agents', () => {
     const log = draw('zcode');
     expect(log.some(l => l.includes(p.band))).toBe(true);
     expect(log.some(l => l.startsWith('fillText(Z'))).toBe(true);
-    // łaty przed oczami: oczy rysują się na nich
+    // patches before eyes: eyes draw on them
     const patch = Math.max(...log.map((l, i) => (l.includes(p.patches) ? i : -1))), eye = log.findIndex(l => l.includes(SKINS.zcode.eyeColor!));
     expect(patch).toBeGreaterThan(-1);
     expect(patch).toBeLessThan(eye);

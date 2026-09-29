@@ -1,29 +1,29 @@
-// Płaski szkielet przodem dla modeli naklejki i pikselowego: te same sprężyny co body.ts, bez obrotu 3D.
-// Ustawia c.hand i c.aHand w tych samych jednostkach co body.ts, więc targets(), rekwizyty i energia ruchu działają bez zmian.
+// Flat front-facing rig for sticker and pixel models: same springs as body.ts, without 3D rotation.
+// Sets c.hand and c.aHand in the same units as body.ts, so targets(), props, and motion energy work unchanged.
 import { PI, cl } from '../math';
 import { pen } from '../pen';
 import type { Pet } from '../pet';
 
 export interface RigArm {
   s: -1 | 1; k: 'L' | 'R';
-  /** bark i dłoń względem (XX, Y); `ah` = dłoń bez IK (naturalne machanie) */
+  /** shoulder and hand relative to (XX, Y); `ah` = hand without IK (natural waving) */
   sx: number; sy: number; hx: number; hy: number; ah: [number, number];
   ik: number; L: number; fr: number; sw: [number, number];
 }
 
 export interface Rig {
-  /** podstawa zwierzaka na scenie (po przesunięciu lx) */
+  /** pet base on stage (after lx offset) */
   XX: number; Y: number;
-  /** przesunięcie skoku (ujemne w górę) */
+  /** jump offset (negative upward) */
   oy: number;
-  /** squash & stretch i przechył bryły */
+  /** squash and stretch and body tilt */
   sx: number; sy: number; rot: number;
   W: number; H: number; top: number; bot: number; legH: number; down: number; loaf: number; sit: number;
-  /** zwrot z `th`: w lewo, przód, w prawo */
+  /** orientation from `th`: left, front, right */
   face: -1 | 0 | 1;
-  /** płynny zwrot twarzy −1…1 (naklejka); `face` to wersja skokowa dla siatki pikselowej */
+  /** smooth face turn −1…1 (sticker); `face` is the stepped version for the pixel grid */
   faceX: number;
-  /** przesunięcie źrenic (ex, look) w jednostkach u */
+  /** pupil offset (ex, look) in u units */
   gaze: [number, number];
   eyes: { open: number; blink: number; sleep: number; happy: number; dizzy: number; squint: number };
   grey: number; alpha: number; walk: number; hopH: number;

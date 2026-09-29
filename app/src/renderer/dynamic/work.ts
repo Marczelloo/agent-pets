@@ -1,5 +1,5 @@
-// Choreografie Dynamiczny scen pracy (spec 8.3). Współrzędne w jednostkach mózgu jak w scenes.ts: podstawa (0, 0),
-// y w górę ujemny, klawiatura biurka ≈ (−2…18, −30), ekran terminala ≈ (70…100, −60).
+// Dynamic choreography for work scenes (spec 8.3). Coordinates in brain units as in scenes.ts: base (0, 0),
+// negative y is upward, desk keyboard ≈ (−2…18, −30), terminal screen ≈ (70…100, −60).
 import { PI, TAU, ease, hr } from '../math';
 import { rng } from '../rng';
 import type { Scene } from '../scenes';
@@ -9,14 +9,14 @@ import { emit, hitStop, impact, spray, word } from './state';
 const PUNCH = 1 / 14;
 const kx = (i: number, k: number) => (i ? 18 : -2) + 8 * (hr(k * 1.37 + i) - 0.5);
 
-/** Seria ORA/MUDA: pięści na przemian w klawiaturę, 14 ciosów na sekundę zegara zwierzaka. */
+/** ORA/MUDA sequence: fists alternate on the keyboard, 14 strikes per pet-clock second. */
 const barrage = (_a: number, _c: unknown, t: number) => {
   const k = Math.floor(t / PUNCH), p = (t / PUNCH) % 1, left = k % 2 === 0;
   const down = p < 0.5 ? snapE(p * 2) : 1 - snapE((p - 0.5) * 2);
   return { ikL: 1, ikR: 1, hxL: kx(0, k), hyL: left ? -46 + 16 * down : -44, hxR: kx(1, k), hyR: left ? -44 : -46 + 16 * down,
     typeW: 1, lean: 0.25, squint: 0.6, look: 0.4, _barrage: 1, _bg: 'speed', _stiff: 3 };
 };
-/** Finałowy cios: wyraźny zamach (0,3 s, z przyspieszeniem), błyskawiczne uderzenie, poza trzymana ~1 s, powrót. */
+/** Final strike: clear wind-up (0.3 s, accelerating), instant impact, pose held ~1 s, return. */
 const FINAL = (a: number) => {
   const base = { ikL: 1, hxL: -2, hyL: -40, ikR: 1, squint: 0.6, _stiff: 3 };
   if (a < 0.3) { const p = ease(a / 0.3); return { ...base, hxR: 18 + 16 * p, hyR: -44 - 40 * p, lean: 0.2 - 0.55 * p, tilt: -0.08 * p }; }
@@ -42,74 +42,74 @@ const BACK = keys([[0, { lx: 40, th: -PI / 2, _stiff: 3 }], [0.25, { lx: 0 }], [
 
 export const WORK: Record<string, Scene> = {
   edit: { cycle: 1, base: { th: 0.3, look: 0.2, ex: 0.75, _prop: 'desk' }, acts: [
-    ['seria ORA', 3.2, barrage, undefined, undefined, (a, c, _t, dt) => {
+    ['ORA barrage', 3.2, barrage, undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, PUNCH)) {
         const P = c.p, left = Math.floor(a / PUNCH) % 2 === 0, hx = left ? P.hxL.x : P.hxR.x;
         emit(c, 'key', hx, -32, { vx: -25 + rng() * 105, vy: -150 - rng() * 90, vr: (rng() - 0.5) * 20 });
         if (rng() < 0.5) spray(c, 'spark', 1, hx, -30, 90);
       }
     }],
-    ['finałowy cios', 1.6, (a) => ({ ...FINAL(a), typeW: 1, _bg: a > 0.3 && a < 1.1 ? 'speed' : null }), (c) => { c.landed = false; }, undefined, (a, c, _t, dt) => {
-      // uderzenie dopiero, gdy pięść naprawdę dotknie klawiatury: zatrzymana klatka (hit-stop), klatka uderzenia, wybuch, BAM!
+    ['final strike', 1.6, (a) => ({ ...FINAL(a), typeW: 1, _bg: a > 0.3 && a < 1.1 ? 'speed' : null }), (c) => { c.landed = false; }, undefined, (a, c, _t, dt) => {
+      // impact only when the fist touches the keyboard: hit-stop, impact frame, burst, BAM!
       if (!c.landed && a > 0.3 && (c.p.hyR.x > -34 || at(a, dt, 0.7))) { c.landed = true; impact(c, 3.5); hitStop(c, 0.15); spray(c, 'spark', 14, 12, -30, 110); spray(c, 'key', 5, 12, -30, 150, -PI / 2 + 0.5, PI / 2); word(c, 'BAM!', 30, -92, 34); }
     }],
   ] },
   bash: { cycle: 1, base: { th: 0.55, look: -0.1, ex: 0.8, _prop: 'crt' }, acts: [
-    ['pieczęcie rąk', 1.6, (a) => ({ ...SEALS(a), squint: 0.5, _scr: 'type', _prog: a / 1.6 }), undefined, undefined, (a, c, _t, dt) => {
+    ['hand seals', 1.6, (a) => ({ ...SEALS(a), squint: 0.5, _scr: 'type', _prog: a / 1.6 }), undefined, undefined, (a, c, _t, dt) => {
       for (const s of SEAL_AT) if (at(a, dt, s)) spray(c, 'spark', 3, (c.p.hxL.x + c.p.hxR.x) / 2, (c.p.hyL.x + c.p.hyR.x) / 2 - 4, 110);
     }],
-    ['puf!', 0.5, keys([[0, { ...HIP, ikR: 1, hxR: 2, hyR: -56, _stiff: 3 }], [0.08, { hxR: 64, hyR: -52, lean: 0.4 }], [0.5, {}]]), undefined, undefined, (a, c, _t, dt) => {
+    ['poof!', 0.5, keys([[0, { ...HIP, ikR: 1, hxR: 2, hyR: -56, _stiff: 3 }], [0.08, { hxR: 64, hyR: -52, lean: 0.4 }], [0.5, {}]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.08)) { spray(c, 'smoke', 8, 84, -60, 60, -PI / 2, 2 * PI); word(c, 'POOF!', 84, -92); impact(c, 1.5, false); }
     }],
-    ['komenda działa', 1.8, (a) => ({ ...HIP, ikR: 1, hxR: 68, hyR: -47, look: -0.4, ex: 0.85, _scr: 'run', _run: a, _prog: 1 })],
+    ['command runs', 1.8, (a) => ({ ...HIP, ikR: 1, hxR: 68, hyR: -47, look: -0.4, ex: 0.85, _scr: 'run', _run: a, _prog: 1 })],
   ] },
   read: { cycle: 1, base: { th: 0.12, look: 0.85, tilt: -0.06, _hold: 'sheet' }, acts: [
-    ['czyta z błyskiem okularów', 3, (a) => ({ ...SHEET, hyL: -19 + Math.sin(a * 1.7), hyR: -19 + Math.sin(a * 1.7 + 0.4), ex: -0.8 + 1.6 * ((a / 1.3) % 1), _face: 'glasses', _faceK: 1, _bg: 'wind' }), undefined, undefined, (a, c, _t, dt) => {
-      if (every(a, dt, 0.9, 0.3)) emit(c, 'page', 30, -30, { vx: 60 + rng() * 40, vy: -60 - rng() * 40, vr: 6 }); // x ≤ ≈ 100u: zostaje w miejscu zwierzaka
+    ['reads with glasses glint', 3, (a) => ({ ...SHEET, hyL: -19 + Math.sin(a * 1.7), hyR: -19 + Math.sin(a * 1.7 + 0.4), ex: -0.8 + 1.6 * ((a / 1.3) % 1), _face: 'glasses', _faceK: 1, _bg: 'wind' }), undefined, undefined, (a, c, _t, dt) => {
+      if (every(a, dt, 0.9, 0.3)) emit(c, 'page', 30, -30, { vx: 60 + rng() * 40, vy: -60 - rng() * 40, vr: 6 }); // x ≤ ≈ 100u: stays within the pet's space
     }],
-    ['przerzuca stronę', 0.6, (a) => ({ ...FLICK(a), _face: 'glasses', _faceK: 1, _bg: 'wind' }), undefined, undefined, (a, c, _t, dt) => {
+    ['turns a page', 0.6, (a) => ({ ...FLICK(a), _face: 'glasses', _faceK: 1, _bg: 'wind' }), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.16)) for (let i = 0; i < 3; i++) emit(c, 'page', 34, -36, { vx: 80 + i * 20, vy: -90 + i * 20, vr: 8 });
     }],
   ] },
-  // detektyw: chodzi wzdłuż tablicy z wielką lupą (w szkle powiększony kod), trafienie zatrzymuje wszystko
+  // detective walks along the board with a large magnifier (code enlarged in the lens); a find freezes everything
   grep: { cycle: 1, base: { th: 0.3, _prop: 'board' }, acts: [
-    ['szuka z lupą', 3.6, (a) => { const w = Math.sin(a * TAU / 1.8); return { ...HIP, lx: 9 - 9 * Math.cos(a * TAU / 1.8), walkW: Math.abs(w) > 0.3 ? 1 : 0,
+    ['searches with a magnifier', 3.6, (a) => { const w = Math.sin(a * TAU / 1.8); return { ...HIP, lx: 9 - 9 * Math.cos(a * TAU / 1.8), walkW: Math.abs(w) > 0.3 ? 1 : 0,
       ikR: 1, hxR: 44 + 6 * Math.sin(a * 3), hyR: -62 + 10 * Math.sin(a * 1.7), ex: 0.8, look: -0.3, squint: 0.3, _lens: 1, _lensK: snapE(a / 0.3) }; }],
-    ['trafienie!', 1.4, keys([[0, { ...HIP, ikR: 1, hxR: 44, hyR: -62, lx: 0, _lens: 1, _stiff: 2 }], [0.1, { hxR: 54, hyR: -60, hopW: 0.8, lean: 0.4, ex: 0.9 }], [0.8, { hopW: 0 }], [1.4, { hxR: 44, hyR: -62, lean: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
+    ['found it!', 1.4, keys([[0, { ...HIP, ikR: 1, hxR: 44, hyR: -62, lx: 0, _lens: 1, _stiff: 2 }], [0.1, { hxR: 54, hyR: -60, hopW: 0.8, lean: 0.4, ex: 0.9 }], [0.8, { hopW: 0 }], [1.4, { hxR: 44, hyR: -62, lean: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.1)) { impact(c, 2.5); hitStop(c, 0.1); word(c, '!', 40, -92, 40); spray(c, 'spark', 8, 62, -72, 120, -PI / 2, 2 * PI); }
     }],
   ] },
   web: { cycle: 1, base: {}, acts: [
-    ['oddech pioruna: zamach', 0.35, () => ({ th: PI / 2, sit: 0.35, squint: 0.8, lean: -0.3, ...HIP, ikR: 1, hxR: 20, hyR: -30, _bg: 'speed' })],
-    ['zygzak', 0.5, (a) => ({ ...ZIG(a), squint: 0.8, ikR: 1, hxR: 30, hyR: -60, _bg: 'speed' }), undefined, undefined, (a, c, _t, dt) => {
+    ['thunder breath: wind-up', 0.35, () => ({ th: PI / 2, sit: 0.35, squint: 0.8, lean: -0.3, ...HIP, ikR: 1, hxR: 20, hyR: -30, _bg: 'speed' })],
+    ['zigzag', 0.5, (a) => ({ ...ZIG(a), squint: 0.8, ikR: 1, hxR: 30, hyR: -60, _bg: 'speed' }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.05)) emit(c, 'bolt', c.p.lx.x - 50 - rng() * 15, -40 + (rng() - 0.5) * 30, { rot: PI + (rng() - 0.5) * 0.8, s: 22 }); // za zwierzakiem
       if (every(a, dt, 0.1)) spray(c, 'spark', 2, c.p.lx.x, -30, 80);
     }],
-    ['łapie stronę', 0.4, keys([[0, { lx: 40, th: 0, ikR: 1, hxR: 30, hyR: -60, _stiff: 3 }], [0.08, { hxR: 34, hyR: -86, happy: 0.6 }], [0.4, {}]]), undefined, undefined, (a, c, _t, dt) => {
+    ['catches a page', 0.4, keys([[0, { lx: 40, th: 0, ikR: 1, hxR: 30, hyR: -60, _stiff: 3 }], [0.08, { hxR: 34, hyR: -86, happy: 0.6 }], [0.4, {}]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.08)) { spray(c, 'spark', 5, c.p.lx.x + 34, -86, 110); impact(c, 1, false); }
     }],
-    ['wraca z iskrami', 0.6, (a) => ({ ...BACK(a), ...SHEET, _hold: 'sheet', walkW: a < 0.3 ? 1 : 0 }), undefined, undefined, (a, c, _t, dt) => {
+    ['returns with sparks', 0.6, (a) => ({ ...BACK(a), ...SHEET, _hold: 'sheet', walkW: a < 0.3 ? 1 : 0 }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.06) && a < 0.3) spray(c, 'spark', 2, c.p.lx.x + 10, -20, 70);
     }],
-    ['ogląda stronę', 1.2, () => ({ ...SHEET, _hold: 'sheet', look: 0.8, happy: 0.5 })],
+    ['examines a page', 1.2, () => ({ ...SHEET, _hold: 'sheet', look: 0.8, happy: 0.5 })],
   ] },
   agent: { cycle: 1, base: {}, acts: [
-    ['składa pieczęć', 0.5, (a) => ({ ikL: 1, hxL: -4, hyL: -46, ikR: 1, hxR: 4, hyR: -46, squint: 0.7, _stiff: 3, _ground: 'seal', _groundK: snapE(a / 0.3), _groundX: 45 })],
-    ['uderza w ziemię', 0.35, keys([[0, { ikL: 1, hxL: -4, hyL: -46, ikR: 1, hxR: 4, hyR: -46, _stiff: 3, _ground: 'seal', _groundK: 1, _groundX: 45 }], [0.12, { hyL: -70, hyR: -70, lean: -0.3 }], [0.18, { hxL: 20, hyL: -6, hxR: 34, hyR: -6, lean: 0.8, sit: 0.4 }], [0.35, {}]]), undefined, undefined, (a, c, _t, dt) => {
+    ['forms a seal', 0.5, (a) => ({ ikL: 1, hxL: -4, hyL: -46, ikR: 1, hxR: 4, hyR: -46, squint: 0.7, _stiff: 3, _ground: 'seal', _groundK: snapE(a / 0.3), _groundX: 45 })],
+    ['strikes the ground', 0.35, keys([[0, { ikL: 1, hxL: -4, hyL: -46, ikR: 1, hxR: 4, hyR: -46, _stiff: 3, _ground: 'seal', _groundK: 1, _groundX: 45 }], [0.12, { hyL: -70, hyR: -70, lean: -0.3 }], [0.18, { hxL: 20, hyL: -6, hxR: 34, hyR: -6, lean: 0.8, sit: 0.4 }], [0.35, {}]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.18)) { spray(c, 'smoke', 10, 45, -12, 70, -PI / 2, 2 * PI); word(c, 'POOF!', 45, -90); impact(c, 2, false); }
     }],
-    ['pomocnik wybiega', 1.6, () => ({ ...HIP, armR: 2.3, oscR: 0.55, _f: 11, look: -0.3, ex: 0.9, th: 0.3, happy: 0.5, _ground: 'seal', _groundK: 0, _groundX: 45 }), (c) => {
-      emit(c, 'helper', 45, 0, { vx: 40, max: 0.9 }); // znika w obrębie miejsca zwierzaka (≈ 80u)
+    ['helper runs out', 1.6, () => ({ ...HIP, armR: 2.3, oscR: 0.55, _f: 11, look: -0.3, ex: 0.9, th: 0.3, happy: 0.5, _ground: 'seal', _groundK: 0, _groundX: 45 }), (c) => {
+      emit(c, 'helper', 45, 0, { vx: 40, max: 0.9 }); // disappears within the pet's space (≈ 80u)
     }],
   ] },
   mcp: { cycle: 1, base: { th: 0 }, acts: [
-    ['klaśnięcie', 0.45, keys([[0, { ikL: 1, ikR: 1, hxL: -26, hyL: -42, hxR: 26, hyR: -42, _stiff: 3 }], [0.15, { hxL: -42, hxR: 42, hyL: -48, hyR: -48, lean: -0.2 }], [0.22, { hxL: -4, hxR: 4, hyL: -45, hyR: -45, lean: 0.2 }], [0.45, {}]]), undefined, undefined, (a, c, _t, dt) => {
+    ['clap', 0.45, keys([[0, { ikL: 1, ikR: 1, hxL: -26, hyL: -42, hxR: 26, hyR: -42, _stiff: 3 }], [0.15, { hxL: -42, hxR: 42, hyL: -48, hyR: -48, lean: -0.2 }], [0.22, { hxL: -4, hxR: 4, hyL: -45, hyR: -45, lean: 0.2 }], [0.45, {}]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.22)) { spray(c, 'spark', 6, 0, -45, 120); impact(c, 1.5, false); }
     }],
-    ['krąg transmutacji', 0.9, (a) => ({ ikL: 1, ikR: 1, hxL: -18, hyL: -6, hxR: 18, hyR: -6, lean: 0.5, sit: 0.4, squint: 0.6, _ground: 'circle', _groundK: snapE(a / 0.2), _stiff: 3 }), undefined, undefined, (a, c, _t, dt) => {
+    ['transmutation circle', 0.9, (a) => ({ ikL: 1, ikR: 1, hxL: -18, hyL: -6, hxR: 18, hyR: -6, lean: 0.5, sit: 0.4, squint: 0.6, _ground: 'circle', _groundK: snapE(a / 0.2), _stiff: 3 }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.08)) { const an = rng() * PI * 2; emit(c, 'energy', Math.cos(an) * 30, Math.sin(an) * 8, { vy: -60, col: '#5DCAA5' }); }
     }],
-    ['narzędzie wyłania się', 1.2, keys([[0, { ikL: 1, ikR: 1, hxL: -18, hyL: -6, hxR: 30, hyR: -6, _hold: 'wrench', _ground: 'circle', _groundK: 1, _stiff: 3 }], [0.12, { hxR: 34, hyR: -72, lean: 0, sit: 0, happy: 0.7, ...HIP }], [0.9, { _groundK: 0 }], [1.2, {}]]), undefined, undefined, (a, c, _t, dt) => {
+    ['tool emerges', 1.2, keys([[0, { ikL: 1, ikR: 1, hxL: -18, hyL: -6, hxR: 30, hyR: -6, _hold: 'wrench', _ground: 'circle', _groundK: 1, _stiff: 3 }], [0.12, { hxR: 34, hyR: -72, lean: 0, sit: 0, happy: 0.7, ...HIP }], [0.9, { _groundK: 0 }], [1.2, {}]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0)) spray(c, 'spark', 10, 30, -6, 140);
       if (at(a, dt, 0.12)) spray(c, 'energy', 6, 34, -72, 60, -PI / 2, 2 * PI);
     }],

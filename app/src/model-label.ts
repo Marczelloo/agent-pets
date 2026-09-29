@@ -1,11 +1,11 @@
-// Tekst podpisu zwierzaka: agent (czyja pętla), model (kogo pyta) i program (gdzie użytkownik steruje). Spec 0.10, 2 i 3.3.
+// Pet label text: agent (whose loop), model (who it queries), and app (where the user controls it). Spec 0.10, 2 and 3.3.
 import { t } from './i18n';
 import type { Session } from './types';
 
 const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 const words = (rest: string) => rest.split('-').filter(Boolean).map(cap).join(' ');
 
-/** Id modelu jak z logów (`claude-opus-5-5`, `openai/gpt-6-sol`) → nazwa do wyświetlenia; nieznany format bez zmian. */
+/** Model ID from logs (`claude-opus-5-5`, `openai/gpt-6-sol`) → display name; unknown formats stay unchanged. */
 export function modelLabel(id: string | null | undefined): string | null {
   const raw = (id ?? '').trim().split('/').pop()?.trim() ?? '';
   if (!raw) return null;
@@ -20,18 +20,18 @@ export function modelLabel(id: string | null | undefined): string | null {
   return raw.slice(0, 32);
 }
 
-/** Nazwa agenta; agent z furtki podaje własną (tekst, nigdy znaczniki). */
+/** Agent name; a bridge agent provides its own (text, never markup). */
 export function agentLabel(s: Pick<Session, 'agent' | 'agent_name'>): string {
   if (s.agent === 'other') return s.agent_name || t().agent.other;
   return t().agent[s.agent] ?? s.agent;
 }
 
-/** Program, w którym działa sesja; `null` = terminal albo nieznany (jak dotąd: terminal pomijamy). */
+/** App running the session; `null` = terminal or unknown (as before, omit the terminal). */
 export function hostLabel(s: Pick<Session, 'origin' | 'jump'>): string | null {
   if (s.origin === 'router') return t().origin.router;
   const app = s.jump.app;
   if (!app || app === 'terminal') return s.origin === 'desktop' && !app ? t().origin.desktop : null;
-  // aplikacja samego agenta: „Codex · aplikacja”, jak w 0.9
+  // agent's own app: "Codex · app", as in 0.9
   if (app === 'claude_desktop' || app === 'codex_app') return t().origin.desktop;
   if (app === 'other') return s.jump.app_name || null;
   return t().app[app];

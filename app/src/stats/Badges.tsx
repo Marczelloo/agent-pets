@@ -3,7 +3,7 @@ import type { BadgeKind, Pets, StatsBadge } from '../types';
 import { agentName, badgeText, formatHours, formatPct, formatTokens, projectName } from './model';
 import { StatPet } from './StatPet';
 
-/** Rzecz „na sobie” zwierzaka odznaki. */
+/** Worn item for a badge pet. */
 export const WEAR_OF: Record<BadgeKind, string> = { glutton: 'bib', cache_master: 'scarf', night_owl: 'nightcap', marathon: 'headband' };
 
 const proj = (b: StatsBadge) => projectName(b.project ?? '');
@@ -17,7 +17,7 @@ function detail(b: StatsBadge): string {
   }
 }
 
-/** Dłuższe wyjaśnienie odznaki w podpowiedzi (najechanie albo fokus z klawiatury). */
+/** Longer badge explanation in a tooltip (hover or keyboard focus). */
 function tip(b: StatsBadge, totalTokens: number): string {
   const x = t().stats.tip;
   switch (b.kind) {

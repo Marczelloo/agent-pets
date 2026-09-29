@@ -74,7 +74,7 @@ describe('panel model', () => {
     expect(panelSessions(all).map(x => x.id)).toEqual(['q', 'p']);
     expect(childrenOf(all, 'p', 1_000 + CHILD_DONE_MS - 1).map(x => x.id)).toEqual(['gone', 'a', 'b']);
     expect(childrenOf(all, 'p', 1_000 + CHILD_DONE_MS).map(x => x.id)).toEqual(['a', 'b']);
-    expect(hasInactive([s('p', 'working', 1), kid('d', 1, { state: 'done' })]), 'dziecka nie ukrywa się osobno').toBe(false);
+    expect(hasInactive([s('p', 'working', 1), kid('d', 1, { state: 'done' })]), 'a child is not hidden separately').toBe(false);
   });
   const sub = (over: Partial<Session> = {}): Session => ({
     ...s('k', 'working', 0), parent: 'p', title: 'Znajdź testy', action: 'Szukanie: bubble',

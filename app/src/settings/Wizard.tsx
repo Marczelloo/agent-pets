@@ -16,7 +16,7 @@ interface Props {
   initialStep?: WizardStep;
 }
 
-/** Kreator pierwszego uruchomienia: aplikacje, zgoda na limity, powiadomienia i autostart, skórka. */
+/** First-run wizard: apps, limit consent, notifications and autostart, skin. */
 export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }: Props) {
   const [draft, setDraft] = useState(() => defaultAppChoice(rows, initial));
   const [step, setStep] = useState(WIZARD_STEPS.indexOf(initialStep));

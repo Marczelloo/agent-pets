@@ -10,10 +10,10 @@ import { StatPet } from './StatPet';
 const SCENE = ['podium_first', 'podium_second', 'podium_third'];
 const PET_W = 96, PET_H = 80, PET_U = 0.52;
 
-/** Opóźnienia wejścia dla miejsc 1, 2, 3: najpierw trzecie, na końcu zwycięzca (co 300 ms). */
+/** Entrance delays for places 1, 2, 3: third first, winner last (every 300 ms). */
 export const introPlan = (reduced: boolean): number[] => (reduced ? [0, 0, 0] : [600, 300, 0]);
 
-/** Konfetti przez 2,5 s po wejściu zwycięzcy; od nowa przy każdej zmianie `replay`. */
+/** Confetti for 2.5 s after the winner enters; restart whenever `replay` changes. */
 function Confetti({ agent, replay, animate }: { agent: string | null; replay: string; animate: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -44,7 +44,7 @@ function Confetti({ agent, replay, animate }: { agent: string | null; replay: st
 
 export interface PodiumProps {
   places: StatsPlace[]; format: (v: number) => string; pets: Pets; animate: boolean;
-  /** zmiana (okres, miara) powtarza wejście i konfetti */
+  /** changing (period, measure) replays the entrance and confetti */
   replay: string;
 }
 

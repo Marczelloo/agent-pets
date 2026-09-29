@@ -57,12 +57,12 @@ if(sk.antenna){const by=top+2*u,len=15*u,tx=Math.sin(c.aa)*len,ty=by-Math.cos(c.
 
 const bodyP=sk.facet?hexP:sk.droid?droidP:rrP,android=sk.shape==='android';
 if(android)drawAndroidAntennas(x,0,top,hW*2,H,u,cm,lw,Math.sin(c.aa));
-// uszy hełmu Copilota: wystają po bokach, za ciałem
+// Copilot helmet ears: protrude at the sides, behind the body
 const pilot=c.pilot??sk.pilot;
 if(pilot)for(const s of [-1,1])shp(x,elP(s*hW,top+H*.6,5.5*u,9*u),cs,u);
 drawEars(x,sk,hW,top,u);
 const fwid=W*Math.abs(co),front=co>=0,fcx=(front?1:-1)*Dp/2*si;
-// ludzik Androida jest okrągły (walec): jedna bryła bez osobnej ściany bocznej, po której przesuwa się twarz
+// Android mascot is round (cylinder): one shape without a separate side wall for the face to slide across
 if(android)for(const p of androidP(-hW,top,hW*2,H,R))shp(x,p,front?cm:cb,u);
 else shp(x,bodyP(-hW,top,hW*2,H,R),cs,u,{hatch:true});
 if(fwid>1.5&&!android){const fp=bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2));shp(x,fp,front?cm:cb,u);
@@ -74,7 +74,7 @@ const ey=top+H*(sk.eyeY??.42)+P.look.x*4.5*u,exs=P.ex.x*4*u*co;
 const bl=c.blink>0?Math.sin(PI*(c.blink/.16)):0,sl=cl(P.sleep.x),hp=cl(P.happy.x),dz=cl(P.dizzy.x),sqn=cl(P.squint.x);
 const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFace&&loaf>.5;
 let ecol=st.face?.eyes==='accent'?pen.ol:c.pilot?.eye??sk.eyeColor??'#1E1410';
-// białe oczy ludzika giną na ciele rozjaśnionym przez styl (Tusz, Pastel): wtedy ciemne
+// mascot's white eyes disappear against a style-lightened body (Ink, Pastel): use dark eyes then
 if(android&&st.fillFor&&luma(st.fillFor(cm))>.78)ecol='#1E1410';
 if(front&&fwid>4*u){
 if(pilot)drawPilot(x,fcx+exs*.4,top,fwid,H,u,pilot);
@@ -86,7 +86,7 @@ if(saver){const tri=(v: any)=>Math.abs((((v%1)+1)%1)*2-1);x.globalAlpha=GA*loaf*
 x.restore();
 if((Math.floor(t*2.2)%2)&&open>.3){x.save();x.globalAlpha=GA*(1-tw)*open*ea;x.fillStyle=ecol;x.fillRect(fcx-5*u*co,top+H*.66,10*u*co,3*u);x.restore();}}
 if(cyc){
-// opencode: jedno oko, dosłownie „o” z logo (jasna ramka 240×300, w środku u góry otwór, niżej blok w kolorze ciała jak powieka)
+// opencode: one eye, literally the logo's "o" (light 240×300 frame, top opening, body-colored block below as a lid)
 const ew=W*.42*co,eh=W*.42*1.25,o=open,ex=fcx+exs,ec=top+H*.46;x.save();x.globalAlpha=GA*ea;x.lineWidth=Math.max(1,lw);x.strokeStyle=pen.ol;
 if(o>.15){const h=eh*o,y0=ec-h/2,fr=ew*.25;shp(x,rrP(ex-ew/2,y0,ew,h,1.5*u),'#F1ECEC',u);
 const iw=ew-2*fr,ih=h-2*fr*o,iy=y0+fr*o;x.fillStyle='#131010';x.fillRect(ex-iw/2,iy,iw,ih);x.fillStyle=cm;x.fillRect(ex-iw/2,iy+ih/3,iw,ih*2/3);}
@@ -97,8 +97,8 @@ x.stroke();}
 if(pen.fx&&hp>.3){x.fillStyle='#FFFFFF';x.font=`${Math.max(6,10*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.fillText('✦',ex+ew*.6,ec-eh*.4);}
 x.restore();}
 else [-1,1].forEach((s: any)=>{
-// na walcu ludzika oko leży na obwodzie kopułki (na wysokości oczu ma ona ~0,88 szerokości): kąt obrotu plus własne
-// przesunięcie, więc przy obrocie oko nie wychodzi poza bryłę
+// on the mascot's cylindrical body, the eye sits on the dome's edge (at eye level it spans ~0.88 width): rotation angle plus its
+// own offset keeps the eye inside the body during rotation
 const ph=android?th+s*Math.asin(Math.min(.95,2*sk.eyeX/.88)):0,ex=android?W*.44*Math.sin(ph)+exs:fcx+s*(sk.eyeX)*W*co+exs,ew=(sk.eyeW)*u*Math.sqrt(Math.max(0,android?Math.cos(ph):co)),eh=(sk.eyeH)*u;
 x.save();x.fillStyle=ecol;x.strokeStyle=ecol;x.lineWidth=Math.max(1,2.6*u);
 
@@ -111,7 +111,7 @@ if(dz>.02){x.globalAlpha=GA*ea*dz;const k=5*u;x.beginPath();x.moveTo(ex-k,ey-k);
 
 if(hp>.02&&sk.blush){x.globalAlpha=GA*ea*hp*.6;x.fillStyle='#F0997B';x.beginPath();x.ellipse(ex+s*6*u*co,ey+14*u,6*u*co,3.5*u,0,0,TAU);x.fill();}
 x.restore();});
-// blob: wielka litera nazwy agenta na brzuchu (tekst, nigdy znaczniki)
+// blob: uppercase initial of agent name on the belly (text, never markup)
 if(sk.mark&&c.mark){x.save();x.globalAlpha=GA*ea;x.fillStyle=pal.h;x.font=`bold ${Math.max(6,H*.3)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.translate(fcx,top+H*.76);x.scale(Math.max(.05,co),1);x.fillText(String(c.mark).slice(0,1),0,0);x.restore();}}
 x.globalAlpha=GA;x.strokeStyle=pen.ol;x.lineWidth=lw;
 if(sit>.05&&loaf<.5){legs.filter((g: any)=>!sk.frontLegsOnlySitting||g.z>=-.5*u).forEach((g: any)=>{const sw=Math.sin(t*6+g.i*2)*2.5*u*cl(P.swing.x);x.save();x.globalAlpha=GA*sit;shp(x,elP(g.x+si*6*u,-3*u+sw,7*u,5*u),cm,u);x.restore();});}

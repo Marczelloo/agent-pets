@@ -24,7 +24,7 @@ describe('mini pets', () => {
     expect(minisOf(P, [P, done], 30_500, true).shown.map(c => c.id)).toEqual(['a'], );
     expect(minisOf(P, [P, done], 31_000, true).shown).toEqual([]);
     const young = kid('b', 27_000, { state: 'done', state_since: 30_000 });
-    expect(minisOf(P, [P, young], 30_100, true).shown, 'nigdy nie był mini: nie żegna się').toEqual([]);
+    expect(minisOf(P, [P, young], 30_100, true).shown, 'never a mini: no farewell').toEqual([]);
   });
 
   it('an error shows its pose for 1.5 s before leaving', () => {
@@ -54,8 +54,8 @@ describe('mini pets', () => {
 
   it('the parent delegates while a working child has no mini yet', () => {
     expect(delegating(P, [P, kid('a', 57_000)], 60_000, true)).toBe(true);
-    expect(delegating(P, [P, kid('a', 0)], 60_000, true), 'z samymi mini ma swój stan').toBe(false);
-    expect(delegating(P, [P, kid('a', 0)], 60_000, false), 'mini wyłączone: poza „deleguje”').toBe(true);
+    expect(delegating(P, [P, kid('a', 0)], 60_000, true), 'with only minis, it has its own state').toBe(false);
+    expect(delegating(P, [P, kid('a', 0)], 60_000, false), 'minis disabled: delegation pose').toBe(true);
     expect(delegating(P, [P, kid('a', 57_000, { state: 'done' })], 60_000, true)).toBe(false);
     expect(delegating(P, [P], 60_000, true)).toBe(false);
   });

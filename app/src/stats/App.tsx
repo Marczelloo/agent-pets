@@ -18,14 +18,14 @@ export const PERIODS: StatsPeriod[] = ['today', 'week', 'month', 'all'];
 
 export interface PageProps {
   view: StatsView; period: StatsPeriod; metric: StatsMetric; race: StatsRace; progress: StatsProgress | null;
-  /** liczniki i paski rosną od zera (w testach i przy ograniczonym ruchu: od razu wartości) */
+  /** counters and bars grow from zero (in tests and reduced motion: values appear immediately) */
   animate: boolean;
   onPeriod: (p: StatsPeriod) => void; onMetric: (m: StatsMetric) => void; onRace: (r: StatsRace) => void;
-  /** wygląd zwierzaków z ustawień */
+  /** pet appearance from settings */
   pets?: Pets;
 }
 
-/** Czas od ostatniej zmiany `key` (ms), do końca animacji liczników; bez animacji od razu „koniec”. */
+/** Time since `key` last changed (ms), up to counter animation end; without animation, immediately "done". */
 function useElapsed(animate: boolean, key: string): number {
   const [el, setEl] = useState(animate ? 0 : Infinity);
   useEffect(() => {
@@ -50,7 +50,7 @@ function Seg<T extends string>({ items, value, label, onPick, text, small }: {
   );
 }
 
-/** Okno „Statystyki” (spec 0.9, 3.2). Zwierzaki dorysowują płótna w miejscach `.pet-slot`. */
+/** Stats window (spec 0.9, 3.2). Pets draw canvases in `.pet-slot` elements. */
 export function StatsPage({ view, period, metric, race, progress, animate, onPeriod, onMetric, onRace, pets = defaultPets() }: PageProps) {
   const el = useElapsed(animate, `${period}|${metric}|${race}`);
   const reduced = reducedMotion();
@@ -71,7 +71,7 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
         <span className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={scanPct(progress)}><i style={{ width: `${scanPct(progress)}%` }} /></span>
       </div>}
       {view.empty ? <div className="empty">{progress && !progress.done
-        // pierwszy skan jeszcze trwa: zwierzak czyta historię, tekst jest w pasku wyżej
+        // initial scan is still running: the pet reads history; text is in the bar above
         ? <StatPet agent="claude" scene="read" w={96} h={72} u={0.45} pets={pets} animate={animate} />
         : <><StatPet agent="claude" scene="sleep" w={96} h={72} u={0.45} pets={pets} animate={animate} /><p>{x.empty}</p></>}</div> : <>
         <div className="row top">
@@ -113,16 +113,16 @@ function loadChoice(): Choice {
   const d: Choice = { period: 'week', metric: 'time', race: 'agents' };
   try { return { ...d, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Choice>) }; } catch { return d; }
 }
-function saveChoice(c: Choice) { try { localStorage.setItem(KEY, JSON.stringify(c)); } catch { /* bez pamięci wyboru */ } }
+function saveChoice(c: Choice) { try { localStorage.setItem(KEY, JSON.stringify(c)); } catch { /* choice is not persisted */ } }
 
-/** Okno w aplikacji (rdzeń) albo w zwykłej przeglądarce (dane pokazowe). */
+/** Window in the app (core) or a regular browser (demo data). */
 export default function Root({ tauri }: { tauri: boolean }) {
   const [choice, setChoice] = useState<Choice>(loadChoice);
   const [view, setView] = useState<StatsView | null>(tauri ? null : demoStats());
   const [progress, setProgress] = useState<StatsProgress | null>(null);
   const [, relang] = useState(0);
   const [pets, setPets] = useState<Pets>(defaultPets);
-  // tryb oszczędzania energii: bez liczników, wejść i konfetti (spec 3.3), jak w panelu i na scenie
+  // power saving mode: no counters, entrances, or confetti (spec 3.3), as in panel and stage
   const [saving, setSaving] = useState(false);
   const lang = (l: Parameters<typeof resolveLang>[0]) => { setLang(resolveLang(l)); relang(n => n + 1); };
   const pick = (c: Partial<Choice>) => setChoice(o => { const n = { ...o, ...c }; saveChoice(n); return n; });
@@ -134,7 +134,7 @@ export default function Root({ tauri }: { tauri: boolean }) {
   useEffect(() => {
     if (!tauri) return;
     const every = setInterval(() => { if (!document.hidden) refresh(); }, 30_000);
-    // w trakcie skanu liczby rosną na żywo (spec 3.2), najwyżej co 2 s
+    // during a scan, numbers update live (spec 3.2), at most every 2 s
     let shown = 0;
     const un = [
       listen<StatsProgress>('stats://progress', e => {
