@@ -171,6 +171,9 @@ export const en: Dict = {
     langAuto: 'Automatic (like Windows)',
     broken: e => `The settings file is damaged (${e}); using default settings.`,
     antigravityNote: 'Needs a version with hooks (Antigravity 2.0 or a newer IDE). Antigravity does not say when it waits for your approval, so this pet never shows “needs you”.',
+    cursorNote: 'Cursor does not report permission prompts, so this pet never shows “needs you”.',
+    zcodeNote: 'ZCode does not report errors: after one, the pet goes idle only after a quiet spell.',
+    experimental: 'experimental',
     appHint: {
       claude_code: 'I’ll install hooks in ~/.claude/settings.json (with a backup).',
       codex: 'Nothing to install: reads session files in ~/.codex/sessions.',

@@ -9,6 +9,9 @@ export const appLabel = (id: AppId): string =>
   ({ claude_code: t().agent.claude, codex: t().agent.codex, agent_router: t().origin.router, opencode: t().agent.opencode,
      copilot: APP_LABEL.copilot, antigravity: t().agent.antigravity, cursor: APP_LABEL.cursor, grok: APP_LABEL.grok, zcode: APP_LABEL.zcode })[id];
 export const appHint = (id: AppId): string => t().settings.appHint[id];
+/** Integracje bez sprawdzenia na żywo: plakietka „eksperymentalne” i nigdy nie włączane tylko dlatego, że je wykryto. */
+export const EXPERIMENTAL: AppId[] = ['cursor', 'grok', 'zcode'];
+export const appBadge = (id: AppId): string | undefined => EXPERIMENTAL.includes(id) ? t().settings.experimental : undefined;
 const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id in APP_LABEL ? appLabel(id as AppId) : id;
 
 export const WIZARD_STEPS = ['apps', 'limits', 'notify', 'look'] as const;
@@ -32,7 +35,7 @@ export const withDoor = (s: Settings, on: boolean): Settings => ({ ...s, apps: {
 
 /** Kreator zaczyna z włączonymi tylko tymi aplikacjami, które znaleziono na komputerze. */
 export function defaultAppChoice(rows: AppRow[], s: Settings): Settings {
-  return rows.reduce((acc, r) => withApp(acc, r.id, r.detected.found), s);
+  return rows.reduce((acc, r) => withApp(acc, r.id, r.detected.found && !EXPERIMENTAL.includes(r.id)), s);
 }
 
 export const clampMaxVisible = (n: number) => (Number.isFinite(n) ? Math.min(8, Math.max(1, Math.round(n))) : 5);

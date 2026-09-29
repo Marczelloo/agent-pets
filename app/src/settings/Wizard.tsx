@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AppRow, Settings } from '../types';
 import { LookGallery } from './look/LookGallery';
 import { MotionSwitch } from './look/LookTab';
-import { appHint, appLabel, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
+import { appBadge, appHint, appLabel, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
 import { Toggle } from './Toggle';
 import { resolveLang, setLang, t } from '../i18n';
 import { LanguageSelect } from './LanguageSelect';
@@ -51,7 +51,7 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
 
       {cur === 'apps' && <section className="card">
         {rows.map(r => (
-          <Toggle key={r.id} label={appLabel(r.id)} checked={r.detected.found && !!draft.apps[r.id]} disabled={!r.detected.found}
+          <Toggle key={r.id} label={appLabel(r.id)} badge={appBadge(r.id)} checked={r.detected.found && !!draft.apps[r.id]} disabled={!r.detected.found}
             onChange={on => set({ apps: { ...draft.apps, [r.id]: on } })}>
             {r.detected.found ? `${r.detected.path}. ${appHint(r.id)}` : r.detected.note}
           </Toggle>

@@ -144,6 +144,9 @@ fn repair_integrations(app: &tauri::AppHandle) {
     // odświeża komendy i `hook.exe` po aktualizacji; cudzy plik albo klucz zostaje (enable zwraca błąd bez zmian)
     if apps.copilot { let _ = integrations::enable(AppId::Copilot, &st.home, src.as_deref(), st.lang()); }
     if apps.antigravity { let _ = integrations::enable(AppId::Antigravity, &st.home, src.as_deref(), st.lang()); }
+    if apps.cursor { let _ = integrations::enable(AppId::Cursor, &st.home, src.as_deref(), st.lang()); }
+    if apps.grok { let _ = integrations::enable(AppId::Grok, &st.home, src.as_deref(), st.lang()); }
+    if apps.zcode { let _ = integrations::enable(AppId::Zcode, &st.home, src.as_deref(), st.lang()); }
     if apps.generic { let _ = integrations::place_hook(&st.home, src.as_deref(), st.lang()); }
 }
 

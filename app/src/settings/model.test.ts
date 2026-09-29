@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import type { AppRow, Diagnostics } from '../types';
 import { appFor } from '../look';
-import { APP_LABEL, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, reportText, withApp, withDoor } from './model';
+import { APP_LABEL, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, EXPERIMENTAL, reportText, withApp, withDoor } from './model';
 
 const row = (id: AppRow['id'], found: boolean): AppRow =>
   ({ id, detected: { found, path: found ? `C:/home/.${id}` : null, note: found ? null : 'nie znaleziono' },
      status: { installed: false, detail: '' }, enabled: true });
 
 describe('settings model', () => {
+  it('experimental apps are never turned on just because they were found', () => {
+    expect(EXPERIMENTAL).toEqual(['cursor', 'grok', 'zcode']);
+    const s = defaultAppChoice([row('claude_code', true), row('copilot', true), row('cursor', true), row('grok', true), row('zcode', true)],
+      defaultSettings());
+    expect([s.apps.claude_code, s.apps.copilot, s.apps.cursor, s.apps.grok, s.apps.zcode]).toEqual([true, true, false, false, false]);
+    const on = withApp(defaultSettings(), 'cursor', true);
+    expect(defaultAppChoice([row('cursor', true)], on).apps.cursor).toBe(false);
+  });
   it('turns pets on only for the apps that were found', () => {
     const s = defaultAppChoice([row('claude_code', true), row('codex', false), row('agent_router', true), row('opencode', true)], defaultSettings());
     expect(s.apps).toEqual({ claude_code: true, codex: false, agent_router: true, opencode: true, generic: true, copilot: false, antigravity: false, cursor: false, grok: false, zcode: false });

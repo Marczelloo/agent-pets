@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, UpdateStatus } from '../types';
 import { LookTab } from './look/LookTab';
 import { StageTab } from './StageTab';
-import { appHint, appLabel, doorOn, reportText, withDoor } from './model';
+import { appBadge, appHint, appLabel, doorOn, reportText, withDoor } from './model';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
@@ -41,6 +41,13 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Okno ustawień: zakładki po lewej jak w Ustawieniach Windows 11, zmiany działają od razu. */
+/** Aplikacje, którym dopisujemy hooki do ich plików: akapit mówi, co i gdzie. */
+const HOOK_FILES: AppId[] = ['copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
+/** Czego zwierzak tej aplikacji nie pokaże. */
+const NOTE: Partial<Record<AppId, () => string>> = {
+  antigravity: () => t().settings.antigravityNote, cursor: () => t().settings.cursorNote, zcode: () => t().settings.zcodeNote,
+};
+
 export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, monitors = [], leftFallback = false, onMove = () => {} }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
@@ -61,12 +68,12 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         {tab === 'apps' && <section className="card">
           {rows.map(r => (
             <div key={r.id}>
-              <Toggle label={appLabel(r.id)} checked={!!s.apps[r.id]} disabled={!r.detected.found && !s.apps[r.id]}
+              <Toggle label={appLabel(r.id)} badge={appBadge(r.id)} checked={!!s.apps[r.id]} disabled={!r.detected.found && !s.apps[r.id]}
                 onChange={on => void onIntegration(r.id, on)}>
                 {r.detected.found ? `${r.detected.path} · ${r.status.detail}` : r.detected.note}
               </Toggle>
-              {(r.id === 'copilot' || r.id === 'antigravity') && (
-                <p className="fix">{appHint(r.id)}{r.id === 'antigravity' && ` ${t().settings.antigravityNote}`}</p>
+              {HOOK_FILES.includes(r.id) && (
+                <p className="fix">{appHint(r.id)}{NOTE[r.id] && ` ${NOTE[r.id]!()}`}</p>
               )}
               {r.id === 'claude_code' && s.apps.claude_code && !r.status.installed && (
                 <p className="fix">{appHint('claude_code')}{' '}

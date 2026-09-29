@@ -182,6 +182,9 @@ export const pl = {
     langAuto: 'Automatycznie (jak Windows)',
     broken: (e: string) => `Plik ustawień jest uszkodzony (${e}); używam ustawień domyślnych.`,
     antigravityNote: 'Potrzebna wersja z hookami (Antigravity 2.0 albo nowsze IDE). Antigravity nie mówi, kiedy czeka na Twoją zgodę, więc ten zwierzak nie pokazuje „czeka na Ciebie”.',
+    cursorNote: 'Cursor nie zgłasza pytań o zgodę, więc ten zwierzak nie pokazuje „czeka na Ciebie”.',
+    zcodeNote: 'ZCode nie zgłasza błędów: po błędzie zwierzak wraca do spoczynku dopiero po chwili ciszy.',
+    experimental: 'eksperymentalne',
     appHint: {
       claude_code: 'Zainstaluję hooki w ~/.claude/settings.json (z kopią zapasową).',
       codex: 'Nic do instalowania: czytam pliki sesji z ~/.codex/sessions.',
