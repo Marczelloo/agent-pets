@@ -6,6 +6,7 @@ import { petFor, skinFor } from '../stage/sceneFor';
 import type { Agent } from '../types';
 import { blobPal, SKINS } from './index';
 import { archP, floatLift } from '../renderer/draw/float';
+import { droidP } from '../renderer/draw/marks';
 import { PREVIEW_AGENTS } from '../settings/look/LookTab';
 import { accentFor } from '../stage/sceneFor';
 import { ACCENT } from '../styles';
@@ -124,6 +125,22 @@ describe('skins for agents', () => {
     // logo: pierścień z przerwą w prawym górnym rogu (łuk krótszy niż pełne koło)
     const arcs = log.filter(l => l.startsWith('ellipse(')).map(l => l.slice(8, -1).split(',').map(Number));
     expect(arcs.some(a => a[6] - a[5] > Math.PI && a[6] - a[5] < 2 * Math.PI - .3)).toBe(true);
+  });
+  it("Grok's silhouette is a humanoid: a narrower head on a neck above broad shoulders, narrowing to the waist", () => {
+    const p = droidP(0, 0, 100, 100);
+    // szerokość sylwetki na wysokości y: skrajne przecięcia krawędzi z poziomą linią
+    const at = (y: number) => {
+      const xs: number[] = [];
+      p.forEach((a, i) => { const b = p[(i + 1) % p.length]; if (a[1] !== b[1] && (a[1] - y) * (b[1] - y) <= 0) xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1])); });
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    const head = at(20), neck = at(42.5), shoulders = at(56), waist = at(98);
+    expect(neck).toBeGreaterThan(0);
+    expect(head).toBeLessThan(shoulders * .75);
+    expect(neck).toBeLessThan(head * .6);
+    expect(waist).toBeLessThan(shoulders * .85);
+    expect(waist).toBeGreaterThan(shoulders * .5);
+    for (const q of p) for (const v of q) expect(Number.isFinite(v)).toBe(true);
   });
   it('eyes stay upright for skins without a tilt, and other pets keep their own hands', () => {
     for (const s of ['clawd', 'kodek', 'copilot', 'cursor', 'zcode'] as const) {

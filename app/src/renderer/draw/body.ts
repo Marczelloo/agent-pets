@@ -14,7 +14,7 @@ import { DEFAULT_LOOK } from "../../look";
 import type { Look } from "../../types";
 import { effectiveStyle } from "../effective";
 import { archP, drawPilot, floatLift, googleFill } from "./float";
-import { drawEars, drawMarks, hexP } from "./marks";
+import { droidP, drawEars, drawMarks, hexP } from "./marks";
 export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
 const lk0=look??DEFAULT_LOOK,lk={...lk0,style:effectiveStyle(lk0.style,c.type)},st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=c.accent??ACCENT[c.type];if(st.sketch)pen.boil=Math.floor(t*st.sketch.boilHz);pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.fx;
 if(st.model==='sticker')return drawSticker(x,c,X,Y,u,t,lk);if(st.model==='pixel')return drawPixel(x,c,X,Y,u,t,lk);
@@ -52,7 +52,7 @@ worldT();arms.forEach((a: any)=>{if(a.fr<1){hose(x,a,a.L,thk,cm,u,lw);mitt(x,a,m
 bodyT();
 if(sk.antenna){const by=top+2*u,len=15*u,tx=Math.sin(c.aa)*len,ty=by-Math.cos(c.aa)*len;x.beginPath();x.moveTo(0,by);x.lineTo(tx,ty);x.stroke();shp(x,elP(tx,ty,4.5*u,4.5*u),gr>.5?'#E24B4A':'#5DCAA5',u);}
 
-const bodyP=sk.shape==='arch'?archP:sk.facet?hexP:rrP;
+const bodyP=sk.shape==='arch'?archP:sk.facet?hexP:sk.droid?droidP:rrP;
 // uszy hełmu Copilota: wystają po bokach, za ciałem
 const pilot=c.pilot??sk.pilot;
 if(pilot)for(const s of [-1,1])shp(x,elP(s*hW,top+H*.6,5.5*u,9*u),cs,u);
