@@ -2,7 +2,7 @@
 {"ts":1790000000100,"ppid":4242,"event":"UserPromptSubmit","payload":{"session_id":"cop_1","cwd":"C:/work/app","prompt":"…"},"host":{"app":"jetbrains","name":null,"pid":900}}
 {"ts":1790000000200,"ppid":4242,"event":"PreToolUse","payload":{"session_id":"cop_1","cwd":"C:/work/app","tool_name":"edit","tool_input":{"path":"C:/work/app/src/main.ts"}}}
 {"ts":1790000000300,"ppid":4242,"event":"PostToolUse","payload":{"session_id":"cop_1","cwd":"C:/work/app","tool_name":"edit","tool_result":{"result_type":"success"}}}
-{"ts":1790000000400,"ppid":4242,"event":"notification","payload":{"sessionId":"cop_1","cwd":"C:/work/app","hook_event_name":"Notification","notification_type":"permission_prompt","message":"Allow running npm test?","title":"Permission"}}
+{"ts":1790000000400,"ppid":4242,"event":"notification","payload":{"sessionId":"cop_1","cwd":"C:/work/app","hook_event_name":"Notification","notification_type":"elicitation_dialog","message":"Run npm test or npm run e2e?","title":"Question"}}
 {"ts":1790000000500,"ppid":4242,"event":"PreToolUse","payload":{"session_id":"cop_1","cwd":"C:/work/app","tool_name":"bash","tool_input":{"command":"npm test"}}}
 {"ts":1790000000600,"ppid":4242,"event":"PostToolUse","payload":{"session_id":"cop_1","cwd":"C:/work/app","tool_name":"bash"}}
 {"ts":1790000000700,"ppid":4242,"event":"SubagentStart","payload":{"sessionId":"cop_1","cwd":"C:/work/app","agentName":"explore","agentDisplayName":"Explore the codebase"}}

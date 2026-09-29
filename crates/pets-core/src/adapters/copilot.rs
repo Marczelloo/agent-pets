@@ -33,7 +33,8 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
         "PreToolUse" => (Kind::ToolStart, top.clone(), Some(from_copilot(tool))),
         "PostToolUse" | "postToolUseFailure" => (Kind::ToolEnd, top.clone(), None),
         "notification" => match s("notification_type", "notificationType").unwrap_or("") {
-            "permission_prompt" | "elicitation_dialog" => (Kind::NeedsInput, top.clone(), None),
+            // `permission_prompt` Copilot wysyła przy każdym narzędziu, także zatwierdzonym samo, więc nie znaczy „czekam”
+            "elicitation_dialog" => (Kind::NeedsInput, top.clone(), None),
             _ => return vec![],
         },
         "Stop" => (Kind::TurnEnd, top.clone(), None),
@@ -116,7 +117,9 @@ mod tests {
         let v: Vec<Event> = live.iter().flat_map(|e| events(e, Lang::Pl)).collect();
         assert_eq!(v.last().map(|e| e.kind), Some(Kind::TurnEnd));
         assert!(!v.iter().any(|e| e.kind == Kind::SessionEnd));
-        assert_eq!(v.iter().filter(|e| e.kind == Kind::NeedsInput).count(), 4);
+        // `permission_prompt` przychodzi przy każdym narzędziu, też zatwierdzonym samo (git status ruszył 1 s później),
+        // więc nie znaczy, że Copilot czeka na człowieka
+        assert!(!v.iter().any(|e| e.kind == Kind::NeedsInput));
         assert!(v.iter().all(|e| e.session_id == "copilot:cop_live" && e.data.pid == Some(4242)));
         // łatka jako tekst (`apply_patch`) nie trafia do akcji
         assert!(v.iter().all(|e| !e.data.action.as_deref().unwrap_or("").contains("Begin Patch")));
@@ -154,7 +157,7 @@ mod tests {
         assert_eq!((edit.tool, edit.data.action.as_deref()), (Some(Tool::Edit), Some("Edytuje main.ts")));
         let bash = one(f[5].clone());
         assert_eq!((bash.tool, bash.data.action.as_deref()), (Some(Tool::Bash), Some("npm test")));
-        assert_eq!(one(f[4].clone()).data.question.as_deref(), Some("Allow running npm test?"));
+        assert_eq!(one(f[4].clone()).data.question.as_deref(), Some("Run npm test or npm run e2e?"));
         let kid = one(f[7].clone());
         assert_eq!(kid.data.parent.as_deref(), Some("copilot:cop_1"));
         let sub = kid.data.sub.expect("dziecko");
@@ -162,13 +165,13 @@ mod tests {
             (SubKind::Copilot, Some("explore"), Some("Explore the codebase")));
         let long = one(env("notification", json!({"sessionId": "s", "notification_type": "elicitation_dialog", "message": "q".repeat(400)})));
         assert_eq!((long.kind, long.data.question.map(|q| q.chars().count())), (Kind::NeedsInput, Some(300)));
-        let titled = one(env("notification", json!({"sessionId": "s", "notification_type": "permission_prompt", "title": "Allow?"})));
+        let titled = one(env("notification", json!({"sessionId": "s", "notification_type": "elicitation_dialog", "title": "Allow?"})));
         assert_eq!(titled.data.question.as_deref(), Some("Allow?"));
     }
 
     #[test]
     fn quiet_notifications_and_recoverable_errors_change_nothing() {
-        for t in ["agent_idle", "agent_completed", "shell_completed", ""] {
+        for t in ["agent_idle", "agent_completed", "shell_completed", "permission_prompt", ""] {
             assert!(events(&env("notification", json!({"sessionId": "s", "notification_type": t})), Lang::Pl).is_empty(), "{t}");
         }
         assert!(events(&env("errorOccurred", json!({"sessionId": "s", "recoverable": true})), Lang::Pl).is_empty());
