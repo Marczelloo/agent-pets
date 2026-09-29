@@ -6,10 +6,11 @@ use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum AppId { ClaudeCode, Codex, AgentRouter, Opencode, Copilot, Antigravity }
+pub enum AppId { ClaudeCode, Codex, AgentRouter, Opencode, Copilot, Antigravity, Cursor, Grok, Zcode }
 
 impl AppId {
-    pub const ALL: [AppId; 6] = [AppId::ClaudeCode, AppId::Codex, AppId::AgentRouter, AppId::Opencode, AppId::Copilot, AppId::Antigravity];
+    pub const ALL: [AppId; 9] = [AppId::ClaudeCode, AppId::Codex, AppId::AgentRouter, AppId::Opencode, AppId::Copilot, AppId::Antigravity,
+        AppId::Cursor, AppId::Grok, AppId::Zcode];
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -238,13 +239,19 @@ fn home_folder(id: AppId) -> &'static str {
     match id {
         AppId::ClaudeCode => ".claude", AppId::Codex => ".codex", AppId::AgentRouter => ".agent-router",
         AppId::Opencode => ".config/opencode", AppId::Copilot => ".copilot", AppId::Antigravity => ".gemini",
+        AppId::Cursor => ".cursor", AppId::Grok => ".grok", AppId::Zcode => ".zcode",
     }
+}
+
+/// Drugie miejsce, po którym poznajemy aplikację (Cursor trzyma dane też w `%APPDATA%\Cursor`).
+fn other_folder(id: AppId) -> Option<&'static str> {
+    match id { AppId::Cursor => Some("AppData/Roaming/Cursor"), _ => None }
 }
 
 /// Aplikację wykrywamy po jej katalogu w domu użytkownika: tworzy go przy pierwszym uruchomieniu.
 pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
-    let dir = home.join(home_folder(id));
-    if dir.is_dir() {
+    let dir = std::iter::once(home_folder(id)).chain(other_folder(id)).map(|f| home.join(f)).find(|d| d.is_dir());
+    if let Some(dir) = dir {
         return Detected { found: true, path: Some(dir.to_string_lossy().into_owned()), note: None };
     }
     let note = match id {
@@ -260,6 +267,12 @@ pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
             "~/.copilot not found. Run Copilot once, then turn it on here."),
         AppId::Antigravity => tr(lang, "Nie znaleziono ~/.gemini. Uruchom Antigravity raz, potem włącz tutaj.",
             "~/.gemini not found. Run Antigravity once, then turn it on here."),
+        AppId::Cursor => tr(lang, "Nie znaleziono ~/.cursor. Uruchom Cursor raz, potem włącz tutaj.",
+            "~/.cursor not found. Run Cursor once, then turn it on here."),
+        AppId::Grok => tr(lang, "Nie znaleziono ~/.grok. Uruchom Grok Build raz, potem włącz tutaj.",
+            "~/.grok not found. Run Grok Build once, then turn it on here."),
+        AppId::Zcode => tr(lang, "Nie znaleziono ~/.zcode. Uruchom ZCode raz, potem włącz tutaj.",
+            "~/.zcode not found. Run ZCode once, then turn it on here."),
     };
     Detected { found: false, path: None, note: Some(note.into()) }
 }
@@ -419,7 +432,21 @@ mod tests {
         std::fs::create_dir_all(h.path().join(".gemini")).unwrap();
         assert!(detect(AppId::Copilot, h.path(), Lang::Pl).found);
         assert!(detect(AppId::Antigravity, h.path(), Lang::Pl).found);
-        assert_eq!(AppId::ALL.len(), 6);
+        assert_eq!(AppId::ALL.len(), 9);
+    }
+
+    #[test]
+    fn cursor_grok_and_zcode_are_detected_by_their_folders() {
+        let h = home();
+        for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { assert!(!detect(id, h.path(), Lang::Pl).found, "{id:?}"); }
+        assert!(detect(AppId::Cursor, h.path(), Lang::Pl).note.unwrap().contains("~/.cursor"));
+        assert!(detect(AppId::Grok, h.path(), Lang::En).note.unwrap().contains("~/.grok"));
+        assert!(detect(AppId::Zcode, h.path(), Lang::En).note.unwrap().contains("~/.zcode"));
+        std::fs::create_dir_all(h.path().join("AppData").join("Roaming").join("Cursor")).unwrap();
+        assert!(detect(AppId::Cursor, h.path(), Lang::Pl).found);
+        let h = home();
+        for d in [".cursor", ".grok", ".zcode"] { std::fs::create_dir_all(h.path().join(d)).unwrap(); }
+        for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { assert!(detect(id, h.path(), Lang::Pl).found, "{id:?}"); }
     }
 
     #[test]

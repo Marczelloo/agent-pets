@@ -17,11 +17,20 @@ pub enum Incoming {
     Copilot(crate::adapters::AgentEnvelope),
     /// `hook.exe --agent antigravity` (`adapters::antigravity::events`)
     Antigravity(crate::adapters::AgentEnvelope),
+    /// `hook.exe --agent cursor` (`adapters::cursor::events`)
+    Cursor(crate::adapters::AgentEnvelope),
+    /// `hook.exe --agent grok` (`adapters::grok::events`)
+    Grok(crate::adapters::AgentEnvelope),
+    /// `hook.exe --agent zcode` (`adapters::zcode::events`)
+    Zcode(crate::adapters::AgentEnvelope),
 }
 
 /// Trasy włączane w locie z ustawień; zamknięta wygląda jak brak trasy (404).
 #[derive(Debug, Default)]
-pub struct Doors { pub generic: AtomicBool, pub copilot: AtomicBool, pub antigravity: AtomicBool }
+pub struct Doors {
+    pub generic: AtomicBool, pub copilot: AtomicBool, pub antigravity: AtomicBool,
+    pub cursor: AtomicBool, pub grok: AtomicBool, pub zcode: AtomicBool,
+}
 
 impl Doors {
     pub fn new(apps: &crate::settings::Apps) -> Doors {
@@ -33,6 +42,9 @@ impl Doors {
         self.generic.store(apps.generic, Ordering::Relaxed);
         self.copilot.store(apps.copilot, Ordering::Relaxed);
         self.antigravity.store(apps.antigravity, Ordering::Relaxed);
+        self.cursor.store(apps.cursor, Ordering::Relaxed);
+        self.grok.store(apps.grok, Ordering::Relaxed);
+        self.zcode.store(apps.zcode, Ordering::Relaxed);
     }
 }
 
@@ -69,7 +81,7 @@ impl Ingest {
     }
 }
 
-enum Route { Claude, Statusline, Opencode, Generic, Copilot, Antigravity }
+enum Route { Claude, Statusline, Opencode, Generic, Copilot, Antigravity, Cursor, Grok, Zcode }
 
 fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, doors: &Doors) -> u16 {
     if *req.method() != tiny_http::Method::Post { return 404; }
@@ -81,6 +93,9 @@ fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Inco
         "/v1/events/generic" if doors.generic.load(Ordering::Relaxed) => Route::Generic,
         "/v1/events/copilot" if doors.copilot.load(Ordering::Relaxed) => Route::Copilot,
         "/v1/events/antigravity" if doors.antigravity.load(Ordering::Relaxed) => Route::Antigravity,
+        "/v1/events/cursor" if doors.cursor.load(Ordering::Relaxed) => Route::Cursor,
+        "/v1/events/grok" if doors.grok.load(Ordering::Relaxed) => Route::Grok,
+        "/v1/events/zcode" if doors.zcode.load(Ordering::Relaxed) => Route::Zcode,
         _ => return 404,
     };
     let auth = req.headers().iter().find(|h| h.field.equiv("Authorization")).map(|h| h.value.as_str().to_string());
@@ -97,6 +112,9 @@ fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Inco
             .and_then(|g| crate::adapters::generic::to_event(g, crate::time::now_ms()).ok()).map(Incoming::Generic),
         Route::Copilot => serde_json::from_slice::<crate::adapters::AgentEnvelope>(&body).ok().map(Incoming::Copilot),
         Route::Antigravity => serde_json::from_slice::<crate::adapters::AgentEnvelope>(&body).ok().map(Incoming::Antigravity),
+        Route::Cursor => serde_json::from_slice::<crate::adapters::AgentEnvelope>(&body).ok().map(Incoming::Cursor),
+        Route::Grok => serde_json::from_slice::<crate::adapters::AgentEnvelope>(&body).ok().map(Incoming::Grok),
+        Route::Zcode => serde_json::from_slice::<crate::adapters::AgentEnvelope>(&body).ok().map(Incoming::Zcode),
     };
     match msg {
         Some(m) => { let _ = tx.send(m); 204 }

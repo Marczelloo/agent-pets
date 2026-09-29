@@ -3,7 +3,7 @@ import type { App } from '../types';
 type Kind = 'terminal' | 'editor' | 'window';
 
 const KIND: Record<App, Kind> = {
-  terminal: 'terminal', vscode: 'editor', cursor: 'editor', zed: 'editor', jetbrains: 'editor', antigravity: 'editor',
+  terminal: 'terminal', vscode: 'editor', cursor: 'editor', zed: 'editor', jetbrains: 'editor', antigravity: 'editor', zcode: 'editor',
   claude_desktop: 'window', codex_app: 'window', t3code: 'window', other: 'window',
 };
 

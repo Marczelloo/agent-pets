@@ -1,7 +1,7 @@
 // Lustro modelu z crates/pets-core/src/model.rs (serde: snake_case, Option → null).
-export type Agent = 'claude' | 'codex' | 'opencode' | 'antigravity' | 'copilot' | 'cursor' | 'grok' | 'other';
+export type Agent = 'claude' | 'codex' | 'opencode' | 'antigravity' | 'copilot' | 'cursor' | 'grok' | 'zcode' | 'other';
 /** Program, w którym działa sesja (`App` w rdzeniu). */
-export type App = 'terminal' | 'claude_desktop' | 'codex_app' | 'vscode' | 't3code' | 'cursor' | 'antigravity' | 'zed' | 'jetbrains' | 'other';
+export type App = 'terminal' | 'claude_desktop' | 'codex_app' | 'vscode' | 't3code' | 'cursor' | 'antigravity' | 'zed' | 'jetbrains' | 'zcode' | 'other';
 export type Origin = 'cli' | 'desktop' | 'router';
 export type State = 'thinking' | 'working' | 'needs_you' | 'done' | 'error' | 'idle' | 'sleep' | 'compacting' | 'ended';
 export type Tool = 'edit' | 'bash' | 'read' | 'grep' | 'web' | 'agent' | 'mcp' | 'other';
@@ -42,7 +42,7 @@ export interface Session {
   agent_name?: string | null;
 }
 
-export type SubKind = 'claude' | 'codex' | 'router' | 'opencode' | 'copilot';
+export type SubKind = 'claude' | 'codex' | 'router' | 'opencode' | 'copilot' | 'cursor';
 export interface SubInfo { kind: SubKind; agent_type: string | null; description: string | null; background: boolean }
 
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
@@ -62,7 +62,7 @@ export type PointerMsg =
   | { kind: 'context'; x: number; y: number };
 export interface TooltipContent { title: string; subtitle: string; lines: string[] }
 
-export type AppId = 'claude_code' | 'codex' | 'agent_router' | 'opencode' | 'copilot' | 'antigravity';
+export type AppId = 'claude_code' | 'codex' | 'agent_router' | 'opencode' | 'copilot' | 'antigravity' | 'cursor' | 'grok' | 'zcode';
 export type StyleId = 'sketch' | 'clean' | 'sticker' | 'pixel' | 'neon' | 'ink' | 'pastel';
 export type MotionId = 'calm' | 'dynamic';
 export interface Look { style: StyleId; motion: MotionId }
@@ -70,8 +70,9 @@ export interface Look { style: StyleId; motion: MotionId }
 export interface Pets { style: StyleId; motion: MotionId; overrides: Partial<Record<AppId, Partial<Look>>>; max_visible: number; react_to_media?: boolean }
 /** Lustro `media::Media` (zdarzenie `pets://media`): czy coś gra w Windows (GSMTC) i w jakiej aplikacji. */
 export interface Media { playing: boolean; app: string | null }
-/** `opencode` i `generic` (furtka) od 0.10, `copilot` i `antigravity` od 0.11; brak w starszym pliku = wartości domyślne rdzenia. */
-export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean; opencode?: boolean; generic?: boolean; copilot?: boolean; antigravity?: boolean }
+/** `opencode` i `generic` (furtka) od 0.10, `copilot` i `antigravity` od 0.11, `cursor`, `grok`, `zcode` od 0.12; brak w starszym pliku = wartości domyślne rdzenia. */
+export interface AppsSettings { claude_code: boolean; codex: boolean; agent_router: boolean; opencode?: boolean; generic?: boolean; copilot?: boolean; antigravity?: boolean;
+  cursor?: boolean; grok?: boolean; zcode?: boolean }
 export interface Settings {
   version: number;
   apps: AppsSettings;

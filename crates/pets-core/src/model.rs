@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-pub enum Agent { Claude, Codex, Opencode, Antigravity, Copilot, Cursor, Grok, Other }
+pub enum Agent { Claude, Codex, Opencode, Antigravity, Copilot, Cursor, Grok, Zcode, Other }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -10,7 +10,7 @@ pub enum Origin { Cli, Desktop, Router }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum App { Terminal, ClaudeDesktop, CodexApp, Vscode, T3code, Cursor, Antigravity, Zed, Jetbrains, Other }
+pub enum App { Terminal, ClaudeDesktop, CodexApp, Vscode, T3code, Cursor, Antigravity, Zed, Jetbrains, Zcode, Other }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -95,7 +95,7 @@ pub struct AgentUsage { pub agent: Agent, pub tokens_today: u64, pub cost_today:
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum SubKind { Claude, Codex, Router, Opencode, Copilot }
+pub enum SubKind { Claude, Codex, Router, Opencode, Copilot, Cursor }
 
 /// Opis dziecka: kto je uruchomił i po co.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -124,7 +124,7 @@ pub struct Limit {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Source { Claude, Codex, Router, Opencode, Generic, Copilot, Antigravity }
+pub enum Source { Claude, Codex, Router, Opencode, Generic, Copilot, Antigravity, Cursor, Grok, Zcode }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -199,6 +199,9 @@ impl Event {
             Source::Generic => Agent::Other,
             Source::Copilot => Agent::Copilot,
             Source::Antigravity => Agent::Antigravity,
+            Source::Cursor => Agent::Cursor,
+            Source::Grok => Agent::Grok,
+            Source::Zcode => Agent::Zcode,
         }
     }
 }
@@ -269,6 +272,18 @@ mod tests {
             assert_eq!(serde_json::to_value(x).unwrap(), j);
         }
         assert_eq!(serde_json::to_value(SubKind::Copilot).unwrap(), "copilot");
+    }
+
+    #[test]
+    fn cursor_grok_and_zcode_events_belong_to_their_agents() {
+        for (x, a, j) in [(Source::Cursor, Agent::Cursor, "cursor"), (Source::Grok, Agent::Grok, "grok"), (Source::Zcode, Agent::Zcode, "zcode")] {
+            assert_eq!(Event::new(x, "s", Kind::Prompt, 1).agent(), a);
+            assert_eq!(serde_json::to_value(x).unwrap(), j);
+            assert_eq!(serde_json::to_value(a).unwrap(), j);
+            assert_eq!(serde_json::from_value::<Agent>(j.into()).unwrap(), a);
+        }
+        assert_eq!(serde_json::to_value(SubKind::Cursor).unwrap(), "cursor");
+        assert_eq!(serde_json::from_value::<App>("zcode".into()).unwrap(), App::Zcode);
     }
 
     #[test]

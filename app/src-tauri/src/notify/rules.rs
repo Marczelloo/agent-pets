@@ -47,6 +47,7 @@ fn limit_toast(l: &Limit, lang: Lang) -> Toast {
         Agent::Copilot => "Copilot",
         Agent::Cursor => "Cursor",
         Agent::Grok => "Grok",
+        Agent::Zcode => "ZCode",
         Agent::Other => "Agent",
     };
     let five = l.window == Window::FiveHour;

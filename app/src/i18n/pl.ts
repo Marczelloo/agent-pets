@@ -21,6 +21,7 @@ export const pl = {
     copilot: 'Copilot',
     cursor: 'Cursor',
     grok: 'Grok',
+    zcode: 'ZCode',
     other: 'Agent',
   },
   app: {
@@ -33,6 +34,7 @@ export const pl = {
     antigravity: 'Antigravity',
     zed: 'Zed',
     jetbrains: 'JetBrains',
+    zcode: 'ZCode',
     other: 'program',
   },
   origin: {
@@ -187,6 +189,9 @@ export const pl = {
       opencode: 'Zainstaluję plugin w ~/.config/opencode/plugins/agent-pets.js (usunę go przy wyłączeniu).',
       copilot: 'Zapiszę hooki w ~/.copilot/hooks/agent-pets.json (usunę go przy wyłączeniu).',
       antigravity: 'Dopiszę hooki do ~/.gemini/config/hooks.json (z kopią zapasową; usunę je przy wyłączeniu).',
+      cursor: 'Dopiszę hooki do ~/.cursor/hooks.json (z kopią zapasową; usunę je przy wyłączeniu).',
+      grok: 'Zapiszę hooki w ~/.grok/hooks/agent-pets.json (usunę go przy wyłączeniu).',
+      zcode: 'Dopiszę hooki do ~/.zcode/cli/config.json (z kopią zapasową; usunę je przy wyłączeniu).',
     } as Record<AppId, string>,
     sourceClaudeUsage: 'Limity Claude\'a',
     report: {

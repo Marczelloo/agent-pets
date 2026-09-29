@@ -23,7 +23,7 @@ pub struct GenericEvent {
 pub enum Reject { BadAgent, Reserved, BadSession }
 
 /// Nazwy znanych agentów i źródeł: tylko ich własne trasy.
-pub const RESERVED: [&str; 8] = ["claude", "codex", "router", "opencode", "antigravity", "copilot", "cursor", "grok"];
+pub const RESERVED: [&str; 9] = ["claude", "codex", "router", "opencode", "antigravity", "copilot", "cursor", "grok", "zcode"];
 
 pub fn check_agent(a: &str) -> Result<(), Reject> {
     let ok = !a.is_empty() && a.len() <= 32 && a.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn known_agents_and_bad_ids_are_rejected() {
-        for a in ["claude", "codex", "router", "opencode", "antigravity", "copilot", "cursor", "grok"] {
+        for a in ["claude", "codex", "router", "opencode", "antigravity", "copilot", "cursor", "grok", "zcode"] {
             let mut v = base("done");
             v["agent"] = json!(a);
             assert_eq!(to_event(g(v), 1).err(), Some(Reject::Reserved), "{a}");

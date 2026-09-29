@@ -43,6 +43,12 @@ pub struct Apps {
     pub copilot: bool,
     /// klucz w `~/.gemini/config/hooks.json`: tylko po wyraźnym włączeniu
     pub antigravity: bool,
+    /// nasze wpisy w `~/.cursor/hooks.json`: tylko po wyraźnym włączeniu
+    pub cursor: bool,
+    /// plik `~/.grok/hooks/agent-pets.json`: tylko po wyraźnym włączeniu
+    pub grok: bool,
+    /// nasze hooki w `~/.zcode/cli/config.json`: tylko po wyraźnym włączeniu
+    pub zcode: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -85,6 +91,9 @@ pub struct Overrides {
     #[serde(skip_serializing_if = "Option::is_none")] pub opencode: Option<LookOverride>,
     #[serde(skip_serializing_if = "Option::is_none")] pub copilot: Option<LookOverride>,
     #[serde(skip_serializing_if = "Option::is_none")] pub antigravity: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub cursor: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub grok: Option<LookOverride>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub zcode: Option<LookOverride>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -292,7 +301,8 @@ impl Stage {
 }
 
 impl Default for Apps {
-    fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false } }
+    fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
+        cursor: false, grok: false, zcode: false } }
 }
 impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
 impl Default for Pets {
@@ -505,6 +515,20 @@ mod tests {
         assert_eq!((a.opencode, a.copilot, a.antigravity), (true, false, false));
         let back: Apps = serde_json::from_value(serde_json::to_value(Apps { copilot: true, ..a }).unwrap()).unwrap();
         assert_eq!((back.copilot, back.antigravity), (true, false));
+    }
+
+    #[test]
+    fn a_0_11_file_keeps_cursor_grok_and_zcode_off() {
+        let l = load_str(r#"{"version":1,"apps":{"claude_code":true,"copilot":true,"antigravity":true}}"#);
+        assert!(l.error.is_none());
+        let a = l.settings.apps;
+        assert_eq!((a.copilot, a.cursor, a.grok, a.zcode), (true, false, false, false));
+        assert_eq!((Apps::default().cursor, Apps::default().grok, Apps::default().zcode), (false, false, false));
+        let back: Apps = serde_json::from_value(serde_json::to_value(Apps { cursor: true, zcode: true, ..a }).unwrap()).unwrap();
+        assert_eq!((back.cursor, back.grok, back.zcode), (true, false, true));
+        let o = load_str(r#"{"version":1,"pets":{"overrides":{"zcode":{"style":"neon"},"grok":{"motion":"calm"}}}}"#).settings.pets.overrides;
+        assert_eq!(o.zcode, Some(LookOverride { style: Some(Style::Neon), motion: None }));
+        assert_eq!((o.grok.is_some(), o.cursor), (true, None));
     }
 
     #[test]

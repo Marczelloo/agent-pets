@@ -12,7 +12,7 @@ pen.font = 'x';
 describe('skins for agents', () => {
   it('every agent has a pet', () => {
     const want: Record<Agent, string> = { claude: 'clawd', codex: 'kodek', opencode: 'opencode', antigravity: 'antigravity', copilot: 'copilot',
-      cursor: 'blob', grok: 'blob', other: 'blob' };
+      cursor: 'blob', grok: 'blob', zcode: 'blob', other: 'blob' };
     for (const [a, s] of Object.entries(want)) expect(skinFor(a), a).toBe(s);
   });
   it('pixel and sticker draw new pets like clean; clawd and kodek keep their own art', () => {

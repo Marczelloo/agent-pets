@@ -147,6 +147,8 @@ impl Runtime {
                     && crate::adapters::copilot::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
                 Incoming::Antigravity(env) => self.apps.antigravity
                     && crate::adapters::antigravity::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
+                // adaptery w kolejnych krokach 0.12
+                Incoming::Cursor(_) | Incoming::Grok(_) | Incoming::Zcode(_) => false,
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -320,8 +322,9 @@ fn agent_on(apps: crate::settings::Apps, agent: crate::model::Agent) -> bool {
         crate::model::Agent::Other => apps.generic,
         crate::model::Agent::Copilot => apps.copilot,
         crate::model::Agent::Antigravity => apps.antigravity,
-        // własne adaptery w 0.12
-        crate::model::Agent::Cursor | crate::model::Agent::Grok => false,
+        crate::model::Agent::Cursor => apps.cursor,
+        crate::model::Agent::Grok => apps.grok,
+        crate::model::Agent::Zcode => apps.zcode,
     }
 }
 
@@ -345,6 +348,9 @@ fn event_on(apps: crate::settings::Apps, e: &Event) -> bool {
         Source::Generic => apps.generic,
         Source::Copilot => apps.copilot,
         Source::Antigravity => apps.antigravity,
+        Source::Cursor => apps.cursor,
+        Source::Grok => apps.grok,
+        Source::Zcode => apps.zcode,
     }
 }
 
@@ -361,6 +367,9 @@ fn source_key(e: &Event) -> &'static str {
         Source::Generic => "generic",
         Source::Copilot => "copilot",
         Source::Antigravity => "antigravity",
+        Source::Cursor => "cursor",
+        Source::Grok => "grok",
+        Source::Zcode => "zcode",
     }
 }
 
@@ -515,6 +524,41 @@ mod tests {
         for agent in ["copilot", "antigravity"] { assert_eq!(send(agent, &ep.token, env), 404, "{agent} zamknięty"); }
         rt.set_apps(crate::settings::Apps { copilot: true, antigravity: true, ..Default::default() });
         for agent in ["copilot", "antigravity"] {
+            assert_eq!(send(agent, &ep.token, env), 204, "{agent}");
+            assert_eq!(send(agent, "wrong", env), 401, "{agent}");
+            assert_eq!(send(agent, &ep.token, r#"{"x":1}"#), 400, "{agent}");
+        }
+    }
+
+    #[test]
+    fn cursor_grok_and_zcode_follow_their_switches() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let all = [(Source::Cursor, "cursor:a", Agent::Cursor), (Source::Grok, "grok:a", Agent::Grok), (Source::Zcode, "zcode:a", Agent::Zcode)];
+        for (x, id, _) in all { assert!(!rt.apply_external(event(x, id, Kind::Prompt)), "{id} wyłączony"); }
+        rt.set_apps(crate::settings::Apps { cursor: true, grok: true, zcode: true, ..Default::default() });
+        for (x, id, a) in all {
+            assert!(rt.apply_external(event(x, id, Kind::Prompt)), "{id}");
+            assert_eq!(rt.store().session(id).map(|s| s.agent), Some(a));
+        }
+        assert!(rt.set_apps(crate::settings::Apps { cursor: true, ..Default::default() }));
+        assert!(rt.store().session("cursor:a").is_some());
+        assert!(rt.store().session("grok:a").is_none() && rt.store().session("zcode:a").is_none());
+    }
+
+    #[test]
+    fn cursor_grok_and_zcode_routes_open_with_their_switches() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let send = |agent: &str, token: &str, body: &str| ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
+            .set("Authorization", &format!("Bearer {token}")).send_string(body)
+            .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
+        let env = r#"{"ts":1,"ppid":5,"event":"stop","payload":{"sessionId":"s"}}"#;
+        for agent in ["cursor", "grok", "zcode"] { assert_eq!(send(agent, &ep.token, env), 404, "{agent} zamknięty"); }
+        rt.set_apps(crate::settings::Apps { cursor: true, grok: true, zcode: true, ..Default::default() });
+        for agent in ["cursor", "grok", "zcode"] {
             assert_eq!(send(agent, &ep.token, env), 204, "{agent}");
             assert_eq!(send(agent, "wrong", env), 401, "{agent}");
             assert_eq!(send(agent, &ep.token, r#"{"x":1}"#), 400, "{agent}");

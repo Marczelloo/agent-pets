@@ -77,7 +77,7 @@ fn resume(t: &Target) -> Option<(String, Vec<String>)> {
         Agent::Claude => Some(("claude".into(), vec!["--resume".into(), id])),
         Agent::Codex => Some(("codex".into(), vec!["resume".into(), id])),
         Agent::Opencode => Some(("opencode".into(), vec!["--session".into(), id])),
-        Agent::Antigravity | Agent::Copilot | Agent::Cursor | Agent::Grok | Agent::Other => None,
+        Agent::Antigravity | Agent::Copilot | Agent::Cursor | Agent::Grok | Agent::Zcode | Agent::Other => None,
     }
 }
 
@@ -229,7 +229,8 @@ mod tests {
 
     #[test]
     fn copilot_and_antigravity_focus_their_program_without_resume() {
-        for (a, id) in [(Agent::Copilot, "copilot:cop_1"), (Agent::Antigravity, "antigravity:d5f1")] {
+        for (a, id) in [(Agent::Copilot, "copilot:cop_1"), (Agent::Antigravity, "antigravity:d5f1"), (Agent::Cursor, "cursor:conv_1"),
+                        (Agent::Grok, "grok:g1"), (Agent::Zcode, "zcode:zc_1")] {
             let mut x = t(a, false);
             x.session_id = id.into();
             let p = plan(&x);

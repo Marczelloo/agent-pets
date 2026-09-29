@@ -10,6 +10,7 @@ export const en: Dict = {
     copilot: 'Copilot',
     cursor: 'Cursor',
     grok: 'Grok',
+    zcode: 'ZCode',
     other: 'Agent',
   },
   app: {
@@ -22,6 +23,7 @@ export const en: Dict = {
     antigravity: 'Antigravity',
     zed: 'Zed',
     jetbrains: 'JetBrains',
+    zcode: 'ZCode',
     other: 'program',
   },
   origin: {
@@ -176,6 +178,9 @@ export const en: Dict = {
       opencode: 'I’ll install a plugin at ~/.config/opencode/plugins/agent-pets.js (removed when turned off).',
       copilot: 'I’ll write hooks to ~/.copilot/hooks/agent-pets.json (removed when turned off).',
       antigravity: 'I’ll add hooks to ~/.gemini/config/hooks.json (with a backup; removed when turned off).',
+      cursor: 'I’ll add hooks to ~/.cursor/hooks.json (with a backup; removed when turned off).',
+      grok: 'I’ll write hooks to ~/.grok/hooks/agent-pets.json (removed when turned off).',
+      zcode: 'I’ll add hooks to ~/.zcode/cli/config.json (with a backup; removed when turned off).',
     },
     sourceClaudeUsage: 'Claude limits',
     report: {
