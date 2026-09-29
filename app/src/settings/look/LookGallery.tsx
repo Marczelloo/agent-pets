@@ -6,7 +6,7 @@ import { PetsCanvas } from './PetsCanvas';
 
 interface Props { style: StyleId; motion: MotionId; scene: SceneKey; agent?: Agent; compact?: boolean; onPick: (s: StyleId) => void }
 
-/** Karty stylów z wybranym zwierzakiem; kliknięcie wybiera styl. Jeden zwierzak na kartę mieści się w najwęższej karcie. */
+/** Style cards with the selected pet; clicking selects a style. One pet per card fits the narrowest card. */
 export function LookGallery({ style, motion, scene, agent = 'claude', compact, onPick }: Props) {
   const [w, h, u] = compact ? [96, 60, 0.3] : [96, 72, 0.34];
   return (

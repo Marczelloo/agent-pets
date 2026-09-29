@@ -1,6 +1,6 @@
 import type { TooltipContent } from '../types';
 
-/** Tytuły sesji to treść promptów: wyłącznie `textContent`, nigdy `innerHTML`. */
+/** Session titles contain prompt text: use only `textContent`, never `innerHTML`. */
 export function renderTooltip(el: HTMLElement, c: TooltipContent): void {
   const row = (cls: string, text: string) => {
     const d = document.createElement('div');

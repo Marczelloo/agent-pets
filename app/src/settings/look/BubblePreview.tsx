@@ -7,7 +7,7 @@ import type { Agent, Look } from '../../types';
 
 const W = 460, H = 132;
 
-/** Dymki w wybranym stylu: krótkie, jak pojawiają się same, i rozwinięte, jak po najechaniu na zwierzaka. */
+/** Bubbles in the selected style: short when appearing on their own, expanded on pet hover. */
 export function BubblePreview({ look, agent }: { look: Look; agent: Agent }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {

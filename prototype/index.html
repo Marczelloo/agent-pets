@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Agent Pets – prototyp v6</title>
+<title>Agent Pets – v6 prototype</title>
 <style>
 :root{--stg:#F0EEE6;--tb:#F3F3F3;--tbl:#DEDEDE;--txt:#3D3D3A;--mut:#8C887E}
 @media (prefers-color-scheme: dark){:root{--stg:#30302E;--tb:#1C1C1C;--tbl:#333333;--txt:#E8E6DE;--mut:#8C887E}}
@@ -13,11 +13,11 @@ button.on{border-color:#D97757;color:#D97757}
 </head>
 <body>
 <div id="btns" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>
-<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px"><span style="font-size:13px;color:var(--mut)">Pracuje:</span><span id="tools" style="display:flex;flex-wrap:wrap;gap:6px"></span></div>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px"><span style="font-size:13px;color:var(--mut)">Working:</span><span id="tools" style="display:flex;flex-wrap:wrap;gap:6px"></span></div>
 <canvas id="cv" style="display:block;width:100%;height:330px;background:var(--stg);border-radius:12px"></canvas>
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 14px">
 <span id="sty" style="display:flex;gap:6px"></span>
-<label id="lbl" style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:13px;color:var(--mut)"><input type="checkbox" id="slow"> Zwolnij 4×</label>
+<label id="lbl" style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:13px;color:var(--mut)"><input type="checkbox" id="slow"> Slow down 4×</label>
 </div>
 <canvas id="tb" style="display:block;width:100%;height:48px;background:var(--tb);border-top:1px solid var(--tbl)"></canvas>
 <script src="pets.js"></script>

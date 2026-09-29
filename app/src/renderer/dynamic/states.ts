@@ -1,4 +1,4 @@
-// Choreografie Dynamiczny scen stanów (spec 8.3). Współrzędne jak w scenes.ts.
+// Dynamic choreography for state scenes (spec 8.3). Coordinates as in scenes.ts.
 import { PI, TAU } from '../math';
 import { rng } from '../rng';
 import type { Pet } from '../pet';
@@ -6,106 +6,106 @@ import { BEAT, type Scene } from '../scenes';
 import { at, every, keys, snapE } from './kit';
 import { emit, impact, spray, word } from './state';
 
-/** Twarz zwierzaka z ostatniej klatki modelu (albo środek głowy, gdy jeszcze nie rysowany). */
-const faceOf = (c: Pet): number[] => { const f = (c.face as number[]) ?? [0, -45, 12]; return [f[0] + c.p.lx.x, f[1], f[2]]; }; // w miejscu zwierzaka, jak cząsteczki
+/** Pet face from the last model frame (or head center if not yet drawn). */
+const faceOf = (c: Pet): number[] => { const f = (c.face as number[]) ?? [0, -45, 12]; return [f[0] + c.p.lx.x, f[1], f[2]]; }; // at the pet's location, like particles
 
 const THUMB = keys([[0, { ikR: 1, hxR: 20, hyR: -30, lean: -0.3, squint: 0.8, _stiff: 3 }], [0.12, { hxR: 36, hyR: -62, lean: 0.2, squint: 0, happy: 1 }], [1.6, {}]]);
 
 export const STATES: Record<string, Scene> = {
-  // Shikamaru: siedzi, dłonie złożone w kółko, oczy zamknięte, wokół głowy krążą „?”, trybik i żarówka; potem pomysł
+  // Shikamaru: sits with hands forming a circle, eyes closed; "?", gear, and bulb orbit the head, then an idea
   thinking: { cycle: 1, base: { sit: 1, th: 0, look: 0 }, acts: [
-    ['medytuje', 4, (a) => ({ ikL: 1, hxL: -8, hyL: -12, ikR: 1, hxR: 8, hyR: -12, sleep: 0.9, _orbit: 1, _orbitK: snapE(a / 0.6) })],
-    ['wpada na pomysł', 1.4, keys([[0, { ikL: 1, hxL: -8, hyL: -12, ikR: 1, hxR: 8, hyR: -12, sleep: 0.9, _orbit: 1, _idea: 0, _stiff: 2 }],
+    ['meditates', 4, (a) => ({ ikL: 1, hxL: -8, hyL: -12, ikR: 1, hxR: 8, hyR: -12, sleep: 0.9, _orbit: 1, _orbitK: snapE(a / 0.6) })],
+    ['gets an idea', 1.4, keys([[0, { ikL: 1, hxL: -8, hyL: -12, ikR: 1, hxR: 8, hyR: -12, sleep: 0.9, _orbit: 1, _idea: 0, _stiff: 2 }],
       [0.12, { sleep: 0, hyR: -80, hxR: 20, _idea: 1, happy: 0.4 }], [1.1, {}], [1.4, { hyR: -12, hxR: 7, _idea: 0, happy: 0 }]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.12)) { const [fx, fy] = faceOf(c); spray(c, 'spark', 6, fx, fy - 58, 90, -Math.PI / 2, 2 * Math.PI); impact(c, 0.8, false); }
     }],
   ] },
   needs: { base: { th: 0, look: 0 }, acts: [
-    ['błyszczące oczy', 2.2, () => ({ hopW: 0.6, armR: 2.3, oscR: 0.55, _f: 11, _face: 'sparkle', _faceK: 1, _bang: 1, _shock: 1 })],
-    ['puka w szybę', 1.6, (a, _c, t) => ({ hopW: 0, lean: 1, ikR: 1, hxR: 47 + 5 * Math.max(0, Math.sin(t * 16)), hyR: -44, _f: 16, _knock: a > 0.25 ? 1 : 0, _big: 1, _face: 'sparkle', _faceK: 1, _bang: 1 })],
+    ['sparkling eyes', 2.2, () => ({ hopW: 0.6, armR: 2.3, oscR: 0.55, _f: 11, _face: 'sparkle', _faceK: 1, _bang: 1, _shock: 1 })],
+    ['knocks on the glass', 1.6, (a, _c, t) => ({ hopW: 0, lean: 1, ikR: 1, hxR: 47 + 5 * Math.max(0, Math.sin(t * 16)), hyR: -44, _f: 16, _knock: a > 0.25 ? 1 : 0, _big: 1, _face: 'sparkle', _faceK: 1, _bang: 1 })],
   ] },
   done: { base: { happy: 1, look: -0.3 }, seq: [
     ['Nice!', 1.6, (a) => ({ ...THUMB(a), _thumb: a > 0.1 ? 1 : 0, _face: a > 0.1 ? 'teeth' : null, _faceK: 1, _bg: 'rays', _bgK: snapE(a / 0.3) }), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.12)) { impact(c, 1.5); word(c, 'NICE!', 0, -104, 28); spray(c, 'confetti', 16, 0, -70, 190); }
     }],
   ], acts: [
-    ['cieszy się', 3, (a) => ({ armL: 2.5 + 0.3 * Math.sin(a * 9), armR: 2.5 - 0.3 * Math.sin(a * 9), hopW: 0.6, happy: 1 }), undefined, undefined, (a, c, _t, dt) => {
+    ['rejoices', 3, (a) => ({ armL: 2.5 + 0.3 * Math.sin(a * 9), armR: 2.5 - 0.3 * Math.sin(a * 9), hopW: 0.6, happy: 1 }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.6)) spray(c, 'confetti', 4, (rng() - 0.5) * 60, -90, 90);
     }],
-    ['kciuk znowu', 1.6, (a) => ({ ...THUMB(a), _thumb: a > 0.1 ? 1 : 0, _face: a > 0.1 ? 'teeth' : null, _faceK: 1, _bg: 'rays' }), undefined, undefined, (a, c, _t, dt) => {
+    ['thumbs up again', 1.6, (a) => ({ ...THUMB(a), _thumb: a > 0.1 ? 1 : 0, _face: a > 0.1 ? 'teeth' : null, _faceK: 1, _bg: 'rays' }), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.12)) { word(c, 'NICE!', 0, -104, 28); spray(c, 'confetti', 8, 0, -70, 170); }
     }],
   ] },
   error: { base: { sit: 1, grey: 1 }, acts: [
-    ['dusza wylatuje', 3, () => ({ look: 0.6, tilt: 0.12, sleep: 0.5, dizzy: 0.2 }), undefined, undefined, (a, c, _t, dt) => {
+    ['soul drifts away', 3, () => ({ look: 0.6, tilt: 0.12, sleep: 0.5, dizzy: 0.2 }), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.1)) { const [fx, fy] = faceOf(c); emit(c, 'soul', fx, fy + 10, { vy: -14, max: 2.6 }); }
       if (every(a, dt, 1.1, 0.4)) { const [fx, fy, gp] = faceOf(c); emit(c, 'tear', fx + gp + 8, fy - 10, { vx: 10, vy: -30 }); }
     }],
-    ['wraca do siebie', 1.2, () => ({ shake: 1, dizzy: 0.6 }), undefined, undefined, (a, c, _t, dt) => {
+    ['recovers', 1.2, () => ({ shake: 1, dizzy: 0.6 }), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0)) { const [fx, fy, gp] = faceOf(c); emit(c, 'tear', fx + gp + 8, fy - 10, { vx: 10, vy: -30 }); }
     }],
   ] },
   idle: { cycle: 1, base: { th: 0.1 }, acts: [
-    ['chibi kręci się i nuci', 2.4, (a) => ({ th: a < 0.5 ? TAU * snapE(a / 0.5) : TAU, happy: 0.7, armL: 1.2, armR: 1.2, hopW: a < 0.5 ? 0.4 : 0 }), undefined, undefined, (a, c, _t, dt) => { // nextAct sam zdejmuje pełny obrót z th
+    ['chibi spins and hums', 2.4, (a) => ({ th: a < 0.5 ? TAU * snapE(a / 0.5) : TAU, happy: 0.7, armL: 1.2, armR: 1.2, hopW: a < 0.5 ? 0.4 : 0 }), undefined, undefined, (a, c, _t, dt) => { // nextAct removes the full rotation from th itself
       if (a > 0.5 && every(a, dt, 0.35, 0.5)) emit(c, 'note', (rng() - 0.5) * 60, -80, { vx: (rng() - 0.5) * 20, vy: -30 });
     }],
-    ['trening: pompki', 2.4, (a) => ({ loaf: 0.45 + 0.45 * Math.sin(a * TAU * 1.25), ikL: 1, hxL: -34, hyL: -4, ikR: 1, hxR: 34, hyR: -4, squint: 0.5, _stiff: 2 }), undefined, undefined, (a, c, _t, dt) => {
+    ['training: push-ups', 2.4, (a) => ({ loaf: 0.45 + 0.45 * Math.sin(a * TAU * 1.25), ikL: 1, hxL: -34, hyL: -4, ikR: 1, hxR: 34, hyR: -4, squint: 0.5, _stiff: 2 }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.8, 0.4)) { const [fx, fy, gp] = faceOf(c); emit(c, 'tear', fx - gp - 6, fy - 8, { vx: -15, vy: -25 }); }
     }],
-    ['trening: przysiady', 2.4, (a) => ({ sit: 0.45 + 0.45 * Math.sin(a * TAU * 1.25), armL: 1.6, armR: 1.6, squint: 0.4, _stiff: 2 }), undefined, undefined, (a, c, _t, dt) => {
+    ['training: squats', 2.4, (a) => ({ sit: 0.45 + 0.45 * Math.sin(a * TAU * 1.25), armL: 1.6, armR: 1.6, squint: 0.4, _stiff: 2 }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.8, 0.4)) spray(c, 'dust', 2, 0, -2, 30, -PI / 2, PI);
     }],
   ] },
-  // muzyka w systemie: headbang z „rogami”, DJ z ręką na słuchawce, disco (Travolta); nutki na każde uderzenie
+  // system music: headbang with horns, DJ with hand on headphone, disco (Travolta); notes on every beat
   vibe: { cycle: 1, base: { th: 0.1, _phones: 1, _hf: BEAT }, acts: [
     ['headbang', 3.2, (_a, _c, t) => { const b = (t * BEAT) % 1, k = b < 0.2 ? snapE(b / 0.2) : 1 - (b - 0.2) / 0.8;
       return { tilt: 0.16 * k - 0.04, lean: 0.35 * k, squint: 1, armL: 2.6, armR: 2.6, hopW: 0.2, _stiff: 2 }; }, undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 1 / BEAT)) emit(c, 'note', (rng() - 0.5) * 70, -72, { vx: (rng() - 0.5) * 30, vy: -22 });
     }],
-    ['DJ: ręka na słuchawce', 3.2, (_a, _c, t) => ({ ikL: 1, hxL: -44, hyL: -62, ikR: 1, hxR: 30 + 9 * Math.sin(t * TAU * BEAT * 2), hyR: -26,
+    ['DJ: hand on headphone', 3.2, (_a, _c, t) => ({ ikL: 1, hxL: -44, hyL: -62, ikR: 1, hxR: 30 + 9 * Math.sin(t * TAU * BEAT * 2), hyR: -26,
       th: 0.3, look: 0.4, happy: 0.8, tilt: 0.04 * Math.sin(t * PI * BEAT) }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 2 / BEAT)) emit(c, 'note', 40 + rng() * 20, -50, { vx: 20, vy: -25 });
     }],
-    // co uderzenie palec w górę naprzemiennie: prawa ręka w prawo ↔ lewa w lewo, wolna na biodrze; biodra za palcem
+    // alternate raised fingers on each beat: right hand right ↔ left hand left, free hand on hip; hips follow the finger
     ['disco', 6 / BEAT, (_a, _c, t) => { const s = Math.floor(t * BEAT) % 2 ? -1 : 1;
       return { ikL: 1, ikR: 1, hxR: s > 0 ? 42 : 47, hyR: s > 0 ? -96 : -25, hxL: s < 0 ? -42 : -47, hyL: s < 0 ? -96 : -25,
         lx: 5 * s, tilt: -0.08 * s, th: 0.2 * s, look: -0.6, ex: 0.8 * s, happy: 1, _stiff: 3 }; }, undefined, undefined, (a, c, t, dt) => {
       if (every(a, dt, 1 / BEAT)) { const s = Math.floor(t * BEAT) % 2 ? -1 : 1; emit(c, 'note', 50 * s, -95, { vx: 20 * s, vy: -22 }); }
     }],
-    // obrót widać tylko w modelu wektorowym (naklejka i piksele stoją przodem), więc kulminacją jest skok i poza „disco”
-    ['obrót i poza', 2.2, keys([[0, { th: 0, lx: 0, hopW: 0, _stiff: 2 }], [0.7, { th: TAU, lx: 0, hopW: 0.9, armL: 1.6, armR: 1.6 }],
+    // rotation is visible only in the vector model (sticker and pixel face forward), so the peak is a jump and disco pose
+    ['spin and pose', 2.2, keys([[0, { th: 0, lx: 0, hopW: 0, _stiff: 2 }], [0.7, { th: TAU, lx: 0, hopW: 0.9, armL: 1.6, armR: 1.6 }],
       [0.9, { hopW: 0, armL: 0.3, armR: 2.8, lean: 0.3, tilt: -0.1, happy: 1 }], [2.2, {}]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.9)) spray(c, 'spark', 7, 20, -70, 70, -PI / 2, PI);
     }],
   ] },
-  // śpi przy muzyce: jak `sleep` (bąbel z nosa), w słuchawkach; nutka co dwa uderzenia, nisko nad poduszką
+  // sleeps to music: like `sleep` (nose bubble), with headphones; a note every two beats, low above the pillow
   doze: { cycle: 1, base: { loaf: 1, sleep: 1, dim: 1, th: 0.3, _prop: 'pillow', armL: 0.15, armR: 0.15, _phones: 1 }, acts: [
-    ['bąbel z nosa w rytm', 4, (a, _c, t) => ({ _snot: 0.5 - 0.5 * Math.cos(a * TAU / 2), tilt: 0.04 * Math.sin(t * PI * BEAT / 2) }), undefined, undefined, (a, c, _t, dt) => {
+    ['nose bubble to the beat', 4, (a, _c, t) => ({ _snot: 0.5 - 0.5 * Math.cos(a * TAU / 2), tilt: 0.04 * Math.sin(t * PI * BEAT / 2) }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 2 / BEAT, 0.5)) emit(c, 'note', 25 + rng() * 15, -55, { vx: 12, vy: -16 });
     }],
   ] },
   sleep: { cycle: 1, base: { loaf: 1, sleep: 1, dim: 1, th: 0.3, _prop: 'pillow', armL: 0.15, armR: 0.15 }, acts: [
-    ['bąbel z nosa', 4, (a) => ({ _snot: 0.5 - 0.5 * Math.cos(a * TAU / 2) })],
-    ['dymek snu', 4, (a) => ({ _dream: a })],
+    ['nose bubble', 4, (a) => ({ _snot: 0.5 - 0.5 * Math.cos(a * TAU / 2) })],
+    ['dream bubble', 4, (a) => ({ _dream: a })],
   ] },
   compact: { cycle: 1, base: { th: 0, look: 0.3 }, acts: [
-    ['dwie kule', 1, (a) => ({ ikL: 1, hxL: -40, hyL: -50, ikR: 1, hxR: 40, hyR: -50, squint: 0.5, _orbs: 1, _bg: 'purple', _bgK: snapE(a / 0.5), _stiff: 2 })],
-    ['łączy', 0.6, keys([[0, { ikL: 1, hxL: -40, hyL: -50, ikR: 1, hxR: 40, hyR: -50, _orbs: 1, _bg: 'purple', _stiff: 3 }], [0.15, { hxL: -52, hxR: 52, lean: -0.2 }], [0.35, { hxL: -3, hxR: 3, lean: 0.3 }], [0.6, {}]]), undefined, undefined, (a, c, _t, dt) => {
+    ['two orbs', 1, (a) => ({ ikL: 1, hxL: -40, hyL: -50, ikR: 1, hxR: 40, hyR: -50, squint: 0.5, _orbs: 1, _bg: 'purple', _bgK: snapE(a / 0.5), _stiff: 2 })],
+    ['merges', 0.6, keys([[0, { ikL: 1, hxL: -40, hyL: -50, ikR: 1, hxR: 40, hyR: -50, _orbs: 1, _bg: 'purple', _stiff: 3 }], [0.15, { hxL: -52, hxR: 52, lean: -0.2 }], [0.35, { hxL: -3, hxR: 3, lean: 0.3 }], [0.6, {}]]), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.35)) { impact(c, 3); }
     }],
-    ['implozja', 0.9, (a) => ({ ikL: 1, hxL: -3, hyL: -50, ikR: 1, hxR: 3, hyR: -50, squint: 0.9, _orbs: 2, _orbK: 1 - a / 0.9, _bg: 'purple' }), undefined, undefined, (a, c, _t, dt) => {
+    ['implosion', 0.9, (a) => ({ ikL: 1, hxL: -3, hyL: -50, ikR: 1, hxR: 3, hyR: -50, squint: 0.9, _orbs: 2, _orbK: 1 - a / 0.9, _bg: 'purple' }), undefined, undefined, (a, c, _t, dt) => {
       if (every(a, dt, 0.06)) { const an = rng() * TAU; emit(c, 'energy', Math.cos(an) * 40, -50 + Math.sin(an) * 30, { vx: -Math.cos(an) * 70, vy: -Math.sin(an) * 50 }); }
     }],
-    ['ociera czoło', 1, (a) => ({ ikL: 1, hxL: -26 + 34 * snapE(a / 0.6), hyL: -64, ikR: 1, hxR: 30, hyR: -34, look: 0.1 }), undefined, undefined, (a, c, _t, dt) => {
+    ['wipes forehead', 1, (a) => ({ ikL: 1, hxL: -26 + 34 * snapE(a / 0.6), hyL: -64, ikR: 1, hxR: 30, hyR: -34, look: 0.1 }), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0.5)) emit(c, 'tear', -30, -62, { vx: -25, vy: -20 });
     }],
   ] },
   bye: { base: {}, seq: [
-    ['macha na pożegnanie', 0.5, () => ({ th: 0, look: 0, happy: 0.8, armR: 2.3, oscR: 0.55, _f: 11 })],
-    ['zamach do biegu', 0.25, () => ({ th: PI / 2, lx: -6, lean: -0.4, squint: 0.8, sit: 0.3, _stiff: 3 })],
-    ['ucieczka', 0.35, () => ({ th: PI / 2, lx: 50, walkW: 1, squint: 0.8, _stiff: 3, _bg: 'speed' }), undefined, undefined, (a, c, _t, dt) => {
+    ['waves goodbye', 0.5, () => ({ th: 0, look: 0, happy: 0.8, armR: 2.3, oscR: 0.55, _f: 11 })],
+    ['running wind-up', 0.25, () => ({ th: PI / 2, lx: -6, lean: -0.4, squint: 0.8, sit: 0.3, _stiff: 3 })],
+    ['escape', 0.35, () => ({ th: PI / 2, lx: 50, walkW: 1, squint: 0.8, _stiff: 3, _bg: 'speed' }), undefined, undefined, (a, c, _t, dt) => {
       if (at(a, dt, 0)) { spray(c, 'dust', 8, -6, -2, 60, PI, PI / 2); }
       if (every(a, dt, 0.05)) spray(c, 'dust', 1, c.p.lx.x - 12, -2, 30, PI, PI / 3);
     }],
-  ], acts: [['odszedł', 5, () => ({ th: PI / 2, lx: 50, _stiff: 3 })]] }, // ta sama sztywność: bez przestrzelenia przy zmianie w biegu
+  ], acts: [['gone', 5, () => ({ th: PI / 2, lx: 50, _stiff: 3 })]] }, // same stiffness: no overshoot when switching mid-run
 };

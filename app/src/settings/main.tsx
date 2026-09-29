@@ -13,7 +13,7 @@ import { resolveLang, setLang, setPreviewLang, setSystemLang, t } from '../i18n'
 const inTauri = '__TAURI_INTERNALS__' in window;
 if (!inTauri) setPreviewLang();
 
-/** Dane pokazowe dla podglądu w przeglądarce (`pnpm dev`, /settings.html, `?wizard` pokazuje kreator). */
+/** Demo data for browser preview (`pnpm dev`, /settings.html; `?wizard` shows the wizard). */
 const demoRows: AppRow[] = [
   { id: 'claude_code', detected: { found: true, path: 'C:/Users/ja/.claude', note: null }, status: { installed: true, detail: '' }, enabled: true },
   { id: 'codex', detected: { found: true, path: 'C:/Users/ja/.codex', note: null }, status: { installed: true, detail: '' }, enabled: true },
@@ -25,7 +25,7 @@ const demoDiag: Diagnostics = { version: '0.5.0', endpoint_port: 61234, settings
   apps: [['claude_code', true, ''], ['codex', true, ''], ['agent_router', true, '']],
   stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
 
-/** Karta z adresu (`settings.html#stage` z menu sceny). */
+/** Tab from the URL (`settings.html#stage` from the stage menu). */
 const tabFrom = (hash: string): Tab | null => {
   const t = hash.replace(/^#/, '') as Tab;
   return TABS.includes(t) ? t : null;
@@ -96,7 +96,7 @@ function Root() {
     setMessage(null);
     if (!inTauri) return;
     const relang = s.language !== view.settings.language;
-    // opisy integracji i diagnostyka przychodzą z Rusta już w nowym języku
+    // integration descriptions and diagnostics arrive from Rust in the new language
     void invoke('settings_set', { settings: s }).then(() => { if (relang) void reload(); }).catch(e => setMessage(String(e)));
   };
   const onIntegration = async (id: AppId, on: boolean) => {

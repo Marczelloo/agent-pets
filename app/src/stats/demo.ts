@@ -1,4 +1,4 @@
-// Dane pokazowe okna statystyk: podgląd w zwykłej przeglądarce (`pnpm dev`, /stats.html) i testy.
+// Stats window demo data: preview in a regular browser (`pnpm dev`, /stats.html) and tests.
 import type { StatsDay, StatsView } from '../types';
 
 const H = 3_600_000, MIN = 60_000;

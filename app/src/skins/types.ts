@@ -8,30 +8,30 @@ export interface Skin {
   eyeX: number; eyeW: number; eyeH: number;
   screenFace: boolean; antenna: boolean; backVents: boolean;
   eyeGlint: boolean; blush: boolean; frontLegsOnlySitting: boolean;
-  /** oczy: dwie pigułki (domyślnie) albo jedno oko cyklopa w kształcie „o” z logo opencode */
+  /** eyes: two pills (default) or one cyclops eye shaped like the opencode logo's "o" */
   eyes?: 'pill' | 'cyclops';
-  /** wielka litera nazwy agenta na brzuchu (`Pet.mark`) */
+  /** uppercase initial of agent name on the belly (`Pet.mark`) */
   mark?: boolean;
-  /** ma własny rysunek w stylach Pixel i Sticker; bez tego te style rysują go jak Clean */
+  /** has custom Pixel and Sticker drawings; otherwise these styles draw it like Clean */
   legacy?: boolean;
-  /** kolor oczu (ciemne ciało potrzebuje jasnych); domyślnie ciemne */
+  /** eye color (dark bodies need light eyes); dark by default */
   eyeColor?: string;
-  /** wysokość oczu jako ułamek wysokości ciała od góry (domyślnie .42) */
+  /** eye height as a fraction of body height from the top (default .42) */
   eyeY?: number;
-  /** głowa z logo Copilota: gogle u góry (oprawa, szkło), wizjer pod nimi z oczami, uszy po bokach */
+  /** Copilot logo head: goggles on top (frame, lenses), visor with eyes below, ears at the sides */
   pilot?: { frame: string; lens: string; visor: string };
-  /** bez nóg, unosi się nad ziemią i płynie zamiast chodzić (Antigravity) */
+  /** legless, floats above the ground instead of walking (Antigravity) */
   float?: boolean;
-  /** kształt ciała: zaokrąglony prostokąt (domyślnie) albo ludzik Androida (kopułka i tułów, dwie antenki) */
+  /** body shape: rounded rectangle (default) or Android mascot (dome and torso, two antennae) */
   shape?: 'android';
-  /** Cursor: ścięte boki (sześciokąt), jaśniejszy trójkąt przodu od lewego górnego rogu i jasna krawędź */
+  /** Cursor: cut sides (hexagon), lighter front triangle from the top left and a light edge */
   facet?: { light: string; edge: string };
-  /** Grok: mały humanoid; czarny wizor na górze przodu (oczy na nim), logo Groka na klatce, czarne dłonie */
+  /** Grok: small humanoid; black visor high on the front (eyes on it), Grok logo on the chest, black hands */
   droid?: { visor: string; logo: string; hands: string };
-  /** długość nóg w jednostkach (domyślnie 17); dłuższe podnoszą ciało */
+  /** leg length in units (default 17); longer legs raise the body */
   legLen?: number;
-  /** grubość ramion w jednostkach (domyślnie 9) */
+  /** arm thickness in units (default 9) */
   armThk?: number;
-  /** ZCode: okrągłe uszy, łaty pod oczami (oczy na nich) i opaska z literą „Z” */
+  /** ZCode: round ears, eye patches (eyes on them), and a headband with "Z" */
   panda?: { ears: string; patches: string; band: string; mark: string };
 }

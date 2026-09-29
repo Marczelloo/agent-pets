@@ -59,7 +59,7 @@ describe('pixel font', () => {
     expect(glyphOf('Ż')).not.toEqual(glyphOf('Ź'));
     expect(glyphOf('ł')).not.toEqual(glyphOf('l'));
     expect(glyphOf('Ł')).not.toEqual(glyphOf('L'));
-    // kreska akcentu idzie w prawo w górę
+    // accent stroke goes up to the right
     const acute = glyphOf('ó');
     expect(acute[1].indexOf('#')).toBeGreaterThan(acute[2].indexOf('#'));
   });

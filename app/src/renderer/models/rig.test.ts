@@ -37,7 +37,7 @@ describe('rig', () => {
   it('squash & stretch follows the motion profile (pen.squash)', () => {
     const squashAt = (k: number) => {
       const c = createPet('clawd', 'needs');
-      c.hp = 0.5; c.p.hopW.x = 1; // lądowanie: faza 0,42–0,58
+      c.hp = 0.5; c.p.hopW.x = 1; // landing: phase 0.42–0.58
       pen.squash = k;
       const r = rig(c, 0, 0, 1, 0, { w: 100, h: 70, arm: 16 });
       pen.squash = 1;

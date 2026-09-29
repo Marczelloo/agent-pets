@@ -18,24 +18,24 @@ const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
 interface JumpResult { method: string; detail: string }
 interface ViewProps {
   snap: Snapshot; nowMs: number; status: string | null; focusId: string | null; onJump: (id: string) => void;
-  /** ukryty panel nie rysuje zwierzaków (WebView2 animuje także w ukrytym oknie) */
+  /** hidden panel does not draw pets (WebView2 animates even in a hidden window) */
   animate?: boolean;
   onSettings?: () => void;
   onStats?: () => void;
-  /** wygląd zwierzaków z ustawień (styl, ruch, nadpisania) */
+  /** pet appearance from settings (style, motion, overrides) */
   pets?: Pets;
   update?: UpdateStatus;
   onInstall?: () => void;
   onDismiss?: (ids: string[]) => void;
   onDismissInactive?: () => void;
-  /** ostatnio ukryte sesje, do „Cofnij” (znika po 6 s) */
+  /** recently hidden sessions for Undo (disappears after 6 s) */
   undo?: { ids: string[] } | null;
   onUndo?: () => void;
-  /** co gra w Windows (`null`, gdy zwierzaki nie reagują na muzykę) */
+  /** what is playing in Windows (`null` when pets do not react to music) */
   media?: Media | null;
 }
 
-/** Czysty widok panelu: tekst tylko przez JSX (React ucieka znaki), bez `innerHTML`. */
+/** Pure panel view: text through JSX only (React escapes characters), without `innerHTML`. */
 export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null }: ViewProps) {
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
@@ -114,7 +114,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
   );
 }
 
-/** Subagent w karcie rodzica: gałąź drzewka, mini-zwierzak, tytuł z etykietami, akcja i czas pracy. */
+/** Subagent on a parent card: tree branch, mini pet, title with labels, action, and working time. */
 function SubagentRow({ c, nowMs, focus, animate, pets }: { c: Session; nowMs: number; focus: boolean; animate: boolean; pets: Pets }) {
   const mark = childMark(c);
   return (
@@ -187,7 +187,7 @@ export default function App() {
 
   const onJump = async (sessionId: string) => {
     const r = await invoke<JumpResult>('jump', { sessionId });
-    // udane przejście chowa panel (robi to komenda); schowek i porażkę trzeba przeczytać
+    // successful navigation hides the panel (handled by the command); clipboard and failure need to be read
     setStatus(r.method === 'clipboard' || r.method === 'none' ? r.detail : null);
   };
 

@@ -9,7 +9,7 @@ const rng = seeded(11);
 setRng(rng.next);
 pen.font = 'x';
 
-describe('każda scena i skórka: bez NaN i wyjątków', () => {
+describe('every scene and skin: no NaN or exceptions', () => {
   for (const skin of ['clawd', 'kodek', 'opencode', 'blob', 'copilot', 'antigravity', 'cursor', 'grok', 'zcode'] as const) for (const scene of Object.keys(SCENES)) {
     it(`${skin} / ${scene}`, () => {
       const c = createPet(skin, 'idle');
@@ -45,7 +45,7 @@ describe('każda scena i skórka: bez NaN i wyjątków', () => {
   });
 });
 
-describe('każdy styl × ruch × skórka × scena przez PetPainter: bez NaN, stan płótna przywrócony', () => {
+describe('every style × motion × skin × scene through PetPainter: no NaN, canvas state restored', () => {
   for (const style of STYLE_IDS) for (const motion of ['calm', 'dynamic'] as const) {
     it(`${style} / ${motion}`, () => {
       for (const skin of ['clawd', 'kodek', 'opencode', 'blob', 'copilot', 'antigravity', 'cursor', 'grok', 'zcode'] as const) for (const scene of Object.keys(SCENES)) {
@@ -57,6 +57,6 @@ describe('każdy styl × ruch × skórka × scena przez PetPainter: bez NaN, sta
         expect(rec.log.some(l => l.includes('NaN')), `${skin}/${scene}`).toBe(false);
         expect(rec.log.filter(l => l === 'save()').length).toBe(rec.log.filter(l => l === 'restore()').length);
       }
-    }, 45_000); // szkic × 9 skórek × wszystkie sceny trwa ok. 8 s: bez zapasu domyślny limit łapie obciążoną maszynę
+    }, 45_000); // sketch × 9 skins × all scenes takes about 8 s: the default timeout can catch a loaded machine
   }
 });

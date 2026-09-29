@@ -10,7 +10,7 @@ const rng = seeded(7);
 const proto: ProtoApi = loadPrototype(rng.next);
 setRng(rng.next);
 
-/** Stan po każdej 20. klatce: nazwa akcji i wszystkie sprężyny (6 miejsc po przecinku). */
+/** State after every 20th frame: action name and all springs (6 decimal places). */
 function trace(make: () => any, step: (c: any, dt: number, t: number) => void): string[] {
   rng.reset(7);
   const c = make();
@@ -24,7 +24,7 @@ function trace(make: () => any, step: (c: any, dt: number, t: number) => void): 
   return out;
 }
 
-describe('port silnika = prototyp v6', () => {
+describe('engine port = v6 prototype', () => {
   for (const skin of SKIN_IDS) for (const scene of PROTO_SCENES) {
     it(`${skin} / ${scene}`, () => {
       const a = trace(() => proto.mkC(skin, scene), proto.stepC);
@@ -57,11 +57,11 @@ function drawTrace(api: {
   return rec.log;
 }
 
-describe('port rysowania = prototyp v6', () => {
-  // Szkic przy u = 0,3 różni się celowo (minima w pikselach, styles.test.ts).
-  // Szkic v2 nie jest już zgodny z prototypem (spec wyglądu v2, 4): zgodność pilnuje tylko Czysty.
+describe('drawing port = v6 prototype', () => {
+  // Sketch at u = 0.3 intentionally differs (pixel minimums, styles.test.ts).
+  // Sketch v2 no longer matches the prototype (appearance spec v2, 4): only Clean is checked for parity.
   for (const skin of SKIN_IDS) for (const scene of PROTO_SCENES) for (const sketch of [false]) for (const u of [1, 0.3]) {
-    it(`${skin} / ${scene} / ${sketch ? 'rysowany' : 'czysty'} / u=${u}`, () => {
+    it(`${skin} / ${scene} / ${sketch ? 'sketched' : 'clean'} / u=${u}`, () => {
       proto.setSK(sketch);
       const a = drawTrace({ make: () => proto.mkC(skin, scene), step: proto.stepC, draw: proto.drawC, boil: proto.setBoil }, u);
       const look = { style: sketch ? 'sketch' : 'clean', motion: 'calm' } as const;

@@ -7,7 +7,7 @@ import { CYCLE_MS, PREVIEW_GROUPS, cycleScene } from './scenes';
 
 interface Props { look: Look; agent: Agent; scene: SceneKey; cycle: boolean; onScene: (s: SceneKey) => void; onCycle: (on: boolean) => void }
 
-/** Duży podgląd wybranego zwierzaka z wyborem każdej animacji albo wszystkich po kolei. */
+/** Large preview of the selected pet with a choice of each animation or all in sequence. */
 export function PreviewStage({ look, agent, scene, cycle, onScene, onCycle }: Props) {
   useEffect(() => {
     if (!cycle) return;

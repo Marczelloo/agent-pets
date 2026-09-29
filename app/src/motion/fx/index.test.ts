@@ -10,7 +10,7 @@ describe('dynamic frame composition', () => {
     const s = fxState(createPet('clawd', 'edit'));
     const starts: number[] = [];
     let prev = false;
-    for (let f = 0; f < 300; f++) { // 5 s przy 60 kl./s, prośba co klatkę
+    for (let f = 0; f < 300; f++) { // 5 s at 60 fps, request each frame
       s.flashReq = 1;
       const on = flashFrame(s, f / 60, ENV);
       if (on && !prev) starts.push(f / 60);

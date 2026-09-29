@@ -1,11 +1,11 @@
-// Wejście mini-zwierzaka (spec 0.8, 3.3): „puf” z dymu w stylu Spokojnym, pieczęć przywołania w Dynamicznym.
-// `k` to postęp 0..1 w czasie `SPAWN_S`; (cx, y) to środek podstawy zwierzaka, `u` jego skala.
+// Mini pet entrance (spec 0.8, 3.3): smoke poof in Calm style, summoning seal in Dynamic.
+// `k` is progress from 0..1 over `SPAWN_S`; (cx, y) is the pet's base center, `u` its scale.
 import { gridPx } from '../renderer/models/pixel';
 
 export const SPAWN_S = 0.6;
 const SMOKE = '#D8D5CC';
 
-/** Rysuje efekt wejścia; po końcu (`k` ≥ 1) nic. Pixel-art: same prostokąty na całych pikselach urządzenia. */
+/** Draw the entrance effect; nothing after completion (`k` ≥ 1). Pixel art: rectangles on whole device pixels only. */
 export function drawSpawn(x: CanvasRenderingContext2D, cx: number, y: number, u: number, k: number, motion: 'calm' | 'dynamic',
   pixel: boolean, dpr: number, accent: string): void {
   if (!(k >= 0 && k < 1)) return;
@@ -34,7 +34,7 @@ export function drawSpawn(x: CanvasRenderingContext2D, cx: number, y: number, u:
     return;
   }
   if (motion === 'calm') {
-    // kłęby dymu rozchodzą się od środka i bledną
+    // smoke clouds spread from the center and fade
     x.fillStyle = SMOKE;
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + 0.4, d = R * (0.25 + 0.75 * k), r = 14 * u * (1 - 0.4 * k);
@@ -43,7 +43,7 @@ export function drawSpawn(x: CanvasRenderingContext2D, cx: number, y: number, u:
       x.fill();
     }
   } else {
-    // pieczęć przywołania: krąg na ziemi z kreskami i gwiazdą, obraca się i gaśnie
+    // summoning seal: circle on the ground with lines and a star; rotates and fades
     const r = R * (0.6 + 0.4 * k), rot = k * Math.PI;
     x.strokeStyle = accent;
     x.lineWidth = Math.max(1, 2.5 * u);

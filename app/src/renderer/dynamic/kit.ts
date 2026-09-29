@@ -1,10 +1,10 @@
-// Narzędzia choreografii Dynamiczny (spec 8.1): klatki kluczowe z szybką akcją i pauzą, zdarzenia w czasie akcji.
+// Dynamic choreography tools (spec 8.1): keyframes with quick action and pause, timed action events.
 export type Pose = Record<string, number | string | null>;
 
-/** Szybka akcja: prawie cała droga w pierwszej ⅓ odcinka, potem zatrzymanie w pozie. */
+/** Quick action: almost all movement in the first third of the segment, then hold the pose. */
 export const snapE = (v: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, v)), 5);
 
-/** Klatki kluczowe `[czas, poza]`: brakujące klucze przechodzą z poprzedniej klatki; liczby idą `snapE`, reszta przełącza się na początku odcinka do klatki. */
+/** Keyframes `[time, pose]`: missing keys carry from the previous frame; numbers use `snapE`, others switch at segment start. */
 export function keys(F: [number, Pose][]): (a: number) => Pose {
   const R: [number, Pose][] = [];
   let acc: Pose = {};
@@ -20,13 +20,13 @@ export function keys(F: [number, Pose][]): (a: number) => Pose {
   };
 }
 
-/** Raz, gdy czas akcji mija `a0` w tym kroku. */
+/** Once when action time passes `a0` during this step. */
 export const at = (a: number, dt: number, a0: number) => a - dt < a0 && a >= a0;
-/** Raz na okres `period`, od `from` (pierwszy raz na starcie). */
+/** Once per `period`, starting at `from` (first time at startup). */
 export const every = (a: number, dt: number, period: number, from = 0) =>
   a >= from && Math.floor((a - from) / period + 1e-9) !== Math.floor((a - dt - from) / period + 1e-9);
 
-/** Lewa ręka na biodrze (jak w scenach Spokojnych). */
+/** Left hand on hip (as in Calm scenes). */
 export const HIP = { ikL: 1, hxL: -47, hyL: -25 };
-/** Jedyne napisy scen, tylko w kulminacjach (czcionka pikselowa w `motion/fx/glyphs.ts` musi mieć każdy znak). */
+/** The only scene captions, shown at peaks (pixel font in `motion/fx/glyphs.ts` needs every character). */
 export const WORDS = ['BAM!', 'POOF!', 'NICE!', '!'] as const;

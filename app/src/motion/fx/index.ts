@@ -1,5 +1,5 @@
-// Składanie klatki Dynamiczny (spec 8.1–8.2): klatka uderzenia z limitem, wstrząs, rozciągnięcie ciała, ślad dłoni,
-// rozdział rysowania efektów na model wektorowy i pikselowy.
+// Compose a Dynamic frame (spec 8.1–8.2): rate-limited impact frame, shake, body stretch, hand trail,
+// and separate effect drawing for vector and pixel models.
 import type { FxState } from '../../renderer/dynamic/state';
 import { cl } from '../../renderer/math';
 import type { Pet } from '../../renderer/pet';
@@ -8,19 +8,19 @@ import { pixelBack, pixelFront } from './pixel';
 import { vectorBack, vectorFront } from './vector';
 
 export interface FxCtx { X: number; Y: number; u: number; t: number; dpr: number; env: FxEnv; model: 'vector' | 'sticker' | 'pixel'; flash: boolean;
-  /** siła wygasającego białego błysku po klatce uderzenia (1 → 0) */
+  /** intensity of the fading white flash after an impact frame (1 → 0) */
   glow: number; accent: string; alpha: number }
 
 export const FLASH_MAX = 3;
 export const TRAIL_S = 0.12;
-/** Klatka uderzenia trwa tyle czasu (nie klatek), żeby była widoczna także w pasku przy 10 kl./s. */
+/** An impact frame lasts this long in time (not frames) so it remains visible in the taskbar at 10 fps. */
 export const FLASH_S = 0.12;
-/** Po odwróconej klatce białe tło z promieniami wygasa przez tyle sekund (błysk nie znika od razu). */
+/** After an inverted frame, the white background with rays fades over this many seconds (flash does not vanish immediately). */
 export const FLASH_FADE = 0.4;
 
 /**
- * Czy ta klatka jest klatką uderzenia: FLASH_S (0,12 s) na uderzenie, najwyżej 3 uderzenia w ciągu sekundy (czas `now` = zegar sceny).
- * Prośby w trakcie błysku i bliżej niż 1/3 s od poprzedniego przepadają (błyski nie zlewają się w jeden długi).
+ * Whether this is an impact frame: FLASH_S (0.12 s) per impact, at most 3 impacts per second (`now` = stage clock).
+ * Requests during a flash or within 1/3 s of the last one are dropped (flashes do not merge into one long flash).
  */
 export function flashFrame(s: FxState, now: number, env: FxEnv): boolean {
   if (s.flashReq) {
@@ -32,7 +32,7 @@ export function flashFrame(s: FxState, now: number, env: FxEnv): boolean {
   return env.flash && now >= (s.flashLog.at(-1) ?? Infinity) && now < s.flashUntil;
 }
 
-/** Siła białego błysku: 1 w klatce uderzenia, potem liniowo do 0 przez FLASH_FADE. */
+/** White flash intensity: 1 during the impact frame, then linearly to 0 over FLASH_FADE. */
 export function flashGlow(s: FxState, now: number, env: FxEnv): number {
   const start = s.flashLog.at(-1);
   if (!env.flash || start == null || now < start) return 0;
@@ -40,17 +40,17 @@ export function flashGlow(s: FxState, now: number, env: FxEnv): number {
   return cl(1 - (now - s.flashUntil) / FLASH_FADE);
 }
 
-/** Przesunięcie wstrząsu w px; `cell` > 0 zaokrągla do komórki siatki pikselowej. */
+/** Shake offset in px; `cell` > 0 rounds to a pixel-grid cell. */
 export function shakeOffset(s: FxState, t: number, env: FxEnv, u: number, cell: number): [number, number] {
   const e = t - s.shakeAt;
   if (!env.shake || !(e >= 0 && e < 0.3)) return [0, 0];
   let a = s.shakeAmp * u * Math.exp(-e * 14);
-  if (cell > 0 && e < 0.15) a = Math.max(a, cell); // w pikselowym pasku co najmniej jedna komórka, inaczej zaokrągla się do zera
+  if (cell > 0 && e < 0.15) a = Math.max(a, cell); // at least one cell in the pixel taskbar, otherwise it rounds to zero
   const dx = a * Math.sin(e * 90), dy = a * 0.5 * Math.cos(e * 70);
   return cell > 0 ? [Math.round(dx / cell) * cell, Math.round(dy / cell) * cell] : [dx, dy];
 }
 
-/** Rozciągnięcie ciała w kierunku szybkiego ruchu poziomego (smuga zamiast duchów). */
+/** Body stretch in the direction of fast horizontal motion (a trail instead of ghosting). */
 export const stretchOf = (c: Pet) => cl((Math.abs(c.p.lx.v) - 150) / 1500, 0, 0.3);
 
 export function recordTrail(s: FxState, c: Pet, now: number): void {

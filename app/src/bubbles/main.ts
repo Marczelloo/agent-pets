@@ -1,5 +1,5 @@
-// Okno dymków (spec 0.8, 2.3): wybór (`Picker`), rozmieszczenie (`arrange`), rysowanie (`drawBubble`) i animacja.
-// Okno stoi nad sceną; Rust ustawia je na prośbę (`bubbles_place`) i obsługuje kliknięcia w dymki.
+// Bubble window (spec 0.8, 2.3): selection (`Picker`), layout (`arrange`), drawing (`drawBubble`), and animation.
+// The window sits above the stage; Rust positions it on request (`bubbles_place`) and handles bubble clicks.
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { resolveLang, setLang, setSystemLang } from '../i18n';
@@ -13,11 +13,11 @@ import type { Pets, Session, Settings, SettingsView, Snapshot, StageSettings } f
 import { arrange } from './arrange';
 import { Picker, type BubbleWant } from './pick';
 
-/** Zapas po bokach sceny w oknie dymków (px CSS), jak `bubbles::MARGIN_CSS` w Rust. */
+/** Side margin around the stage in the bubble window (CSS px), like Rust `bubbles::MARGIN_CSS`. */
 const MARGIN = 150;
 const POP_MS = 150, FADE_MS = 200, ROW_GAP = 4;
 
-/** `wide`: rozwinięty po najechaniu na zwierzaka (pełny tekst w kilku liniach). */
+/** `wide`: expanded on pet hover (full text over several lines). */
 interface Live { want: BubbleWant; box: BubbleBox; born: number; gone: number | null; wide: boolean }
 interface StagePets { pets: { id: string; x: number }[]; width: number; zoom: number }
 
@@ -30,9 +30,9 @@ let pets: Pets = defaultPets();
 let stage: StageSettings = defaultStage();
 let at: StagePets = { pets: [], width: 0, zoom: 1 };
 let visible = true, moving = false, raf = 0, lastHits = '';
-/** zwierzak pod kursorem, którego dymek jest rozwinięty (od Rust, zamiast tooltipa) */
+/** pet under the cursor whose bubble is expanded (from Rust, instead of a tooltip) */
 let hovered: string | null = null;
-/** dymek pod kursorem (od Rust, wątek kursora okna dymków): też się rozwija */
+/** bubble under the cursor (from Rust's bubble-window cursor thread): also expands */
 let bubbleHovered: string | null = null;
 const picker = new Picker();
 const live = new Map<string, Live>();
@@ -41,7 +41,7 @@ const lookOf = (s: Session) => lookFor(pets, appFor(s));
 const accentOf = (id: string) => { const s = snap.sessions.find(x => x.id === id); return s ? accentFor(s) : ACCENT.clawd; };
 const keyOf = (w: BubbleWant) => `${w.id}|${w.kind}|${w.text}`;
 
-/** Nowy stan: które dymki mają być, które wchodzą, a które znikają. */
+/** New state: which bubbles are wanted, entering, or leaving. */
 function refresh(): void {
   const now = Date.now();
   const on = visible && !moving && at.pets.length > 0;
@@ -69,7 +69,7 @@ async function paint(): Promise<void> {
   const rowH = Math.max(...list.map(l => l.box.h));
   const W = Math.ceil(at.width + 2 * MARGIN), H = Math.ceil(2 * rowH + ROW_GAP);
   const placed = await invoke<{ offset: number; above: boolean } | null>('bubbles_place', { w: W, h: H });
-  // scena schowana albo gra na pełnym ekranie: Rust już schował okno; stan wraca przy następnym odświeżeniu
+  // stage hidden or a full-screen game active: Rust has already hidden the window; state returns on the next refresh
   if (!placed) { lastHits = ''; return; }
   const d = devicePixelRatio || 1;
   const pw = Math.round(W * d), ph = Math.round(H * d);
@@ -82,7 +82,7 @@ async function paint(): Promise<void> {
   let busy = false;
   list.forEach((l, i) => {
     const { left, row } = pos[i];
-    // nad sceną rząd 0 jest na dole (przy zwierzakach); pod sceną na górze
+    // above the stage, row 0 is at the bottom (near the pets); below the stage, it is at the top
     const y = placed.above ? H - l.box.h - row * (rowH + ROW_GAP) : row * (rowH + ROW_GAP);
     const tail = l.want.x + placed.offset - left;
     const tIn = Math.min(1, (now - l.born) / POP_MS), tOut = l.gone == null ? 0 : Math.min(1, (now - l.gone) / FADE_MS);
@@ -90,7 +90,7 @@ async function paint(): Promise<void> {
     ctx.save();
     ctx.globalAlpha = tIn * (1 - tOut);
     if (!reduced && tIn < 1) {
-      // wskakuje od ogonka: skala 0,8 → 1 (w „Ograniczeniu ruchu” tylko się przenika)
+      // pops in from the tail: scale 0.8 → 1 (with reduced motion, only fades)
       const s = 0.8 + 0.2 * tIn, ox = left + tail, oy = y + l.box.h;
       ctx.translate(ox, oy); ctx.scale(s, s); ctx.translate(-ox, -oy);
     }
@@ -113,5 +113,5 @@ const onSettings = (s: Settings) => { setLang(resolveLang(s.language ?? 'auto'))
 void listen<Settings>('pets://settings', e => onSettings(e.payload));
 void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); onSettings(v.settings); });
 void invoke<Snapshot>('snapshot').then(s => { snap = s; refresh(); });
-// dymek akcji gaśnie po 3 s bez nowych zdarzeń
+// action bubble fades after 3 s without new events
 setInterval(refresh, 500);

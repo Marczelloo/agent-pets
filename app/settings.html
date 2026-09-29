@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="utf-8" />
-<title>Agent Pets: ustawienia</title>
+<title>Agent Pets: Settings</title>
 <style>
 :root{
   --bg:#F3F3F3;--card:#FBFBFB;--line:rgba(0,0,0,.08);--txt:#1F1F1F;--mut:#5F5E5A;--nav:rgba(0,0,0,.05);
@@ -27,7 +27,7 @@ button.accent:hover:not(:disabled){background:var(--accent);filter:brightness(1.
 button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--txt);outline-offset:1px}
 input[type=number]{width:64px}
 
-/* okno ustawień */
+/* settings window */
 .settings{display:grid;grid-template-columns:200px 1fr;height:100%}
 .settings nav{padding:16px 8px;display:flex;flex-direction:column;gap:2px}
 .settings nav h1{font-size:14px;padding:4px 12px 14px}
@@ -63,14 +63,14 @@ label.check{display:flex;align-items:center;gap:6px;font-size:12px}
 .segmented[aria-disabled=true] button{cursor:default}
 button.reset{margin:16px 0 4px}
 
-/* przełącznik Windows 11 z pola wyboru */
+/* Windows 11 switch built from a checkbox */
 input.switch{appearance:none;flex:none;width:40px;height:20px;border-radius:10px;border:1px solid var(--track);background:transparent;position:relative;cursor:pointer;margin:0}
 input.switch::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--track);transition:left .15s}
 input.switch:checked{background:var(--accent);border-color:var(--accent)}
 input.switch:checked::after{left:23px;background:var(--accentTxt)}
 input.switch:disabled{cursor:default}
 
-/* kreator */
+/* wizard */
 .wizard{max-width:600px;margin:0 auto;padding:28px 24px;display:flex;flex-direction:column;gap:16px;min-height:calc(100% - 56px)}
 .wizard h1{font-size:28px}
 .wizard-top{display:flex;align-items:center;justify-content:space-between;gap:12px}

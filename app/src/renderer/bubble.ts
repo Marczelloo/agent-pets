@@ -1,5 +1,5 @@
-// Dymki nad zwierzakami (spec 0.8, 2.2): pytanie agenta i bieżąca akcja, w stylu zwierzaka.
-// Współrzędne w px CSS okna dymków; `zoom` to skala sceny. Kształt: prostokąt z zaokrągleniem i ogonkiem u dołu.
+// Bubbles above pets (spec 0.8, 2.2): agent question and current action, in the pet's style.
+// Coordinates in bubble-window CSS px; `zoom` is stage scale. Shape: rounded rectangle with a tail below.
 import { ACCENT } from '../styles';
 import type { Look } from '../types';
 import { darken, lighten } from './color';
@@ -8,21 +8,21 @@ import { gridPx } from './models/pixel';
 import { FONT_ROWS, glyphOf, textWidth } from './pixelfont';
 
 export type BubbleKind = 'question' | 'action';
-/** Wymiary dymku razem z ogonkiem (px CSS). */
+/** Bubble dimensions including the tail (CSS px). */
 export interface BubbleBox { w: number; h: number }
 
-/** Najszerszy dymek (px CSS przy zoom 1): 40 znaków zwykłej czcionki z zapasem. */
+/** Maximum bubble width (CSS px at zoom 1): room for 40 regular-font characters plus padding. */
 export const BUBBLE_MAX_W = 300;
-/** Dymek rozwinięty po najechaniu: szerszy i w kilku liniach (pełne pytanie albo komenda). */
+/** Hover-expanded bubble: wider and multiline (full question or command). */
 export const BUBBLE_WIDE_W = 340;
 export const BUBBLE_MAX_LINES = 5;
 const FONT_PX = 12, PAD_X = 10, PAD_Y = 5, LINE = 16, RADIUS = 11, TAIL_H = 7, TAIL_W = 6;
-/** Ciepły kolor pytania (spec 2.2: pytanie zawsze ma pomarańczowe tło albo akcent). */
+/** Warm question color (spec 2.2: a question always has an orange background or accent). */
 const AMBER = '#EF9F27';
 
 interface Paint {
   fill: string; stroke: string; lineW: number; text: string; weight: number;
-  /** odręczna kreska: drganie w px CSS i liczba przejść */
+  /** hand-drawn stroke: jitter in CSS px and number of passes */
   hand?: { jitter: number; passes: number };
   glow?: string; shadow?: boolean; rim?: string;
 }
@@ -42,13 +42,13 @@ function paint(look: Look, kind: BubbleKind, accent: string): Paint {
 
 const font = (p: Paint, zoom: number) => `${p.weight} ${FONT_PX * zoom}px "Segoe UI", system-ui, sans-serif`;
 
-/** Komórka pikselowej ramki i czcionki w px CSS: całe piksele urządzenia. */
+/** Pixel border and font cell in CSS px: whole device pixels. */
 const pixelCells = (zoom: number, dpr: number) => ({
   g: gridPx(0.3 * zoom, dpr) / dpr,
   t: Math.max(1, Math.round(zoom * dpr)) / dpr,
 });
 
-/** Tekst przycięty do szerokości (zwykle już ma ≤ 40 znaków z rdzenia; szerokie litery mogą nie zmieścić się w pikselach). */
+/** Text clipped to width (usually already ≤ 40 characters from core; wide letters may not fit in pixels). */
 function fit(text: string, max: number, width: (s: string) => number): string {
   if (width(text) <= max) return text;
   const chars = Array.from(text);
@@ -57,8 +57,8 @@ function fit(text: string, max: number, width: (s: string) => number): string {
 }
 
 /**
- * Tekst w liniach nie szerszych niż `max`: łamanie na spacjach, zbyt długie słowo cięte po znakach;
- * po `maxLines` liniach reszta znika, a ostatnia linia kończy się wielokropkiem.
+ * Text in lines no wider than `max`: wrap at spaces, split overly long words by character;
+ * after `maxLines`, discard the rest and end the last line with an ellipsis.
  */
 export function layoutLines(text: string, max: number, width: (s: string) => number, maxLines: number): string[] {
   const lines: string[] = [];
@@ -86,7 +86,7 @@ export function layoutLines(text: string, max: number, width: (s: string) => num
   return out;
 }
 
-/** Pikselowy dymek w całych komórkach ramki: to samo dla pomiaru i rysowania (przy skali ekranu `dpr`). */
+/** Pixel bubble in whole border cells: same geometry for measuring and drawing (at display scale `dpr`). */
 function pixelGeom(text: string, zoom: number, dpr: number, wrap = false) {
   const { g, t } = pixelCells(zoom, dpr);
   const pad = 3 * g, maxText = (wrap ? BUBBLE_WIDE_W : BUBBLE_MAX_W) * zoom - 2 * pad, tw = (s: string) => textWidth(s) * t;
@@ -97,18 +97,18 @@ function pixelGeom(text: string, zoom: number, dpr: number, wrap = false) {
   return { g, t, lines, lineH, cw, chh };
 }
 
-/** `dpr`: skala ekranu; pikselowy dymek ma inną szerokość przy 125 % czy 150 %, a układ musi znać tę prawdziwą. */
-/** Linie tekstu zwykłego dymku (bez zawijania: jedna linia przycięta do szerokości). */
+/** `dpr`: display scale; a pixel bubble has a different width at 125% or 150%, and layout needs the actual width. */
+/** Text lines of a regular bubble (no wrapping: one line clipped to width). */
 function textLines(ctx: CanvasRenderingContext2D, text: string, zoom: number, wrap: boolean): string[] {
   const w = (s: string) => ctx.measureText(s).width;
   if (!wrap) return [fit(text, (BUBBLE_MAX_W - 2 * PAD_X) * zoom, w)];
   return layoutLines(text, (BUBBLE_WIDE_W - 2 * PAD_X) * zoom, w, BUBBLE_MAX_LINES);
 }
 
-/** `wrap`: dymek rozwinięty (po najechaniu) — pełny tekst w kilku liniach. */
+/** `wrap`: expanded (hovered) bubble with full text over multiple lines. */
 export function measureBubble(ctx: CanvasRenderingContext2D, text: string, look: Look, zoom: number, dpr = 1, wrap = false): BubbleBox {
   if (look.style === 'pixel') {
-    // ramka na `chh` komórek i dwa rzędy ogonka pod nią
+    // border of `chh` cells and two tail rows below
     const { g, cw, chh } = pixelGeom(text, zoom, dpr, wrap);
     return { w: cw * g, h: (chh + 2) * g };
   }
@@ -120,7 +120,7 @@ export function measureBubble(ctx: CanvasRenderingContext2D, text: string, look:
   return { w: tw + 2 * PAD_X * zoom, h: (lines.length * LINE + 2 * PAD_Y + TAIL_H) * zoom };
 }
 
-/** Obrys dymku z ogonkiem jako wielokąt (łuki rogów z odcinków), w kolejności zgodnej z ruchem wskazówek. */
+/** Bubble outline with tail as a polygon (corner arcs made of segments), clockwise. */
 function outline(x: number, y: number, w: number, h: number, r: number, tx: number, th: number, tw: number): number[][] {
   const p: number[][] = [], n = 5;
   const corner = (cx: number, cy: number, a0: number) => {
@@ -144,8 +144,8 @@ function trace(ctx: CanvasRenderingContext2D, pts: number[][], jitter: number, s
 }
 
 /**
- * Rysuje dymek z lewym górnym rogiem w (x, y); ogonek wskazuje `tailX` (względem x, przycięte do dymku).
- * `accent`: kolor agenta (obwódka Neonu).
+ * Draw a bubble with top left at (x, y); the tail points to `tailX` (relative to x, clamped to the bubble).
+ * `accent`: agent color (Neon border).
  */
 export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, kind: BubbleKind, look: Look,
   tailX: number, zoom: number, dpr: number, accent: string = ACCENT.clawd, wrap = false): void {
@@ -180,7 +180,7 @@ export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.restore();
 }
 
-/** Pikselowy dymek: ramka o grubości jednej komórki `gridPx`, ścięte rogi, schodkowy ogonek, tekst z `pixelfont`. */
+/** Pixel bubble: border one `gridPx` cell thick, cut corners, stepped tail, text from `pixelfont`. */
 function drawPixelBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, p: Paint, tailX: number, zoom: number, dpr: number, wrap = false): void {
   const { g, t, lines, lineH, cw, chh } = pixelGeom(text, zoom, dpr, wrap);
   const snap = (v: number) => Math.round(v * dpr) / dpr;
@@ -191,7 +191,7 @@ function drawPixelBubble(ctx: CanvasRenderingContext2D, x: number, y: number, te
   rect(1, 0, cw - 2, 1); rect(1, chh - 1, cw - 2, 1); rect(0, 1, 1, chh - 2); rect(cw - 1, 1, 1, chh - 2);
   ctx.fillStyle = p.fill;
   rect(1, 1, cw - 2, chh - 2);
-  // ogonek: trzy schodki w dół, środkiem pod zwierzakiem
+  // tail: three downward steps, centered under the pet
   const tc = Math.min(cw - 4, Math.max(3, Math.round(tailX / g)));
   ctx.fillStyle = p.fill;
   rect(tc - 1, chh - 1, 3, 1);
@@ -202,7 +202,7 @@ function drawPixelBubble(ctx: CanvasRenderingContext2D, x: number, y: number, te
   rect(tc, chh, 1, 1);
   ctx.fillStyle = p.stroke;
   rect(tc, chh + 1, 1, 1);
-  // tekst: komórka czcionki = całe piksele urządzenia, początek na siatce ramki
+  // text: font cell uses whole device pixels, starts on the border grid
   ctx.fillStyle = p.text;
   const textH = FONT_ROWS * t + (lines.length - 1) * lineH;
   const tx0 = X + 3 * g, ty0 = Y + Math.round((chh * g - textH) / 2 * dpr) / dpr;

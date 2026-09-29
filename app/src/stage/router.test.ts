@@ -24,7 +24,7 @@ describe('router task health', () => {
     expect(routerHealth(t, 1_000_000 + 180_001)).toBe('stalled');
   });
   it('counts activity the pet saw in the rollout too', () => {
-    // plik statusu mógł zostać zapisany dawno, a Codex dalej pisze do rolloutu
+    // status file may have been written long ago while Codex still writes to the rollout
     expect(routerHealth(task(), 1_000_000 + 300_000, 1_000_000 + 295_000)).toBe('active');
     expect(routerLine(task(), 1_000_000 + 300_000, 1_000_000 + 295_000)).toBe('Zadanie routera: aktywne');
   });

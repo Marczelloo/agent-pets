@@ -1,8 +1,8 @@
-// Czcionka bitmapowa pikselowych dymków: 9 wierszy na znak, '#' = piksel, '.' = puste.
-// Wiersz 0: akcenty wielkich liter; 1–7: wysokość wielkich liter (linia bazowa to wiersz 7); 3–7: małe litery; 8: ogonki i descendery.
+// Bitmap font for pixel bubbles: 9 rows per character, '#' = pixel, '.' = empty.
+// Row 0: uppercase accents; 1–7: uppercase height (baseline is row 7); 3–7: lowercase; 8: tails and descenders.
 export const FONT_ROWS = 9;
 
-/** Znak: [pierwszy wiersz, wiersze rozdzielone '/']. Szerokość = najdłuższy wiersz. */
+/** Character: [first row, rows separated by '/']. Width = longest row. */
 const SHAPES: Record<string, [number, string]> = {
   'A': [1, '.###./#...#/#...#/#####/#...#/#...#/#...#'], 'B': [1, '####./#...#/#...#/####./#...#/#...#/####.'],
   'C': [1, '.####/#..../#..../#..../#..../#..../.####'], 'D': [1, '####./#...#/#...#/#...#/#...#/#...#/####.'],
@@ -60,7 +60,7 @@ function build([top, pattern]: [number, string]): string[] {
   return rows;
 }
 
-/** Znak `base` z podmienionymi wierszami (akcenty, ogonki, kreski). */
+/** `base` glyph with replaced rows (accents, tails, strokes). */
 function marked(base: string[], marks: Record<number, string>): string[] {
   const w = base[0].length;
   return base.map((r, i) => (marks[i] === undefined ? r : marks[i].padEnd(w, '.').slice(0, w)));
@@ -95,7 +95,7 @@ export function glyphOf(ch: string): string[] {
   return PIXEL_FONT[ch] ?? PIXEL_FONT['?'];
 }
 
-/** Szerokość tekstu w pikselach czcionki: glify i jeden piksel odstępu między nimi. */
+/** Text width in font pixels: glyphs with one pixel between them. */
 export function textWidth(text: string): number {
   let width = 0, count = 0;
   for (const ch of text) { width += glyphOf(ch)[0].length; count += 1; }

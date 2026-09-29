@@ -1,30 +1,30 @@
 import type { StyleId } from '../types';
 
-/** Styl rysowania: dane i flagi czytane przez `pen.ts` i `draw/body.ts`; geometria i animacja są wspólne. */
+/** Drawing style: data and flags read by `pen.ts` and `draw/body.ts`; geometry and animation are shared. */
 export interface StyleDef {
   id: StyleId;
-  /** sposób rysowania: wektorowy (body.ts), naklejka przodem, piksele na siatce */
+  /** drawing method: vector (body.ts), front-facing sticker, grid pixels */
   model: 'vector' | 'sticker' | 'pixel';
-  /** kontur: najmniejsza grubość w px CSS i mnożnik dzisiejszej grubości 2,4·u */
+  /** outline: minimum width in CSS px and multiplier of the current 2.4·u width */
   line: { minPx: number; scale: number };
-  /** kolor konturu zwierzaka i rekwizytów; `accent` to kolor agenta */
+  /** outline color for pet and props; `accent` is the agent color */
   ink: (accent: string) => string;
-  /** kolor konturu jednego kształtu liczony z jego wypełnienia (Pastel) */
+  /** outline color of each shape derived from its fill (Pastel) */
   strokeFor?: (fill: string) => string;
-  /** zmiana wypełnienia każdego kształtu (Neon, Tusz, Pastel) */
+  /** change to each shape's fill (Neon, Ink, Pastel) */
   fillFor?: (fill: string) => string;
   fill: 'flat' | 'gradient';
   glow?: boolean;
   brush?: boolean;
   softShadow?: boolean;
-  /** Szkic: drganie konturu, przesunięcie wypełnienia i odstęp kreskowania, minima w px CSS */
+  /** Sketch: outline jitter, fill offset, and hatching spacing, minimums in CSS px */
   sketch?: {
     jitterPx: number; offsetPx: number; hatchGapPx: number;
-    /** przejścia konturu (pierwsze pełne, kolejne cieńsze i bledsze) */
+    /** outline passes (first solid, later ones thinner and fainter) */
     passes: number;
-    /** drganie konturu na sekundę, z zegara zwierzaka */
+    /** outline jitter per second, from the pet clock */
     boilHz: number;
-    /** wypełnienie kreskowaniem na lekkim tle zamiast płaskiej plamy */
+    /** hatched fill on a light background instead of a flat area */
     hatchFill: boolean;
   };
   face?: { eyes?: 'accent' };

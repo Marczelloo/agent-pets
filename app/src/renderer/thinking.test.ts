@@ -6,7 +6,7 @@ import { recorder, seeded } from './testing';
 setRng(seeded(5).next);
 pen.font = 'x';
 
-/** Klatki jednej akcji „thinking”: cel prawej dłoni i twarz z poprzedniej klatki (z niej liczony jest cel). */
+/** Frames of one `thinking` action: right-hand target and face from the previous frame (used to calculate the target). */
 function run(skin: 'grok' | 'clawd', act: number, secs: number) {
   const c = createPet(skin, 'idle');
   setScene(c, 'thinking', true);
@@ -20,21 +20,21 @@ function run(skin: 'grok' | 'clawd', act: number, secs: number) {
   return out;
 }
 
-describe('myślenie: dłoń pod brodą idzie za głową', () => {
-  it('Grok rozgląda się, a dłoń obraca się razem z głową', () => {
+describe('thinking: the hand under the chin follows the head', () => {
+  it('Grok looks around and the hand rotates with the head', () => {
     const f = run('grok', 2, 2.9), dx = f.map(o => o.hx - o.fx);
     expect(Math.max(...f.map(o => o.fx)) - Math.min(...f.map(o => o.fx))).toBeGreaterThan(10);
     expect(Math.max(...dx) - Math.min(...dx)).toBeLessThan(0.5);
   });
 
-  it('dłoń Groka jest pod brodą, nie przy brzuchu', () => {
+  it('Grok keeps its hand under the chin, not by the belly', () => {
     for (const act of [0, 2]) for (const o of run('grok', act, 2.9)) {
       expect(o.hy - o.fy, `act ${act}`).toBeGreaterThan(6);
       expect(o.hy - o.fy, `act ${act}`).toBeLessThan(20);
     }
   });
 
-  it('Clawd trzyma dłoń tam, gdzie w prototypie', () => {
+  it('Clawd keeps its hand in the prototype position', () => {
     for (const act of [0, 2]) for (const o of run('clawd', act, 2.9)) { expect(o.hx).toBe(14); expect(o.hy).toBeGreaterThan(-28.6); expect(o.hy).toBeLessThan(-25.4); }
   });
 });

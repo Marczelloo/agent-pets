@@ -5,31 +5,31 @@ import { demoLimits, demoSessions } from './demo';
 import { setSystemLang } from '../i18n';
 
 export interface Bridge {
-  /** Po zarejestrowaniu nasłuchu: zgłasza gotowość i zwraca bieżącą migawkę. */
+  /** After registering the listener: signal readiness and return the current snapshot. */
   start(): Promise<Snapshot | null>;
   onSnapshot(cb: (s: Snapshot) => void): void;
   onLayout(cb: (l: StageLayout) => void): void;
   onVisibility(cb: (v: boolean) => void): void;
   onPointer(cb: (p: PointerMsg) => void): void;
-  /** Ustawienia (skórka, limit zwierzaków): od razu bieżące, potem każda zmiana. */
+  /** Settings (skin, pet limit): current values immediately, then each change. */
   onSettings(cb: (s: Settings) => void): void;
-  /** Tryb oszczędny: od razu bieżący, potem każda zmiana. */
+  /** Power saving mode: current value immediately, then each change. */
   onPower(cb: (saving: boolean) => void): void;
-  /** Muzyka w systemie (Spotify, Apple Music, przeglądarka…): od razu bieżąca, potem każda zmiana. */
+  /** System music (Spotify, Apple Music, browser…): current value immediately, then each change. */
   onMedia?(cb: (m: Media) => void): void;
-  /** Menu pod prawym klikiem: na zwierzaku (`id`) albo ogólne (`null`); x, y w pikselach CSS sceny. */
+  /** Right-click menu: for a pet (`id`) or general (`null`); x, y in stage CSS pixels. */
   openMenu?(id: string | null, x: number, y: number): void;
-  /** Okno pływające: przepuszczanie kliknięć przez puste miejsca. */
+  /** Floating window: pass clicks through empty areas. */
   setPassthrough?(on: boolean): void;
-  /** Tryb „Przesuń” w pasku: scena pokazuje przerywaną ramkę. */
+  /** Taskbar Move mode: the stage shows a dashed border. */
   onMoving?(cb: (on: boolean) => void): void;
   setWidth(css: number): void;
-  /** Widoczne zwierzaki (środek w px CSS sceny) dla okna dymków. */
+  /** Visible pets (centers in stage CSS px) for the bubble window. */
   setPets?(pets: { id: string; x: number }[], width: number, zoom: number): void;
-  /** `pet`: zwierzak pod kursorem; jego dymek (jeśli widać) rozwija się zamiast tooltipa. */
+  /** `pet`: pet under the cursor; its bubble, if visible, expands instead of a tooltip. */
   showTooltip(anchorX: number, content: TooltipContent, pet?: string): void;
   hideTooltip(): void;
-  /** Otwiera panel (albo zamyka otwarty); `focus` podświetla sesję. */
+  /** Open the panel (or close it if open); `focus` highlights a session. */
   openPanel(focus?: string): void;
 }
 
@@ -60,7 +60,7 @@ export function tauriBridge(): Bridge {
   };
 }
 
-/** Atrapa do dev.html: dane pokazowe, mysz z DOM, tooltip w zwykłym elemencie strony. */
+/** Stub for dev.html: demo data, DOM mouse, tooltip in a regular page element. */
 export function fakeBridge(canvas: HTMLCanvasElement, tip: HTMLElement,
   opts: { count: () => number; maxWidth: () => number; music?: () => boolean; only?: () => [State, Tool | null] | null; render: (el: HTMLElement, c: TooltipContent) => void }): Bridge {
   const snaps: ((s: Snapshot) => void)[] = [];
@@ -94,7 +94,7 @@ export function fakeBridge(canvas: HTMLCanvasElement, tip: HTMLElement,
     setWidth: w => { canvas.style.width = `${w}px`; },
     showTooltip: (x, content) => {
       opts.render(tip, content);
-      tip.style.left = '0px'; // pełna szerokość przed pomiarem; jak w Rust, tooltip nie wychodzi poza ekran
+      tip.style.left = '0px'; // full width before measuring; as in Rust, keep the tooltip on screen
       const box = canvas.getBoundingClientRect();
       const left = box.left + x - tip.offsetWidth / 2;
       tip.style.left = `${Math.max(4, Math.min(left, innerWidth - tip.offsetWidth - 4))}px`;

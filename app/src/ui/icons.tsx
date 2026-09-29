@@ -1,8 +1,8 @@
-// Ikony interfejsu rysowane kreską w kolorze tekstu (bez emoji: wyglądają różnie w każdym systemie i motywie).
+// UI icons drawn with strokes in the text color (emoji vary by system and theme).
 const base = { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4,
   strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
 
-/** Statystyki: trzy słupki na linii bazowej. */
+/** Stats: three bars on a baseline. */
 export function StatsIcon() {
   return (
     <svg {...base}>
@@ -14,7 +14,7 @@ export function StatsIcon() {
   );
 }
 
-/** Kontur koła zębatego: `n` zębów, promień zewnętrzny `ro`, wewnętrzny `ri` (środek 8, 8). */
+/** Gear outline: `n` teeth, outer radius `ro`, inner radius `ri` (center 8, 8). */
 export function gearPath(n = 8, ro = 7, ri = 5.3): string {
   const r = (v: number) => Math.round(v * 100) / 100;
   const pt = (a: number, rad: number) => `${r(8 + rad * Math.cos(a))} ${r(8 + rad * Math.sin(a))}`;
@@ -27,7 +27,7 @@ export function gearPath(n = 8, ro = 7, ri = 5.3): string {
   return `M${pts.join('L')}Z`;
 }
 
-/** Ustawienia: koło zębate z otworem. */
+/** Settings: gear with a hole. */
 export function GearIcon() {
   return (
     <svg {...base}>

@@ -1,5 +1,5 @@
 import type { Skin } from './types';
-/** Cursor: czarny sześciokątny klocek jak logo, z jaśniejszą fasetką od lewego górnego rogu i jasną krawędzią. */
+/** Cursor: black hexagonal block like the logo, with a lighter facet from the top left and a light edge. */
 export const cursor: Skin = {
   id: 'cursor', pal: { m:'#1A1A1A',s:'#111111',b:'#161616',h:'#2E2E2E',g:'#6B6868',gs:'#555252' },
   width: 84, depth: 54, height: 66, radius: 6, armLen: 25, mitt: 5.4,

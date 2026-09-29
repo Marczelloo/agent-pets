@@ -31,7 +31,7 @@ describe('pixel model', () => {
   });
   it('moves in steps of 0.1 s: the same frame until the step ends, even while the springs move', () => {
     setRng(seeded(4).next);
-    const c = createPet('clawd', 'done'); // skoki: ruch większy niż komórka siatki
+    const c = createPet('clawd', 'done'); // jumps: motion larger than a grid cell
     let T = 2;
     const frame = () => { const r = recorder(); drawPet(r.ctx, c, 61.3, 40.2, .3, T, { style: 'pixel', motion: 'calm' }); return r.log; };
     const advance = (dt: number) => { for (let i = 0; i < Math.round(dt * 60); i++) { T += 1 / 60; stepPet(c, 1 / 60, T); } };
@@ -44,7 +44,7 @@ describe('pixel model', () => {
   });
   it('worn items are integer rectangles too', () => {
     for (const wear of ['crown', 'bib', 'scarf', 'nightcap', 'headband']) for (const skin of ['clawd', 'kodek'] as const) {
-      // model pikselowy pamięta klatkę przez 0,1 s, więc porównujemy dwa jednakowo zasiane zwierzaki
+      // pixel model keeps a frame for 0.1 s, so compare two pets with the same seed
       const mk = (w?: string) => {
         setRng(seeded(4).next);
         const c = createPet(skin, 'idle');
@@ -70,7 +70,7 @@ describe('pixel model', () => {
       for (const r of rows) expect(/^[.klmsdtcpbywhg]+$/.test(r), `${name}: ${r}`).toBe(true);
     }
   });
-  // pasek: wysokość 48, podstawa zwierzaka Y = h − 8 = 40, u = 0,3 (stage.ts)
+  // taskbar: height 48, pet base Y = h − 8 = 40, u = 0.3 (stage.ts)
   const frames = (scene: string, skin: 'clawd' | 'kodek', dpr: number, n = 240) => {
     setRng(seeded(4).next);
     const c = createPet(skin, scene);
@@ -101,9 +101,9 @@ describe('pixel model', () => {
   it('typing hands rest on the desk keyboard (edit scene)', () => {
     const { c } = frames('edit', 'clawd', 1, 240);
     const [[lx, ly], [rx, ry]] = c.hand as number[][];
-    // klawiatura pikselowego biurka: x −10…35 u, y ≈ −30 u (jak TYPE(-2, 18) w scenes.ts)
+    // pixel desk keyboard: x −10…35 u, y ≈ −30 u (like TYPE(-2, 18) in scenes.ts)
     for (const [hx, hy] of [[lx, ly], [rx, ry]]) { expect(hx).toBeGreaterThan(-12); expect(hx).toBeLessThan(36); expect(Math.abs(hy + 30)).toBeLessThan(8); }
-    // prostokąty w kolorze klawiatury (#2C2C2A, u Clawda nieużywany) na wysokości dłoni
+    // keyboard-colored rectangles (#2C2C2A, unused by Clawd) at hand height
     let col = '';
     const keys: number[][] = [];
     for (const l of frames('edit', 'clawd', 1, 3).out[0]) {
@@ -111,7 +111,7 @@ describe('pixel model', () => {
       else if (l.startsWith('fillRect(') && col === '#2C2C2A') keys.push(l.slice(9, -1).split(',').map(Number));
     }
     const deskLeft = Math.min(...keys.filter(r => r[1] >= 40 - 34 * .3 && r[1] <= 40 - 22 * .3).map(r => r[0]));
-    expect(deskLeft).toBeLessThanOrEqual(60 + lx * .3); // klawiatura zaczyna się pod lewą dłonią albo dalej w lewo
+    expect(deskLeft).toBeLessThanOrEqual(60 + lx * .3); // keyboard starts below the left hand or further left
   });
   it('a sitting pet rests on its shadow (no gap)', () => {
     const rs = rects(frames('idle', 'clawd', 1, 240).out.at(-1)!);

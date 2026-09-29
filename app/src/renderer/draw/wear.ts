@@ -1,6 +1,6 @@
-// Rzeczy „na sobie” dla odznak w oknie statystyk (spec 0.9, 3.3): korona, śliniaczek, szalik z lodu, szlafmyca,
-// opaska. Rysowane przez `pen`, więc biorą kontur i kreskowanie ze stylu. Zaczepione w bryle zwierzaka:
-// `top` to jej górna krawędź, `w` i `h` szerokość i wysokość (w układzie bryły, u = skala).
+// Worn items for badges in the stats window (spec 0.9, 3.3): crown, bib, ice scarf, nightcap,
+// headband. Drawn by `pen`, so they use style outline and hatching. Anchored to the pet body:
+// `top` is its upper edge; `w` and `h` are width and height (body coordinates, u = scale).
 import { TAU } from '../math';
 import { elP, pen, rrP, shp } from '../pen';
 

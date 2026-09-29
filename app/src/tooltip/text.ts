@@ -10,7 +10,7 @@ const cut = (s: string, n: number) => ([...s].length <= n ? s : [...s].slice(0, 
 const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? '';
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** `media`: gra muzyka i zwierzak jej słucha → „Bezczynny · gra Spotify”, żeby taniec nie wyglądał na pracę. */
+/** `media`: music is playing and the pet is listening → "Idle · Spotify playing", so dancing does not look like work. */
 export function actionLabel(s: Pick<Session, 'state' | 'tool'>, media?: Media | null): string {
   if (s.state === 'working') return t().tool[s.tool ?? 'other'] ?? t().tool.other;
   const base = t().state[s.state] ?? t().tool.other;
@@ -25,7 +25,7 @@ export function formatAgo(ms: number): string {
   return t().time.hourAgo(Math.floor(s / 3600));
 }
 
-/** Czas trwania: „45 s”, „3 min”, „1 h 5 min”. */
+/** Duration: "45 s", "3 min", "1 h 5 min". */
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   if (s < 60) return `${s} s`;

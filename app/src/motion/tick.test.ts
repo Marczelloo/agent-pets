@@ -13,7 +13,7 @@ setRng(rng.next);
 
 describe('motion', () => {
   it('calm tick = the old stepPet with the global clock', () => {
-    // każdy zwierzak liczony osobno od tego samego ziarna (stepPet losuje akcje i mrugnięcia)
+    // each pet is advanced separately from the same seed (stepPet randomizes actions and blinks)
     rng.reset(3); const a = createPet('clawd', 'edit');
     let T = 0;
     for (let f = 0; f < 120; f++) { T += 1 / 60; stepPet(a, 1 / 60, T + 0.5); }
@@ -40,7 +40,7 @@ describe('motion', () => {
   });
   it('dynamic springs never overshoot (critically damped), calm ones do', () => {
     const peak = (m: typeof MOTIONS.calm) => { rng.reset(9); const c = createPet('clawd', 'idle'); let T = 0, top = 0;
-      c.act = ['test', 99, () => ({ armR: 0.35 })]; c.aT = 0; // cel niezależny od choreografii sceny
+      c.act = ['test', 99, () => ({ armR: 0.35 })]; c.aT = 0; // target independent of scene choreography
       c.p.armR.x = 0; c.p.armR.v = 0; for (let f = 0; f < 90; f++) { T += 1 / 60; tick(c, 1 / 60, T, m, true); top = Math.max(top, c.p.armR.x); } return top; };
     expect(peak(MOTIONS.calm)).toBeGreaterThan(0.35 * 1.02);
     expect(peak(MOTIONS.dynamic)).toBeLessThanOrEqual(0.35 + 1e-9);
@@ -87,12 +87,12 @@ describe('motion', () => {
     expect(c.act).toBe(SCENES.edit.acts[0]);
   });
   it('switching motion drops props and held items the new choreography does not use', () => {
-    const c = createPet('clawd', 'web'); // Spokojny: siatka w dłoni
+    const c = createPet('clawd', 'web'); // Calm: net in hand
     expect(c.hold).toBe('net');
     setMotion(c, true); // Dynamiczny: dash bez siatki
     expect(c.hold).toBeNull();
     expect(c.p.holdA.x).toBe(0);
-    const d = createPet('clawd', 'edit'); // biurko jest w obu choreografiach
+    const d = createPet('clawd', 'edit'); // desk is in both choreographies
     setMotion(d, true);
     expect(d.prop).toBe('desk');
   });
@@ -119,13 +119,13 @@ describe('motion', () => {
     expect(c.aT).toBeGreaterThan(aT);
   });
   it('a brand-new pet starts right in the dynamic pose (no spring-in from the calm pose)', () => {
-    const c = createPet('clawd', 'thinking'); // Spokojny: stoi; Dynamiczny: siedzi (Shikamaru)
+    const c = createPet('clawd', 'thinking'); // Calm: stands; Dynamic: sits (Shikamaru)
     setMotion(c, true);
     expect(c.p.sit.x).toBe(1);
     const d = createPet('clawd', 'idle'); let T = 0;
     for (let f = 0; f < 10; f++) { T += 1 / 60; tick(d, 1 / 60, T, MOTIONS.calm, true); }
     setScene(d, 'thinking'); const sit = d.p.sit.x;
-    setMotion(d, true); // pracujący zwierzak: przejście sprężynami, bez skoku
+    setMotion(d, true); // working pet: transition through springs, without a jump
     expect(d.p.sit.x).toBe(sit);
   });
   it('the step hook runs every step with the act time, pet clock and dt', () => {

@@ -6,8 +6,8 @@ export type RouterHealth = 'active' | 'quiet' | 'stalled' | 'blocked';
 const QUIET_MS = 30_000;
 
 /**
- * Jak `Router.healthOf` w Agent Routerze, ale liczone w chwili rysowania: plik stanu zmienia się tylko przy
- * zdarzeniach. `seenAt` to ostatnia aktywność sesji widziana w rolloucie; liczy się późniejsza z obu.
+ * Like `Router.healthOf` in Agent Router, but computed when drawing: the state file changes only on
+ * events. `seenAt` is the last session activity seen in the rollout; use the later of the two.
  */
 export function routerHealth(t: RouterTask, nowMs: number, seenAt?: number): RouterHealth {
   if (t.blocked) return 'blocked';

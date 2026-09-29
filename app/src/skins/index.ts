@@ -16,7 +16,7 @@ const hex = (h: number, s: number, l: number) => {
   return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
 };
 
-/** Barwa bloba z nazwy agenta (FNV-1a → odcień 0–359); jasność i nasycenie stałe, żeby każdy blob był równie czytelny. */
+/** Blob color from agent name (FNV-1a → hue 0–359); fixed brightness and saturation keep every blob equally legible. */
 export function blobPal(name: string): Skin['pal'] {
   let x = 0x811c9dc5;
   for (const ch of name) { x ^= ch.codePointAt(0) ?? 0; x = Math.imul(x, 0x01000193) >>> 0; }

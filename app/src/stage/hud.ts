@@ -15,8 +15,8 @@ export function progressFraction(p: Session['progress']): number | null {
 }
 
 /**
- * Pasek postępu pod zwierzakiem: 28×2 px; bez listy zadań pulsuje, gdy sesja pracuje.
- * `music`: zwierzak słucha muzyki — zamiast paska szare słupki equalizera (szare = bezczynny, nie praca).
+ * Progress bar under the pet: 28×2 px; without a task list, it pulses while the session works.
+ * `music`: the pet listens to music; gray equalizer bars replace the progress bar (gray = idle, not working).
  */
 export function drawProgress(x: CanvasRenderingContext2D, cx: number, y: number, s: Session, t: number, music: EqMode = null): void {
   if (music) { drawEq(x, cx, y, t, music); return; }
@@ -39,7 +39,7 @@ export function drawProgress(x: CanvasRenderingContext2D, cx: number, y: number,
 export type EqMode = 'dance' | 'doze' | null;
 const EQ = [[1, 0], [1.5, 1.3], [0.75, 2.2], [1.25, 0.6]] as const;
 
-/** Wysokości słupków EQ (px, 1–5): taniec skacze w rytm, drzemka ledwo faluje. */
+/** EQ bar heights (px, 1–5): dancing bounces to the beat; dozing barely moves. */
 export function eqHeights(t: number, mode: 'dance' | 'doze'): number[] {
   const amp = mode === 'dance' ? 4 : 1.5, sp = mode === 'dance' ? 1 : 0.35;
   return EQ.map(([k, ph]) => 1 + amp * Math.abs(Math.sin(t * Math.PI * BEAT * k * sp + ph)));
@@ -52,10 +52,10 @@ function drawEq(x: CanvasRenderingContext2D, cx: number, y: number, t: number, m
   x.restore();
 }
 
-/** Kolor ostrzeżenia plakietki: zadanie routera stoi albo jest zablokowane. */
+/** Badge warning color: router task is stalled or blocked. */
 const WARN = '#EF9F27';
 
-/** Znaczek Agent Routera: kółko w kolorze Codexa (albo ostrzeżenia) ze strzałkami w obie strony, nad lewym ramieniem. */
+/** Agent Router badge: circle in Codex (or warning) color with opposing arrows, above the left arm. */
 export function drawRouterBadge(x: CanvasRenderingContext2D, cx: number, y: number, warn = false): void {
   const r = 4.5, bx = cx - 17, by = y;
   x.save();
@@ -70,7 +70,7 @@ export function drawRouterBadge(x: CanvasRenderingContext2D, cx: number, y: numb
   x.lineCap = 'round';
   x.strokeStyle = '#FFFFFF';
   x.lineWidth = 1.1;
-  // górna strzałka w prawo, dolna w lewo
+  // upper arrow points right, lower arrow points left
   x.moveTo(bx - 2.2, by - 1.2); x.lineTo(bx + 2.2, by - 1.2); x.lineTo(bx + 1, by - 2.4);
   x.moveTo(bx + 2.2, by + 1.2); x.lineTo(bx - 2.2, by + 1.2); x.lineTo(bx - 1, by + 2.4);
   x.stroke();
@@ -91,7 +91,7 @@ export function limitBars(limits: Limit[]): LimitBar[] {
   return out;
 }
 
-/** Pionowe paski 3 px: 5h pełnym kolorem, tydzień przygaszony; grupy agentów rozdziela większy odstęp. */
+/** Vertical 3 px bars: 5h in full color, week dimmed; a larger gap separates agent groups. */
 export function drawLimits(x: CanvasRenderingContext2D, lx: number, h: number, bars: LimitBar[]): void {
   const top = 8, H = h - 16;
   let px = lx + 3;
@@ -126,7 +126,7 @@ export function drawBadge(x: CanvasRenderingContext2D, bx: number, h: number, hi
   x.restore();
 }
 
-/** „+N” dzieci przy mini-zwierzakach: mała pigułka przy ziemi (współrzędne w układzie 1×, `h` = 48). */
+/** "+N" children beside minis: a small pill at ground level (coordinates at 1×, `h` = 48). */
 export function drawMiniMore(x: CanvasRenderingContext2D, cx: number, h: number, n: number, font: string): void {
   const w = 14, hh = 11, y = h - 9 - hh / 2;
   x.save();

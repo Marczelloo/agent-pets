@@ -8,21 +8,21 @@ import { agentLabel, hostLabel, modelLabel } from '../model-label';
 
 const URGENT = new Set(['needs_you', 'error']);
 
-/** Najpierw sesje, które czekają na Ciebie albo mają błąd, potem od ostatnio aktywnej. Dzieci są pod rodzicem. */
+/** Sessions waiting for you or in error first, then by latest activity. Children appear under their parent. */
 export function panelSessions(sessions: Session[]): Session[] {
   return sessions.filter(s => !s.parent).sort((a, b) =>
     Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
 }
 
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
-/** Jak `dismiss::inactive` w rdzeniu: to zdejmuje „Usuń nieaktywne” (dzieci znikają z rodzicem, nie osobno). */
+/** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately). */
 export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
 
-/** Zakończone dziecko znika z panelu po tym czasie. */
+/** A finished child disappears from the panel after this time. */
 export const CHILD_DONE_MS = 10_000;
 const FINISHED = new Set(['done', 'error', 'ended']);
 
-/** Dzieci sesji (subagenci, zadania routera) od najstarszego; zakończone jeszcze przez 10 s. */
+/** Session children (subagents, router tasks) oldest first; finished ones remain for 10 s. */
 export function childrenOf(sessions: Session[], id: string, nowMs: number): Session[] {
   return sessions.filter(c => c.parent === id && !(FINISHED.has(c.state) && nowMs - c.state_since >= CHILD_DONE_MS))
     .sort((a, b) => a.started_at - b.started_at || (a.id < b.id ? -1 : 1));
@@ -30,7 +30,7 @@ export function childrenOf(sessions: Session[], id: string, nowMs: number): Sess
 
 export interface UpdateBar { text: string; action: string | null; pct: number | null }
 
-/** Pasek nad listą sesji: tylko gdy jest coś do zrobienia z aktualizacją (albo błąd). */
+/** Bar above the session list: only when an update needs attention (or has an error). */
 export function updateBar(u: UpdateStatus | undefined): UpdateBar | null {
   const x = t().panel.update;
   switch (u?.state) {
@@ -42,7 +42,7 @@ export function updateBar(u: UpdateStatus | undefined): UpdateBar | null {
   }
 }
 
-/** Linia zużycia na karcie: tokeny sesji i dnia, koszt sesji tylko gdy większy od 0 (spec 0.11 §4.2). */
+/** Usage line on a card: session and daily tokens, session cost only above 0 (spec 0.11 §4.2). */
 export function usageLine(s: Session, today: AgentUsage | undefined): string | null {
   if (!s.usage) return null;
   const u = t().panel.usage;
@@ -52,7 +52,7 @@ export function usageLine(s: Session, today: AgentUsage | undefined): string | n
   return parts.join(' · ');
 }
 
-/** Paski konta, na którym działa sesja (subskrypcja Claude'a albo ChatGPT); tylko te z danymi. */
+/** Bars for the account running the session (Claude or ChatGPT subscription); only those with data. */
 export function accountRows(s: Session, limits: Limit[], nowMs: number): LimitRow[] {
   const acct = s.usage?.account;
   if (acct !== 'claude' && acct !== 'codex') return [];
@@ -61,7 +61,7 @@ export function accountRows(s: Session, limits: Limit[], nowMs: number): LimitRo
 
 export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string }
 
-/** Zawsze cztery wiersze Claude'a i Codeksa; brak danych to `pct: null`, nigdy 0%. Antigravity tylko z danymi. */
+/** Always four Claude and Codex rows; missing data is `pct: null`, never 0%. Antigravity only with data. */
 export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
   const rows: LimitRow[] = [];
   for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly'] as const) {
@@ -92,7 +92,7 @@ export function contextText(s: Session): string | null {
 
 export interface ChildLabel { kind: 'type' | 'router' | 'bg' | 'warn'; text: string }
 
-/** Etykiety subagenta: typ (gdy nie jest już tytułem), „Router”, „w tle” i ostrzeżenie o utkniętym zadaniu routera. */
+/** Subagent labels: type (unless already the title), "Router", "in background", and a stalled router-task warning. */
 export function childLabels(c: Session, nowMs: number): ChildLabel[] {
   const out: ChildLabel[] = [];
   const x = t().panel.child;
@@ -113,7 +113,7 @@ export function childMark(c: Session): ChildMark {
   return c.state === 'idle' || c.state === 'sleep' ? 'idle' : 'run';
 }
 
-/** Druga linia wiersza: bieżąca akcja, a po zakończeniu wynik („Skończył” także dla `ended`). */
+/** Second row line: current action, then result on completion ("Finished" also for `ended`). */
 export function childLine(c: Session): string {
   switch (childMark(c)) {
     case 'ok': return t().state.done;
@@ -122,7 +122,7 @@ export function childLine(c: Session): string {
   }
 }
 
-/** Czas pracy jak na zegarze: 0:09, 1:12, 1:02:03. */
+/** Working time in clock format: 0:09, 1:12, 1:02:03. */
 export function clock(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000)), p = (n: number) => String(n).padStart(2, '0');
   const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60;

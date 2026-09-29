@@ -5,19 +5,19 @@ import { SCENES_DYNAMIC } from "./dynamic";
 import { fxState, stepFx } from "./dynamic/state";
 import { rng } from "./rng";
 import { SKINS, type SkinId } from "../skins";
-export interface Pet { type: SkinId; p: Record<string, { x: number; v: number }>; parts: any[]; /** mnożnik przezroczystości całego zwierzaka (pojawianie się, pożegnanie) */ alpha?: number; [key: string]: any }
+export interface Pet { type: SkinId; p: Record<string, { x: number; v: number }>; parts: any[]; /** opacity multiplier for the whole pet (entrance, farewell) */ alpha?: number; [key: string]: any }
 export function createPet(type: SkinId,st: string): Pet{const c: Pet={type,p:{},parts:[],spawn:0,blink:0,nb:1+rng()*2,aa:0,av:0,hp:rng(),f:20,hand:[[-30,-30],[30,-30]],aHand:[[-30,-30],[30,-30]],kph:0,prop:null,hold:null,boltAng:0,pageSeed:0};K.forEach((k: any)=>c.p[k]={x:0,v:0});setScene(c,st,true);return c;}
-/** Zrzuca słuchawki: znikają z głowy od razu i odlatują w bok jako cząsteczka (koniec sceny `vibe`/`doze`). */
+/** Drops headphones: they leave the head immediately and fly aside as a particle (end of `vibe`/`doze`). */
 export function throwPhones(c: Pet){if((c.phA||0)<.3)return;c.phA=0;c.parts.push({k:'phones',x:c.p.lx.x,y:-58,vx:75,vy:-85,g:320,life:0,max:1.1,spin:9});}
 export function startAct(c: any,a: any){c.act=a;c.aT=0;c.pend=null;if(a[3])a[3](c);}
 export const sceneTable=(c: any)=>c.dynamic?SCENES_DYNAMIC:SCENES;
-/** Przełącza choreografię (Spokojny ↔ Dynamiczny) i restartuje bieżącą scenę w nowej tablicy; pozy przechodzą sprężynami. */
+/** Switch choreography (Calm ↔ Dynamic) and restart the current scene in the new table; poses transition through springs. */
 export function setMotion(c: Pet,dynamic: boolean){if(!!c.dynamic===dynamic)return;c.dynamic=dynamic;c.parts=[];if(c.fx){c.fx.parts=[];c.fx.words=[];}
-// nowy zwierzak (jeszcze bez zegara) od razu w pozie nowej choreografii; pracujący przechodzi sprężynami
+// a new pet (no clock yet) immediately takes the new choreography pose; a working pet transitions through springs
 setScene(c,c.st,c.clk==null);
-// rekwizyt albo przedmiot, którego nowa choreografia nie używa, znika od razu (inaczej wygasa w obcej pozie, np. siatka w uniesionej łapie)
+// a prop or object unused by the new choreography disappears immediately (otherwise it fades in an unrelated pose, e.g. a net in a raised paw)
 const tg=targets(c,0);if((tg._prop||null)!==c.prop){c.prop=null;c.p.propA.x=0;c.p.propA.v=0;}if((tg._hold||null)!==c.hold){c.hold=null;c.p.holdA.x=0;c.p.holdA.v=0;}}
-/** Krytycznie tłumiona sprężyna, rozwiązanie dokładne: bez przestrzelenia i stabilna przy każdym dt. */
+/** Critically damped spring, exact solution: no overshoot and stable at any dt. */
 export function critStep(s: {x:number;v:number},target: number,k: number,dt: number){const w=Math.sqrt(k),e=s.x-target,j=s.v+w*e,ex=Math.exp(-w*dt);s.x=target+(e+j*dt)*ex;s.v=(s.v-w*j*dt)*ex;}
 export function setScene(c: any,st: any,inst?: any){c.st=st;c.seqI=0;c.sceneT=0;const s=sceneTable(c)[st];startAct(c,s.seq?s.seq[0]:s.acts[0]);if(inst){const tg=targets(c,0);c.prop=tg._prop||null;c.hold=tg._hold||null;tg.propA=c.prop?1:0;tg.holdA=c.hold?1:0;K.forEach((k: any)=>{c.p[k].x=tg[k];c.p[k].v=0;});c.tg=tg;}}
 export function nextAct(c: any){const s=sceneTable(c)[c.st];if(c.act[4])c.act[4](c);c.p.th.x-=TAU*Math.round(c.p.th.x/TAU);
@@ -28,8 +28,8 @@ let a=acts[0];if(c.act===acts[0]&&acts.length>1&&rng()>.3)a=acts[1+Math.floor(rn
 export function targets(c: any,t: any){const o=Object.assign({},DEF,sceneTable(c)[c.st].base,c.act[2](c.aT,c,t)||{});['L','R'].forEach((k: any,i: any)=>{if(!o['ik'+k]){o['hx'+k]=c.aHand[i][0];o['hy'+k]=c.aHand[i][1];}});return o;}
 function slot(c: any,tg: any,key: any,ak: any){const nm=key.slice(1),want=tg[key]||null,P=c.p[ak];if(want&&want!==c[nm]){if(!c[nm]||P.x<.1)c[nm]=want;else{tg[ak]=0;return;}}tg[ak]=want?1:0;if(!want&&P.x<.03)c[nm]=null;}
 /**
- * Sztywność sprężyn Dynamicznego: zwykła (k) przy przejściach, a akcje z `_stiff` twardnieją dopiero po wejściu
- * w nowy stan (0,2–0,4 s po zmianie), żeby zmiana stanu była płynna, a same ruchy szybkie.
+ * Dynamic spring stiffness: normal (k) during transitions; actions with `_stiff` stiffen only after entering
+ * the new state (0.2–0.4 s after the change), keeping state transitions smooth and actions quick.
  */
 export function stiffOf(c: any,tg: any,spr: {k:number;action?:number}){const st=tg._stiff;if(!st)return spr.k;const r=cl(((c.sceneT??1)-.2)/.2);return spr.k*(1+(st*(spr.action??1)-1)*r);}
 export function stepPet(c: any,dt: any,t: any,spr?: {k:number;d:number;crit?:boolean;action?:number}){const sk=spr?.k??1,sd=spr?.d??1;c.aT+=dt;c.sceneT=(c.sceneT??0)+dt;if(c.pend&&c.aT>=c.pend.t){const f=c.pend.fn;c.pend=null;f();}if(c.aT>c.act[1])nextAct(c);

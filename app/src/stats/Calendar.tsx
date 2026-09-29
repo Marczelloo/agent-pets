@@ -2,7 +2,7 @@ import { t } from '../i18n';
 import type { StatsDay } from '../types';
 import { formatHours } from './model';
 
-/** Kalendarz aktywności: kratka na dzień, kolumny to tygodnie (jak na GitHubie). */
+/** Activity calendar: one cell per day, columns are weeks (like GitHub). */
 export function Calendar({ days }: { days: StatsDay[] }) {
   return (
     <div className="cal" role="img" aria-label={t().stats.activity}>

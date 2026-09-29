@@ -1,4 +1,4 @@
-/** Przełącznik w stylu Windows 11: prawdziwe pole wyboru (dostępne z klawiatury), podpis i opis pod spodem. */
+/** Windows 11 style toggle: a real checkbox (keyboard accessible), label, and description below. */
 export function Toggle({ label, badge, checked, disabled, onChange, children }: {
   label: string; badge?: string; checked: boolean; disabled?: boolean; onChange: (on: boolean) => void; children?: React.ReactNode;
 }) {

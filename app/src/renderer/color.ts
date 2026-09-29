@@ -1,4 +1,4 @@
-// Proste operacje na kolorach dla stylów (Neon, Tusz, Pastel, Naklejka). Wyniki są zapamiętywane.
+// Simple color operations for styles (Neon, Ink, Pastel, Sticker). Results are cached.
 type RGBA = [number, number, number, number];
 const cache = new Map<string, string>();
 

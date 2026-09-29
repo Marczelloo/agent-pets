@@ -1,5 +1,5 @@
 import type { Skin } from './types';
-/** Antigravity: ludzik Androida (Google), zielony, z dwiema antenkami; unosi się nad paskiem, nóżki wiszą w powietrzu.
+/** Antigravity: green Android mascot (Google) with two antennae; floats above the taskbar, legs dangling.
  * Robot Androida: Google, licencja CC BY 3.0. */
 export const antigravity: Skin = {
   id: 'antigravity', pal: { m:'#3DDC84',s:'#2BB06A',b:'#34C677',h:'#C9F5DC',g:'#A8A49A',gs:'#86837A' },

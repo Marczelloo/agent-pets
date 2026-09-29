@@ -9,13 +9,13 @@ function rgb(hex: string | null | undefined): [number, number, number] | null {
 
 const rgba = ([r, g, b]: [number, number, number], a: number) => `rgba(${r},${g},${b},${+a.toFixed(3)})`;
 
-/** Czy tło jest rysowane (widoczność steruje klasą `on`, żeby ramka „Przesuń” działała także bez tła). */
+/** Whether the background is drawn (`on` controls visibility so the Move border works even without a background). */
 export const bgVisible = (bg: StageBackground): boolean => bg.kind !== 'none';
 
 /**
- * Styl tła za płótnem sceny. Szkło bez koloru: biały odcień na ciemnym pasku, czarny na jasnym,
- * z ramką 1 px o 1,5× większym kryciu. Pełny kolor bez wybranego koloru: karta w jasności paska.
- * WebView nie widzi okien pod sobą, więc prawdziwego rozmycia nie ma.
+ * Background style behind the stage canvas. Colorless glass: white tint on a dark taskbar, black on a light one,
+ * with a 1 px border at 1.5× opacity. Solid color without a selected color: a card matching taskbar brightness.
+ * WebView cannot see windows beneath it, so true blur is unavailable.
  */
 export function bgStyle(bg: StageBackground, lightBar: boolean): Record<string, string> {
   if (bg.kind === 'none') return { background: 'transparent', border: 'none', borderRadius: `${bg.radius}px` };

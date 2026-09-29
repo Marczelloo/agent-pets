@@ -1,5 +1,5 @@
 import type { Skin } from './types';
-/** ZCode: panda z opaską z literą „Z” na czole; oczy na czarnych łatach. */
+/** ZCode: panda with a headband bearing "Z" on its forehead; eyes on black patches. */
 export const zcode: Skin = {
   id: 'zcode', pal: { m:'#F4F4F2',s:'#D9D9D5',b:'#E6E6E2',h:'#FFFFFF',g:'#A8A49A',gs:'#86837A' },
   width: 86, depth: 56, height: 64, radius: 26, armLen: 25, mitt: 5.6,

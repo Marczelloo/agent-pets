@@ -57,7 +57,7 @@ describe('PanelView', () => {
     expect(dl).toContain('aria-valuenow="40"');
     expect(view({ state: 'ready', version: '0.7.1' })).toContain('Zainstaluj teraz');
     for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update');
-    // błąd ręcznego sprawdzenia należy do ustawień; w panelu tylko problem z samą aktualizacją
+    // manual check errors belong in settings; the panel shows only problems with the update itself
     expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).not.toContain('class="update');
     expect(view({ state: 'error', message: 'Nie udało się zweryfikować aktualizacji', verify: true })).toContain('Nie udało się zweryfikować');
   });

@@ -7,20 +7,20 @@ import { skinFor } from '../stage/sceneFor';
 import type { AppId, Pets, StatAgent } from '../types';
 
 const FPS = 30;
-/** Wygląd z ustawień dla agenta ze statystyk (router nosi wygląd routera, ale skórę Kodka). */
+/** Appearance from settings for a stats agent (router uses router appearance but the Codex skin). */
 export const statApp = (a: StatAgent): AppId => (a === 'router' ? 'agent_router' : a === 'claude' ? 'claude_code' : a);
 export const statSkin = (a: StatAgent) => skinFor(a === 'router' ? 'codex' : a);
 
 export interface StatPetProps {
   agent: StatAgent; scene: string; wear?: string; w: number; h: number; u: number; pets: Pets;
-  /** false: jedna klatka (testy, ograniczony ruch) */
+  /** false: one frame (tests, reduced motion) */
   animate: boolean;
   className?: string;
-  /** opóźnienie wejścia (animacja CSS `enter`) */
+  /** entrance delay (CSS `enter` animation) */
   delay?: number;
 }
 
-/** Zwierzak w oknie statystyk, w stylu z ustawień. Nie rysuje, gdy okno jest ukryte. */
+/** Pet in the stats window using the configured style. Does not draw while the window is hidden. */
 export function StatPet({ agent, scene, wear, w, h, u, pets, animate, className, delay }: StatPetProps) {
   const ref = useRef<HTMLCanvasElement>(null);
   const look = lookFor(pets, statApp(agent));
