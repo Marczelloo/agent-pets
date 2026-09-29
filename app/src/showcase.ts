@@ -40,19 +40,16 @@ const BOARDS: Record<string, Board> = {
   ] as [string, Agent, SceneKey][]).map(([label, agent, scene]) => ({ label, look: { motion: 'dynamic' }, pets: [pet(agent, scene)] })) },
 };
 
-// the README banner: the title on the left, every pet in one group photo on the right, back row first
+// the README banner: the title on top, the whole crew at work in one row on a taskbar
 type Spot = Pet & { x: number; y: number; u: number };
-const BANNER: Spot[] = [
-  { ...pet('codex', 'thinking'), x: 855, y: 318, u: 1.8 },
-  { ...pet('opencode', 'idle'), x: 1012, y: 318, u: 1.8 },
-  { ...pet('grok', 'idle'), x: 1160, y: 318, u: 1.8 },
-  { ...pet('antigravity', 'done'), x: 1308, y: 318, u: 1.8 },
-  { ...pet('zcode', 'idle'), x: 1462, y: 318, u: 1.8 },
-  { ...pet('claude', 'idle'), x: 905, y: 492, u: 2.15 },
-  { ...pet('copilot', 'idle'), x: 1085, y: 492, u: 2.15 },
-  { ...pet('cursor', 'idle'), x: 1262, y: 492, u: 2.15 },
-  { ...pet('other', 'needs', 'Kilo'), x: 1432, y: 492, u: 2.15 },
+const CREW: Pet[] = [
+  pet('claude', 'edit'), pet('grok', 'thinking'), pet('codex', 'bash'), pet('opencode', 'read'), pet('antigravity', 'grep'),
+  pet('copilot', 'web'), pet('cursor', 'mcp'), pet('other', 'vibe', 'Kilo'), pet('zcode', 'podium_first'),
 ];
+// Claude's desk and Copilot's net need more room than the others
+const CREW_X = [135, 370, 522, 672, 817, 967, 1127, 1292, 1457];
+const BANNER: Spot[] = CREW.map((p, i) => ({ ...p, x: CREW_X[i], y: 468, u: 1.65 }));
+const BANNER_LOOK: Look = { style: 'clean', motion: 'calm' };
 
 const q = new URLSearchParams(location.search);
 const banner = q.get('mode') === 'banner';
@@ -101,18 +98,20 @@ function step(): string {
 }
 
 function drawBanner(dt: number): string {
-  x.fillStyle = '#2B2622'; x.font = '800 118px "Segoe UI Variable Display", "Segoe UI"';
-  x.fillText('Agent Pets', 72, 250);
-  x.fillStyle = '#6E655D'; x.font = '500 30px "Segoe UI Variable Display", "Segoe UI"';
-  x.fillText('Pets for your coding agents,', 78, 312);
-  x.fillText('right in the Windows 11 taskbar', 78, 352);
-  // a soft warm glow holds the group together
-  const g = x.createRadialGradient(1160, 330, 40, 1160, 330, 470);
+  // a soft warm glow behind the crew
+  const g = x.createRadialGradient(W / 2, 400, 60, W / 2, 400, 760);
   g.addColorStop(0, '#F7DDC9'); g.addColorStop(1, 'rgba(251,241,232,0)');
-  x.fillStyle = g; x.fillRect(640, 0, W - 640, H);
-  const look: Look = { style: 'sticker', motion: 'calm' };
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.textAlign = 'center';
+  x.fillStyle = '#2B2622'; x.font = '800 104px "Segoe UI Variable Display", "Segoe UI"';
+  x.fillText('Agent Pets', W / 2, 118);
+  x.fillStyle = '#6E655D'; x.font = '500 28px "Segoe UI Variable Display", "Segoe UI"';
+  x.fillText('Pets for your coding agents, right in the Windows 11 taskbar', W / 2, 164);
+  x.textAlign = 'left';
+  // the taskbar they all work on
+  x.fillStyle = '#1F1C1A'; x.beginPath(); x.roundRect(40, 468, W - 80, 40, 12); x.fill();
   BANNER.forEach((s, i) => bannerPainters[i].frame(x, {
-    dt, t0: T, X: s.x, Y: s.y, u: s.u, look, animate: true, saving: false, reduced: false, dpr: Z,
+    dt, t0: T, X: s.x, Y: s.y, u: s.u, look: BANNER_LOOK, animate: true, saving: false, reduced: false, dpr: Z,
   }));
   return c.toDataURL('image/png');
 }
