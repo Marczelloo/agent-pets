@@ -7,10 +7,10 @@ use crate::i18n::Lang;
 use crate::model::*;
 use crate::tools::from_claude;
 
-/// Narzędzia Agent Routera, których wynik wiąże zadanie z sesją, która je zleciła.
+/// Agent Router tools whose results link a task to the session that requested it.
 const ROUTER_LINKING: [&str; 3] = ["mcp__agent-router__codex_delegate", "mcp__agent-router__codex_continue", "mcp__agent-router__codex_review"];
 
-/// `taskId` zadania routera w wyniku narzędzia MCP: w polach JSON, w tekście z JSON-em albo w zwykłym tekście.
+/// Router task `taskId` in an MCP tool result: JSON fields, text containing JSON, or plain text.
 pub fn find_task_id(v: &Value) -> Option<String> {
     match v {
         Value::Object(m) => {
@@ -37,9 +37,9 @@ pub fn transcript_path(env: &HookEnvelope) -> Option<PathBuf> {
     env.payload.get("transcript_path")?.as_str().map(PathBuf::from)
 }
 
-/// Zdarzenia z hooka. `last`: ostatnia akcja sesji (narzędzie, tekst) do pytania o zgodę.
-/// Hooki narzędzi wewnątrz subagenta (`agent_id`) należą do dziecka `"{sesja}/{agent_id}"`.
-/// Plik subagenta z `SubagentStop`: czytany przed końcem dziecka, żeby spóźnione linie go nie ożywiły.
+/// Hook events. `last`: the session's last action (tool, text) for a permission question.
+/// Tool hooks inside a subagent (`agent_id`) belong to child `"{session}/{agent_id}"`.
+/// Subagent file from `SubagentStop`: read before ending the child so late lines cannot revive it.
 pub fn subagent_transcript_path(env: &HookEnvelope) -> Option<PathBuf> {
     env.payload.get("agent_transcript_path")?.as_str().filter(|p| !p.is_empty()).map(PathBuf::from)
 }
@@ -59,7 +59,7 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
             None => { let mut e = Event::new(Source::Claude, sid, Kind::Meta, env.ts); e.data.sub_end = true; e }
         }];
     }
-    // pytanie subagenta (`AskUserQuestion`) czeka u rodzica, jak jego prośby o zgodę
+    // a subagent question (`AskUserQuestion`) waits at the parent, like its permission requests
     let asks = name == "PreToolUse" && tool_name == "AskUserQuestion";
     let in_child = matches!(name, "PreToolUse" | "PostToolUse") && !asks;
     let mut e = match agent_id {
@@ -73,7 +73,7 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
     e.data.cwd = p.get("cwd").and_then(|v| v.as_str()).map(String::from);
 
     let task_tool = matches!(tool_name, "TaskCreate" | "TaskUpdate" | "TaskList" | "TaskGet");
-    // program się nie zmienia, ale sesja mogła powstać przed włączeniem widżetu, więc też przy każdym prompcie
+    // host does not change, but the session may predate widget startup, so also send it with every prompt
     if matches!(name, "SessionStart" | "UserPromptSubmit") {
         if let Some(h) = &env.host {
             e.data.app = Some(h.app);
@@ -121,7 +121,7 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
     vec![e]
 }
 
-/// Zdarzenie dziecka (subagenta Claude Code) o id `"{rodzic}/{agent_id}"`.
+/// Child (Claude Code subagent) event with ID `"{parent}/{agent_id}"`.
 fn child(parent: &str, agent_id: &str, p: &Value, kind: Kind, ts: i64) -> Event {
     let mut e = Event::new(Source::Claude, format!("{parent}/{agent_id}"), kind, ts);
     e.data.parent = Some(parent.to_string());
@@ -134,7 +134,7 @@ fn child(parent: &str, agent_id: &str, p: &Value, kind: Kind, ts: i64) -> Event 
     e
 }
 
-/// Stan hooków między wywołaniami: ostatnia akcja każdej sesji (tylko w pamięci), do pytania o zgodę.
+/// Hook state across calls: each session's last action (in memory only), for permission questions.
 #[derive(Default)]
 pub struct HookState {
     last: HashMap<String, (String, String)>,
@@ -149,7 +149,7 @@ impl HookState {
         let tool = p.get("tool_name").and_then(|v| v.as_str()).unwrap_or("");
         for e in &events {
             match (e.kind, &e.data.action) {
-                // akcja dziecka też: zgoda na jego narzędzie czeka u rodzica
+                // include child action: permission for its tool waits at the parent
                 (Kind::ToolStart, Some(a)) => { self.last.insert(sid.to_string(), (tool.to_string(), a.clone())); }
                 (Kind::SessionEnd, _) if e.session_id == sid => { self.last.remove(sid); }
                 _ => {}
@@ -161,7 +161,7 @@ impl HookState {
     pub fn is_empty_for(&self, sid: &str) -> bool { !self.last.contains_key(sid) }
 }
 
-/// Postęp z narzędzi listy zadań Claude Code 2.1+ (TaskCreate/TaskUpdate), śledzony per sesja.
+/// Progress from Claude Code 2.1+ task list tools (TaskCreate/TaskUpdate), tracked per session.
 #[derive(Default)]
 pub struct TaskTracker {
     sessions: std::collections::HashMap<String, std::collections::BTreeMap<String, bool>>,
@@ -227,7 +227,7 @@ mod tests {
         }
         let mut x = env(json!({"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Edit", "tool_input": {}}));
         x.host = Some(host);
-        assert_eq!(te(&x)[0].data.app, None, "reszta zdarzeń bez programu");
+        assert_eq!(te(&x)[0].data.app, None, "other events have no host");
     }
 
     #[test]
@@ -331,10 +331,10 @@ mod tests {
             progress_seen |= tr.observe(&e).is_some();
             let ev = te(&e);
             if name != "PostToolUse" && !tool.starts_with("Task") && !idle {
-                assert!(!ev.is_empty(), "brak zdarzenia dla {:?}", f.path());
+                assert!(!ev.is_empty(), "missing event for {:?}", f.path());
             }
         }
-        assert!(progress_seen, "próbki TaskCreate/TaskUpdate powinny dać postęp");
+        assert!(progress_seen, "TaskCreate/TaskUpdate samples should produce progress");
     }
 
     #[test]
@@ -362,7 +362,7 @@ mod tests {
         let sub = e[0].data.sub.as_ref().unwrap();
         assert_eq!((sub.kind, sub.agent_type.as_deref()), (SubKind::Claude, Some("general-purpose")));
         assert_eq!((e[0].kind, e[0].tool, e[0].data.action.as_deref()), (Kind::ToolStart, Some(Tool::Bash), Some("echo spike-ok")));
-        assert_eq!(e[0].data.pid, None, "pid procesu należy do rodzica, nie do dziecka");
+        assert_eq!(e[0].data.pid, None, "process PID belongs to the parent, not the child");
     }
 
     #[test]
@@ -406,7 +406,7 @@ mod tests {
             "message": "Claude needs your permission to use Bash"})), Lang::Pl);
         assert_eq!(e[0].data.question.as_deref(), Some("Zgoda na Bash? cargo test"));
         h.events(&env(json!({"hook_event_name": "SessionEnd", "session_id": "s"})), Lang::Pl);
-        assert!(h.is_empty_for("s"), "po końcu sesji nic o niej nie trzymamy");
+        assert!(h.is_empty_for("s"), "retain nothing after the session ends");
     }
 
     #[test]
@@ -416,7 +416,7 @@ mod tests {
         assert_eq!(e[0].data.router_link.as_deref(), Some("codex-20260926192354-00172e9"));
         let other = te(&env(json!({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "mcp__agent-router__codex_task_status",
             "tool_response": [{"type": "text", "text": "{\"taskId\":\"x\"}"}]})));
-        assert_eq!(other[0].data.router_link, None, "tylko zlecenie, kontynuacja i review wiążą zadanie");
+        assert_eq!(other[0].data.router_link, None, "only delegation, continuation, and review link a task");
     }
 
     #[test]

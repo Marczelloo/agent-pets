@@ -14,19 +14,19 @@ pub struct HookEnvelope {
     pub ts: i64,
     pub ppid: Option<u32>,
     pub payload: serde_json::Value,
-    /// program, w którym działa agent (0.10); starsze `hook.exe` go nie wysyłają
+    /// Host program running the agent (0.10); older `hook.exe` versions do not send it.
     #[serde(default)]
     pub host: Option<crate::host::Host>,
 }
 
-/// Dane statusline Claude Code (CLI) przesłane przez `hook.exe --agent-pets-statusline`.
+/// Claude Code (CLI) statusline data sent by `hook.exe --agent-pets-statusline`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StatuslineEnvelope {
     pub ts: i64,
     pub payload: serde_json::Value,
 }
 
-/// Postęp z `TodoWrite` (starsze wersje Claude Code). Nowsze wersje: `hook::TaskTracker`.
+/// Progress from `TodoWrite` (older Claude Code versions). Newer versions: `hook::TaskTracker`.
 pub fn progress_from_tool_use(name: &str, input: &serde_json::Value) -> Option<Progress> {
     if name != "TodoWrite" { return None; }
     let todos = input.get("todos")?.as_array()?;

@@ -23,10 +23,10 @@ pub fn kind_of(path: &Path) -> Option<FileKind> {
 
 enum Parser { Claude(TranscriptParser), Subagent(SubagentParser), Codex(RolloutParser) }
 
-/// Śledzone pliki transkryptów i rolloutów, każdy z własnym czytnikiem końcówki i parserem.
+/// Watched transcript and rollout files, each with its own tail reader and parser.
 pub struct Sources {
     tails: HashMap<PathBuf, (TailReader, Parser)>,
-    /// język tekstów akcji z plików
+    /// Language of action text from files.
     pub lang: Lang,
 }
 
@@ -63,7 +63,7 @@ impl Sources {
         }).collect()
     }
 
-    /// Subagenci, których plik kończy się odpowiedzią: (id dziecka, czas ostatniej linii).
+    /// Subagents whose file ends with a response: (child ID, last line time).
     pub fn finished_subagents(&self) -> Vec<(String, i64)> {
         self.tails.values().filter_map(|(_, p)| match p { Parser::Subagent(s) => s.finished(), _ => None }).collect()
     }
@@ -74,8 +74,8 @@ impl Sources {
     }
 }
 
-/// Rekurencyjna obserwacja katalogów; wysyła ścieżki utworzonych lub zmienionych plików `.jsonl`.
-/// Zwrócony watcher trzeba trzymać przy życiu.
+/// Watch directories recursively; send paths of created or changed `.jsonl` files.
+/// Keep the returned watcher alive.
 pub fn watch(roots: &[PathBuf], tx: Sender<PathBuf>) -> notify::Result<notify::RecommendedWatcher> {
     use notify::{EventKind, RecursiveMode, Watcher};
     let mut w = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {

@@ -1,4 +1,4 @@
-//! JSON statusline Claude Code → limity konta (5h, tydzień), kontekst i tytuł sesji (raport S3).
+//! Claude Code statusline JSON → account limits (5h, weekly), context, and session title (S3 report).
 use super::StatuslineEnvelope;
 use crate::model::*;
 use serde_json::Value;
@@ -65,7 +65,7 @@ mod tests {
         let ev = to_events(&StatuslineEnvelope { ts: 1, payload: json!({
             "session_id": "s", "rate_limits": { "five_hour": { "used_percentage": null } },
             "context_window": { "used_percentage": null, "context_window_size": 200000 } }) });
-        assert!(ev.iter().all(|e| e.kind != Kind::Limits), "limit bez procentu to brak danych");
+        assert!(ev.iter().all(|e| e.kind != Kind::Limits), "limit without percentage means no data");
         assert!(ev.iter().all(|e| e.data.context.is_none()));
     }
 

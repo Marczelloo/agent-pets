@@ -1,5 +1,5 @@
-//! Statystyki pracy agentów (spec 0.9): sumy tokenów, czasu pracy, pytań i narzędzi per plik historii,
-//! w kubełkach kwadrans (UTC) × model. Tylko liczby, nazwy folderów projektów i modeli; bez treści.
+//! Agent work statistics (spec 0.9): token, work time, question, and tool totals per history file,
+//! in quarter-hour (UTC) × model buckets. Only numbers and project folder and model names; no content.
 pub mod active;
 pub mod book;
 pub mod claude;
@@ -17,13 +17,13 @@ use serde::{Deserialize, Serialize};
 use crate::model::Tool;
 
 pub const HOUR_MS: i64 = 3_600_000;
-/// Kubełek czasu w księdze: kwadrans mieści każde prawdziwe przesunięcie strefy (+5:30, +5:45), więc praca po
-/// lokalnej północy nie trafia do poprzedniego dnia (przegląd 0.9, I2).
+/// Time bucket in the ledger: a quarter hour accommodates every real zone offset (+5:30, +5:45), so work after
+/// local midnight is not assigned to the previous day (review 0.9, I2).
 pub const BUCKET_MS: i64 = 15 * 60_000;
-/// Dłuższa przerwa między zdarzeniami agenta to pauza, nie praca (spec 2.3).
+/// A longer gap between agent events is a pause, not work (spec 2.3).
 pub const GAP_MS: i64 = 5 * 60_000;
 
-/// Wywołania narzędzi według rodzaju (ten sam podział co `Tool`).
+/// Tool calls by kind (same categories as `Tool`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tools { pub edit: u32, pub bash: u32, pub read: u32, pub grep: u32, pub web: u32, pub agent: u32, pub mcp: u32, pub other: u32 }
 
@@ -40,7 +40,7 @@ impl Tools {
     }
 }
 
-/// Sumy jednej godziny i jednego modelu w jednym pliku.
+/// Totals for one hour and one model in one file.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cell { pub input: u64, pub cache_read: u64, pub cache_write: u64, pub output: u64, pub active_ms: u64, pub questions: u32, pub tools: Tools }
 
@@ -61,11 +61,11 @@ impl Cell {
 #[serde(rename_all = "snake_case")]
 pub enum StatAgent { Claude, Codex, Router, Opencode }
 
-/// Kto i gdzie: agent, projekt (ostatni człon `cwd`), czy to subagent, kiedy plik się zaczął.
+/// Who and where: agent, project (last `cwd` component), whether a subagent, and when the file began.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FileMeta { pub agent: Option<StatAgent>, pub project: Option<String>, pub sub: bool, pub started: Option<i64> }
 
-/// Gdzie skończyliśmy czytać plik i stan potrzebny, by czytać dalej bez podwójnego liczenia.
+/// Where file reading stopped and the state needed to continue without double counting.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Cursor {
     pub offset: u64,
@@ -74,18 +74,18 @@ pub struct Cursor {
     pub last_event: Option<i64>,
     pub line: u64,
     pub skip_until: u64,
-    /// Claude: ostatnia odpowiedź (`message.id`) i jej wkład w tokeny (powtarza się w kolejnych wierszach)
+    /// Claude: last response (`message.id`) and its token contribution (repeated in subsequent lines).
     pub last_msg: Option<(String, Cell)>,
-    /// Codex: ostatnia suma narastająca `[input bez cache, cache_read, cache_write, output]`
+    /// Codex: last cumulative total `[input without cache, cache_read, cache_write, output]`.
     pub last_total: Option<[u64; 4]>,
     pub model: Option<String>,
-    /// Claude: skróty (FNV-1a) `message.id` już policzonych odpowiedzi; Claude Code dopisuje starsze odpowiedzi
-    /// jeszcze raz przy wznowieniu i kompaktowaniu (przegląd 0.9, C1)
+    /// Claude: hashes (FNV-1a) of already counted `message.id` responses; Claude Code appends older responses
+    /// again on resume and compaction (review 0.9, C1).
     #[serde(default)]
     pub seen: BTreeSet<u64>,
 }
 
-/// Wpis księgi dla jednego pliku historii: kursor, metadane i wkład (kwadrans UTC → model → sumy).
+/// Ledger entry for one history file: cursor, metadata, and contribution (UTC quarter hour → model → totals).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FileEntry { pub cursor: Cursor, pub meta: FileMeta, pub buckets: BTreeMap<i64, BTreeMap<String, Cell>> }
 

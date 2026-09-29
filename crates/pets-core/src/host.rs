@@ -1,5 +1,5 @@
-//! Program-gospodarz sesji (terminal, VS Code, t3code…): wędrówka po rodzicach procesu agenta.
-//! Jeden zrzut Toolhelp na wędrówkę (spike S3), najwyżej 8 kroków, ochrona przed ponownie użytym PID.
+//! Session host program (terminal, VS Code, t3code…): walk up the agent process's parents.
+//! One Toolhelp snapshot per walk (spike S3), at most 8 steps, with reused PID protection.
 use crate::model::App;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -7,13 +7,13 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Proc { pub pid: u32, pub parent: u32, pub exe: String, pub created: Option<u64> }
 
-/// Zrzut procesów: `pid → (rodzic, nazwa)`. Czas utworzenia żywego zrzutu czytamy tylko dla procesów z wędrówki.
+/// Process snapshot: `pid → (parent, name)`. Read live creation time only for processes visited in the walk.
 pub struct ProcTable { procs: HashMap<u32, Proc>, live: bool }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Host {
     pub app: App,
-    /// nazwa programu `App::Other`
+    /// `App::Other` program name.
     #[serde(default)]
     pub name: Option<String>,
     pub pid: u32,
@@ -35,7 +35,7 @@ impl ProcTable {
 
     pub fn get(&self, pid: u32) -> Option<&Proc> { self.procs.get(&pid) }
 
-    /// Czas utworzenia (FILETIME); brak = nie da się sprawdzić (np. brak dostępu).
+    /// Creation time (FILETIME); absent if it cannot be checked (e.g. access denied).
     pub fn created(&self, pid: u32) -> Option<u64> {
         let p = self.procs.get(&pid)?;
         if p.created.is_some() || !self.live { return p.created; }
@@ -46,17 +46,17 @@ impl ProcTable {
     }
 }
 
-/// Program po nazwie pliku. `claude.exe` celowo nie: to i CLI, i aplikacja Claude (spike S3).
+/// Program by file name. Deliberately exclude `claude.exe`: both the CLI and Claude app use it (spike S3).
 pub fn app_of_exe(exe: &str) -> Option<App> {
     let e = exe.to_ascii_lowercase();
     Some(match e.as_str() {
         "t3 code.exe" | "t3code.exe" => App::T3code,
         "code.exe" | "code - insiders.exe" => App::Vscode,
         "cursor.exe" => App::Cursor,
-        // od 2.0: aplikacja „Antigravity” i osobne „Antigravity IDE”
+        // since 2.0: the "Antigravity" app and a separate "Antigravity IDE"
         "antigravity.exe" | "antigravity ide.exe" => App::Antigravity,
         "zed.exe" => App::Zed,
-        // sprawdzone na żywo: %LOCALAPPDATA%\Programs\ZCode\ZCode.exe
+        // verified live: %LOCALAPPDATA%\Programs\ZCode\ZCode.exe
         "zcode.exe" => App::Zcode,
         "idea64.exe" | "pycharm64.exe" | "webstorm64.exe" | "goland64.exe" | "rider64.exe" | "clion64.exe"
             | "rustrover64.exe" | "phpstorm64.exe" => App::Jetbrains,
@@ -65,8 +65,8 @@ pub fn app_of_exe(exe: &str) -> Option<App> {
     })
 }
 
-/// Najbliższy znany program nad `pid`. Terminal przegrywa z programem wyżej (terminal w VS Code to VS Code).
-/// Z kilku procesów programu o tej samej nazwie bierzemy najwyższy: tylko główny ma okno do skoku.
+/// Nearest known program above `pid`. A terminal yields to a program above it (a VS Code terminal is VS Code).
+/// Among same-named program processes, take the highest one: only the main process has a window to jump to.
 pub fn host_of(t: &ProcTable, pid: u32) -> Option<Host> {
     let mut chain: Vec<u32> = Vec::new();
     let mut cur = pid;
@@ -74,7 +74,7 @@ pub fn host_of(t: &ProcTable, pid: u32) -> Option<Host> {
         let Some(p) = t.get(cur) else { break };
         let parent = p.parent;
         if parent == 0 || parent == cur || chain.contains(&parent) || t.get(parent).is_none() { break; }
-        // rodzic młodszy od dziecka: jego PID został użyty ponownie, to nie nasz przodek
+        // parent younger than child: its PID was reused, so it is not our ancestor
         if let (Some(pc), Some(cc)) = (t.created(parent), t.created(cur)) { if pc > cc { break; } }
         chain.push(parent);
         cur = parent;
@@ -98,7 +98,7 @@ mod tests {
     fn a_terminal_inside_vs_code_belongs_to_vs_code() {
         let t = ProcTable::from_procs(vec![p(1, 2, "pwsh.exe", 50), p(2, 3, "cmd.exe", 40), p(3, 4, "claude.exe", 30),
             p(4, 5, "Code.exe", 20), p(5, 6, "Code.exe", 10), p(6, 0, "explorer.exe", 1)]);
-        assert_eq!(host_of(&t, 1), Some(Host { app: App::Vscode, name: None, pid: 5 }), "główny proces VS Code, nie pomocniczy");
+        assert_eq!(host_of(&t, 1), Some(Host { app: App::Vscode, name: None, pid: 5 }), "main VS Code process, not a helper");
     }
 
     #[test]
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn a_reused_parent_pid_stops_the_walk() {
-        // rodzic claude.exe zakończył się, a jego PID dostał później uruchomiony VS Code
+        // the claude.exe parent exited and a later VS Code process reused its PID
         let t = ProcTable::from_procs(vec![p(1, 2, "claude.exe", 50), p(2, 0, "Code.exe", 90)]);
         assert_eq!(host_of(&t, 1), None);
     }
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn the_snapshot_knows_this_process_and_its_parent() {
         let t = ProcTable::snapshot();
-        let me = t.get(std::process::id()).expect("bieżący proces w zrzucie");
+        let me = t.get(std::process::id()).expect("current process in snapshot");
         assert_eq!(Some(me.parent), crate::pid::process_entry(std::process::id()).map(|(p, _)| p));
         assert!(t.created(std::process::id()).is_some());
     }

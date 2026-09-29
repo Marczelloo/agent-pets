@@ -1,5 +1,5 @@
-//! Aplikacje, dla których są zwierzaki: wykrycie, stan, włączenie, wyłączenie i pełne odinstalowanie.
-//! Nowy program w przyszłości to nowy wariant `AppId` plus adapter w rdzeniu.
+//! Apps with pets: detection, status, enabling, disabling, and complete removal.
+//! A future program needs a new `AppId` variant plus a core adapter.
 use crate::i18n::{tr, Lang};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -24,11 +24,11 @@ pub fn pets_dir(home: &Path) -> PathBuf { home.join(".agent-pets") }
 pub fn installed_hook(home: &Path) -> PathBuf { pets_dir(home).join("hook.exe") }
 fn statusline_original(home: &Path) -> PathBuf { pets_dir(home).join("statusline-original.json") }
 
-/// Pierwsza linia naszego pluginu: plik bez niej nie jest nasz i nie ruszamy go.
+/// First line of our plugin: a file without it is not ours and is left untouched.
 pub const PLUGIN_MARK: &str = "// agent-pets plugin v1";
 pub const OPENCODE_PLUGIN: &str = include_str!("../assets/opencode-plugin.js");
 fn opencode_dir(home: &Path) -> PathBuf { home.join(".config").join("opencode") }
-/// opencode 1.18 wczytuje `{plugin,plugins}/*.{ts,js}` z katalogu konfiguracji (spike S1).
+/// opencode 1.18 loads `{plugin,plugins}/*.{ts,js}` from its config directory (spike S1).
 pub fn opencode_plugin(home: &Path) -> PathBuf { opencode_dir(home).join("plugins").join("agent-pets.js") }
 
 enum PluginFile { Missing, Ours(String), Foreign }
@@ -38,7 +38,7 @@ fn plugin_file(home: &Path) -> PluginFile {
         Ok(t) if t.starts_with(PLUGIN_MARK) => PluginFile::Ours(t),
         Ok(_) => PluginFile::Foreign,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => PluginFile::Missing,
-        // plik jest, ale nie da się go przeczytać (np. nie UTF-8): traktujemy jak cudzy
+        // file exists but cannot be read (e.g. not UTF-8): treat it as someone else's
         Err(_) => PluginFile::Foreign,
     }
 }
@@ -58,7 +58,7 @@ fn enable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
             let dir = f.parent().expect("plugins/");
             let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
             std::fs::create_dir_all(dir).map_err(err)?;
-            // zapis atomowy: opencode nigdy nie wczyta połowy pliku
+            // atomic write: opencode never reads half a file
             let tmp = dir.join(".agent-pets.js.tmp");
             std::fs::write(&tmp, OPENCODE_PLUGIN).map_err(err)?;
             std::fs::rename(&tmp, &f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e) })?;
@@ -78,8 +78,8 @@ fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
     }
 }
 
-/// Komenda hooka dla cmd i bash: ukośniki (bash nie zjada `\`), cudzysłów przy każdym znaku spoza bezpiecznego
-/// zestawu (spacja, apostrof, `&`, nawiasy…). Zwykła ścieżka zostaje bez cudzysłowu, więc działa też w PowerShellu.
+/// Hook command for cmd and bash: forward slashes (bash does not consume `\`), quotes for any character outside the safe
+/// set (space, apostrophe, `&`, parentheses…). An ordinary path stays unquoted, so it also works in PowerShell.
 pub fn hook_command(hook: &Path, agent: &str, event: &str) -> String {
     let p = hook.to_string_lossy().replace('\\', "/");
     let safe = p.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | ':' | '_' | '-'));
@@ -87,18 +87,18 @@ pub fn hook_command(hook: &Path, agent: &str, event: &str) -> String {
     format!("{p} --agent {agent} --event {event}")
 }
 
-/// Komenda hooka dla PowerShella (klucz `powershell` Copilota): operator wywołania i apostrofy, `'` podwojony.
+/// Hook command for PowerShell (Copilot `powershell` key): call operator and single quotes, with `'` doubled.
 pub fn hook_command_ps(hook: &Path, agent: &str, event: &str) -> String {
     let p = hook.to_string_lossy().replace('\\', "/").replace('\'', "''");
     format!("& '{p}' --agent {agent} --event {event}")
 }
 
-/// Zdarzenia Copilota: PascalCase dla tych, które zna też VS Code, camelCase dla tych tylko z CLI (spec 0.11 §3.1).
+/// Copilot events: PascalCase for those also known to VS Code, camelCase for CLI-only events (spec 0.11 §3.1).
 pub const COPILOT_EVENTS: [&str; 11] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart",
     "SubagentStop", "Stop", "sessionEnd", "notification", "errorOccurred", "postToolUseFailure"];
-/// Bez `PreToolUse`: to bramka zgód, na którą każda odpowiedź coś decyduje (`{}` odmawia, `ask` wymusza pytanie).
+/// Without `PreToolUse`: it is a permission gate where every response makes a decision (`{}` denies, `ask` forces a prompt).
 pub const ANTIGRAVITY_EVENTS: [&str; 3] = ["PreInvocation", "PostToolUse", "Stop"];
-/// Klucz naszego hooka w `hooks.json` Antigravity.
+/// Our hook key in Antigravity `hooks.json`.
 const ANTIGRAVITY_KEY: &str = "agent-pets";
 
 pub const CURSOR_EVENTS: [&str; 10] = ["sessionStart", "sessionEnd", "beforeSubmitPrompt", "preToolUse", "postToolUse",
@@ -112,12 +112,12 @@ pub fn copilot_hooks(home: &Path) -> PathBuf { home.join(".copilot").join("hooks
 pub fn antigravity_hooks(home: &Path) -> PathBuf { home.join(".gemini").join("config").join("hooks.json") }
 pub fn cursor_hooks_path(home: &Path) -> PathBuf { home.join(".cursor").join("hooks.json") }
 pub fn grok_hooks(home: &Path) -> PathBuf { home.join(".grok").join("hooks").join("agent-pets.json") }
-/// Katalog danych ZCode: `ZCODE_DATA_BASE_DIR`, jeśli ustawiony, inaczej `~/.zcode`.
+/// ZCode data directory: `ZCODE_DATA_BASE_DIR` if set, otherwise `~/.zcode`.
 pub fn zcode_dir(home: &Path, base: Option<PathBuf>) -> PathBuf { base.unwrap_or_else(|| home.join(".zcode")) }
 pub fn zcode_config(home: &Path, base: Option<PathBuf>) -> PathBuf { zcode_dir(home, base).join("cli").join("config.json") }
 fn zcode_base() -> Option<PathBuf> { std::env::var_os("ZCODE_DATA_BASE_DIR").filter(|v| !v.is_empty()).map(PathBuf::from) }
 
-/// Wszystkie komendy w drzewie JSON (pola `command` i `powershell`).
+/// All commands in the JSON tree (`command` and `powershell` fields).
 fn commands(v: &serde_json::Value, out: &mut Vec<String>) {
     match v {
         serde_json::Value::Object(o) => for (k, x) in o {
@@ -131,7 +131,7 @@ fn commands(v: &serde_json::Value, out: &mut Vec<String>) {
     }
 }
 
-/// Czy to nasz wpis: ma komendy i każda to nasz `hook.exe` dla tego agenta.
+/// Whether this is our entry: it has commands and each invokes our `hook.exe` for this agent.
 fn ours(v: &serde_json::Value, agent: &str) -> bool {
     let mut c = Vec::new();
     commands(v, &mut c);
@@ -148,7 +148,7 @@ fn copilot_json(hook: &Path) -> serde_json::Value {
 
 enum HookFile { Missing, Ours, Foreign }
 
-/// Plik hooków, który w całości należy do nas (Copilot, Grok).
+/// Hook file that belongs entirely to us (Copilot, Grok).
 fn own_file(f: &Path, agent: &str) -> HookFile {
     match std::fs::read(f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => HookFile::Missing,
@@ -159,7 +159,7 @@ fn own_file(f: &Path, agent: &str) -> HookFile {
 
 fn copilot_file(home: &Path) -> HookFile { own_file(&copilot_hooks(home), "copilot") }
 
-/// Zapisuje nasz plik tylko przy zmianie treści; atomowo, więc agent nigdy nie wczyta połowy pliku.
+/// Write our file only when its contents change; atomically, so the agent never reads half a file.
 fn write_own_file(f: &Path, text: &str, lang: Lang) -> Result<(), String> {
     if std::fs::read_to_string(f).ok().as_deref() == Some(text) { return Ok(()); }
     let dir = f.parent().expect("hooks/");
@@ -198,14 +198,14 @@ fn disable_copilot(home: &Path, lang: Lang) -> Result<String, String> {
 fn antigravity_entry(hook: &Path) -> serde_json::Value {
     let cmd = |ev: &str| serde_json::json!({"type": "command", "command": hook_command(hook, "antigravity", ev), "timeout": 5});
     let groups: serde_json::Map<String, serde_json::Value> = ANTIGRAVITY_EVENTS.iter().map(|ev| {
-        // tylko zdarzenia narzędzi mają grupy z `matcher`; reszta to lista komend wprost (docs Antigravity: Hooks)
+        // only tool events have groups with `matcher`; the rest are direct command lists (Antigravity Hooks docs)
         let g = if ev.ends_with("ToolUse") { serde_json::json!({"matcher": "*", "hooks": [cmd(ev)]}) } else { cmd(ev) };
         (ev.to_string(), serde_json::json!([g]))
     }).collect();
     serde_json::Value::Object(groups)
 }
 
-/// Plik hooków Antigravity: `None` = brak pliku; błąd = zły JSON, główny element nie jest obiektem albo nasz klucz jest cudzy.
+/// Antigravity hook file: `None` = no file; error = invalid JSON, non-object root, or our key belongs to someone else.
 fn read_antigravity(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
     let f = antigravity_hooks(home);
     let v: serde_json::Value = match std::fs::read(&f) {
@@ -231,9 +231,9 @@ fn enable_antigravity(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Resul
     let ours_now = current.as_ref().and_then(|v| v.get(ANTIGRAVITY_KEY));
     let done = tr(lang, "Hooki Antigravity zapisane (kopia: hooks.json.agent-pets.bak). Potrzebna wersja Antigravity z hookami.",
         "Antigravity hooks written (backup: hooks.json.agent-pets.bak). Needs an Antigravity version with hooks.");
-    // naprawa przy każdym starcie: bez zmian nic nie zapisujemy (plik użytkownika i kopia zostają nietknięte)
+    // repair on every startup: if unchanged, write nothing (leave user file and backup untouched)
     if ours_now == Some(&entry) { return Ok(done.into()); }
-    // kopia tylko pliku sprzed naszej pierwszej zmiany; zmiana naszego wpisu (np. nowa ścieżka) jej nie nadpisuje
+    // back up only the file before our first edit; changing our entry (e.g. new path) does not overwrite it
     crate::hooks_install::edit_file_opts(&antigravity_hooks(home), ours_now.is_none(), |v| { v[ANTIGRAVITY_KEY] = entry; })
         .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), antigravity_hooks(home).display()))?;
     Ok(done.into())
@@ -245,17 +245,17 @@ fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, String> {
     if v.get(ANTIGRAVITY_KEY).is_none() { return nothing(); }
     let f = antigravity_hooks(home);
     let mut empty = false;
-    // bez nowej kopii: kopia zostaje plikiem sprzed naszej pierwszej zmiany
+    // no new backup: keep the file from before our first edit as the backup
     crate::hooks_install::edit_file_opts(&f, false, |v| {
         if let Some(o) = v.as_object_mut() { o.remove(ANTIGRAVITY_KEY); empty = o.is_empty(); }
     }).map_err(|e| e.to_string())?;
-    // plik tylko z naszym kluczem: po wyłączeniu nic w nim nie zostało
+    // file with only our key: nothing remains after disabling
     if empty { std::fs::remove_file(&f).map_err(|e| e.to_string())?; }
     Ok(tr(lang, "Hooki Antigravity usunięte.", "Antigravity hooks removed.").into())
 }
 
-/// Plik z mapą `hooks` {zdarzenie: [wpisy]} (Cursor, ZCode). `None` = brak pliku; błąd = zły JSON albo nietypowy kształt,
-/// wtedy nic nie zmieniamy.
+/// File with `hooks` map {event: [entries]} (Cursor, ZCode). `None` = no file; error = invalid JSON or unexpected shape,
+/// then change nothing.
 fn read_hook_map(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
     let unusual = || format!("{} {}, {}", tr(lang, "Nietypowy plik", "Unusual file"), f.display(),
         tr(lang, "nic nie zmieniam.", "leaving it unchanged."));
@@ -271,7 +271,7 @@ fn read_hook_map(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, Stri
     if shape { Ok(Some(v)) } else { Err(unusual()) }
 }
 
-/// Usuwa nasze wpisy ze wszystkich list w `hooks`; listy, które przez to opustoszały, znikają. Zwraca, czy coś usunięto.
+/// Remove our entries from all `hooks` lists; lists emptied by this are removed. Return whether anything was removed.
 fn strip_hooks(v: &mut serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -> bool) -> bool {
     let Some(hooks) = v.get_mut("hooks").and_then(|h| h.as_object_mut()) else { return false };
     let mut removed = false;
@@ -285,15 +285,15 @@ fn strip_hooks(v: &mut serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -
     removed
 }
 
-/// Dopisuje nasz wpis na koniec listy każdego zdarzenia; cudze wpisy zostają przed naszymi. Bez zmian nic nie zapisujemy,
-/// a kopia (`.agent-pets.bak`) powstaje tylko z pliku bez naszych wpisów, więc zostaje plikiem sprzed naszej pierwszej zmiany.
+/// Append our entry to each event list; others' entries stay before ours. Write nothing if unchanged,
+/// and create the backup (`.agent-pets.bak`) only from a file without our entries, preserving the pre-edit file.
 fn join_hooks(f: &Path, current: Option<&serde_json::Value>, mut v: serde_json::Value, events: &[&str],
               entry: impl Fn(&str) -> serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -> bool, lang: Lang) -> Result<(), String> {
     let had_ours = merge_hooks(&mut v, events, entry, is_ours);
     write_hooks(f, current, v, had_ours, lang)
 }
 
-/// Nasze wpisy na koniec list w `hooks` (dawne usunięte). Zwraca, czy jakieś dawne były.
+/// Place our entries at the end of `hooks` lists (old ones removed). Return whether any old ones existed.
 fn merge_hooks(v: &mut serde_json::Value, events: &[&str], entry: impl Fn(&str) -> serde_json::Value,
                is_ours: &dyn Fn(&serde_json::Value) -> bool) -> bool {
     let had_ours = strip_hooks(v, is_ours);
@@ -311,13 +311,13 @@ fn write_hooks(f: &Path, current: Option<&serde_json::Value>, v: serde_json::Val
         .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), f.display()))
 }
 
-/// Czy każde zdarzenie ma dokładnie nasz aktualny wpis.
+/// Whether every event has exactly our current entry.
 fn has_hooks(v: &serde_json::Value, events: &[&str], entry: impl Fn(&str) -> serde_json::Value) -> bool {
     events.iter().all(|ev| v["hooks"][*ev].as_array().is_some_and(|a| a.contains(&entry(ev))))
 }
 
-/// Cursor 3.22 uruchamia hooki przez PowerShell: zwykła ścieżka zostaje w formie sprawdzonej na żywo, a ścieżka
-/// z cudzysłowem (spacja, apostrof…) dostaje operator wywołania, bo `"…" --agent` to w PowerShellu błąd składni.
+/// Cursor 3.22 runs hooks through PowerShell: ordinary paths keep the form verified live, while quoted paths
+/// (space, apostrophe…) get the call operator because `"…" --agent` is a PowerShell syntax error.
 fn cursor_entry(hook: &Path, ev: &str) -> serde_json::Value {
     let cmd = hook_command(hook, "cursor", ev);
     let cmd = if cmd.starts_with('"') { hook_command_ps(hook, "cursor", ev) } else { cmd };
@@ -342,7 +342,7 @@ fn disable_cursor(home: &Path, lang: Lang) -> Result<String, String> {
     let Some(mut v) = read_hook_map(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
     if !strip_hooks(&mut v, &is_cursor) { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()); }
     let empty = v.get("hooks").and_then(|h| h.as_object()).is_none_or(|h| h.is_empty());
-    // bez kopii plik był nasz od początku: po wyłączeniu nic w nim nie zostało
+    // without a backup, the file was ours from the start: nothing remains after disabling
     if empty && !f.with_file_name("hooks.json.agent-pets.bak").exists() {
         std::fs::remove_file(&f).map_err(|e| e.to_string())?;
     } else {
@@ -354,7 +354,7 @@ fn disable_cursor(home: &Path, lang: Lang) -> Result<String, String> {
 fn grok_json(hook: &Path) -> serde_json::Value {
     let hooks: serde_json::Map<String, serde_json::Value> = GROK_EVENTS.iter().map(|ev| {
         let mut g = serde_json::json!({"hooks": [{"type": "command", "command": hook_command(hook, "grok", ev), "timeout": 5}]});
-        // `matcher` tylko przy zdarzeniach narzędzi, jak w Claude Code
+        // `matcher` only for tool events, as in Claude Code
         if ev.contains("ToolUse") { g["matcher"] = serde_json::json!("*"); }
         (ev.to_string(), serde_json::json!([g]))
     }).collect();
@@ -387,7 +387,7 @@ fn disable_grok(home: &Path, lang: Lang) -> Result<String, String> {
     }
 }
 
-/// Hook procesu ZCode: ścieżka wprost (bez powłoki, więc bez cudzysłowów) i argumenty osobno.
+/// ZCode process hook: direct path (no shell, so no quotes) and separate arguments.
 fn zcode_entry(hook: &Path, ev: &str) -> serde_json::Value {
     serde_json::json!({"matcher": "*", "hooks": [{"type": "process", "command": hook.to_string_lossy(),
         "args": ["--agent", "zcode", "--event", ev], "timeoutMs": 5000}]})
@@ -402,9 +402,9 @@ fn is_zcode(e: &serde_json::Value) -> bool {
     }))
 }
 
-/// Konfiguracja ZCode: zdarzenia leżą w `hooks.events`, obok tylko `enabled`, `timeoutMs` i `maxOutputBytes`; każdy inny
-/// klucz w `hooks` ZCode odrzuca razem z całym plikiem, a hooki uruchamia tylko przy `hooks.enabled: true` (schemat
-/// z bundla ZCode, sprawdzone na żywo). Nietypowy kształt = błąd, wtedy nic nie zmieniamy.
+/// ZCode config: events live in `hooks.events`, alongside only `enabled`, `timeoutMs`, and `maxOutputBytes`; ZCode rejects
+/// the whole file for any other key in `hooks` and runs hooks only with `hooks.enabled: true` (schema from the ZCode
+/// bundle, verified live). Unexpected shape is an error; change nothing then.
 fn read_zcode(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
     let unusual = || format!("{} {}, {}", tr(lang, "Nietypowy plik", "Unusual file"), f.display(),
         tr(lang, "nic nie zmieniam.", "leaving it unchanged."));
@@ -423,7 +423,7 @@ fn read_zcode(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String>
     if shape { Ok(Some(v)) } else { Err(unusual()) }
 }
 
-/// `hooks.events` jako `{"hooks": …}` dla wspólnych helperów.
+/// `hooks.events` as `{"hooks": …}` for shared helpers.
 fn zcode_view(v: &serde_json::Value) -> serde_json::Value {
     serde_json::json!({"hooks": v["hooks"].get("events").cloned().unwrap_or_else(|| serde_json::json!({}))})
 }
@@ -432,7 +432,7 @@ fn enable_zcode(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<Stri
     if !zcode_dir(home, zcode_base()).is_dir() { return Err(detect(AppId::Zcode, home, lang).note.unwrap_or_default()); }
     let f = zcode_config(home, zcode_base());
     let current = read_zcode(&f, lang)?;
-    // hooki wyłączone przez użytkownika: to jego decyzja, nie włączamy ich za niego
+    // hooks disabled by the user: respect that decision; do not enable them
     if current.as_ref().is_some_and(|v| v["hooks"]["enabled"] == false) {
         return Err(tr(lang, "Hooki w ZCode są wyłączone (hooks.enabled: false w ~/.zcode/cli/config.json), nic nie zmieniam.",
             "Hooks are turned off in ZCode (hooks.enabled: false in ~/.zcode/cli/config.json); leaving it unchanged.").into());
@@ -453,7 +453,7 @@ fn disable_zcode(home: &Path, lang: Lang) -> Result<String, String> {
     let Some(mut v) = read_zcode(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
     let mut view = zcode_view(&v);
     if !strip_hooks(&mut view, &is_zcode) { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()); }
-    // `enabled` zostaje tylko wtedy, gdy było w pliku sprzed naszej pierwszej zmiany (kopia); bez kopii plik był nasz
+    // Keep `enabled` only if present before our first edit (backup); without a backup, the file was ours
     let theirs_on = std::fs::read(f.with_file_name("config.json.agent-pets.bak")).ok()
         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
         .is_some_and(|b| b["hooks"]["enabled"] == true);
@@ -476,12 +476,12 @@ fn home_folder(id: AppId) -> &'static str {
     }
 }
 
-/// Drugie miejsce, po którym poznajemy aplikację (Cursor trzyma dane też w `%APPDATA%\Cursor`).
+/// Second location used to detect the app (Cursor also stores data in `%APPDATA%\Cursor`).
 fn other_folder(id: AppId) -> Option<&'static str> {
     match id { AppId::Cursor => Some("AppData/Roaming/Cursor"), _ => None }
 }
 
-/// Aplikację wykrywamy po jej katalogu w domu użytkownika: tworzy go przy pierwszym uruchomieniu.
+/// Detect an app by its directory in the user's home: it creates one on first launch.
 pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
     let base = if id == AppId::Zcode { zcode_base() } else { None };
     let dir = base.into_iter().chain(std::iter::once(home_folder(id)).chain(other_folder(id)).map(|f| home.join(f))).find(|d| d.is_dir());
@@ -577,8 +577,8 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
     }
 }
 
-/// Kopiuje `hook.exe` do `~/.agent-pets` tylko wtedy, gdy go brak albo zawartość się różni (np. nowa wersja).
-/// Też dla furtki: `hook.exe report` ma stałą ścieżkę `~/.agent-pets/hook.exe` (spec 8).
+/// Copy `hook.exe` to `~/.agent-pets` only if absent or contents differ (e.g. new version).
+/// Also for the door: `hook.exe report` has a stable path at `~/.agent-pets/hook.exe` (spec 8).
 pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, String> {
     let dst = installed_hook(home);
     if let Some(src) = src.filter(|s| s.is_file()) {
@@ -626,15 +626,15 @@ pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, String> {
         "Hooks removed from Claude Code settings (backup: settings.json.agent-pets.bak).").into())
 }
 
-/// Czy trzeba ponownie włączyć Claude Code: hooki zniknęły (np. aktualizacja przez „odinstaluj, potem zainstaluj”)
-/// albo `hook.exe` w `~/.agent-pets` różni się od tego z instalacji.
+/// Whether Claude Code needs re-enabling: hooks disappeared (e.g. update via "uninstall, then install")
+/// or `hook.exe` in `~/.agent-pets` differs from the installed copy.
 pub fn claude_needs_repair(home: &Path, hook_src: Option<&Path>) -> bool {
     if !status(AppId::ClaudeCode, home, Lang::En).installed { return true; }
     let Some(src) = hook_src.and_then(|p| std::fs::read(p).ok()) else { return false };
     std::fs::read(installed_hook(home)).ok().as_deref() != Some(src.as_slice())
 }
 
-/// Odinstalowanie: wyłącza wszystkie integracje i usuwa pliki widżetu; `settings.json` zostaje, chyba że `remove_data`.
+/// Uninstall: disable all integrations and remove widget files; keep `settings.json` unless `remove_data`.
 pub fn uninstall_all(home: &Path, remove_data: bool, lang: Lang) -> Vec<String> {
     let mut steps: Vec<String> = AppId::ALL.iter().map(|id| match disable(*id, home, lang) {
         Ok(m) => format!("{id:?}: {m}"),
@@ -728,7 +728,7 @@ mod tests {
         let f = opencode_plugin(h.path());
         assert_eq!(f, oc(h.path()).join("plugins").join("agent-pets.js"));
         assert!(std::fs::read_to_string(&f).unwrap().starts_with(PLUGIN_MARK));
-        assert_eq!(std::fs::read_dir(f.parent().unwrap()).unwrap().count(), 1, "bez plików tymczasowych");
+        assert_eq!(std::fs::read_dir(f.parent().unwrap()).unwrap().count(), 1, "no temporary files");
         assert!(status(AppId::Opencode, h.path(), Lang::Pl).installed);
         disable(AppId::Opencode, h.path(), Lang::Pl).unwrap();
         assert!(!f.exists());
@@ -755,13 +755,13 @@ mod tests {
     fn the_copilot_hooks_file_installs_once_and_uninstalls() {
         let h = home();
         let src = hook_src(h.path());
-        assert!(enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).is_err(), "bez ~/.copilot");
+        assert!(enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).is_err(), "missing ~/.copilot");
         std::fs::create_dir_all(h.path().join(".copilot")).unwrap();
         assert!(!status(AppId::Copilot, h.path(), Lang::Pl).installed);
         enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).unwrap();
         let first = std::fs::read(copilot_hooks(h.path())).unwrap();
         enable(AppId::Copilot, h.path(), Some(&src), Lang::Pl).unwrap();
-        assert_eq!(std::fs::read(copilot_hooks(h.path())).unwrap(), first, "powtórne włączenie nic nie zmienia");
+        assert_eq!(std::fs::read(copilot_hooks(h.path())).unwrap(), first, "enabling again changes nothing");
         assert_eq!(copilot_hooks(h.path()), h.path().join(".copilot").join("hooks").join("agent-pets.json"));
         let v = copilot_json(h.path());
         assert_eq!(v["version"], 1);
@@ -774,8 +774,8 @@ mod tests {
             assert!(entry["powershell"].as_str().unwrap().starts_with("& '"), "{entry}");
             assert_eq!(entry["timeoutSec"], 5);
         }
-        assert!(installed_hook(h.path()).is_file(), "hook.exe na stałej ścieżce");
-        assert_eq!(std::fs::read_dir(copilot_hooks(h.path()).parent().unwrap()).unwrap().count(), 1, "bez plików tymczasowych");
+        assert!(installed_hook(h.path()).is_file(), "hook.exe at a stable path");
+        assert_eq!(std::fs::read_dir(copilot_hooks(h.path()).parent().unwrap()).unwrap().count(), 1, "no temporary files");
         assert!(status(AppId::Copilot, h.path(), Lang::Pl).installed);
         disable(AppId::Copilot, h.path(), Lang::Pl).unwrap();
         assert!(!copilot_hooks(h.path()).exists());
@@ -794,7 +794,7 @@ mod tests {
         disable(AppId::Copilot, h.path(), Lang::Pl).unwrap();
         uninstall_all(h.path(), false, Lang::Pl);
         assert_eq!(std::fs::read_to_string(&f).unwrap(), theirs);
-        assert!(f.with_file_name("audit.json").exists(), "cudze pliki w hooks/ zostają");
+        assert!(f.with_file_name("audit.json").exists(), "other files in hooks/ remain");
         let st = status(AppId::Copilot, h.path(), Lang::Pl);
         assert!(!st.installed && st.detail.contains("nie jest nasz"), "{st:?}");
     }
@@ -805,19 +805,19 @@ mod tests {
     fn antigravity_hooks_join_someone_elses_hooks_and_leave_them_alone() {
         let h = home();
         let src = hook_src(h.path());
-        assert!(enable(AppId::Antigravity, h.path(), Some(&src), Lang::Pl).is_err(), "bez ~/.gemini");
+        assert!(enable(AppId::Antigravity, h.path(), Some(&src), Lang::Pl).is_err(), "missing ~/.gemini");
         let f = antigravity_hooks(h.path());
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         let mine = json!({"PostToolUse": [{"matcher": "run_command", "hooks": [{"type": "command", "command": "./lint.sh", "timeout": 10}]}]});
         std::fs::write(&f, serde_json::to_string(&json!({"my-linter": mine})).unwrap()).unwrap();
         enable(AppId::Antigravity, h.path(), Some(&src), Lang::Pl).unwrap();
         let v = ag_json(h.path());
-        assert_eq!(v["my-linter"], mine, "cudzy hook bez zmian");
+        assert_eq!(v["my-linter"], mine, "other hook unchanged");
         let ours = v["agent-pets"].as_object().unwrap();
         assert_eq!(ours.len(), ANTIGRAVITY_EVENTS.len());
         for ev in ANTIGRAVITY_EVENTS {
-            // narzędzia: grupy {matcher, hooks: [...]}; PreInvocation i Stop: komendy wprost pod zdarzeniem (inaczej
-            // Antigravity 2.5 odrzuca cały plik: „command hook must specify 'command'”)
+            // tools: {matcher, hooks: [...]} groups; PreInvocation and Stop: commands directly under the event (otherwise
+            // Antigravity 2.5 rejects the whole file: "command hook must specify 'command'")
             let group = &ours[ev][0];
             let hook = if ev.ends_with("ToolUse") { &group["hooks"][0] } else { group };
             let cmd = hook["command"].as_str().unwrap_or_else(|| panic!("{ev}: {group}"));
@@ -825,7 +825,7 @@ mod tests {
             assert_eq!((hook["type"].as_str(), &hook["timeout"]), (Some("command"), &json!(5)), "{ev}");
             assert_eq!(group.get("matcher").and_then(|m| m.as_str()), if ev.ends_with("ToolUse") { Some("*") } else { None }, "{ev}");
         }
-        assert!(f.with_file_name("hooks.json.agent-pets.bak").exists(), "kopia przed zmianą");
+        assert!(f.with_file_name("hooks.json.agent-pets.bak").exists(), "backup before edit");
         assert!(status(AppId::Antigravity, h.path(), Lang::Pl).installed);
         disable(AppId::Antigravity, h.path(), Lang::Pl).unwrap();
         assert_eq!(ag_json(h.path()), json!({"my-linter": mine}));
@@ -842,11 +842,11 @@ mod tests {
         let bak = f.with_file_name("hooks.json.agent-pets.bak");
         enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         let (file, backup) = (std::fs::read(&f).unwrap(), std::fs::read(&bak).unwrap());
-        assert_eq!(backup, original.as_bytes(), "kopia to plik sprzed naszej zmiany");
-        // naprawa przy starcie aplikacji: nic się nie zmieniło, więc nic nie zapisujemy
+        assert_eq!(backup, original.as_bytes(), "backup is the file before our edit");
+        // repair at app startup: nothing changed, so write nothing
         enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         assert_eq!((std::fs::read(&f).unwrap(), std::fs::read(&bak).unwrap()), (file.clone(), backup.clone()));
-        // stary wpis (inna ścieżka hook.exe, `Stop` w grupie jak przed poprawką): wpis się zmienia, kopia zostaje pierwotna
+        // old entry (different hook.exe path, `Stop` in a group as before the fix): update it, preserving the original backup
         let mut v: Value = serde_json::from_slice(&file).unwrap();
         v["agent-pets"]["Stop"] = json!([{"hooks": [{"type": "command", "command": "C:/old/hook.exe --agent antigravity --event Stop", "timeout": 5}]}]);
         std::fs::write(&f, serde_json::to_string(&v).unwrap()).unwrap();
@@ -855,8 +855,8 @@ mod tests {
         assert!(ag_json(h.path())["agent-pets"]["Stop"][0]["command"].as_str().unwrap().contains(".agent-pets"));
     }
 
-    /// `PreToolUse` to w Antigravity bramka zgód bez odpowiedzi „bez zdania”: `{}` odmawia, `ask` wymusza pytanie. Nie
-    /// rejestrujemy go, a wpis z 0.11–0.12.0 znika przy pierwszym starcie (naprawa podmienia cały nasz klucz).
+    /// In Antigravity, `PreToolUse` is a permission gate with no neutral response: `{}` denies, `ask` forces a prompt. Do not
+    /// register it; an entry from 0.11–0.12.0 disappears on first startup (repair replaces our whole key).
     #[test]
     fn antigravity_never_hooks_the_permission_gate() {
         assert!(!ANTIGRAVITY_EVENTS.contains(&"PreToolUse"));
@@ -878,8 +878,8 @@ mod tests {
         enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         assert!(ag_json(h.path())["agent-pets"].is_object());
         disable(AppId::Antigravity, h.path(), Lang::Pl).unwrap();
-        assert!(!antigravity_hooks(h.path()).exists(), "pusty plik po naszym kluczu znika");
-        assert!(disable(AppId::Antigravity, h.path(), Lang::Pl).is_ok(), "brak pliku to nic do usunięcia");
+        assert!(!antigravity_hooks(h.path()).exists(), "empty file after removing our key disappears");
+        assert!(disable(AppId::Antigravity, h.path(), Lang::Pl).is_ok(), "missing file means nothing to remove");
     }
 
     #[test]
@@ -888,7 +888,7 @@ mod tests {
         let f = antigravity_hooks(h.path());
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         let foreign = r#"{"agent-pets":{"Stop":[{"hooks":[{"type":"command","command":"their.sh"}]}]}}"#;
-        for text in ["{nie json", "[]", foreign] {
+        for text in ["{not json", "[]", foreign] {
             std::fs::write(&f, text).unwrap();
             assert!(enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err(), "{text}");
             let _ = disable(AppId::Antigravity, h.path(), Lang::Pl);
@@ -926,7 +926,7 @@ mod tests {
     #[test]
     fn uninstall_removes_the_opencode_plugin() {
         let h = home();
-        assert!(enable(AppId::Opencode, h.path(), None, Lang::Pl).is_err(), "bez opencode nie tworzymy jego konfiguracji");
+        assert!(enable(AppId::Opencode, h.path(), None, Lang::Pl).is_err(), "do not create config without opencode");
         assert!(!oc(h.path()).exists());
         std::fs::create_dir_all(oc(h.path())).unwrap();
         enable(AppId::Opencode, h.path(), None, Lang::Pl).unwrap();
@@ -938,7 +938,7 @@ mod tests {
     fn the_plugin_times_out_and_sends_no_message_content() {
         assert!(OPENCODE_PLUGIN.starts_with(PLUGIN_MARK));
         assert!(OPENCODE_PLUGIN.contains("AbortSignal.timeout(300)"));
-        assert!(!OPENCODE_PLUGIN.contains("parts"), "treść wiadomości nie trafia do koperty");
+        assert!(!OPENCODE_PLUGIN.contains("parts"), "message content does not enter the envelope");
     }
 
     #[test]
@@ -952,7 +952,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(20));
         enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
         assert_eq!(our_hooks(&claude_json(h.path())), 9);
-        assert_eq!(std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap(), first, "ten sam hook.exe nie jest kopiowany ponownie");
+        assert_eq!(std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap(), first, "same hook.exe is not copied again");
         assert!(status(AppId::ClaudeCode, h.path(), Lang::Pl).installed);
     }
 
@@ -965,16 +965,16 @@ mod tests {
 
     #[test]
     fn claude_needs_repair_when_hooks_vanished_or_the_hook_is_outdated() {
-        // aktualizacja przez „odinstaluj, potem zainstaluj” zdejmuje hooki starym deinstalatorem
+        // an "uninstall, then install" update removes hooks with the old uninstaller
         let h = home();
         std::fs::create_dir_all(h.path().join(".claude")).unwrap();
         let src = hook_src(h.path());
-        assert!(claude_needs_repair(h.path(), Some(&src)), "brak hooków");
+        assert!(claude_needs_repair(h.path(), Some(&src)), "hooks missing");
         enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
         assert!(!claude_needs_repair(h.path(), Some(&src)));
-        assert!(!claude_needs_repair(h.path(), None), "bez zasobu nie ma z czym porównać");
+        assert!(!claude_needs_repair(h.path(), None), "no resource to compare against");
         std::fs::write(&src, b"hook-binary-v2").unwrap();
-        assert!(claude_needs_repair(h.path(), Some(&src)), "nowszy hook.exe w instalacji");
+        assert!(claude_needs_repair(h.path(), Some(&src)), "newer hook.exe in the installation");
     }
 
     #[test]
@@ -1012,7 +1012,7 @@ mod tests {
         let v = claude_json(h.path());
         assert_eq!((our_hooks(&v), v["statusLine"]["command"].as_str()), (0, Some("mine.exe")));
         assert!(!installed_hook(h.path()).exists() && !pets_dir(h.path()).join("endpoint.json").exists());
-        assert!(crate::settings::path(h.path()).exists(), "ustawienia zostają bez usuwania danych");
+        assert!(crate::settings::path(h.path()).exists(), "settings remain when data is retained");
         uninstall_all(h.path(), true, Lang::Pl);
         assert!(!pets_dir(h.path()).exists());
     }
@@ -1052,13 +1052,13 @@ mod tests {
             assert!(a[0]["command"].as_str().unwrap().ends_with(&format!("hook.exe --agent cursor --event {ev}")), "{ev}");
             assert_eq!(a[0]["timeout"], json!(5));
         }
-        assert!(!f.with_file_name("hooks.json.agent-pets.bak").exists(), "nie było czego kopiować");
+        assert!(!f.with_file_name("hooks.json.agent-pets.bak").exists(), "there was nothing to back up");
         assert!(status(AppId::Cursor, h.path(), Lang::Pl).installed);
         let before = std::fs::read(&f).unwrap();
         enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         assert_eq!(std::fs::read(&f).unwrap(), before);
         disable(AppId::Cursor, h.path(), Lang::Pl).unwrap();
-        assert!(!f.exists(), "plik, który sami utworzyliśmy, znika");
+        assert!(!f.exists(), "file created by us disappears");
         assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed);
         assert!(disable(AppId::Cursor, h.path(), Lang::Pl).is_ok());
     }
@@ -1073,17 +1073,17 @@ mod tests {
         let bak = f.with_file_name("hooks.json.agent-pets.bak");
         enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         let v = rd(&f);
-        assert_eq!(v["hooks"]["stop"][0], json!({"command": "./audit.sh"}), "cudzy wpis zostaje pierwszy");
+        assert_eq!(v["hooks"]["stop"][0], json!({"command": "./audit.sh"}), "other entry stays first");
         assert_eq!(v["hooks"]["stop"].as_array().unwrap().len(), 2);
         assert!(v["hooks"]["stop"][1]["command"].as_str().unwrap().contains("--agent cursor --event stop"));
         assert_eq!(std::fs::read(&bak).unwrap(), original.as_bytes());
         enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
-        assert_eq!(rd(&f)["hooks"]["stop"].as_array().unwrap().len(), 2, "bez dubli");
-        // stara ścieżka hook.exe: jeden wpis z nową, kopia zostaje pierwotna
+        assert_eq!(rd(&f)["hooks"]["stop"].as_array().unwrap().len(), 2, "no duplicates");
+        // old hook.exe path: one entry with the new path, original backup preserved
         let mut v = rd(&f);
         v["hooks"]["stop"][1]["command"] = json!("C:/old/hook.exe --agent cursor --event stop");
         std::fs::write(&f, serde_json::to_string(&v).unwrap()).unwrap();
-        assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed, "stara ścieżka to nie instalacja");
+        assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed, "old path is not an installation");
         enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         let stop = rd(&f)["hooks"]["stop"].as_array().unwrap().clone();
         assert_eq!(stop.len(), 2);
@@ -1098,7 +1098,7 @@ mod tests {
         let h = home();
         dirs(h.path());
         let f = cursor_hooks_path(h.path());
-        for text in ["{nie json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"stop":{}}}"#] {
+        for text in ["{not json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"stop":{}}}"#] {
             std::fs::write(&f, text).unwrap();
             let e = enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_err();
             assert!(e.contains("nic nie zmieniam"), "{text}: {e}");
@@ -1115,13 +1115,13 @@ mod tests {
     fn grok_hooks_install_once_and_uninstall() {
         let h = home();
         let src = hook_src(h.path());
-        assert!(enable(AppId::Grok, h.path(), Some(&src), Lang::Pl).is_err(), "bez ~/.grok");
+        assert!(enable(AppId::Grok, h.path(), Some(&src), Lang::Pl).is_err(), "missing ~/.grok");
         dirs(h.path());
         enable(AppId::Grok, h.path(), Some(&src), Lang::Pl).unwrap();
         let f = grok_hooks(h.path());
         let v = rd(&f);
         assert_eq!(v["hooks"].as_object().unwrap().len(), GROK_EVENTS.len());
-        assert!(GROK_EVENTS.contains(&"StopCancelled"), "przerwana tura");
+        assert!(GROK_EVENTS.contains(&"StopCancelled"), "interrupted turn");
         for ev in GROK_EVENTS {
             let group = &v["hooks"][ev][0];
             let cmd = &group["hooks"][0];
@@ -1164,7 +1164,7 @@ mod tests {
         let f = zcode_config(h.path(), None);
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         let theirs = json!({"matcher": "*", "hooks": [{"type": "process", "command": "C:\\tools\\notify.exe", "args": ["done"]}]});
-        // schemat ZCode (sprawdzony w jego bundlu): zdarzenia w `hooks.events`, runner tylko przy `hooks.enabled: true`
+        // ZCode schema (verified in its bundle): events in `hooks.events`, runner only with `hooks.enabled: true`
         let original = json!({"model": "glm-5", "theme": "dark",
             "hooks": {"enabled": true, "timeoutMs": 60000, "events": {"Stop": [theirs.clone()]}}});
         let text = serde_json::to_string_pretty(&original).unwrap();
@@ -1173,7 +1173,7 @@ mod tests {
         let v = rd(&f);
         assert_eq!((&v["model"], &v["theme"]), (&original["model"], &original["theme"]));
         assert_eq!((&v["hooks"]["enabled"], &v["hooks"]["timeoutMs"]), (&json!(true), &json!(60000)));
-        assert_eq!(v["hooks"].as_object().unwrap().len(), 3, "tylko enabled, timeoutMs i events");
+        assert_eq!(v["hooks"].as_object().unwrap().len(), 3, "only enabled, timeoutMs, and events");
         assert_eq!(v["hooks"]["events"]["Stop"][0], theirs);
         assert_eq!(v["hooks"]["events"].as_object().unwrap().len(), ZCODE_EVENTS.len());
         let hook = installed_hook(h.path()).to_string_lossy().into_owned();
@@ -1195,7 +1195,7 @@ mod tests {
         assert!(!status(AppId::Zcode, h.path(), Lang::Pl).installed);
     }
 
-    /// cudze hooki bez `enabled` były wyłączone i po nas mają takie zostać
+    /// Other hooks without `enabled` were disabled and must stay disabled after our edit.
     #[test]
     fn zcode_hooks_switched_on_by_us_are_switched_off_again() {
         let h = home();
@@ -1259,8 +1259,8 @@ mod tests {
         dirs(h.path());
         let f = zcode_config(h.path(), None);
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
-        // zdarzenie wprost w `hooks` to klucz, którego ZCode nie zna i przez który odrzuca cały plik
-        for text in ["{nie json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"Stop":"x"}}"#, r#"{"hooks":{"Stop":[]}}"#,
+        // an event directly in `hooks` is an unknown ZCode key, causing rejection of the whole file
+        for text in ["{not json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"Stop":"x"}}"#, r#"{"hooks":{"Stop":[]}}"#,
                      r#"{"hooks":{"events":[]}}"#, r#"{"hooks":{"events":{"Stop":"x"}}}"#] {
             std::fs::write(&f, text).unwrap();
             assert!(enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err(), "{text}");
@@ -1281,7 +1281,7 @@ mod tests {
             let hook = installed_hook(&h).to_string_lossy().into_owned();
             let c = rd(&cursor_hooks_path(&h))["hooks"]["stop"][0]["command"].as_str().unwrap().to_string();
             let g = rd(&grok_hooks(&h))["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
-            // Cursor uruchamia hooki przez PowerShell (sprawdzone na żywo): tam `"ścieżka" --agent` to błąd składni
+            // Cursor runs hooks through PowerShell (verified live): `"path" --agent` is a syntax error there
             #[cfg(windows)]
             assert_eq!(ps_program(&c), Some((hook.replace('\\', "/"), 5)), "{c}");
             assert!(g.starts_with('"') && g.contains(&hook.replace('\\', "/")), "{g}");
@@ -1292,7 +1292,7 @@ mod tests {
         }
     }
 
-    /// Jak PowerShell czyta komendę: (program, liczba elementów wywołania) albo None przy błędzie składni. Tylko parser, nic nie jest uruchamiane.
+    /// How PowerShell parses a command: (program, invocation element count) or None on syntax error. Parser only; nothing runs.
     #[cfg(windows)]
     fn ps_program(cmd: &str) -> Option<(String, usize)> {
         let script = "$e=$null; $a=[System.Management.Automation.Language.Parser]::ParseInput($env:AP_CMD,[ref]$null,[ref]$e); \
@@ -1317,7 +1317,7 @@ mod tests {
         let c = rd(&cursor_hooks_path(h.path()))["hooks"]["stop"][0]["command"].as_str().unwrap().to_string();
         let hook = installed_hook(h.path()).to_string_lossy().replace('\\', "/");
         assert_eq!(ps_program(&c), Some((hook, 5)), "{c}");
-        assert_eq!(ps_program("\"C:/a b/hook.exe\" --agent cursor --event stop"), None, "tak wyglądał błąd");
+        assert_eq!(ps_program("\"C:/a b/hook.exe\" --agent cursor --event stop"), None, "this was the failure");
     }
 
     #[test]

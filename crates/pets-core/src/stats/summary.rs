@@ -1,5 +1,5 @@
-//! Widok okna „Statystyki” (spec 3.1) liczony z księgi. Dzień lokalny i pora nocna wynikają z godziny UTC
-//! i przesunięcia strefy `tz(ts)` podanego z zewnątrz, więc zmiana strefy nie psuje zapisanych danych.
+//! "Statistics" window view (spec 3.1) computed from the ledger. Local day and nighttime derive from UTC time
+//! and externally supplied zone offset `tz(ts)`, so changing zones does not damage stored data.
 use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
 use super::{Book, Cell, StatAgent, HOUR_MS};
@@ -45,7 +45,7 @@ pub struct StatsView {
     pub calendar: Vec<Day>, pub badges: Vec<Badge>, pub record: bool,
 }
 
-/// Numer dnia lokalnego (dni od epoki) dla chwili `ts`.
+/// Local day number (days since epoch) for `ts`.
 pub fn local_day(ts: i64, tz: &dyn Fn(i64) -> i64) -> i64 { (ts + tz(ts)).div_euclid(DAY) }
 fn local_hour(ts: i64, tz: &dyn Fn(i64) -> i64) -> i64 { (ts + tz(ts)).rem_euclid(DAY) / HOUR_MS }
 fn date_of(day: i64) -> String { crate::time::rfc3339(day * DAY)[..10].to_string() }
@@ -54,7 +54,7 @@ fn pct(part: u64, whole: u64) -> Option<f64> { (whole > 0).then(|| part as f64 *
 #[derive(Default)]
 struct Project { cell: Cell, by_agent: HashMap<StatAgent, u64> }
 impl Project {
-    /// Agent, który w projekcie pracował najdłużej (przy remisie pierwszy w kolejności Claude, Codex, Router).
+    /// Agent with the most work time in a project (ties ordered Claude, Codex, Router).
     fn agent(&self) -> StatAgent {
         self.by_agent.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map(|x| *x.0).unwrap_or(StatAgent::Claude)
     }
@@ -169,7 +169,7 @@ mod tests {
     fn utc(_: i64) -> i64 { 0 }
     fn q(period: Period, metric: Metric, race: RaceBy) -> Query { Query { period, metric, race } }
     fn week() -> Query { q(Period::Week, Metric::Time, RaceBy::Agents) }
-    /// godzina UTC `hour` dnia `day` (0 = dziś, −1 = wczoraj)
+    /// UTC `hour` on `day` (0 = today, −1 = yesterday).
     fn at(day: i64, hour: i64) -> i64 { D0 + day * DAY_MS + hour * HOUR_MS }
     fn meta(agent: StatAgent, project: &str, sub: bool, started: i64) -> FileMeta {
         FileMeta { agent: Some(agent), project: Some(project.into()), sub, started: Some(started) }
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn half_hour_timezones_put_work_on_the_right_day() {
-        // 00:10 w Indiach (+5:30) to 18:40 UTC dnia poprzedniego
+        // 00:10 in India (+5:30) is 18:40 UTC on the previous day
         let mut b = Book::default();
         put(&mut b, "a", meta(StatAgent::Claude, "p", false, at(-1, 1)), at(-1, 18) + 40 * 60_000, work(10 * MIN));
         let ist = |_: i64| 5 * HOUR_MS + 30 * 60_000;
@@ -267,7 +267,7 @@ mod tests {
         put(&mut b, "o", meta(StatAgent::Opencode, "q", false, at(0, 1)), at(0, 1), work(2 * H));
         let v = summary(&b, &week(), NOW, &utc);
         assert_eq!(v.race.iter().map(|l| l.key.as_str()).collect::<Vec<_>>(), ["claude", "router", "opencode"]);
-        assert_eq!(v.podium[0].agent, StatAgent::Opencode, "opencode pracował w projekcie najdłużej");
+        assert_eq!(v.podium[0].agent, StatAgent::Opencode, "opencode worked longest on the project");
     }
 
     #[test]

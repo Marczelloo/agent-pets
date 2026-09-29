@@ -1,4 +1,4 @@
-//! Skan historii (spec 2.4): najpierw cała historia od najnowszych plików, potem tylko dopisane linie.
+//! History scan (spec 2.4): first all history from newest files, then only appended lines.
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use super::claude::claude_line;
 use super::codex::codex_line;
 use super::{Book, FileEntry};
 
-/// Co ile przeczytanych bajtów pytamy, czy wstrzymać skan (gra na pełnym ekranie).
+/// Number of bytes read between checks for pausing the scan (full-screen game).
 pub const PORTION: u64 = 256 * 1024;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -44,7 +44,7 @@ fn feed(kind: FileKind, e: &mut FileEntry, line: &str) {
 impl Scanner {
     pub fn new(roots: Vec<PathBuf>, book: Book) -> Scanner { Scanner { roots, queue: Vec::new(), scanned: 0, total: 0, book } }
 
-    /// Kolejka plików zmienionych od ostatniego odczytu (rozmiar albo czas zmiany), od najnowszego.
+    /// Queue of files changed since the last read (size or modification time), newest first.
     pub fn refresh(&mut self) -> usize {
         let mut files = Vec::new();
         for r in &self.roots { walk(r, &mut files); }
@@ -67,8 +67,8 @@ impl Scanner {
         Progress { files: self.queue.len(), scanned: self.scanned, total: self.total, done: self.queue.is_empty() }
     }
 
-    /// Czyta całe linie, dopóki następna mieści się w `budget` (zawsze co najmniej jedną). Kursor i wkład pliku
-    /// zmieniają się razem, więc zapisana w dowolnej chwili księga wznawia skan bez podwójnego liczenia.
+    /// Read complete lines while the next fits within `budget` (always at least one). The cursor and file contribution
+    /// change together, so a ledger saved at any point resumes scanning without double counting.
     pub fn step(&mut self, budget: u64, pause: &dyn Fn() -> bool) -> Progress {
         let mut consumed = 0u64;
         let mut next_pause = PORTION;
@@ -85,7 +85,7 @@ impl Scanner {
             loop {
                 buf.clear();
                 let n = match r.read_until(b'\n', &mut buf) { Ok(n) => n as u64, Err(_) => { finished = true; break } };
-                // koniec pliku albo niedokończona ostatnia linia: czeka na kolejny odczyt
+                // end of file or incomplete final line: wait for the next read
                 if n == 0 || buf.last() != Some(&b'\n') { finished = true; break; }
                 if consumed > 0 && consumed + n > budget { stop = true; break; }
                 feed(kind, entry, String::from_utf8_lossy(&buf).trim_end());

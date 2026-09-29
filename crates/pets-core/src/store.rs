@@ -27,35 +27,35 @@ pub struct Store {
     pending: BTreeMap<String, (State, Option<Tool>)>,
     ended_at: BTreeMap<String, i64>,
     limits: Vec<Limit>,
-    /// czas odczytu każdego limitu (równoległe do `limits`): starszy odczyt nie nadpisuje nowszego
+    /// Read time of each limit (parallel to `limits`): an older read does not overwrite a newer one.
     limits_ts: Vec<i64>,
-    /// Zegar rdzenia: najpóźniejszy z `tick(now)` i czasów zdarzeń. Zdarzenia z plików przychodzą z opóźnieniem,
-    /// więc minimalny czas stanu liczymy od chwili, w której rdzeń go zobaczył, a nie od czasu w pliku.
+    /// Core clock: latest of `tick(now)` and event times. File events arrive late,
+    /// so minimum state duration starts when the core sees one, not at its file timestamp.
     clock: i64,
     shown_at: BTreeMap<String, i64>,
-    /// dzieci, które już odeszły: id → czas końca. Starsze zdarzenia (spóźnione linie pliku, ten sam wpis
-    /// w status.json routera) ich nie ożywiają; nowsze (kolejna tura) tak.
+    /// Children already gone: ID → end time. Older events (late file lines, the same entry
+    /// in router status.json) do not revive them; newer ones (another turn) do.
     tombs: BTreeMap<String, i64>,
-    /// sumy dnia agentów z własną bazą (opencode)
+    /// Daily totals for agents with their own database (opencode).
     agent_usage: Vec<AgentUsage>,
 }
 
-/// Sesja cicha dłużej niż próg zakończenia plus tyle to stary wątek (np. dotknięty przez aplikację Codex),
-/// a nie sesja, która właśnie ucichła: znika od razu, bez stanu „zakończył” i machania.
+/// A session quiet longer than the end threshold plus this duration is an old thread (e.g. touched by the Codex app),
+/// not a newly quiet session: it disappears immediately without an "ended" state or wave.
 const LONG_DEAD_MS: i64 = 60_000;
 
-/// Subagent Claude bez nowych linii tyle czasu (a rodzic już nie deleguje) został przerwany, np. przez Esc.
+/// A Claude subagent without new lines for this long (and whose parent no longer delegates) was interrupted, e.g. by Esc.
 pub const CHILD_QUIET_MS: i64 = 120_000;
-/// Subagent w tle kończy się tylko przez `SubagentStop` albo po tak długiej ciszy.
+/// A background subagent ends only via `SubagentStop` or after this much quiet time.
 pub const CHILD_BACKGROUND_QUIET_MS: i64 = 600_000;
-/// Dziecko, które skończyło (albo ma błąd), znika po tym czasie.
+/// A child that ended (or has an error) disappears after this duration.
 pub const CHILD_DONE_MS: i64 = 10_000;
-/// Jak długo pamiętamy koniec dziecka (router trzyma zakończone zadania 2 h).
+/// How long to remember a child's end (the router retains finished tasks for 2 h).
 const TOMB_MS: i64 = 3 * 3_600_000;
 
 fn sub_kind(s: &Session) -> Option<SubKind> { s.sub.as_ref().map(|i| i.kind) }
 
-/// Zadanie routera bez żywego rodzica jest zwykłą sesją z plakietką routera (jak w 0.7).
+/// A router task without a live parent is an ordinary session with a router badge (as in 0.7).
 fn orphan(s: &mut Session) { s.parent = None; s.sub = None; }
 
 fn new_session(e: &Event) -> Session {
@@ -88,7 +88,7 @@ fn new_session(e: &Event) -> Session {
         question: None,
         waits_on_child: false,
         model: None,
-        // sesja z furtki (`generic:<agent>:<sesja>`): do czasu zgłoszenia nazwy pokazujemy id agenta
+        // door session (`generic:<agent>:<session>`): show agent ID until a name is reported
         agent_name: (e.source == Source::Generic).then(|| e.session_id.split(':').nth(1).map(String::from)).flatten(),
         usage: None,
     }
@@ -102,8 +102,8 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(c) = d.context { s.context = Some(c); }
     if let Some(p) = d.pid { s.jump.pid = Some(p); }
     if let Some(a) = d.app {
-        // aplikacja agenta (rejestr, `originator`) wygrywa z programem z drzewa procesów, który tylko uzupełnia;
-        // samo „terminal” (transkrypt, rejestr) nie zastępuje konkretnego programu (terminal w VS Code to VS Code)
+        // agent app (registry, `originator`) takes precedence over the process-tree program, which only fills gaps;
+        // generic "terminal" (transcript, registry) does not replace a specific app (a VS Code terminal is VS Code)
         let agent_app = |x: App| matches!(x, App::ClaudeDesktop | App::CodexApp);
         let keep = match s.jump.app {
             Some(cur) if agent_app(cur) => !agent_app(a),
@@ -119,10 +119,10 @@ fn merge(s: &mut Session, d: &EventData) {
     if let Some(m) = d.model.as_ref().filter(|m| !m.is_empty()) { s.model = Some(m.clone()); }
     if let Some(n) = d.agent_name.as_ref().filter(|n| !n.is_empty()) { s.agent_name = Some(n.clone()); }
     if let Some(r) = &d.router_task { s.router_task = Some(r.clone()); }
-    // sesja nigdy nie jest własnym rodzicem (zniknęłaby ze sceny i z panelu)
+    // a session is never its own parent (it would disappear from the scene and panel)
     if let Some(p) = d.parent.as_ref().filter(|p| **p != s.id) { s.parent = Some(p.clone()); }
     if let Some(i) = &d.sub {
-        // hook zna tylko typ dziecka, plik meta także opis i pracę w tle: brak nie kasuje tego, co już wiemy
+        // hook knows only child type; metadata also has description and background status: absence does not clear known data
         s.sub = Some(match s.sub.take() {
             Some(old) => SubInfo {
                 kind: i.kind,
@@ -135,7 +135,7 @@ fn merge(s: &mut Session, d: &EventData) {
     }
 }
 
-/// Tekst akcji żyje od początku do końca narzędzia; pytanie, dopóki sesja czeka (meta go nie kończy).
+/// Action text lasts from tool start to end; a question lasts while the session waits (metadata does not end it).
 fn texts(s: &mut Session, e: &Event) {
     match e.kind {
         Kind::ToolStart => s.action = e.data.action.clone(),
@@ -174,7 +174,7 @@ impl Store {
 
     pub fn agent_usage(&self) -> &[AgentUsage] { &self.agent_usage }
 
-    /// Zużycie sesji z bazy agenta. Zwraca, czy coś się zmieniło (brak sesji albo ta sama wartość: nie).
+    /// Session usage from the agent database. Return whether anything changed (missing session or same value: no).
     pub fn set_usage(&mut self, id: &str, u: Option<Usage>) -> bool {
         match self.sessions.get_mut(id) {
             Some(s) if s.usage != u => { s.usage = u; true }
@@ -188,7 +188,7 @@ impl Store {
         true
     }
 
-    /// Zostawia sesje spełniające `keep` (np. po wyłączeniu aplikacji w ustawieniach). Zwraca, czy coś usunięto.
+    /// Retain sessions matching `keep` (e.g. after disabling an app in settings). Return whether anything was removed.
     pub fn retain_sessions(&mut self, keep: impl Fn(&Session) -> bool) -> bool {
         let gone: Vec<String> = self.sessions.values().filter(|s| !keep(s)).map(|s| s.id.clone()).collect();
         for id in &gone {
@@ -200,12 +200,12 @@ impl Store {
         !gone.is_empty()
     }
 
-    /// Zdejmuje limity agenta bez czasu resetu (nieaktualne dane z aplikacji Claude). Zwraca, czy coś zdjęto.
+    /// Remove agent limits without reset time (stale Claude app data). Return whether anything was removed.
     pub fn drop_limits_without_reset(&mut self, agent: Agent) -> bool {
         self.retain_limits(|l| l.agent != agent || l.resets_at.is_some())
     }
 
-    /// Zostawia limity spełniające `keep` (razem z ich czasami odczytu). Zwraca, czy coś usunięto.
+    /// Retain limits matching `keep` (with their read times). Return whether anything was removed.
     pub fn retain_limits(&mut self, keep: impl Fn(&Limit) -> bool) -> bool {
         let before = self.limits.len();
         let (limits, ts): (Vec<Limit>, Vec<i64>) = self.limits.iter().copied().zip(self.limits_ts.iter().copied())
@@ -215,7 +215,7 @@ impl Store {
         self.limits.len() != before
     }
 
-    /// Limit bez czasu resetu (np. z aplikacji Claude) zachowuje znany reset, dopóki ten nie minął: to wciąż to samo okno.
+    /// A limit without reset time (e.g. from the Claude app) retains a known reset until it passes: still the same window.
     fn merge_limits(&mut self, new: &[Limit], ts: i64) {
         for l in new {
             match self.limits.iter().position(|x| x.agent == l.agent && x.window == l.window) {
@@ -239,7 +239,7 @@ impl Store {
         }
         if e.kind == Kind::Limits { return out; }
         if !self.sessions.contains_key(&e.session_id) {
-            // koniec dziecka, którego nie znamy (np. `SubagentStop` przed pierwszą linią pliku), nie tworzy zwierzaka
+            // ending an unknown child (e.g. `SubagentStop` before its first file line) does not create a pet
             if e.kind == Kind::SessionEnd && e.data.parent.is_some() {
                 let end = self.tombs.entry(e.session_id.clone()).or_insert(e.ts);
                 *end = (*end).max(e.ts);
@@ -251,7 +251,7 @@ impl Store {
                 None => {}
             }
         }
-        // wnuk (subagent w zadaniu routera, subagent subagenta) stoi przy sesji głównej: wnuków nikt nie rysuje
+        // a grandchild (subagent in a router task or of a subagent) stands by the main session: grandchildren are not drawn
         let top = e.data.parent.as_ref().map(|p| self.top_of(p));
         let lifted;
         let data = match &top {
@@ -264,7 +264,7 @@ impl Store {
         let dwell = self.timing.dwell_ms;
         let arrival = self.clock.max(e.ts);
         self.clock = arrival;
-        // nowa sesja przyjmuje pierwszy stan od razu, bez czekania na minimalny czas
+        // a new session takes its first state immediately, without waiting for minimum duration
         let is_new = !self.sessions.contains_key(&e.session_id);
         let s = self.sessions.entry(e.session_id.clone()).or_insert_with(|| new_session(e));
         merge(s, data);
@@ -277,17 +277,17 @@ impl Store {
         texts(s, e);
         let child = s.parent.is_some();
         if !child && !matches!(e.kind, Kind::Meta | Kind::Limits) {
-            // czekanie w trakcie delegowania (albo zgłoszone przez dziecko) to prośba subagenta
+            // waiting during delegation (or reported by a child) is a subagent request
             let delegating = (s.state, s.tool) == (State::Working, Some(Tool::Agent))
                 || self.pending.get(&e.session_id) == Some(&(State::Working, Some(Tool::Agent)));
             s.waits_on_child = e.kind == Kind::NeedsInput && (e.data.from_child || delegating);
         }
-        // zgody dziecka czekają u rodzica: dziecko nigdy nie jest „czeka na Ciebie”
+        // child permissions wait at the parent: the child is never "waiting for you"
         if child { s.question = None; }
 
         let target: Option<(State, Option<Tool>)> = match e.kind {
             Kind::Prompt => {
-                // prompt w trakcie tury (Antigravity woła `PreInvocation` przy każdym wywołaniu modelu) jej nie zaczyna od nowa
+                // a prompt during a turn (Antigravity calls `PreInvocation` for every model call) does not restart it
                 let now = self.pending.get(&e.session_id).map(|p| p.0).unwrap_or(s.state);
                 if s.turn_started_at.is_none() || !matches!(now, State::Thinking | State::Working | State::Compacting) {
                     s.turn_started_at = Some(e.ts);
@@ -296,8 +296,8 @@ impl Store {
             }
             Kind::ToolStart => Some((State::Working, e.tool.or(Some(Tool::Other)))),
             Kind::ToolEnd => {
-                // spóźniony koniec narzędzia (Cursor po przerwanej turze) nie wznawia skończonej tury; Idle i Sleep tu nie
-                // należą: w nie przechodzi też tura z narzędziem dłuższym niż próg bezczynności i koniec narzędzia ją budzi
+                // a late tool end (Cursor after an interrupted turn) does not resume an ended turn; Idle and Sleep do not
+                // apply here: a turn with a tool longer than the idle threshold can enter them, and tool end wakes it
                 let now = self.pending.get(&e.session_id).map(|p| p.0).unwrap_or(s.state);
                 if matches!(now, State::Done | State::Error | State::Ended) { None }
                 else { Some((State::Thinking, None)) }
@@ -310,7 +310,7 @@ impl Store {
             Kind::Meta => match (s.state, s.context) {
                 (State::Thinking, Some(c)) if c.max > 0 && c.used as f64 / c.max as f64 > 0.9 =>
                     Some((State::Compacting, None)),
-                // rosnący transkrypt to aktywność: budzi śpiącą sesję
+                // a growing transcript is activity: wake a sleeping session
                 (State::Sleep, _) => Some((State::Idle, None)),
                 _ => None,
             },
@@ -341,7 +341,7 @@ impl Store {
         out
     }
 
-    /// Sesja główna nad `id` (idąc w górę po rodzicach; najwyżej kilka poziomów).
+    /// Main session above `id` (walk up parents; at most a few levels).
     fn top_of(&self, id: &str) -> String {
         let mut cur = id.to_string();
         for _ in 0..8 {
@@ -353,7 +353,7 @@ impl Store {
         cur
     }
 
-    /// Dzieci sesji `id` (subagenci i zadania routera), od najstarszego.
+    /// Children of session `id` (subagents and router tasks), oldest first.
     pub fn children_of(&self, id: &str) -> Vec<&Session> {
         let mut v: Vec<&Session> = self.sessions.values().filter(|s| s.parent.as_deref() == Some(id)).collect();
         v.sort_by_key(|s| (s.started_at, s.id.clone()));
@@ -368,7 +368,7 @@ impl Store {
         }
     }
 
-    /// Dziecko pracuje dalej po prośbie, na którą czekał rodzic: odpowiedziano, rodzic znów deleguje.
+    /// Child resumes work after a request awaited by the parent: it was answered, and the parent delegates again.
     fn answered_for_child(&mut self, e: &Event, out: &mut Vec<Change>) {
         let Some(pid) = self.sessions.get(&e.session_id).and_then(|c| c.parent.clone()) else { return };
         let Some(p) = self.sessions.get_mut(&pid) else { return };
@@ -381,7 +381,7 @@ impl Store {
         out.push(Change::Upsert(p.clone()));
     }
 
-    /// Koniec rodzica kończy jego subagentów; zadania routera zostają jako zwykłe sesje.
+    /// Ending a parent ends its subagents; router tasks remain ordinary sessions.
     fn release_children(&mut self, parent: &str, now: i64, out: &mut Vec<Change>) {
         let ids: Vec<String> = self.children_of(parent).iter().map(|c| c.id.clone()).collect();
         for id in ids {
@@ -392,7 +392,7 @@ impl Store {
         }
     }
 
-    /// `SubagentStop` bez `agent_id`: kończy najmłodszego żyjącego subagenta Claude tej sesji.
+    /// `SubagentStop` without `agent_id`: end this session's newest live Claude subagent.
     fn end_newest_child(&mut self, parent: &str, now: i64, out: &mut Vec<Change>) {
         let newest = self.children_of(parent).into_iter()
             .filter(|c| c.state != State::Ended && sub_kind(c) == Some(SubKind::Claude)).last().map(|c| c.id.clone());
@@ -406,14 +406,14 @@ impl Store {
         let t = self.timing;
         self.clock = self.clock.max(now);
         let mut out = Vec::new();
-        // po resecie stare zużycie nic nie znaczy: „brak danych” aż do nowego odczytu
+        // after reset, old usage means nothing: "no data" until a new read
         if self.retain_limits(|l| l.resets_at.map(|r| r > now).unwrap_or(true)) {
             out.push(Change::Limits(self.limits.clone()));
         }
         let mut removed = Vec::new();
-        // rodzice, którzy wciąż czekają na subagenta (także w minimalnym czasie stanu), i rodzice, których już nie ma
+        // parents still waiting for a subagent (even during minimum state duration), and parents that no longer exist
         let agent = (State::Working, Some(Tool::Agent));
-        // rodzic czekający na Ciebie też: dziecko może czekać na zgodę, a nie być przerwane
+        // a parent waiting for you also counts: the child may await permission rather than be interrupted
         let delegating: std::collections::HashSet<String> = self.sessions.values()
             .filter(|s| (s.state, s.tool) == agent || s.state == State::NeedsYou || self.pending.get(&s.id) == Some(&agent))
             .map(|s| s.id.clone()).collect();
@@ -461,7 +461,7 @@ impl Store {
                 set(s, State::Ended, None, now);
                 self.ended_at.insert(id.clone(), now);
             } else {
-                // progi „bez zdarzeń” liczymy od późniejszego z: wejścia w stan, ostatniej aktywności
+                // count "no events" thresholds from the later of state entry and last activity
                 let calm = now - s.state_since.max(s.last_activity);
                 match s.state {
                     State::Done if calm >= t.done_to_idle_ms => set(s, State::Idle, None, now),
@@ -505,11 +505,11 @@ mod tests {
         s.apply(&Event::new(Source::Opencode, "opencode:a", Kind::Prompt, 1));
         let u = Usage { tokens: 10, cost: 0.0, account: Some(Agent::Codex) };
         assert!(s.set_usage("opencode:a", Some(u)));
-        assert!(!s.set_usage("opencode:a", Some(u)), "ta sama wartość");
-        assert!(!s.set_usage("nope", Some(u)), "brak sesji");
+        assert!(!s.set_usage("opencode:a", Some(u)), "same value");
+        assert!(!s.set_usage("nope", Some(u)), "missing session");
         assert_eq!((s.session("opencode:a").unwrap().usage, s.session("s1").unwrap().usage), (Some(u), None));
         s.apply(&Event::new(Source::Opencode, "opencode:a", Kind::TurnEnd, 2));
-        assert_eq!(s.session("opencode:a").unwrap().usage, Some(u), "kolejne zdarzenia nie zerują zużycia");
+        assert_eq!(s.session("opencode:a").unwrap().usage, Some(u), "later events do not reset usage");
         let day = vec![AgentUsage { agent: Agent::Opencode, tokens_today: 5, cost_today: 0.5 }];
         assert!(s.set_agent_usage(day.clone()));
         assert!(!s.set_agent_usage(day.clone()));
@@ -533,7 +533,7 @@ mod tests {
 
     #[test]
     fn a_plain_terminal_does_not_replace_a_known_program() {
-        // Claude CLI w terminalu VS Code: hook zna VS Code, a transkrypt i rejestr mówią tylko „terminal”
+        // Claude CLI in a VS Code terminal: hook knows VS Code; transcript and registry say only "terminal"
         let mut s = Store::new(Timing::default());
         let mut e = ev(Kind::Prompt, 0);
         e.data.app = Some(App::Vscode);
@@ -558,7 +558,7 @@ mod tests {
         s.apply(&e2);
         let j = &s.session("s1").unwrap().jump;
         assert_eq!((j.app, j.host_pid), (Some(App::ClaudeDesktop), Some(7)));
-        // terminal bez programu wyżej zostaje uzupełniony programem
+        // a terminal without a program above it gets the program filled in
         let mut e3 = Event::new(Source::Claude, "s2", Kind::Prompt, 0);
         e3.data.app = Some(App::Terminal);
         s.apply(&e3);
@@ -580,7 +580,7 @@ mod tests {
         assert_eq!(s.session("s1").unwrap().turn_started_at, Some(1000));
     }
 
-    /// Antigravity wysyła `PreInvocation` przy każdym wywołaniu modelu (także po narzędziu): to ta sama tura.
+    /// Antigravity sends `PreInvocation` for every model call (also after a tool): it is the same turn.
     #[test]
     fn a_prompt_during_a_turn_keeps_the_turn_start() {
         let mut s = Store::new(Timing::default());
@@ -591,10 +591,10 @@ mod tests {
         assert_eq!(s.session("s1").unwrap().turn_started_at, Some(1000));
         s.apply(&ev(Kind::TurnEnd, 8000));
         s.apply(&ev(Kind::Prompt, 20_000));
-        assert_eq!(s.session("s1").unwrap().turn_started_at, Some(20_000), "nowa tura po zakończonej");
+        assert_eq!(s.session("s1").unwrap().turn_started_at, Some(20_000), "new turn after the previous one ended");
     }
 
-    /// Cursor po przerwanej turze (`stop` z `aborted`) dosyła `postToolUseFailure` narzędzi w locie (sprawdzone na żywo).
+    /// After an interrupted turn (`stop` with `aborted`), Cursor sends `postToolUseFailure` for tools in flight (verified live).
     #[test]
     fn a_late_tool_end_does_not_reopen_a_finished_turn() {
         let mut s = Store::new(Timing::default());
@@ -606,7 +606,7 @@ mod tests {
         s.apply(&ev(Kind::ToolEnd, 7000));
         s.tick(8000, &alive);
         assert_eq!(st(&s).0, State::Done);
-        // także gdy koniec tury jeszcze czeka na swoją kolej
+        // also when turn end is still pending
         s.apply(&ev(Kind::Prompt, 10_000));
         s.tick(11_000, &alive);
         s.apply(&ev(Kind::TurnEnd, 12_000));
@@ -615,7 +615,7 @@ mod tests {
         assert_eq!(st(&s).0, State::Done);
     }
 
-    /// narzędzie dłuższe niż próg bezczynności (długi build): zwierzak zasnął w trakcie tury, koniec narzędzia ją wznawia
+    /// Tool longer than the idle threshold (long build): the pet slept during the turn; tool end resumes it.
     #[test]
     fn a_tool_end_after_a_long_tool_wakes_the_turn_again() {
         let mut s = Store::new(Timing::default());
@@ -623,7 +623,7 @@ mod tests {
         s.apply(&tool(Tool::Bash, 1000));
         s.tick(2000, &alive);
         s.tick(1000 + 11 * 60_000, &alive);
-        assert_ne!(st(&s).0, State::Working, "próg bezczynności minął");
+        assert_ne!(st(&s).0, State::Working, "idle threshold passed");
         s.apply(&ev(Kind::ToolEnd, 1000 + 12 * 60_000));
         s.tick(1000 + 12 * 60_000 + 1000, &alive);
         assert_eq!(st(&s).0, State::Thinking);
@@ -667,7 +667,7 @@ mod tests {
         s.apply(&ev(Kind::SessionStart, 0));
         s.apply(&ev(Kind::Meta, 590_000));
         s.tick(700_000, &alive);
-        assert_eq!(st(&s).0, State::Idle, "aktywność 110 s temu to jeszcze nie sen");
+        assert_eq!(st(&s).0, State::Idle, "activity 110 s ago is not sleep yet");
         s.tick(1_190_000, &alive);
         assert_eq!(st(&s).0, State::Sleep);
 
@@ -675,7 +675,7 @@ mod tests {
         d.apply(&ev(Kind::TurnEnd, 0));
         d.apply(&ev(Kind::Meta, 100_000));
         d.tick(150_000, &alive);
-        assert_eq!(st(&d).0, State::Done, "2 min liczone od ostatniego zdarzenia");
+        assert_eq!(st(&d).0, State::Done, "2 min counted from the last event");
         d.tick(220_000, &alive);
         assert_eq!(st(&d).0, State::Idle);
     }
@@ -771,18 +771,18 @@ mod tests {
         let ch = s.apply(&e);
         assert_eq!(s.limits(), &[lim(20.0)]);
         assert!(matches!(ch.as_slice(), [Change::Limits(_)]));
-        assert!(s.session("c1").is_none(), "samo zdarzenie limitów nie tworzy sesji");
+        assert!(s.session("c1").is_none(), "limits event alone does not create a session");
     }
 
     #[test]
     fn a_tool_read_late_from_a_file_is_still_shown_for_the_minimum_time() {
-        // Rollout Codexa: początek i koniec narzędzia (0,8 s) docierają razem, długo po zapisie w pliku.
+        // Codex rollout: tool start and end (0.8 s) arrive together, long after being written to the file.
         let mut s = Store::new(Timing::default());
         s.apply(&ev(Kind::Prompt, 0));
         s.tick(60_000, &alive);
         s.apply(&tool(Tool::Bash, 59_000));
         s.apply(&ev(Kind::ToolEnd, 59_800));
-        assert_eq!(st(&s), (State::Working, Some(Tool::Bash)), "widać narzędzie, choć jego koniec już przyszedł");
+        assert_eq!(st(&s), (State::Working, Some(Tool::Bash)), "tool remains visible although its end already arrived");
         s.tick(60_250, &alive);
         assert_eq!(st(&s), (State::Working, Some(Tool::Bash)));
         s.tick(60_600, &alive);
@@ -791,12 +791,12 @@ mod tests {
 
     #[test]
     fn a_long_dead_thread_disappears_without_waving() {
-        // Aplikacja Codex dotyka starych wątków: ich ostatnia aktywność jest sprzed dni.
+        // The Codex app touches old threads whose last activity was days ago.
         let mut s = Store::new(Timing::default());
         s.apply(&ev(Kind::Prompt, 0));
         let ch = s.tick(3 * 86_400_000, &alive);
         assert!(s.session("s1").is_none());
-        assert_eq!(ch, vec![Change::Removed("s1".into())], "bez stanu „zakończył” i machania");
+        assert_eq!(ch, vec![Change::Removed("s1".into())], "without an ended state or wave");
     }
 
     #[test]
@@ -820,7 +820,7 @@ mod tests {
 
     #[test]
     fn an_older_reading_never_overrides_a_newer_one() {
-        // Aplikacja Codex dotyka starych wątków: ich rollouty z sierpniowym limitem czytamy po wrześniowym.
+        // The Codex app touches old threads: read their rollouts with August limits after September limits.
         let mut s = Store::new(Timing::default());
         let week = |p: f32, r: i64| Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: p, resets_at: Some(r) };
         let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Codex, "c", Kind::Limits, ts); e.data.limits = vec![l]; e };
@@ -837,7 +837,7 @@ mod tests {
         s.apply(&e);
         assert!(s.tick(4_000, &|_| true).is_empty());
         assert!(matches!(s.tick(5_000, &|_| true).as_slice(), [Change::Limits(l)] if l.is_empty()));
-        assert!(s.limits().is_empty(), "po resecie stare zużycie nic nie znaczy: brak danych");
+        assert!(s.limits().is_empty(), "old usage means nothing after reset: no data");
     }
 
     #[test]
@@ -853,7 +853,7 @@ mod tests {
         assert!(s.drop_limits_without_reset(Agent::Claude));
         assert_eq!(s.limits().iter().map(|l| (l.agent, l.window)).collect::<Vec<_>>(),
             vec![(Agent::Claude, Window::Weekly), (Agent::Codex, Window::FiveHour)]);
-        assert!(!s.drop_limits_without_reset(Agent::Claude), "nic do zdjęcia");
+        assert!(!s.drop_limits_without_reset(Agent::Claude), "nothing to remove");
     }
 
     #[test]
@@ -863,9 +863,9 @@ mod tests {
         let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Claude, "x", Kind::Limits, ts); e.data.limits = vec![l]; e };
         s.apply(&at(1_000, lim(30.0, Some(10_000))));
         s.apply(&at(2_000, lim(40.0, None)));
-        assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "to samo okno: reset ze statusline zostaje");
+        assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "same window: retain statusline reset");
         s.apply(&at(20_000, lim(5.0, None)));
-        assert_eq!(s.limits(), &[lim(5.0, None)], "reset minął: nie wiemy, kiedy następny");
+        assert_eq!(s.limits(), &[lim(5.0, None)], "reset passed: next time unknown");
     }
 
     fn action(s: &Store) -> Option<String> { s.session("s1").unwrap().action.clone() }
@@ -880,12 +880,12 @@ mod tests {
         s.apply(&t);
         assert_eq!(action(&s).as_deref(), Some("npm test"));
         s.apply(&ev(Kind::Meta, 1500));
-        assert_eq!(action(&s).as_deref(), Some("npm test"), "meta nie czyści akcji");
+        assert_eq!(action(&s).as_deref(), Some("npm test"), "metadata does not clear action");
         s.apply(&ev(Kind::ToolEnd, 2000));
         assert_eq!(action(&s), None);
         s.apply(&t.clone());
         s.apply(&tool(Tool::Other, 3000));
-        assert_eq!(action(&s), None, "nowe narzędzie bez tekstu czyści stary tekst");
+        assert_eq!(action(&s), None, "new tool without text clears old text");
         let mut t2 = tool(Tool::Edit, 4000);
         t2.data.action = Some("Edytuje a.ts".into());
         s.apply(&t2);
@@ -902,7 +902,7 @@ mod tests {
         s.apply(&n);
         assert_eq!(question(&s).as_deref(), Some("Zgoda na Bash? npm test"));
         s.apply(&ev(Kind::Meta, 1500));
-        assert!(question(&s).is_some(), "meta (np. kontekst) nie kończy czekania");
+        assert!(question(&s).is_some(), "metadata (e.g. context) does not end waiting");
         s.apply(&ev(Kind::ToolEnd, 2000));
         assert_eq!(question(&s), None);
         s.apply(&n.clone());
@@ -974,7 +974,7 @@ mod tests {
         s.apply(&n);
         s.tick(2_000, &alive);
         let c = s.session("p/a").unwrap();
-        assert_eq!((c.state, c.question.clone()), (State::Thinking, None), "zgody dziecka czekają u rodzica");
+        assert_eq!((c.state, c.question.clone()), (State::Thinking, None), "child permissions wait at the parent");
     }
 
     #[test]
@@ -984,10 +984,10 @@ mod tests {
         s.apply(&kid("p/a", "p", Kind::Prompt, 0, sub(SubKind::Claude, false)));
         parent_working(&mut s, 0);
         s.tick(130_000, &alive);
-        assert_eq!(state_of(&s, "p/a"), Some(State::Thinking), "rodzic wciąż czeka na subagenta");
+        assert_eq!(state_of(&s, "p/a"), Some(State::Thinking), "parent still waits for a subagent");
         s.apply(&Event::new(Source::Claude, "p", Kind::ToolEnd, 131_000));
         s.tick(132_000, &alive);
-        assert_eq!(state_of(&s, "p/a"), Some(State::Ended), "przerwany subagent (Esc) nie wisi");
+        assert_eq!(state_of(&s, "p/a"), Some(State::Ended), "interrupted subagent (Esc) does not linger");
     }
 
     #[test]
@@ -1018,7 +1018,7 @@ mod tests {
         let mut s = Store::new(Timing::default());
         s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
         assert!(s.apply(&kid("p/x", "p", Kind::SessionEnd, 10, sub(SubKind::Claude, false))).is_empty());
-        assert!(s.session("p/x").is_none(), "koniec dziecka, którego nie znamy, nie tworzy zwierzaka");
+        assert!(s.session("p/x").is_none(), "ending an unknown child does not create a pet");
     }
 
     #[test]
@@ -1047,18 +1047,18 @@ mod tests {
         s.apply(&Event::new(Source::Claude, "p", Kind::SessionEnd, 1_000));
         assert_eq!(state_of(&s, "p/a"), Some(State::Ended));
         let t = s.session("th").unwrap();
-        assert_eq!((t.state, t.parent.clone(), t.sub.clone()), (State::Thinking, None, None), "zadanie routera zostaje jako zwykły zwierzak");
+        assert_eq!((t.state, t.parent.clone(), t.sub.clone()), (State::Thinking, None, None), "router task remains an ordinary pet");
     }
 
     #[test]
     fn a_router_task_of_a_gone_parent_is_standalone_at_once() {
         let mut s = Store::new(Timing::default());
-        s.apply(&kid("th", "nie-ma", Kind::Prompt, 0, sub(SubKind::Router, false)));
+        s.apply(&kid("th", "missing", Kind::Prompt, 0, sub(SubKind::Router, false)));
         let t = s.session("th").unwrap();
         assert_eq!((t.parent.clone(), t.sub.clone()), (None, None));
         s.apply(&Event::new(Source::Claude, "p", Kind::SessionEnd, 0));
         s.apply(&kid("th2", "p", Kind::Prompt, 10, sub(SubKind::Router, false)));
-        assert_eq!(s.session("th2").unwrap().parent, None, "rodzic zakończony: też sierota");
+        assert_eq!(s.session("th2").unwrap().parent, None, "ended parent: also orphaned");
     }
 
     #[test]
@@ -1093,7 +1093,7 @@ mod tests {
 
     #[test]
     fn a_wait_while_delegating_counts_as_the_subagent_s_request() {
-        // hook bez agent_id: rodzic pracował narzędziem Agent, więc prośba należy do dziecka
+        // hook without agent_id: parent used the Agent tool, so the request belongs to the child
         let mut s = Store::new(Timing::default());
         s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
         parent_working(&mut s, 1_000);
@@ -1122,7 +1122,7 @@ mod tests {
         s.apply(&kid("p/a", "p", Kind::ToolStart, 1_000, sub(SubKind::Claude, false)));
         parent_asks(&mut s, 2_000, true);
         s.tick(200_000, &alive);
-        assert_eq!(state_of(&s, "p/a"), Some(State::Working), "czeka na Twoją zgodę, nie jest przerwany");
+        assert_eq!(state_of(&s, "p/a"), Some(State::Working), "waiting for your permission, not interrupted");
     }
 
     fn router_meta(ts: i64, status: &str) -> Event {
@@ -1141,16 +1141,16 @@ mod tests {
         s.tick(17_000, &alive);
         assert!(s.session("th").is_none());
         s.apply(&router_meta(5_000, "completed"));
-        assert!(s.session("th").is_none(), "ten sam, zakończony wpis w status.json");
+        assert!(s.session("th").is_none(), "same completed entry in status.json");
         s.apply(&kid("th", "p", Kind::Prompt, 20_000, sub(SubKind::Router, false)));
-        assert_eq!(state_of(&s, "th"), Some(State::Thinking), "codex_continue: nowa tura wraca");
+        assert_eq!(state_of(&s, "th"), Some(State::Thinking), "codex_continue: new turn returns");
     }
 
     #[test]
     fn late_lines_of_an_ended_subagent_do_not_bring_it_back() {
         let mut s = Store::new(Timing::default());
         s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
-        // SubagentStop przed pierwszą linią pliku: dziecka jeszcze nie ma
+        // SubagentStop before the first file line: the child does not exist yet
         s.apply(&kid("p/a", "p", Kind::SessionEnd, 9_000, sub(SubKind::Claude, false)));
         s.apply(&kid("p/a", "p", Kind::SessionStart, 1_000, sub(SubKind::Claude, false)));
         s.apply(&kid("p/a", "p", Kind::ToolStart, 8_000, sub(SubKind::Claude, false)));
@@ -1160,7 +1160,7 @@ mod tests {
         s.tick(11_000, &alive);
         assert!(s.session("p/b").is_none());
         s.apply(&kid("p/b", "p", Kind::ToolEnd, 8_500, sub(SubKind::Claude, false)));
-        assert!(s.session("p/b").is_none(), "linia z pliku po zniknięciu dziecka");
+        assert!(s.session("p/b").is_none(), "file line after the child disappeared");
     }
 
     #[test]
@@ -1174,7 +1174,7 @@ mod tests {
 
     #[test]
     fn a_grandchild_stands_with_the_top_session() {
-        // subagent Codexa w zadaniu routera, które zlecił Claude: wnuków nikt nie rysuje, więc stoi przy sesji głównej
+        // Codex subagent in a router task requested by Claude: grandchildren are not drawn, so it stands by the main session
         let mut s = Store::new(Timing::default());
         s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
         s.apply(&kid("th", "p", Kind::Prompt, 10, sub(SubKind::Router, false)));

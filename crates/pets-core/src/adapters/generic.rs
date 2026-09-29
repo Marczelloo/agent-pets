@@ -1,5 +1,5 @@
-//! Furtka: `POST /v1/events/generic` od dowolnego narzędzia (spec 8). Znani agenci mają własne trasy,
-//! więc furtka nie może się pod nich podszyć.
+//! Door: `POST /v1/events/generic` from any tool (spec 8). Known agents have their own routes,
+//! so the door cannot impersonate them.
 use super::{clean_text, safe_id};
 use crate::model::*;
 use serde::Deserialize;
@@ -22,7 +22,7 @@ pub struct GenericEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reject { BadAgent, Reserved, BadSession }
 
-/// Nazwy znanych agentów i źródeł: tylko ich własne trasy.
+/// Names of known agents and sources: only their own routes.
 pub const RESERVED: [&str; 9] = ["claude", "codex", "router", "opencode", "antigravity", "copilot", "cursor", "grok", "zcode"];
 
 pub fn check_agent(a: &str) -> Result<(), Reject> {
@@ -52,7 +52,7 @@ pub fn to_event(g: GenericEvent, ts: i64) -> Result<Event, Reject> {
     let mut e = Event::new(Source::Generic, format!("generic:{}:{}", g.agent, g.session), kind, ts);
     if kind == Kind::ToolStart { e.tool = Some(g.tool.unwrap_or(Tool::Other)); }
     let d = &mut e.data;
-    // tylko zgłoszona nazwa; domyślną (id agenta) nadaje sklep przy tworzeniu sesji, żeby zdarzenie bez `name` jej nie zmieniało
+    // only the reported name; the store assigns the default (agent ID) on session creation so an event without `name` does not change it
     d.agent_name = text(&g.name, 40);
     d.title = text(&g.title, 80);
     d.cwd = text(&g.cwd, 260);
@@ -64,8 +64,8 @@ pub fn to_event(g: GenericEvent, ts: i64) -> Result<Event, Reject> {
     Ok(e)
 }
 
-/// `hook.exe report --agent <id> --session <id> --state <stan> [--name --tool --title --cwd --model --question --app --pid]`:
-/// ciało dla `/v1/events/generic`, sprawdzone tak jak sprawdzi je furtka (błąd zamiast odrzucenia po drugiej stronie).
+/// `hook.exe report --agent <id> --session <id> --state <state> [--name --tool --title --cwd --model --question --app --pid]`:
+/// Body for `/v1/events/generic`, validated as the door would validate it (error instead of remote rejection).
 pub fn report_body(args: &[String]) -> Result<serde_json::Value, String> {
     const TEXT: [&str; 9] = ["agent", "session", "state", "name", "tool", "title", "cwd", "model", "question"];
     let mut body = serde_json::Map::new();
@@ -113,13 +113,13 @@ mod tests {
 
     #[test]
     fn report_refuses_what_the_door_would_refuse() {
-        assert!(report_body(&args(&["--agent", "kilo", "--session", "abc"])).is_err(), "brak --state");
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "abc"])).is_err(), "missing --state");
         assert!(report_body(&args(&["--agent", "claude", "--session", "abc", "--state", "done"])).is_err(), "Reserved");
         assert!(report_body(&args(&["--agent", "kilo", "--session", "../x", "--state", "done"])).is_err());
         assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state", "nope"])).is_err());
         assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state", "done", "--pid", "x"])).is_err());
         assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state", "done", "--wat", "1"])).is_err());
-        assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state"])).is_err(), "flaga bez wartości");
+        assert!(report_body(&args(&["--agent", "kilo", "--session", "a", "--state"])).is_err(), "flag without a value");
     }
 
     #[test]
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn a_name_is_sent_only_when_reported() {
-        // brak `name` nie może nadpisać nazwy zgłoszonej wcześniej (id agenta jako domyślną nadaje sklep)
+        // missing `name` cannot overwrite a previously reported name (the store sets the agent ID as default)
         assert_eq!(to_event(g(base("done")), 1).unwrap().data.agent_name, None);
     }
 
@@ -145,7 +145,7 @@ mod tests {
     fn a_door_pet_keeps_its_name_between_events() {
         let mut st = crate::store::Store::new(crate::store::Timing::default());
         st.apply(&to_event(g(base("working")), 1).unwrap());
-        assert_eq!(st.session("generic:kilo:abc").unwrap().agent_name.as_deref(), Some("kilo"), "domyślnie id agenta");
+        assert_eq!(st.session("generic:kilo:abc").unwrap().agent_name.as_deref(), Some("kilo"), "agent ID by default");
         let mut named = base("working");
         named["name"] = json!("Kilo CLI");
         st.apply(&to_event(g(named), 2).unwrap());
@@ -194,7 +194,7 @@ mod tests {
         let d = to_event(g(v), 1).unwrap().data;
         let n = |s: &Option<String>| s.as_ref().map(|s| s.chars().count());
         assert_eq!((n(&d.title), n(&d.question), n(&d.model), n(&d.cwd)), (Some(80), Some(300), Some(64), Some(260)));
-        assert!(n(&d.agent_name).unwrap() <= 40, "cięcie na 40, bez spacji na końcu");
+        assert!(n(&d.agent_name).unwrap() <= 40, "clip at 40, with no trailing space");
         assert!(d.title.unwrap().starts_with("a x"));
         assert!(!d.agent_name.unwrap().contains('\n'));
     }

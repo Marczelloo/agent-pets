@@ -1,11 +1,11 @@
-//! Statystyki opencode z jego bazy (spec 0.11 §4.4): każda sesja to pozycja księgi `opencode:<id>`, przeliczana od nowa,
-//! gdy zmieni się jej `time_updated`. Te same kubełki i pola co u Claude'a i Codexa.
+//! opencode statistics from its database (spec 0.11 §4.4): each session is a ledger entry `opencode:<id>`, recalculated
+//! when its `time_updated` changes. Same buckets and fields as Claude and Codex.
 use crate::opencode_db as db;
 use crate::tools::from_opencode;
 use super::claude::project_of;
 use super::{active_tick, Book, FileEntry, StatAgent};
 
-/// Pozycja księgi jednej sesji, od zera; `None`, gdy bazy nie dało się teraz odczytać.
+/// Ledger entry for one session, from scratch; `None` when the database could not be read now.
 fn entry(c: &rusqlite::Connection, s: &db::DbSession) -> Option<FileEntry> {
     let mut e = FileEntry::default();
     e.meta.agent = Some(StatAgent::Opencode);
@@ -15,7 +15,7 @@ fn entry(c: &rusqlite::Connection, s: &db::DbSession) -> Option<FileEntry> {
     let msgs = db::messages(c, &s.id)?;
     let tools = db::tools(c, &s.id)?;
     e.meta.started = msgs.iter().map(|m| m.created).filter(|t| *t > 0).min();
-    // chwile pracy: początek i koniec każdej wiadomości oraz narzędzia, z modelem z tej chwili
+    // work instants: start and end of each message and tool, with the model at that time
     let mut moments: Vec<(i64, Option<String>)> = Vec::new();
     for m in &msgs {
         if m.role == "assistant" {
@@ -29,7 +29,7 @@ fn entry(c: &rusqlite::Connection, s: &db::DbSession) -> Option<FileEntry> {
         if let Some(done) = m.completed { moments.push((done, m.model.clone())); }
     }
     for (at, name) in tools {
-        // `question` to pytanie agenta do użytkownika, jak `AskUserQuestion` u Claude'a
+        // `question` is the agent's question to the user, like Claude's `AskUserQuestion`
         let model = msgs.iter().filter(|m| m.created <= at && m.model.is_some()).last().and_then(|m| m.model.clone());
         let cell = e.cell(at, model.as_deref().unwrap_or("unknown"));
         if name == "question" { cell.questions += 1 } else { cell.tools.add(from_opencode(&name)) }
@@ -44,15 +44,15 @@ fn entry(c: &rusqlite::Connection, s: &db::DbSession) -> Option<FileEntry> {
     Some(e)
 }
 
-/// Przelicza pozycje `opencode:<id>` sesji, których `time_updated` różni się od zapisanego (`cursor.mtime`).
-/// Pauza (gra na pełnym ekranie) sprawdzana przed każdą sesją. Zwraca liczbę przeliczonych sesji.
+/// Recalculate `opencode:<id>` entries for sessions whose `time_updated` differs from the stored `cursor.mtime`.
+/// Check for pause (full-screen game) before each session. Return the number of recalculated sessions.
 pub fn sync(book: &mut Book, c: &rusqlite::Connection, pause: &dyn Fn() -> bool) -> usize {
     let mut n = 0;
     for s in db::sessions(c) {
         let key = format!("opencode:{}", s.id);
         if book.files.get(&key).is_some_and(|e| e.cursor.mtime == s.updated) { continue; }
         if pause() { break; }
-        // błąd odczytu: stara pozycja zostaje, a różny `time_updated` przeliczy ją przy następnym skanie
+        // read error: keep the old entry; different `time_updated` will recalculate it on the next scan
         let Some(e) = entry(c, &s) else { continue };
         book.files.insert(key, e);
         n += 1;
@@ -116,7 +116,7 @@ mod tests {
         let mut b = Book::default();
         sync(&mut b, &c, &|| false);
         let before = b.files["opencode:ses_p"].clone();
-        assert_eq!(sync(&mut b, &c, &|| false), 0, "bez zmian w bazie");
+        assert_eq!(sync(&mut b, &c, &|| false), 0, "no database changes");
         drop(c);
         let w = rusqlite::Connection::open(&path).unwrap();
         w.execute("UPDATE session SET time_updated = ?1 WHERE id = 'ses_p'", params![T0 + 99_000]).unwrap();
@@ -124,7 +124,7 @@ mod tests {
         let c = crate::opencode_db::open(&path).unwrap();
         assert_eq!(sync(&mut b, &c, &|| false), 1);
         let after = &b.files["opencode:ses_p"];
-        assert_eq!(after.buckets, before.buckets, "przeliczone od zera, bez podwójnego liczenia");
+        assert_eq!(after.buckets, before.buckets, "recalculated from scratch without double counting");
         assert_eq!(after.cursor.mtime, T0 + 99_000);
     }
 
@@ -137,11 +137,11 @@ mod tests {
         let before = b.files["opencode:ses_p"].clone();
         let w = rusqlite::Connection::open(&path).unwrap();
         w.execute("UPDATE session SET time_updated = ?1 WHERE id = 'ses_p'", params![T0 + 99_000]).unwrap();
-        // wiadomości chwilowo nie do odczytania (blokada, zmiana schemy w trakcie): nie wolno zapisać pustej pozycji
+        // messages temporarily unreadable (lock, schema changing): do not save an empty entry
         w.execute_batch("ALTER TABLE message RENAME TO message_busy;").unwrap();
         drop(w);
         assert_eq!(sync(&mut b, &crate::opencode_db::open(&path).unwrap(), &|| false), 0);
-        assert_eq!(b.files["opencode:ses_p"], before, "stara pozycja zostaje i zostanie przeliczona przy następnym skanie");
+        assert_eq!(b.files["opencode:ses_p"], before, "old entry remains and will be recalculated on the next scan");
     }
 
     #[test]

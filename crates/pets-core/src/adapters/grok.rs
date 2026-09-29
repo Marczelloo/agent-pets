@@ -1,16 +1,16 @@
-//! Grok Build: hooki z `~/.grok/hooks/agent-pets.json` (spec 0.12 §4). `hook.exe --agent grok --event <nazwa>`.
-//! Zdarzenia jak w Claude Code (PascalCase); pola w dwóch zapisach, camelCase i snake_case, adapter czyta oba.
+//! Grok Build: hooks from `~/.grok/hooks/agent-pets.json` (spec 0.12 §4). `hook.exe --agent grok --event <name>`.
+//! Events as in Claude Code (PascalCase); fields use camelCase or snake_case, and the adapter reads both.
 use super::{action_from, clean_text, safe_id, AgentEnvelope};
 use crate::i18n::Lang;
 use crate::model::*;
 use crate::tools::from_keywords;
 use serde_json::Value;
 
-/// Argumenty narzędzi do tekstu akcji: (klucz Groka, klucz Claude'a). Treść plików i diffy nigdy.
+/// Tool arguments for action text: (Grok key, Claude key). Never file contents or diffs.
 const KEYS: [(&str, &str); 8] = [("command", "command"), ("cmd", "command"), ("file_path", "file_path"), ("filePath", "file_path"),
     ("path", "file_path"), ("pattern", "pattern"), ("query", "pattern"), ("url", "url")];
 
-/// Narzędzie Claude'a o tym samym tekście akcji.
+/// Claude tool with the same action text.
 fn claude_name(tool: Tool) -> Option<&'static str> {
     Some(match tool {
         Tool::Bash => "Bash", Tool::Edit => "Edit", Tool::Read => "Read", Tool::Grep => "Grep", Tool::Web => "WebFetch", Tool::Agent => "Task",
@@ -66,7 +66,7 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     vec![e]
 }
 
-/// Uzupełnia `sessionId` ze zmiennej `GROK_SESSION_ID`, gdy JSON go nie ma (ani `session_id`).
+/// Fill `sessionId` from `GROK_SESSION_ID` when JSON has neither it nor `session_id`.
 pub fn fill_session(payload: &mut Value, sid: Option<String>) {
     let (Some(o), Some(sid)) = (payload.as_object_mut(), sid) else { return };
     if !o.contains_key("sessionId") && !o.contains_key("session_id") { o.insert("sessionId".into(), Value::String(sid)); }
@@ -137,7 +137,7 @@ mod tests {
         assert!(events(&env("SubagentStart", json!({"sessionId": "g1"})), Lang::Pl).is_empty());
     }
 
-    /// przerwana tura (Ctrl+C, odrzucona zgoda, limit tur) wysyła `StopCancelled` zamiast `Stop` (dokumentacja Groka)
+    /// An interrupted turn (Ctrl+C, denied permission, turn limit) sends `StopCancelled` instead of `Stop` (Grok docs).
     #[test]
     fn a_cancelled_turn_ends_the_turn() {
         let v = events(&env("StopCancelled", json!({"sessionId": "g1", "reason": "user_interrupt"})), Lang::Pl);

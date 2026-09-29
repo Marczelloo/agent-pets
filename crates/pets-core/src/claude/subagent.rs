@@ -1,5 +1,5 @@
-//! Subagenci Claude Code z ich własnych plików: `…/projects/<proj>/<sesja>/subagents/agent-<id>.jsonl`
-//! i sąsiedni `agent-<id>.meta.json` (typ, opis, praca w tle). Dziecko ma id `"{sesja}/{agentId}"`.
+//! Claude Code subagents from their own files: `…/projects/<proj>/<session>/subagents/agent-<id>.jsonl`
+//! and adjacent `agent-<id>.meta.json` (type, description, background work). A child has ID `"{session}/{agentId}"`.
 use std::path::{Path, PathBuf};
 use serde_json::Value;
 use crate::action::action_text;
@@ -14,7 +14,7 @@ pub struct SubagentParser {
     lang: Lang,
     started: bool,
     sent_meta: bool,
-    /// ostatnia linia to odpowiedź (tekst bez narzędzia): (id dziecka, czas linii)
+    /// Last line is a response (text without a tool): (child ID, line time).
     answered: Option<(String, i64)>,
 }
 
@@ -53,7 +53,7 @@ impl SubagentParser {
         let s = |k: &str| d.get(k).and_then(|v| v.as_str());
         let (Some(parent), Some(agent), Some(ts)) = (s("sessionId"), s("agentId"), s("timestamp").and_then(rfc3339_ms)) else { return vec![] };
         let sid = format!("{parent}/{agent}");
-        // opis bywa zapisany chwilę po pierwszej linii
+        // description may be written shortly after the first line
         if self.meta.is_none() { self.meta = read_meta(&self.meta_path); }
         let null = Value::Null;
         let content = d.pointer("/message/content").unwrap_or(&null);
@@ -86,12 +86,12 @@ impl SubagentParser {
             Some("assistant") | Some("user") if !out.is_empty() => self.answered = None,
             _ => {}
         }
-        // każde zdarzenie niesie rodzaj dziecka: odtworzone po zniknięciu dalej podlega regułom subagentów
+        // every event carries child kind: one restored after disappearing still follows subagent rules
         let sub = self.meta.clone().unwrap_or(SubInfo { kind: SubKind::Claude, agent_type: None, description: None, background: false });
         if let Some(first) = out.first_mut() {
             if !self.sent_meta {
                 first.data.title = sub.description.clone().or_else(|| sub.agent_type.clone());
-                // bez pliku meta czekamy, aż się pojawi (wtedy przyjdzie opis)
+                // without the metadata file, wait for it to appear (then the description arrives)
                 self.sent_meta = self.meta.is_some();
             }
         }
@@ -99,7 +99,7 @@ impl SubagentParser {
         out
     }
 
-    /// Plik kończy się odpowiedzią subagenta: przy odtwarzaniu po starcie to dziecko już skończyło.
+    /// File ends with a subagent response: during startup restoration, that child has already finished.
     pub fn finished(&self) -> Option<(String, i64)> { self.answered.clone()
     }
 }
@@ -148,7 +148,7 @@ mod tests {
         let e = sp.parse_line(&line("user", json!([{"type": "tool_result", "content": "x"}]), "2026-09-26T10:00:02.000Z"));
         assert_eq!(e[0].kind, Kind::ToolEnd);
         let e = sp.parse_line(&line("assistant", json!([{"type": "text", "text": "gotowe"}]), "2026-09-26T10:00:03.000Z"));
-        assert_eq!(e[0].kind, Kind::ToolEnd, "tekst asystenta: myśli");
+        assert_eq!(e[0].kind, Kind::ToolEnd, "assistant text: thinking");
         assert!(sp.parse_line(r#"{"type":"attachment","isSidechain":true,"agentId":"a1","sessionId":"p1","timestamp":"2026-09-26T10:00:04.000Z"}"#).is_empty());
         assert!(sp.parse_line("{bad").is_empty());
     }
@@ -192,7 +192,7 @@ mod tests {
         let mut sp = SubagentParser::new(&with_meta(d.path(), Some(json!({"agentType": "Plan"}))), Lang::Pl);
         sp.parse_line(&line("user", json!("x"), "2026-09-26T10:00:00.000Z"));
         let e = sp.parse_line(&line("assistant", json!([{"type": "text", "text": "."}]), "2026-09-26T10:00:01.000Z"));
-        assert_eq!(e[0].data.sub.as_ref().map(|s| s.kind), Some(SubKind::Claude), "odtworzone dziecko nie traci rodzaju");
+        assert_eq!(e[0].data.sub.as_ref().map(|s| s.kind), Some(SubKind::Claude), "restored child retains its kind");
     }
 
     #[test]

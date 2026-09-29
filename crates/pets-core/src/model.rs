@@ -32,10 +32,10 @@ pub struct JumpTarget {
     pub session_id: String,
     pub cwd: String,
     pub app: Option<App>,
-    /// nazwa programu `App::Other` (np. `originator` Codexa spoza mapy)
+    /// `App::Other` program name (e.g. a Codex `originator` outside the map).
     #[serde(default)]
     pub app_name: Option<String>,
-    /// PID programu-gospodarza (VS Code, t3code…), gdy różny od procesu agenta
+    /// Host program PID (VS Code, t3code…) when different from the agent process.
     #[serde(default)]
     pub host_pid: Option<u32>,
 }
@@ -53,43 +53,43 @@ pub struct Session {
     pub context: Option<Context>,
     pub started_at: i64,
     pub last_activity: i64,
-    /// czas wejścia w bieżący stan (do minimalnego czasu stanu i progów)
+    /// Time of entering the current state (for minimum state duration and thresholds).
     pub state_since: i64,
     pub turn_started_at: Option<i64>,
     pub jump: JumpTarget,
     #[serde(default)]
     pub router_task: Option<RouterTask>,
-    /// id sesji rodzica; `None` = zwykła sesja
+    /// Parent session ID; `None` = ordinary session.
     #[serde(default)]
     pub parent: Option<String>,
-    /// tylko u dzieci (subagentów)
+    /// Only for children (subagents).
     #[serde(default)]
     pub sub: Option<SubInfo>,
-    /// bieżący tekst akcji (tylko w pamięci), pusty poza pracą narzędziem
+    /// Current action text (in memory only), empty outside tool work.
     #[serde(default)]
     pub action: Option<String>,
-    /// tekst pytania (tylko w pamięci), tylko w `needs_you`
+    /// Question text (in memory only), only in `needs_you`.
     #[serde(default)]
     pub question: Option<String>,
-    /// `needs_you` rodzica to prośba jego subagenta: dalsza praca dziecka znaczy, że już odpowiedziano
+    /// A parent's `needs_you` is its subagent's request: further child work means it has been answered.
     #[serde(skip)]
     pub waits_on_child: bool,
-    /// id modelu, którego używa agent (np. `claude-opus-5-5`); nazwę do wyświetlenia liczy UI
+    /// Model ID used by the agent (e.g. `claude-opus-5-5`); the UI computes the display name.
     #[serde(default)]
     pub model: Option<String>,
-    /// nazwa do wyświetlenia agenta `Other` (z furtki)
+    /// Display name for an `Other` agent (from the door).
     #[serde(default)]
     pub agent_name: Option<String>,
-    /// zużycie sesji z bazy agenta (od 0.11 tylko opencode)
+    /// Session usage from the agent database (since 0.11, opencode only).
     #[serde(default)]
     pub usage: Option<Usage>,
 }
 
-/// Tokeny i koszt jednej sesji; `account` = konto, którego limity dotyczą sesji (subskrypcja Claude'a albo ChatGPT).
+/// Tokens and cost for one session; `account` = account whose limits apply to it (Claude or ChatGPT subscription).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Usage { pub tokens: u64, pub cost: f64, pub account: Option<Agent> }
 
-/// Suma dnia (od lokalnej północy) dla agenta ze wszystkich jego sesji.
+/// Agent's daily total (since local midnight) across all its sessions.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct AgentUsage { pub agent: Agent, pub tokens_today: u64, pub cost_today: f64 }
 
@@ -97,7 +97,7 @@ pub struct AgentUsage { pub agent: Agent, pub tokens_today: u64, pub cost_today:
 #[serde(rename_all = "snake_case")]
 pub enum SubKind { Claude, Codex, Router, Opencode, Copilot, Cursor }
 
-/// Opis dziecka: kto je uruchomił i po co.
+/// Child description: who started it and why.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SubInfo {
     pub kind: SubKind,
@@ -105,7 +105,7 @@ pub struct SubInfo {
     pub agent_type: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    /// zadanie w tle (`requestShape: background`): kończy się tylko przez `SubagentStop` albo po 10 min ciszy
+    /// Background task (`requestShape: background`): ends only via `SubagentStop` or after 10 min of quiet.
     #[serde(default)]
     pub background: bool,
 }
@@ -133,7 +133,7 @@ pub enum Kind {
     Error, Compact, SessionEnd, Meta, Limits,
 }
 
-/// Dane opcjonalne niesione przez zdarzenie. Puste pola nie nadpisują stanu sesji.
+/// Optional data carried by an event. Empty fields do not overwrite session state.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(default)]
 pub struct EventData {
@@ -148,15 +148,15 @@ pub struct EventData {
     pub router_task: Option<RouterTask>,
     pub parent: Option<String>,
     pub sub: Option<SubInfo>,
-    /// tekst akcji przy `ToolStart` (brak = narzędzie bez tekstu)
+    /// Action text at `ToolStart` (absent = tool without text).
     pub action: Option<String>,
-    /// tekst pytania przy `NeedsInput`
+    /// Question text at `NeedsInput`.
     pub question: Option<String>,
-    /// `taskId` zadania Agent Routera zleconego przez tę sesję (wynik `codex_delegate`/`continue`/`review`)
+    /// `taskId` of an Agent Router task requested by this session (`codex_delegate`/`continue`/`review` result).
     pub router_link: Option<String>,
-    /// `SubagentStop` bez `agent_id`: koniec najnowszego żyjącego dziecka tej sesji
+    /// `SubagentStop` without `agent_id`: end the newest live child of this session.
     pub sub_end: bool,
-    /// prośba (`NeedsInput`) zgłoszona przez subagenta, czeka u rodzica
+    /// Request (`NeedsInput`) reported by a subagent, waiting at the parent.
     pub from_child: bool,
     pub model: Option<String>,
     pub agent_name: Option<String>,
@@ -164,8 +164,8 @@ pub struct EventData {
     pub host_pid: Option<u32>,
 }
 
-/// Zadanie Agent Routera powiązane z wątkiem Codexa (`~/.agent-router/status.json`).
-/// „Zdrowie” (aktywne, cisza, utknęło, zablokowane) liczy UI z `last_activity_at` w chwili rysowania.
+/// Agent Router task linked to a Codex thread (`~/.agent-router/status.json`).
+/// The UI computes "health" (active, quiet, stuck, blocked) from `last_activity_at` when rendering.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct RouterTask {
     pub task_id: String,

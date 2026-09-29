@@ -1,7 +1,7 @@
-//! Zużycie opencode z jego bazy `~/.local/share/opencode/opencode.db` (spec 0.11 §4.1), tylko do odczytu.
-//! W tej samej bazie są tokeny logowania (`credential`, `account`…), więc zapytania dotykają wyłącznie tabel
-//! `session`, `message` i `part`, a z kolumny `data` czytają tylko wybrane pola przez `json_extract`.
-//! Każdy błąd (brak pliku, blokada, starsza schema) to brak danych, bez komunikatu.
+//! opencode usage from its read-only database `~/.local/share/opencode/opencode.db` (spec 0.11 §4.1).
+//! The same database holds login tokens (`credential`, `account`…), so queries touch only the
+//! `session`, `message`, and `part` tables and read only selected `data` fields via `json_extract`.
+//! Any error (missing file, lock, older schema) means no data, without a message.
 use crate::model::Agent;
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags, Row};
@@ -24,19 +24,19 @@ const MESSAGES: &str = "SELECT json_extract(data,'$.role'), json_extract(data,'$
 const TOOLS: &str = "SELECT time_created, json_extract(data,'$.tool') FROM part \
     WHERE session_id = ?1 AND json_extract(data,'$.type') = 'tool' ORDER BY time_created";
 
-/// Wszystkie zapytania modułu; funkcje używają wyłącznie tych stałych (test pilnuje tabel i pól).
+/// All module queries; functions use only these constants (a test checks tables and fields).
 pub const QUERIES: &[&str] = &[SESSION_USAGE, LAST_PROVIDER, TODAY, SESSIONS, MESSAGES, TOOLS];
 
 pub fn db_path(home: &Path) -> PathBuf { home.join(".local").join("share").join("opencode").join("opencode.db") }
 
 #[cfg(test)]
 thread_local! {
-    /// Liczba otwarć bazy w tym wątku (test: przy wyłączonej integracji nie otwieramy jej wcale). Na wątek, bo testy
-    /// działają równolegle.
+    /// Database open count in this thread (test: disabled integration never opens it). Per thread because tests
+    /// run in parallel.
     pub static OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-/// Połączenie tylko do odczytu na jedno odczytanie; blokada dłuższa niż 200 ms kończy zapytanie błędem.
+/// Read-only connection for one read; a lock longer than 200 ms fails the query.
 pub fn open(path: &Path) -> Option<Connection> {
     #[cfg(test)]
     OPENS.with(|n| n.set(n.get() + 1));
@@ -46,7 +46,7 @@ pub fn open(path: &Path) -> Option<Connection> {
     Some(c)
 }
 
-/// Liczba z komórki: całkowita albo zmiennoprzecinkowa; brak, tekst, ujemna albo nieskończona to 0.
+/// Number from a cell: integer or floating point; missing, text, negative, or infinite becomes 0.
 fn num(r: &Row, i: usize) -> f64 {
     let v = match r.get_ref(i) { Ok(ValueRef::Integer(n)) => n as f64, Ok(ValueRef::Real(x)) => x, _ => 0.0 };
     if v.is_finite() && v > 0.0 { v } else { 0.0 }
@@ -57,7 +57,7 @@ fn text(r: &Row, i: usize) -> Option<String> { r.get::<_, Option<String>>(i).ok(
 #[derive(Clone, Debug, PartialEq)]
 pub struct SessionUsage { pub id: String, pub tokens: u64, pub cost: f64, pub provider: Option<String> }
 
-/// Zużycie wskazanych sesji (id bez prefiksu `opencode:`); sesje, których nie ma, są pomijane.
+/// Usage of selected sessions (IDs without the `opencode:` prefix); missing sessions are skipped.
 pub fn session_usage(c: &Connection, ids: &[&str]) -> Vec<SessionUsage> {
     ids.iter().filter_map(|id| {
         let (id, tokens, cost) = c.query_row(SESSION_USAGE, [id], |r| Ok((r.get::<_, String>(0)?, count(r, 1), num(r, 2)))).ok()?;
@@ -66,13 +66,13 @@ pub fn session_usage(c: &Connection, ids: &[&str]) -> Vec<SessionUsage> {
     }).collect()
 }
 
-/// Tokeny i koszt odpowiedzi od `since_ms` (lokalna północ), ze wszystkich sesji.
+/// Response tokens and cost since `since_ms` (local midnight), across all sessions.
 pub fn today(c: &Connection, since_ms: i64) -> (u64, f64) {
     c.query_row(TODAY, [since_ms], |r| Ok((count(r, 0), num(r, 1)))).unwrap_or((0, 0.0))
 }
 
-/// Konto, którego limity dotyczą sesji: zerowy koszt przy prawdziwym zużyciu znaczy subskrypcję (przy kluczu API
-/// opencode liczy koszt). Bez `auth.json`: dostawca i koszt to wszystko, co wiemy.
+/// Account whose limits apply to a session: zero cost with real usage means a subscription (with an API key
+/// opencode calculates cost). Without `auth.json`: provider and cost are all we know.
 pub fn account_for(u: &SessionUsage) -> Option<Agent> {
     if u.cost != 0.0 || u.tokens == 0 { return None; }
     match u.provider.as_deref()? {
@@ -91,18 +91,18 @@ pub fn sessions(c: &Connection) -> Vec<DbSession> {
         .map(|rows| rows.flatten().collect()).unwrap_or_default()
 }
 
-/// Liczby jednej wiadomości; bez treści (w strukturze nie ma na nią miejsca).
+/// Counts for one message; no content (the structure has no place for it).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DbMessage {
     pub role: String, pub provider: Option<String>, pub model: Option<String>, pub created: i64, pub completed: Option<i64>,
     pub input: u64, pub output: u64, pub reasoning: u64, pub cache_read: u64, pub cache_write: u64, pub cost: f64, pub cwd: Option<String>,
 }
 
-/// Wiadomości sesji; `None` przy błędzie odczytu (blokada, inna schema), żeby nie pomylić go z sesją bez wiadomości.
+/// Session messages; `None` on read error (lock, different schema), distinct from a session without messages.
 pub fn messages(c: &Connection, session: &str) -> Option<Vec<DbMessage>> {
     let mut st = c.prepare(MESSAGES).ok()?;
     let rows = st.query_map([session], |r| {
-        // czas z danych wiadomości, a gdy go brak, z kolumny wiersza
+        // time from message data, or from the row column if missing
         let created = Some(num(r, 3) as i64).filter(|t| *t > 0).unwrap_or_else(|| num(r, 12) as i64);
         Ok(DbMessage {
             role: text(r, 0).unwrap_or_default(), provider: text(r, 1), model: text(r, 2), created,
@@ -115,19 +115,19 @@ pub fn messages(c: &Connection, session: &str) -> Option<Vec<DbMessage>> {
     all
 }
 
-/// Wywołania narzędzi sesji: (czas, nazwa narzędzia); `None` przy błędzie odczytu.
+/// Session tool calls: (time, tool name); `None` on read error.
 pub fn tools(c: &Connection, session: &str) -> Option<Vec<(i64, String)>> {
     let mut st = c.prepare(TOOLS).ok()?;
     let rows = st.query_map([session], |r| Ok((num(r, 0) as i64, text(r, 1).unwrap_or_default()))).ok()?;
     Some(rows.collect::<Result<Vec<_>, _>>().ok()?.into_iter().filter(|(_, n)| !n.is_empty()).collect())
 }
 
-/// Bazy testowe ze schemą opencode (spike S3), wspólne dla testów tego modułu, runtime i statystyk.
+/// Test databases with the opencode schema (spike S3), shared by this module, runtime, and statistics tests.
 #[cfg(test)]
 pub(crate) mod fixture {
     use rusqlite::params;
 
-    /// Baza jak u użytkownika (spike S3), z tabelą tokenów logowania, której nie wolno czytać.
+    /// User-like database (spike S3), with a login token table that must not be read.
     pub fn db(dir: &std::path::Path) -> std::path::PathBuf {
         std::fs::create_dir_all(dir).unwrap();
         let p = dir.join("opencode.db");
@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(account_for(&u("anthropic", 10, 0.0)), Some(crate::model::Agent::Claude));
         assert_eq!(account_for(&u("openai", 10, 0.5)), None, "koszt > 0 to klucz API");
         assert_eq!(account_for(&u("zai-coding-plan", 10, 0.0)), None);
-        assert_eq!(account_for(&u("openai", 0, 0.0)), None, "bez zużycia nic nie wiadomo");
+        assert_eq!(account_for(&u("openai", 0, 0.0)), None, "no usage means no account information");
         assert_eq!(account_for(&SessionUsage { id: "s".into(), tokens: 10, cost: 0.0, provider: None }), None);
     }
 
@@ -250,7 +250,7 @@ mod tests {
         let c = open(&old).unwrap();
         assert!(session_usage(&c, &["s"]).is_empty());
         assert_eq!(today(&c, 0), (0, 0.0));
-        assert!(messages(&c, "s").is_none() && tools(&c, "s").is_none(), "błąd to nie pusta sesja");
+        assert!(messages(&c, "s").is_none() && tools(&c, "s").is_none(), "an error is not an empty session");
         let p = db(d.path());
         let w = rusqlite::Connection::open(&p).unwrap();
         session(&w, "ses_a", None, 1, 0.0, [1, 0, 0, 0, 0]);
@@ -268,18 +268,18 @@ mod tests {
         assert!(!QUERIES.is_empty());
         for q in QUERIES {
             let l = q.to_lowercase();
-            for bad in ["credential", "account", "share", "secret", "auth", "select *"] { assert!(!l.contains(bad), "{bad} w: {q}"); }
+            for bad in ["credential", "account", "share", "secret", "auth", "select *"] { assert!(!l.contains(bad), "{bad} in: {q}"); }
             let words: Vec<&str> = l.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|w| !w.is_empty()).collect();
             for (i, w) in words.iter().enumerate() {
-                if matches!(*w, "from" | "join") { assert!(matches!(words[i + 1], "session" | "message" | "part"), "tabela {} w: {q}", words[i + 1]); }
+                if matches!(*w, "from" | "join") { assert!(matches!(words[i + 1], "session" | "message" | "part"), "table {} in: {q}", words[i + 1]); }
             }
             let mut rest = l.as_str();
             while let Some(i) = rest.find("data") {
                 let before = &rest[..i];
-                assert!(before.ends_with("json_extract("), "całe `data` w: {q}");
+                assert!(before.ends_with("json_extract("), "entire `data` in: {q}");
                 let after = &rest[i + 4..];
                 let path = after.strip_prefix(",'").and_then(|a| a.split('\'').next()).unwrap_or("");
-                assert!(ALLOWED.contains(&path), "ścieżka {path} w: {q}");
+                assert!(ALLOWED.contains(&path), "path {path} in: {q}");
                 rest = after;
             }
         }
@@ -291,7 +291,7 @@ mod tests {
             let m = crate::time::local_midnight(t);
             assert!(m <= t && t < m + 25 * 3_600_000, "{t} → {m}");
             assert_eq!(crate::time::local_midnight(m), m, "{t}");
-            assert!(crate::time::local_midnight(m - 1) < m, "minuta przed północą to poprzedni dzień");
+            assert!(crate::time::local_midnight(m - 1) < m, "a minute before midnight belongs to the previous day");
         }
     }
 }

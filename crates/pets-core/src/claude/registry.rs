@@ -1,4 +1,4 @@
-//! Rejestr żywych sesji Claude Code: `~/.claude/sessions/<pid>.json` (odkryty przy weryfikacji fazy 1).
+//! Live Claude Code session registry: `~/.claude/sessions/<pid>.json` (discovered during phase 1 verification).
 use std::path::Path;
 use crate::model::*;
 
@@ -8,7 +8,7 @@ pub struct LiveSession {
     pub session_id: String,
     pub cwd: String,
     pub entrypoint: String,
-    /// `name` z rejestru, pominięte gdy `nameSource == "derived"` (nazwa z katalogu, gorsza niż ai-title)
+    /// Registry `name`, ignored when `nameSource == "derived"` (directory name, worse than ai-title).
     pub title: Option<String>,
     pub started_at: i64,
 }
@@ -66,8 +66,8 @@ mod tests {
         v.sort_by_key(|s| s.pid);
         assert_eq!(v.len(), 2);
         assert_eq!((v[0].pid, v[0].session_id.as_str(), v[0].title.as_deref()), (100, "a", Some("Widżet")));
-        assert_eq!(v[1].title, None, "nazwa wyprowadzona z katalogu nie jest tytułem");
-        assert!(read_registry(&dir.path().join("brak")).is_empty());
+        assert_eq!(v[1].title, None, "name derived from the directory is not a title");
+        assert!(read_registry(&dir.path().join("missing")).is_empty());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use super::GAP_MS;
 
-/// Czas pracy z kolejnego zdarzenia: odstęp od poprzedniego, gdy mieści się w `GAP_MS` (spec 2.3).
-/// Zwraca `(czas końca odstępu, ms)`. Zdarzenie starsze niż poprzednie nie cofa zegara.
+/// Work time from the next event: gap from the previous one if within `GAP_MS` (spec 2.3).
+/// Return `(gap end time, ms)`. An event older than the previous one does not move the clock backward.
 pub fn active_tick(last: &mut Option<i64>, ts: i64) -> Option<(i64, u64)> {
     let prev = *last;
     if prev.is_some_and(|p| ts < p) { return None; }

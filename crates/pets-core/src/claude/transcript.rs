@@ -2,8 +2,8 @@ use crate::claude::progress_from_tool_use;
 use crate::model::*;
 use crate::time::rfc3339_ms;
 
-/// Okno kontekstu z nazwy modelu. Dokładna wartość przychodzi ze statusline (faza 3);
-/// modele Claude 5 i warianty `[1m]` mają 1M (S3), starsze 200k.
+/// Context window from the model name. Exact value comes from statusline (phase 3);
+/// Claude 5 models and `[1m]` variants have 1M (S3), older ones 200k.
 pub fn context_max(model: &str) -> u64 {
     let gen5 = ["claude-opus-5", "claude-sonnet-5", "claude-fable-5"].iter().any(|p| model.starts_with(p));
     if model.contains("[1m]") || gen5 { 1_000_000 } else { 200_000 }
@@ -17,9 +17,9 @@ pub struct TranscriptParser {
     last_cwd: Option<String>,
     acc: EventData,
     dirty: bool,
-    /// ostatni wysłany model: zmiana idzie w zdarzeniu, powtórka nie
+    /// Last sent model: emit a change event, not a repeat.
     last_model: Option<String>,
-    /// czas zgłoszonego błędu (np. końca limitu), dopóki sesja nie ruszy dalej
+    /// Time of a reported error (e.g. limit reached) until the session proceeds.
     failed_at: Option<i64>,
 }
 
@@ -53,7 +53,7 @@ fn interrupted(msg: Option<&serde_json::Value>) -> bool {
 impl TranscriptParser {
     pub fn new() -> Self { Self::default() }
 
-    /// `<synthetic>` to odpowiedź zastępcza Claude Code (np. po przerwaniu), a nie model.
+    /// `<synthetic>` is a Claude Code substitute response (e.g. after interruption), not a model.
     fn note_model(&mut self, model: &str) {
         let model: String = model.trim().chars().take(64).collect();
         if model.is_empty() || model == "<synthetic>" || self.last_model.as_deref() == Some(&model) { return; }
@@ -72,7 +72,7 @@ impl TranscriptParser {
 
     pub fn parse_line(&mut self, line: &str) -> Vec<Event> {
         let Ok(d) = serde_json::from_str::<serde_json::Value>(line) else { return vec![] };
-        // linie subagentów (sidechain) nie mogą nadpisać kontekstu ani tytułu sesji głównej
+        // subagent (sidechain) lines cannot overwrite the main session's context or title
         if d.get("isSidechain").and_then(|v| v.as_bool()) == Some(true) { return vec![]; }
         let s = |k: &str| d.get(k).and_then(|v| v.as_str());
         if let Some(sid) = s("sessionId") { self.session_id = Some(sid.to_string()); }
@@ -105,14 +105,14 @@ impl TranscriptParser {
             Some("custom-title") => if let Some(t) = s("customTitle") { self.set_title(t, 3) },
             Some("ai-title") => if let Some(t) = s("aiTitle") { self.set_title(t, 2) },
             Some("user") if d.get("isMeta").and_then(|v| v.as_bool()) != Some(true) => {
-                // przerwanie (Esc, odmowa narzędzia) nie wywołuje hooka `Stop`
+                // interruption (Esc, tool denial) does not call the `Stop` hook
                 if interrupted(d.get("message")) { stop = Some(Kind::TurnEnd); }
                 if let Some(t) = d.get("message").and_then(prompt_text) {
                     resumed = true;
                     if self.title_rank < 1 { self.set_title(&t, 1) }
                 }
             }
-            // koniec limitu i inne błędy API: Claude dopisuje syntetyczną odpowiedź, a hook `Stop` nie przychodzi
+            // limit reached and other API errors: Claude appends a synthetic response, and the `Stop` hook does not arrive
             Some("assistant") if d.get("isApiErrorMessage").and_then(|v| v.as_bool()) == Some(true) => stop = Some(Kind::Error),
             Some("assistant") => {
                 if let Some(m) = d.get("message") {
@@ -121,7 +121,7 @@ impl TranscriptParser {
                         let used = n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens");
                         let model = m.get("model").and_then(|v| v.as_str()).unwrap_or("");
                         self.note_model(model);
-                        // użycie większe niż zakładane okno znaczy, że okno jest większe (1M)
+                        // usage above the assumed window means the window is larger (1M)
                         let max = context_max(model).max(if used > 200_000 { 1_000_000 } else { 0 }).max(used);
                         self.acc.context = Some(Context { used, max });
                         self.dirty = true;
@@ -148,8 +148,8 @@ impl TranscriptParser {
             e.data = std::mem::take(&mut self.acc);
             out.push(e);
         }
-        // sesja ruszyła po błędzie: tura z błędem skończyła się tuż po nim (ważne przy odtwarzaniu po starcie;
-        // na żywo nowszy hook `Prompt` już zmienił stan, więc sklep pomija to starsze zdarzenie)
+        // session resumed after an error: the error turn ended just after it (important during startup restoration;
+        // live, a newer `Prompt` hook already changed state, so the store ignores this older event)
         if let Some(t0) = self.failed_at.filter(|_| resumed) {
             self.failed_at = None;
             out.push(Event::new(Source::Claude, sid.clone(), Kind::TurnEnd, t0 + 1));
@@ -178,7 +178,7 @@ mod tests {
         assert_eq!(e[0].data.title.as_deref(), Some("Zrób widżet do paska zadań"));
         assert_eq!(e[0].data.origin, Some(Origin::Desktop));
         assert_eq!(e[0].data.app, Some(App::ClaudeDesktop));
-        // ai-title bez timestamp jest odkładany do następnej linii z czasem
+        // an ai-title without a timestamp is deferred to the next line with a time
         assert!(p.parse_line(&line(serde_json::json!({"type": "ai-title", "aiTitle": "Widżet", "sessionId": "s"}))).is_empty());
         let e = p.parse_line(&line(serde_json::json!({"type": "assistant", "sessionId": "s", "timestamp": TS,
             "message": {"model": "claude-opus-5", "content": [], "usage": {"input_tokens": 2,
@@ -194,7 +194,7 @@ mod tests {
 
     fn kinds(p: &mut TranscriptParser, v: serde_json::Value) -> Vec<Kind> { p.parse_line(&line(v)).iter().map(|e| e.kind).collect() }
 
-    /// Przerwanie (Esc albo odmowa narzędzia) nie wywołuje hooka `Stop`; w transkrypcie zostaje linia użytkownika.
+    /// Interruption (Esc or tool denial) does not call the `Stop` hook; a user line remains in the transcript.
     #[test]
     fn an_interrupt_ends_the_turn() {
         let mut p = TranscriptParser::new();
@@ -205,10 +205,10 @@ mod tests {
         let plain = serde_json::json!({"type": "user", "sessionId": "s", "timestamp": TS, "message": {"role": "user", "content": "zwykły prompt"}});
         let evs = p.parse_line(&line(plain));
         assert!(evs.iter().all(|e| e.kind != Kind::TurnEnd));
-        assert_eq!(evs[0].data.title.as_deref(), Some("zwykły prompt"), "komunikat o przerwaniu nie jest tytułem");
+        assert_eq!(evs[0].data.title.as_deref(), Some("zwykły prompt"), "interruption message is not a title");
     }
 
-    /// Koniec limitu (i inne błędy API) też nie wywołuje `Stop`: Claude dopisuje syntetyczną odpowiedź z błędem.
+    /// A limit reached (and other API errors) also does not call `Stop`: Claude appends a synthetic error response.
     #[test]
     fn an_api_error_such_as_a_hit_limit_is_an_error() {
         let mut p = TranscriptParser::new();
@@ -216,9 +216,9 @@ mod tests {
             "message": {"model": "<synthetic>", "content": [{"type": "text", "text": "You've hit your session limit"}]}});
         assert_eq!(kinds(&mut p, v), vec![Kind::Error]);
         let side = serde_json::json!({"type": "assistant", "sessionId": "s", "timestamp": TS, "isApiErrorMessage": true, "isSidechain": true, "message": {}});
-        assert!(kinds(&mut p, side).is_empty(), "błąd subagenta nie jest błędem sesji");
-        // sesja ruszyła dalej (po resecie limitu): przy odtwarzaniu błąd nie może zostać na zawsze, więc tura
-        // z błędem kończy się tuż po nim; na żywo hook `Prompt` jest nowszy i sklep to pomija
+        assert!(kinds(&mut p, side).is_empty(), "subagent error is not a session error");
+        // session continued (after limit reset): on replay the error cannot last forever, so the error turn
+        // ends just after it; live, the `Prompt` hook is newer and the store ignores this
         let t0 = rfc3339_ms(TS).unwrap();
         let resumed = serde_json::json!({"type": "user", "sessionId": "s", "timestamp": "2026-09-24T12:00:00.000Z", "message": {"role": "user", "content": "dalej"}});
         let evs = p.parse_line(&line(resumed));
@@ -238,7 +238,7 @@ mod tests {
         let e = p.parse_line(&assistant("claude-opus-5-5"));
         assert_eq!(e[0].data.model.as_deref(), Some("claude-opus-5-5"));
         let e = p.parse_line(&assistant("claude-opus-5-5"));
-        assert_eq!(e[0].data.model, None, "ten sam model nie jest wysyłany drugi raz");
+        assert_eq!(e[0].data.model, None, "same model is not sent twice");
         let e = p.parse_line(&assistant("<synthetic>"));
         assert_eq!(e[0].data.model, None);
         let long = "m".repeat(100);
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn million_context_models() {
-        // S3: statusline pokazał context_window_size = 1 000 000 dla claude-sonnet-5 bez [1m]
+        // S3: statusline showed context_window_size = 1,000,000 for claude-sonnet-5 without [1m]
         assert_eq!(context_max("claude-opus-4-1[1m]"), 1_000_000);
         assert_eq!(context_max("claude-sonnet-5"), 1_000_000);
         assert_eq!(context_max("claude-opus-5"), 1_000_000);
@@ -306,7 +306,7 @@ mod tests {
         let mut p = TranscriptParser::new();
         let plain = line(serde_json::json!({"type": "system", "sessionId": "s", "timestamp": TS, "cwd": "C:\\p"}));
         assert_eq!(p.parse_line(&plain).len(), 1, "pierwsza linia niesie cwd");
-        assert!(p.parse_line(&plain).is_empty(), "ta sama cwd nie może generować zdarzeń w kółko");
+        assert!(p.parse_line(&plain).is_empty(), "same cwd cannot keep generating events");
     }
 
     #[test]

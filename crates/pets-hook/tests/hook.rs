@@ -19,7 +19,7 @@ fn forwards_hook_payload_silently() {
     let out = run_hook(&p, r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
     assert!(out.status.success());
     assert!(out.stdout.is_empty() && out.stderr.is_empty());
-    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["session_id"], "abc");
     assert!(env.ts > 0);
     ing.stop();
@@ -52,7 +52,7 @@ fn report_sends_a_door_event_and_says_nothing() {
     ing.endpoint().write(&p).unwrap();
     let out = run_report(&p, &["--agent", "kilo", "--name", "Kilo CLI", "--session", "abc", "--state", "working", "--tool", "edit"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    let Incoming::Generic(e) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Generic(e) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!((e.session_id.as_str(), e.data.agent_name.as_deref()), ("generic:kilo:abc", Some("Kilo CLI")));
     ing.stop();
 }
@@ -65,12 +65,12 @@ fn report_errors_go_to_stderr_with_code_2() {
     assert_eq!(bad.status.code(), Some(2));
     assert!(!bad.stderr.is_empty() && bad.stdout.is_empty());
     let down = run_report(&dir.path().join("missing.json"), &["--agent", "kilo", "--session", "abc", "--state", "done"]);
-    assert_eq!(down.status.code(), Some(2), "widżet nie działa");
+    assert_eq!(down.status.code(), Some(2), "widget is down");
     let (tx, _rx) = channel();
     let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps { generic: false, ..Default::default() }))).unwrap();
     ing.endpoint().write(&p).unwrap();
     let closed = run_report(&p, &["--agent", "kilo", "--session", "abc", "--state", "done"]);
-    assert_eq!(closed.status.code(), Some(2), "furtka wyłączona");
+    assert_eq!(closed.status.code(), Some(2), "door is closed");
     assert!(String::from_utf8_lossy(&closed.stderr).contains("door"));
     ing.stop();
 }
@@ -79,7 +79,7 @@ fn run_agent(endpoint_path: &std::path::Path, args: &[&str], stdin: &str) -> std
     run_with(endpoint_path, args, &[], stdin)
 }
 
-/// Zmienne, po których `hook.exe` poznaje obcego wywołującego; w testach tylko te, które test ustawia.
+/// Variables by which `hook.exe` identifies another caller; tests set only the ones they need.
 const CALLER_VARS: [&str; 3] = ["GROK_HOOK_EVENT", "GROK_SESSION_ID", "ZCODE_SESSION_ID"];
 
 fn run_with(endpoint_path: &std::path::Path, args: &[&str], vars: &[(&str, &str)], stdin: &str) -> std::process::Output {
@@ -89,7 +89,7 @@ fn run_with(endpoint_path: &std::path::Path, args: &[&str], vars: &[(&str, &str)
     for k in CALLER_VARS { cmd.env_remove(k); }
     for (k, v) in vars { cmd.env(k, v); }
     let mut c = cmd.spawn().unwrap();
-    // wejście w osobnym wątku: przy dużym JSON-ie hook może skończyć, zanim przeczyta całość
+    // write input on a separate thread: with large JSON the hook may exit before reading it all
     let mut si = c.stdin.take().unwrap();
     let body = stdin.as_bytes().to_vec();
     let w = std::thread::spawn(move || { let _ = si.write_all(&body); });
@@ -112,9 +112,9 @@ fn antigravity_stop_is_forwarded_and_answered_with_a_stop_decision() {
     let out = run_agent(&p, &["--agent", "antigravity", "--event", "Stop"], r#"{"conversationId":"d5f1","fullyIdle":true}"#);
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"decision":"stop"}"#);
-    let Incoming::Antigravity(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Antigravity(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!((env.event.as_str(), env.payload["conversationId"].as_str()), ("Stop", Some("d5f1")));
-    assert!(env.ts > 0 && env.host.is_none(), "program tylko przy PreInvocation");
+    assert!(env.ts > 0 && env.host.is_none(), "host only at PreInvocation");
     let tool = run_agent(&p, &["--agent", "antigravity", "--event", "PreToolUse"], r#"{"conversationId":"d5f1"}"#);
     assert_eq!(String::from_utf8_lossy(&tool.stdout).trim(), "{}");
     ing.stop();
@@ -130,7 +130,7 @@ fn copilot_hooks_are_forwarded_and_say_nothing() {
     let out = run_agent(&p, &["--agent", "copilot", "--event", "PreToolUse"], r#"{"sessionId":"cop_1","toolName":"bash"}"#);
     assert!(out.status.success());
     assert!(out.stdout.is_empty() && out.stderr.is_empty());
-    let Incoming::Copilot(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Copilot(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!((env.event.as_str(), env.payload["toolName"].as_str()), ("PreToolUse", Some("bash")));
     ing.stop();
 }
@@ -145,10 +145,10 @@ fn antigravity_still_gets_its_answer_when_the_widget_is_down_or_the_input_is_bad
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"decision":"stop"}"#);
     let p = dir.path().join("endpoint.json");
     Endpoint { port: 1, token: "x".into() }.write(&p).unwrap();
-    let bad = run_agent(&p, &["--agent", "antigravity", "--event", "Stop"], "nie-json");
+    let bad = run_agent(&p, &["--agent", "antigravity", "--event", "Stop"], "not-json");
     assert!(bad.status.success());
     assert_eq!(String::from_utf8_lossy(&bad.stdout).trim(), r#"{"decision":"stop"}"#);
-    let other = run_agent(&p, &["--agent", "antigravity", "--event", "PostToolUse"], "nie-json");
+    let other = run_agent(&p, &["--agent", "antigravity", "--event", "PostToolUse"], "not-json");
     assert_eq!(String::from_utf8_lossy(&other.stdout).trim(), "{}");
 }
 
@@ -164,13 +164,13 @@ fn a_bad_or_missing_event_name_sends_nothing() {
         assert!(out.status.success(), "{args:?}");
         assert!(out.stdout.is_empty(), "{args:?}");
     }
-    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nic nie wysłano");
+    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing was sent");
     ing.stop();
 }
 
-/// Komenda z `integrations::hook_command` uruchomiona prawdziwą powłoką: `hook.exe` w folderze ze spacją,
-/// apostrofem i `&` musi odpowiedzieć Antigravity (przegląd 0.11). PowerShell tylko dla zwykłej ścieżki: wymaga
-/// innej formy (`hook_command_ps`), a powłokę Antigravity potwierdza test na żywo.
+/// Command from `integrations::hook_command` run in a real shell: `hook.exe` in a folder with a space,
+/// apostrophe, and `&` must answer Antigravity (review 0.11). PowerShell only for an ordinary path: it needs
+/// another form (`hook_command_ps`), while a live test verifies Antigravity's shell.
 #[test]
 fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
     use std::os::windows::process::CommandExt;
@@ -223,12 +223,12 @@ fn widget() -> (Ingest, std::sync::mpsc::Receiver<Incoming>, tempfile::TempDir, 
 
 #[test]
 fn cursor_input_with_a_utf8_bom_still_reaches_the_widget() {
-    // sprawdzone na żywo: Cursor uruchamia hooki przez pwsh z `$OutputEncoding` UTF-8, więc JSON zaczyna się od BOM
+    // verified live: Cursor runs hooks through pwsh with UTF-8 `$OutputEncoding`, so JSON starts with a BOM
     let (ing, rx, _dir, p) = widget();
     let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"],
         "\u{feff}{\"conversation_id\":\"conv_1\",\"hook_event_name\":\"beforeSubmitPrompt\"}\r\n");
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["conversation_id"], "conv_1");
     ing.stop();
 }
@@ -238,7 +238,7 @@ fn the_cursor_folder_is_kept_although_the_workspace_roots_are_slimmed_away() {
     let (ing, rx, _dir, p) = widget();
     run_agent(&p, &["--agent", "cursor", "--event", "sessionStart"],
         r#"{"conversation_id":"conv_1","cursor_version":"3.22.12","workspace_roots":["/C:/w/app"]}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["cwd"], "C:/w/app");
     assert!(env.payload.get("workspace_roots").is_none());
     ing.stop();
@@ -251,9 +251,9 @@ fn cursor_hooks_are_forwarded_and_always_let_cursor_go_on() {
         r#"{"conversation_id":"conv_1","cursor_version":"1.7.2","hook_event_name":"beforeSubmitPrompt","prompt":"sekret"}"#);
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!((env.event.as_str(), env.payload["conversation_id"].as_str()), ("beforeSubmitPrompt", Some("conv_1")));
-    assert!(env.payload.get("prompt").is_none(), "prompt nie wychodzi z hooka");
+    assert!(env.payload.get("prompt").is_none(), "prompt does not leave the hook");
     let tool = run_agent(&p, &["--agent", "cursor", "--event", "preToolUse"], r#"{"conversation_id":"conv_1","cursor_version":"1.7.2"}"#);
     assert_eq!(String::from_utf8_lossy(&tool.stdout).trim(), "{}");
     assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::Cursor(_)));
@@ -277,7 +277,7 @@ fn grok_takes_the_session_id_from_its_environment() {
     let (ing, rx, _dir, p) = widget();
     run_with(&p, &["--agent", "grok", "--event", "PreToolUse"], &[("GROK_HOOK_EVENT", "PreToolUse"), ("GROK_SESSION_ID", "g1")],
         r#"{"hookEventName":"PreToolUse","toolName":"bash"}"#);
-    let Incoming::Grok(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Grok(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["sessionId"], "g1");
     ing.stop();
 }
@@ -289,7 +289,7 @@ fn cursor_still_gets_its_answer_when_the_widget_is_down_or_the_input_is_bad() {
     let out = run_agent(&dir.path().join("missing.json"), &["--agent", "cursor", "--event", "beforeSubmitPrompt"], r#"{"cursor_version":"1"}"#);
     assert!(out.status.success() && t.elapsed() < Duration::from_secs(1));
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
-    let bad = run_agent(&dir.path().join("missing.json"), &["--agent", "cursor", "--event", "beforeSubmitPrompt"], "nie-json");
+    let bad = run_agent(&dir.path().join("missing.json"), &["--agent", "cursor", "--event", "beforeSubmitPrompt"], "not-json");
     assert!(bad.status.success());
     assert_eq!(String::from_utf8_lossy(&bad.stdout).trim(), r#"{"continue":true}"#);
 }
@@ -297,14 +297,14 @@ fn cursor_still_gets_its_answer_when_the_widget_is_down_or_the_input_is_bad() {
 #[test]
 fn a_hook_run_by_another_agent_sends_nothing() {
     let (ing, rx, _dir, p) = widget();
-    // Grok czyta hooki Cursora: nie udajemy Cursora, ale Cursor-owa odpowiedź zostaje
+    // Grok reads Cursor hooks: do not pretend to be Cursor, but keep the Cursor response
     let out = run_with(&p, &["--agent", "cursor", "--event", "preToolUse"], &[("GROK_HOOK_EVENT", "PreToolUse")], r#"{"conversation_id":"c"}"#);
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "{}");
-    // Cursor i Grok czytają hooki Claude'a: to nie są sesje Claude'a
+    // Cursor and Grok read Claude hooks: these are not Claude sessions
     run_with(&p, &[], &[], r#"{"hook_event_name":"Stop","session_id":"abc","cursor_version":"1.7.2"}"#);
     run_with(&p, &[], &[("GROK_HOOK_EVENT", "Stop")], r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
-    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nic nie wysłano");
+    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing was sent");
     ing.stop();
 }
 
@@ -316,7 +316,7 @@ fn claude_started_from_zcode_is_still_claude() {
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
     run_with(&p, &[], &[("ZCODE_SESSION_ID", "zc_1")], r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
-    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["session_id"], "abc");
     ing.stop();
 }
@@ -329,7 +329,7 @@ fn a_huge_cursor_prompt_never_leaves_the_hook() {
     let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"], &big);
     assert!(t.elapsed() < Duration::from_secs(1), "{:?}", t.elapsed());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
     assert!(env.payload.get("prompt").is_none());
     assert!(serde_json::to_vec(&env).unwrap().len() < 1 << 20);
     ing.stop();
@@ -340,6 +340,6 @@ fn a_bad_cursor_event_name_sends_nothing() {
     let (ing, rx, _dir, p) = widget();
     let out = run_agent(&p, &["--agent", "cursor", "--event", "a b"], r#"{"cursor_version":"1"}"#);
     assert!(out.status.success());
-    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nic nie wysłano");
+    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing was sent");
     ing.stop();
 }

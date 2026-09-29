@@ -11,10 +11,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const USAGE: &str = "użycie: pets-cli run [--record plik.jsonl] | replay plik.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | install-statusline [hook.exe] | uninstall-statusline | stats-scan [--out stats.json]";
+const USAGE: &str = "usage: pets-cli run [--record file.jsonl] | replay file.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | install-statusline [hook.exe] | uninstall-statusline | stats-scan [--out stats.json]";
 
 fn claude_settings() -> anyhow::Result<PathBuf> {
-    Ok(dirs::home_dir().context("brak katalogu domowego")?.join(".claude").join("settings.json"))
+    Ok(dirs::home_dir().context("home directory not found")?.join(".claude").join("settings.json"))
 }
 
 fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
@@ -35,7 +35,7 @@ fn run(record: Option<PathBuf>) -> anyhow::Result<()> {
 
 fn replay(path: &Path, speed: f64) -> anyhow::Result<()> {
     let mut rp = Replay::load(path, speed)?;
-    if rp.is_empty() { println!("pusty plik"); return Ok(()); }
+    if rp.is_empty() { println!("empty file"); return Ok(()); }
     let mut store = Store::new(Timing::default());
     while let Some(d) = rp.next_delay_ms() {
         std::thread::sleep(Duration::from_millis(d));
@@ -46,10 +46,10 @@ fn replay(path: &Path, speed: f64) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Narzędzie deweloperskie (0.9): skan całej historii do osobnej księgi i podsumowanie bez nazw projektów.
+/// Developer tool (0.9): scan all history into a separate ledger and summarize it without project names.
 fn stats_scan(out: Option<PathBuf>) -> anyhow::Result<()> {
     use pets_core::stats::{scan::Scanner, Book, Cell};
-    let home = dirs::home_dir().context("brak katalogu domowego")?;
+    let home = dirs::home_dir().context("home directory not found")?;
     let roots = vec![home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
     let book = out.as_deref().map(Book::load).unwrap_or_default();
     let mut sc = Scanner::new(roots, book);
@@ -59,17 +59,17 @@ fn stats_scan(out: Option<PathBuf>) -> anyhow::Result<()> {
     loop {
         let p = sc.step(4 * 1024 * 1024, &|| false);
         if p.done || last.elapsed() > Duration::from_secs(2) {
-            println!("{:>6.1} s  {} MB / {} MB  pliki w kolejce: {}", t0.elapsed().as_secs_f64(), p.scanned >> 20, p.total >> 20, p.files);
+            println!("{:>6.1} s  {} MB / {} MB  files queued: {}", t0.elapsed().as_secs_f64(), p.scanned >> 20, p.total >> 20, p.files);
             last = std::time::Instant::now();
         }
         if p.done { break; }
     }
     let mut c = Cell::default();
     for e in sc.book.files.values() { for m in e.buckets.values() { for x in m.values() { c.add(x); } } }
-    println!("plików: {files}, czas skanu: {:.1} s", t0.elapsed().as_secs_f64());
-    println!("tokeny: {} (wejście {}, cache odczyt {}, cache zapis {}, wyjście {}), praca: {} h, pytania: {}",
+    println!("files: {files}, scan time: {:.1} s", t0.elapsed().as_secs_f64());
+    println!("tokens: {} (input {}, cache read {}, cache write {}, output {}), work: {} h, questions: {}",
         c.tokens(), c.input, c.cache_read, c.cache_write, c.output, c.active_ms / 3_600_000, c.questions);
-    if let Some(o) = out { sc.book.save(&o)?; println!("księga: {} bajtów", std::fs::metadata(&o)?.len()); }
+    if let Some(o) = out { sc.book.save(&o)?; println!("ledger: {} bytes", std::fs::metadata(&o)?.len()); }
     Ok(())
 }
 
@@ -89,14 +89,14 @@ fn main() -> anyhow::Result<()> {
                 Some(p) => PathBuf::from(p),
                 None => std::env::current_exe()?.with_file_name("hook.exe"),
             };
-            anyhow::ensure!(exe.exists(), "nie ma pliku {}", exe.display());
+            anyhow::ensure!(exe.exists(), "file not found: {}", exe.display());
             hooks_install::install_file(&claude_settings()?, &exe.to_string_lossy())?;
-            println!("Zainstalowano hooki ({}) w {}", exe.display(), claude_settings()?.display());
+            println!("Installed hooks ({}) in {}", exe.display(), claude_settings()?.display());
             Ok(())
         }
         Some("uninstall-hooks") => {
             hooks_install::uninstall_file(&claude_settings()?)?;
-            println!("Usunięto hooki Agent Pets z {}", claude_settings()?.display());
+            println!("Removed Agent Pets hooks from {}", claude_settings()?.display());
             Ok(())
         }
         Some("install-statusline") => {
@@ -104,15 +104,15 @@ fn main() -> anyhow::Result<()> {
                 Some(p) => PathBuf::from(p),
                 None => std::env::current_exe()?.with_file_name("hook.exe"),
             };
-            anyhow::ensure!(exe.exists(), "nie ma pliku {}", exe.display());
+            anyhow::ensure!(exe.exists(), "file not found: {}", exe.display());
             statusline_install::install_file(&claude_settings()?, &exe.to_string_lossy())?;
-            println!("Zainstalowano przelotkę statusline ({}) w {}; poprzedni statusLine zapisano w {}",
+            println!("Installed statusline pass-through ({}) in {}; previous statusLine saved in {}",
                 exe.display(), claude_settings()?.display(), statusline_install::original_path().display());
             Ok(())
         }
         Some("uninstall-statusline") => {
             statusline_install::uninstall_file(&claude_settings()?)?;
-            println!("Przywrócono poprzedni statusLine w {}", claude_settings()?.display());
+            println!("Restored previous statusLine in {}", claude_settings()?.display());
             Ok(())
         }
         _ => { eprintln!("{USAGE}"); Ok(()) }

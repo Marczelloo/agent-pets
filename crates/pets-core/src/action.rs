@@ -1,12 +1,12 @@
-//! Tekst bieżącej akcji i pytania agenta do dymków, tooltipa i panelu.
-//! Tylko w pamięci: nigdy nie trafia na dysk, do logów ani do raportu diagnostycznego.
+//! Current action and agent question text for bubbles, tooltips, and the panel.
+//! In memory only: never written to disk, logs, or the diagnostic report.
 use serde_json::Value;
 use crate::i18n::{tr, Lang};
 
-/// Najdłuższy tekst dymka w znakach, razem z „…”.
+/// Maximum bubble text length in characters, including "…".
 pub const CLIP: usize = 40;
 
-/// Pierwsza niepusta linia, najwyżej `CLIP` znaków (dłuższa kończy się „…”). Tnie po znakach, nie bajtach.
+/// First nonempty line, at most `CLIP` characters (longer text ends in "…"). Clips characters, not bytes.
 pub fn clip(s: &str) -> String {
     let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
     if line.chars().count() <= CLIP { return line.to_string(); }
@@ -23,7 +23,7 @@ fn file_name(path: &str) -> &str {
 
 fn str_at<'a>(v: &'a Value, key: &str) -> Option<&'a str> { v.get(key)?.as_str() }
 
-/// Komenda powłoki: tekst albo tablica argumentów (wtedy właściwa komenda jest ostatnia, np. `pwsh -Command …`).
+/// Shell command: text or an argument array (then the actual command is last, e.g. `pwsh -Command …`).
 fn command(v: &Value) -> Option<String> {
     let c = v.get("command").or_else(|| v.get("cmd"))?;
     match c {
@@ -33,7 +33,7 @@ fn command(v: &Value) -> Option<String> {
     }
 }
 
-/// Pliki z nagłówków łatki Codexa (`*** Update File: …`, `*** Add File: …`, `*** Delete File: …`).
+/// Files from Codex patch headers (`*** Update File: …`, `*** Add File: …`, `*** Delete File: …`).
 fn patch_files(patch: &str) -> Vec<&str> {
     patch.lines().filter_map(|l| {
         ["*** Update File:", "*** Add File:", "*** Delete File:"].iter()
@@ -48,7 +48,7 @@ fn host(url: &str) -> Option<&str> {
     if h.is_empty() { None } else { Some(h) }
 }
 
-/// Tekst akcji z nazwy i wejścia narzędzia (tabela 2.1 specyfikacji). `None`, gdy narzędzie nie ma dymka.
+/// Action text from the tool name and input (spec table 2.1). `None` when the tool has no bubble.
 pub fn action_text(tool: &str, input: &Value, lang: Lang) -> Option<String> {
     let editing = tr(lang, "Edytuje", "Editing");
     let text = match tool {
@@ -85,10 +85,10 @@ pub fn action_text(tool: &str, input: &Value, lang: Lang) -> Option<String> {
     nonempty(text)
 }
 
-/// Tekst pytania sesji, która czeka na użytkownika.
-/// - `ask`: wejście `AskUserQuestion` (Claude) albo `request_user_input` (Codex): pierwsze pytanie;
-/// - `notification`: wiadomość `Notification`; prośba o zgodę („… permission to use Bash”) dostaje tekst ostatniej
-///   akcji tego samego narzędzia (`last_action` = nazwa narzędzia i jej tekst).
+/// Question text for a session waiting for the user.
+/// - `ask`: `AskUserQuestion` (Claude) or `request_user_input` (Codex) input: first question;
+/// - `notification`: a `Notification` message; a permission request ("… permission to use Bash") gets the text of the last
+///   action by the same tool (`last_action` = tool name and its text).
 pub fn question_text(notification: Option<&str>, last_action: Option<(&str, &str)>, ask: Option<&Value>, lang: Lang) -> Option<String> {
     if let Some(q) = ask.and_then(|a| a.pointer("/questions/0"))
         .and_then(|q| q.get("question").or_else(|| q.get("title"))).and_then(|v| v.as_str()) {
@@ -175,7 +175,7 @@ mod tests {
         let c = clip(&s41);
         assert_eq!(c.chars().count(), CLIP);
         assert!(c.ends_with('…'));
-        assert_eq!(clip(&"b".repeat(40)), "b".repeat(40), "40 znaków zostaje bez zmian");
+        assert_eq!(clip(&"b".repeat(40)), "b".repeat(40), "40 characters remain unchanged");
         let tok = pl("Bash", json!({"command": "curl -H \"Authorization: Bearer sk-abcdefghijklmnopqrstuvwxyz0123456789\" https://x"})).unwrap();
         assert_eq!(tok.chars().count(), CLIP);
         assert!(!tok.contains("0123456789"));
@@ -196,7 +196,7 @@ mod tests {
         let q = question_text(Some("Claude needs your permission to use Bash"), Some(("Bash", "npm test")), None, Lang::Pl);
         assert_eq!(q.as_deref(), Some("Zgoda na Bash? npm test"));
         let q = question_text(Some("Claude needs your permission to use Bash"), Some(("Edit", "Edytuje a.ts")), None, Lang::En);
-        assert_eq!(q.as_deref(), Some("Allow Bash?"), "ostatnia akcja innego narzędzia nie pasuje");
+        assert_eq!(q.as_deref(), Some("Allow Bash?"), "another tool's last action does not match");
     }
 
     #[test]

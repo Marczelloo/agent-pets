@@ -1,5 +1,5 @@
-//! Odtwarzanie nagranych zdarzeń: zegar idzie tylko do przodu, a pojedyncza przerwa trwa najwyżej 250 ms,
-//! żeby długie ciche okresy w nagraniu nie blokowały odtwarzania.
+//! Replay recorded events: the clock only moves forward, and each gap lasts at most 250 ms,
+//! so long quiet periods in a recording do not stall playback.
 use crate::model::Event;
 use crate::store::Store;
 use std::collections::VecDeque;
@@ -29,14 +29,14 @@ impl Replay {
     pub fn clock(&self) -> i64 { self.clock }
     pub fn is_empty(&self) -> bool { self.events.is_empty() }
 
-    /// Ile milisekund czasu rzeczywistego odczekać przed następnym zdarzeniem.
+    /// Real time milliseconds to wait before the next event.
     pub fn next_delay_ms(&self) -> Option<u64> {
         let e = self.events.front()?;
         let gap = (e.ts - self.clock).max(0);
         Some(((gap as f64 / self.speed) as u64).min(Self::MAX_GAP_MS))
     }
 
-    /// Stosuje następne zdarzenie i przesuwa zegar `Store`. Zwraca zegar po zdarzeniu.
+    /// Apply the next event and advance the `Store` clock. Return the clock after the event.
     pub fn apply_next(&mut self, store: &mut Store) -> Option<i64> {
         let e = self.events.pop_front()?;
         self.clock = self.clock.max(e.ts);
@@ -76,9 +76,9 @@ mod tests {
         let mut store = Store::new(Timing::default());
         assert_eq!(r.next_delay_ms(), Some(0));
         assert_eq!(r.apply_next(&mut store), Some(0));
-        assert_eq!(r.next_delay_ms(), Some(250)); // 10 s / 10 = 1000 ms, przycięte do 250
+        assert_eq!(r.next_delay_ms(), Some(250)); // 10 s / 10 = 1000 ms, capped at 250
         assert_eq!(r.apply_next(&mut store), Some(10_000));
-        assert_eq!(r.next_delay_ms(), Some(0)); // starsze zdarzenie nie cofa zegara
+        assert_eq!(r.next_delay_ms(), Some(0)); // older event does not move the clock backward
         assert_eq!(r.apply_next(&mut store), Some(10_000));
         assert_eq!(r.next_delay_ms(), Some(200));
         assert_eq!(r.apply_next(&mut store), Some(12_000));

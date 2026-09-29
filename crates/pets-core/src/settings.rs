@@ -1,6 +1,6 @@
-//! Ustawienia widżetu: `~/.agent-pets/settings.json` (katalog domowy, bo Windows wirtualizuje `AppData`
-//! dla pakietów MSIX). Brakujące pola dostają wartości domyślne, nieznane są zachowywane przy zapisie,
-//! a uszkodzony plik nie jest nadpisywany, dopóki użytkownik czegoś nie zmieni.
+//! Widget settings: `~/.agent-pets/settings.json` (home directory because Windows virtualizes `AppData`
+//! for MSIX packages). Missing fields get defaults, unknown fields are preserved on save,
+//! and a damaged file is not overwritten until the user changes something.
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -10,21 +10,21 @@ pub struct Settings {
     pub version: u32,
     pub apps: Apps,
     pub claude_statusline: bool,
-    /// Zgoda na pobieranie limitów Claude'a z `api.anthropic.com` tokenem Claude Code. Domyślnie brak zgody.
+    /// Permission to fetch Claude limits from `api.anthropic.com` with the Claude Code token. Off by default.
     pub claude_plan_usage: bool,
     pub notifications: Notifications,
     pub pets: Pets,
     pub power_saving: PowerSaving,
     pub autostart: bool,
-    /// Język interfejsu: `auto` = polski przy polskim Windows, inaczej angielski.
+    /// Interface language: `auto` = Polish on Polish Windows, English otherwise.
     #[serde(deserialize_with = "or_default")]
     pub language: Language,
-    /// Aktualizacje z wydań na GitHubie: tylko powiadomienie, instalacja w spokojnym momencie albo wyłączone.
+    /// Updates from GitHub releases: notify only, install during a quiet period, or disabled.
     #[serde(deserialize_with = "or_default")]
     pub updates: Updates,
-    /// Okno sceny: pozycja, monitor, tło, rozmiar i układ (karta „Pasek”).
+    /// Scene window: position, monitor, background, size, and layout ("Taskbar" tab).
     pub stage: Stage,
-    /// Pola z nowszych wersji, zachowywane przy zapisie.
+    /// Fields from newer versions, preserved on save.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -35,19 +35,19 @@ pub struct Apps {
     pub claude_code: bool,
     pub codex: bool,
     pub agent_router: bool,
-    /// plugin w konfiguracji opencode: tylko po wyraźnym włączeniu
+    /// Plugin in opencode config: only after explicit enabling.
     pub opencode: bool,
-    /// furtka: `/v1/events/generic` dla dowolnych agentów
+    /// Door: `/v1/events/generic` for any agent.
     pub generic: bool,
-    /// plik hooków w `~/.copilot/hooks`: tylko po wyraźnym włączeniu
+    /// Hook file in `~/.copilot/hooks`: only after explicit enabling.
     pub copilot: bool,
-    /// klucz w `~/.gemini/config/hooks.json`: tylko po wyraźnym włączeniu
+    /// Key in `~/.gemini/config/hooks.json`: only after explicit enabling.
     pub antigravity: bool,
-    /// nasze wpisy w `~/.cursor/hooks.json`: tylko po wyraźnym włączeniu
+    /// Our entries in `~/.cursor/hooks.json`: only after explicit enabling.
     pub cursor: bool,
-    /// plik `~/.grok/hooks/agent-pets.json`: tylko po wyraźnym włączeniu
+    /// File `~/.grok/hooks/agent-pets.json`: only after explicit enabling.
     pub grok: bool,
-    /// nasze hooki w `~/.zcode/cli/config.json`: tylko po wyraźnym włączeniu
+    /// Our hooks in `~/.zcode/cli/config.json`: only after explicit enabling.
     pub zcode: bool,
 }
 
@@ -58,14 +58,14 @@ pub struct Notifications { pub needs_you: bool, pub done: bool, pub limits: bool
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
 pub struct Pets {
-    /// `skin` to nazwa z wersji 0.5 (tylko `sketch`/`clean`).
+    /// `skin` is the name from version 0.5 (`sketch`/`clean` only).
     #[serde(alias = "skin", deserialize_with = "or_default")]
     pub style: Style,
     #[serde(deserialize_with = "or_default")]
     pub motion: Motion,
     pub overrides: Overrides,
     pub max_visible: u8,
-    /// Bezczynny zwierzak słucha muzyki grającej w Windows (Spotify, Apple Music, przeglądarka…). Od 0.9.1.
+    /// An idle pet listens to music playing in Windows (Spotify, Apple Music, browser…). Since 0.9.1.
     pub react_to_media: bool,
 }
 
@@ -81,7 +81,7 @@ pub enum Motion { #[default] Calm, #[serde(alias = "anime")] Dynamic }
 #[serde(rename_all = "snake_case")]
 pub enum Language { #[default] Auto, Pl, En }
 
-/// Wygląd agenta inny niż domyślny; brak pola = „jak domyślny”.
+/// Agent appearance differing from the default; missing field means "use default".
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
 pub struct Overrides {
@@ -103,7 +103,7 @@ pub struct LookOverride {
     #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "or_none")] pub motion: Option<Motion>,
 }
 
-/// Wartość z nowszej wersji (nieznany wariant) nie psuje wczytania całego pliku.
+/// A value from a newer version (unknown variant) does not prevent loading the whole file.
 fn or_default<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned + Default>(d: D) -> Result<T, D::Error> {
     let v = serde_json::Value::deserialize(d)?;
     Ok(serde_json::from_value(v).unwrap_or_default())
@@ -130,7 +130,7 @@ pub enum Position { #[default] Right, Left, Custom, Floating }
 #[serde(rename_all = "snake_case")]
 pub enum BgKind { #[default] None, Glass, Solid }
 
-/// Kotwica okna: po której stronie stoją zwierzaki i w którą stronę okno rośnie.
+/// Window anchor: which side holds the pets and which way the window grows.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Align { Left, Center, #[default] Right }
@@ -142,10 +142,10 @@ pub enum Order { #[default] Start, Attention, Agent }
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Background {
     pub kind: BgKind,
-    /// `#RRGGBB`; brak przy szkle = odcień według jasności paska
+    /// `#RRGGBB`; absent with glass = shade based on taskbar brightness.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
-    /// 0–100; brak = domyślna dla rodzaju (szkło 12, pełny kolor 90)
+    /// 0–100; absent = default for the kind (glass 12, solid color 90).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub opacity: Option<u8>,
     pub radius: u8,
@@ -154,27 +154,27 @@ pub struct Background {
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
 pub struct Show { pub progress: bool, pub limits: bool, pub badge: bool }
 
-/// Dymki nad zwierzakami (karta „Pasek”, sekcja „Dymki i subagenci”).
+/// Bubbles above pets ("Taskbar" tab, "Bubbles and subagents" section).
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
 pub struct Bubbles { pub questions: bool, pub actions: bool }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Point { pub x: f64, pub y: f64 }
 
-/// Ręcznie poprawiany plik: zła wartość jednego pola daje jego wartość domyślną, reszta zostaje.
+/// Manually edited file: an invalid field gets its default value; the rest remains.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Stage {
     pub position: Position,
-    /// kotwica w pasku jako ułamek jego szerokości (0–1)
+    /// Taskbar anchor as a fraction of its width (0–1).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_at: Option<f64>,
-    /// kotwica okna pływającego w pikselach CSS względem obszaru roboczego monitora
+    /// Floating window anchor in CSS pixels relative to the monitor work area.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub floating_at: Option<Point>,
-    /// `primary` albo nazwa urządzenia (`\\.\DISPLAY2`)
+    /// `primary` or a device name (`\\.\DISPLAY2`).
     pub monitor: String,
     pub background: Background,
-    /// % rozmiaru zwierzaków: 70–300, w pasku efektywnie najwyżej `SIZE_TASKBAR_MAX`
+    /// Pet size percentage: 70–300, effectively at most `SIZE_TASKBAR_MAX` on the taskbar.
     pub size: u16,
     pub gap: u8,
     pub padding: u8,
@@ -182,19 +182,19 @@ pub struct Stage {
     pub order: Order,
     pub show: Show,
     pub bubbles: Bubbles,
-    /// mini-zwierzaki subagentów pracujących dłużej niż 20 s
+    /// Mini pets for subagents working longer than 20 s.
     pub minis: bool,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// Liczba z JSON-a w zakresie typu: ułamek zaokrąglony, poza zakresem przycięte, nie-liczba to `None`.
+/// JSON number within the type range: round fractions, clamp out-of-range values, return `None` for non-numbers.
 fn num<T: TryFrom<i64>>(v: Option<&serde_json::Value>, lo: i64, hi: i64) -> Option<T> {
     let f = v?.as_f64().filter(|f| f.is_finite())?;
     T::try_from((f.round() as i64).clamp(lo, hi)).ok()
 }
 
-/// Wartość pola, jeśli da się ją odczytać; inaczej zostaje dotychczasowa (domyślna).
+/// Field value if readable; otherwise retain the current (default) value.
 fn field<T: serde::de::DeserializeOwned>(m: &serde_json::Map<String, serde_json::Value>, key: &str, slot: &mut T) {
     if let Some(v) = m.get(key).and_then(|v| serde_json::from_value(v.clone()).ok()) { *slot = v; }
 }
@@ -263,7 +263,7 @@ impl<'de> Deserialize<'de> for Stage {
 }
 
 pub const SIZE: (u16, u16) = (70, 300);
-/// W pasku 48 px zwierzak przy 100% zajmuje już całą wysokość; większe rozmiary tylko w oknie pływającym.
+/// On a 48 px taskbar, a pet at 100% already fills the height; larger sizes are for floating windows only.
 pub const SIZE_TASKBAR_MAX: u16 = 100;
 pub const PRIMARY: &str = "primary";
 
@@ -284,7 +284,7 @@ impl Default for Stage {
 fn is_hex_color(c: &str) -> bool { c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|h| h.is_ascii_hexdigit()) }
 
 impl Stage {
-    /// Wartości w zakresach karty „Pasek”; zły kolor znika, pusty monitor to główny.
+    /// Values within the "Taskbar" tab ranges; invalid color disappears, empty monitor means primary.
     pub fn clamped(&self) -> Stage {
         let mut s = self.clone();
         s.size = s.size.clamp(SIZE.0, SIZE.1);
@@ -341,7 +341,7 @@ pub fn load(path: &Path) -> Loaded {
     }
 }
 
-/// Zapis atomowy (plik tymczasowy, potem `rename`); limit widocznych zwierzaków przycięty do 1–8, scena do zakresów karty.
+/// Atomic write (temporary file, then `rename`); visible pet limit clamped to 1–8, scene to tab ranges.
 pub fn save(path: &Path, s: &Settings) -> std::io::Result<()> {
     let mut s = s.clone();
     s.pets.max_visible = s.pets.max_visible.clamp(MAX_VISIBLE.0, MAX_VISIBLE.1);
@@ -502,7 +502,7 @@ mod tests {
         let l = load_str(r#"{"version":1,"apps":{"claude_code":true,"codex":false,"agent_router":true}}"#);
         assert!(l.error.is_none());
         let a = l.settings.apps;
-        // opencode zmienia pliki opencode, więc tylko na wyraźne włączenie; furtka to lokalna trasa
+        // opencode changes its own files, so require explicit enabling; the door is a local route
         assert_eq!((a.claude_code, a.codex, a.agent_router, a.opencode, a.generic), (true, false, true, false, true));
     }
 
@@ -511,7 +511,7 @@ mod tests {
         let l = load_str(r#"{"version":1,"apps":{"claude_code":true,"codex":true,"agent_router":true,"opencode":true,"generic":true}}"#);
         assert!(l.error.is_none());
         let a = l.settings.apps;
-        // oba zapisują pliki hooków w konfiguracji agentów, więc tylko na wyraźne włączenie
+        // both write hook files in agent configs, so require explicit enabling
         assert_eq!((a.opencode, a.copilot, a.antigravity), (true, false, false));
         let back: Apps = serde_json::from_value(serde_json::to_value(Apps { copilot: true, ..a }).unwrap()).unwrap();
         assert_eq!((back.copilot, back.antigravity), (true, false));
@@ -558,7 +558,7 @@ mod tests {
         assert_eq!((st.background.kind, st.background.radius, st.background.color.clone(), st.background.opacity), (BgKind::None, 12, None, None));
         assert!(st.show.progress && st.show.limits && st.show.badge);
         assert!(st.custom_at.is_none() && st.floating_at.is_none());
-        assert!(st.bubbles.questions && st.bubbles.actions && st.minis, "0.8: dymki i mini-zwierzaki domyślnie włączone");
+        assert!(st.bubbles.questions && st.bubbles.actions && st.minis, "0.8: bubbles and mini pets enabled by default");
     }
 
     #[test]

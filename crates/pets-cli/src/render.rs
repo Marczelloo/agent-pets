@@ -11,8 +11,8 @@ fn cut(s: &str, n: usize) -> String {
 }
 
 pub fn render(store: &Store, now: i64) -> String {
-    let mut out = String::from("Agent Pets · rdzeń danych (Ctrl+C kończy)\n\n");
-    out += &format!("{:<7} {:<8} {:<16} {:>7} {:>8} {:>7}  {}\n", "agent", "źródło", "stan", "postęp", "kontekst", "cisza", "tytuł");
+    let mut out = String::from("Agent Pets · data core (Ctrl+C to quit)\n\n");
+    out += &format!("{:<7} {:<8} {:<16} {:>7} {:>8} {:>7}  {}\n", "agent", "source", "state", "progress", "context", "quiet", "title");
     for x in store.sessions() {
         let state = match x.tool { Some(t) => format!("{}:{}", name(x.state), name(t)), None => name(x.state) };
         let progress = x.progress.map(|p| format!("{}/{}", p.done, p.total)).unwrap_or_else(|| "-".into());
@@ -22,10 +22,10 @@ pub fn render(store: &Store, now: i64) -> String {
         out += &format!("{:<7} {:<8} {:<16} {:>7} {:>8} {:>7}  {}\n",
             name(x.agent), name(x.origin), state, progress, ctx, quiet, title);
     }
-    out += "\nLimity:\n";
+    out += "\nLimits:\n";
     for l in store.limits() {
-        let w = match l.window { Window::FiveHour => "5h", Window::Weekly => "tydzień" };
-        let reset = l.resets_at.map(|r| format!(" (reset za {} min)", ((r - now) / 60_000).max(0))).unwrap_or_default();
+        let w = match l.window { Window::FiveHour => "5h", Window::Weekly => "week" };
+        let reset = l.resets_at.map(|r| format!(" (resets in {} min)", ((r - now) / 60_000).max(0))).unwrap_or_default();
         out += &format!("  {} {}: {:.0}%{}\n", name(l.agent), w, l.used_pct, reset);
     }
     out
@@ -41,7 +41,7 @@ mod tests {
         let mut s = Store::new(Timing::default());
         let mut e = Event::new(Source::Claude, "s1", Kind::ToolStart, 0);
         e.tool = Some(Tool::Bash);
-        e.data.title = Some("Widżet w pasku".into());
+        e.data.title = Some("Taskbar widget".into());
         e.data.progress = Some(Progress { done: 2, total: 5 });
         e.data.context = Some(Context { used: 50_000, max: 200_000 });
         s.apply(&e);
@@ -49,7 +49,7 @@ mod tests {
         l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 42.0, resets_at: Some(3_600_000) }];
         s.apply(&l);
         let out = render(&s, 10_000);
-        assert!(out.contains("Widżet w pasku"));
+        assert!(out.contains("Taskbar widget"));
         assert!(out.contains("working:bash"));
         assert!(out.contains("2/5"));
         assert!(out.contains("25%"));
