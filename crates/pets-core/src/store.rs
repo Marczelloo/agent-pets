@@ -285,7 +285,14 @@ impl Store {
         if child { s.question = None; }
 
         let target: Option<(State, Option<Tool>)> = match e.kind {
-            Kind::Prompt => { s.turn_started_at = Some(e.ts); Some((State::Thinking, None)) }
+            Kind::Prompt => {
+                // prompt w trakcie tury (Antigravity woła `PreInvocation` przy każdym wywołaniu modelu) jej nie zaczyna od nowa
+                let now = self.pending.get(&e.session_id).map(|p| p.0).unwrap_or(s.state);
+                if s.turn_started_at.is_none() || !matches!(now, State::Thinking | State::Working | State::Compacting) {
+                    s.turn_started_at = Some(e.ts);
+                }
+                Some((State::Thinking, None))
+            }
             Kind::ToolStart => Some((State::Working, e.tool.or(Some(Tool::Other)))),
             Kind::ToolEnd => Some((State::Thinking, None)),
             Kind::NeedsInput => Some((if child { State::Thinking } else { State::NeedsYou }, None)),
@@ -564,6 +571,20 @@ mod tests {
         s.apply(&ev(Kind::Prompt, 1000));
         assert_eq!(st(&s).0, State::Thinking);
         assert_eq!(s.session("s1").unwrap().turn_started_at, Some(1000));
+    }
+
+    /// Antigravity wysyła `PreInvocation` przy każdym wywołaniu modelu (także po narzędziu): to ta sama tura.
+    #[test]
+    fn a_prompt_during_a_turn_keeps_the_turn_start() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 1000));
+        s.apply(&ev(Kind::ToolStart, 3000));
+        s.apply(&ev(Kind::ToolEnd, 5000));
+        s.apply(&ev(Kind::Prompt, 5100));
+        assert_eq!(s.session("s1").unwrap().turn_started_at, Some(1000));
+        s.apply(&ev(Kind::TurnEnd, 8000));
+        s.apply(&ev(Kind::Prompt, 20_000));
+        assert_eq!(s.session("s1").unwrap().turn_started_at, Some(20_000), "nowa tura po zakończonej");
     }
 
     #[test]
