@@ -30,6 +30,10 @@ export interface Skin {
   eyeTilt?: number;
   /** Grok: mały humanoid; czarny wizor na górze przodu (oczy na nim), logo Groka na klatce, czarne dłonie */
   droid?: { visor: string; logo: string; hands: string };
+  /** długość nóg w jednostkach (domyślnie 17); dłuższe podnoszą ciało */
+  legLen?: number;
+  /** grubość ramion w jednostkach (domyślnie 9) */
+  armThk?: number;
   /** ZCode: okrągłe uszy, łaty pod oczami (oczy na nich) i opaska z literą „Z” */
   panda?: { ears: string; patches: string; band: string; mark: string };
 }

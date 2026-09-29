@@ -12,7 +12,7 @@ export function hexP(X: number, Y: number, W: number, H: number, _R?: number): n
   return [[X + c, Y], [X + W - c, Y], [X + W, Y + H / 2], [X + W - c, Y + H], [X + c, Y + H], [X, Y + H / 2]];
 }
 
-/** Sylwetka Groka-humanoida: zaokrąglona głowa, szyja, szerokie barki i tułów zwężający się do pasa. `R` pominięte. */
+/** Sylwetka Groka-humanoida: mała zaokrąglona głowa, szyja, szerokie barki, klatka zwężająca się do pasa i biodra. `R` pominięte. */
 export function droidP(X: number, Y: number, W: number, H: number, _R?: number): number[][] {
   if (W < 0) { X += W; W = -W; }
   W = Math.max(W, .01); H = Math.max(H, .01);
@@ -20,13 +20,14 @@ export function droidP(X: number, Y: number, W: number, H: number, _R?: number):
   const arc = (ax: number, ay: number, r: number, a0: number, a1: number) => {
     for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; p.push([ax + Math.cos(a) * r, ay + Math.sin(a) * r]); }
   };
-  // głowa do .4 wysokości, szyja do .46, barki na całą szerokość, pas na .72 szerokości
-  const hw = W * .31, hh = H * .4, hr = Math.min(hw, hh) * .6, nw = W * .15, ny = H * .46 + Y, sr = Math.min(W * .14, H * .1), ww = W * .36;
+  // głowa do .34 wysokości (.5 szerokości), szyja do .42, barki na całą szerokość, pas na .8 (.52 szerokości), biodra .6 szerokości
+  const hw = W * .25, hh = H * .34, hr = Math.min(hw, hh) * .6, nw = W * .11, ny = H * .42 + Y, sr = Math.min(W * .12, H * .1);
+  const wy = Y + H * .8, ww = W * .26, pw = W * .3;
   arc(cx + hw - hr, Y + hr, hr, -PI / 2, 0);
   arc(cx + hw - hr * .5, Y + hh - hr * .5, hr * .5, 0, PI / 2);
   p.push([cx + nw, Y + hh], [cx + nw, ny]);
   arc(X + W - sr, ny + sr, sr, -PI / 2, 0);
-  p.push([cx + ww, Y + H], [cx - ww, Y + H]);
+  p.push([cx + ww, wy], [cx + pw, Y + H], [cx - pw, Y + H], [cx - ww, wy]);
   arc(X + sr, ny + sr, sr, PI, PI * 1.5);
   p.push([cx - nw, ny], [cx - nw, Y + hh]);
   arc(cx - hw + hr * .5, Y + hh - hr * .5, hr * .5, PI / 2, PI);
@@ -62,15 +63,19 @@ export function drawMarks(x: CanvasRenderingContext2D, sk: Skin, fp: number[][],
   }
   if (sk.droid) {
     // czarna szyja między głową a barkami
-    const d = sk.droid, vw = fw * .5, vy = top + H * .08, vh = H * .26;
-    inside(x, fp, () => shp(x, rrP(cx - fw * .16, top + H * .39, fw * .32, H * .08, 0), d.visor, u, { noStroke: 1 }));
+    const d = sk.droid, vw = fw * .4, vy = top + H * .05, vh = H * .22;
+    inside(x, fp, () => {
+      shp(x, rrP(cx - fw * .14, top + H * .33, fw * .28, H * .1, 0), d.visor, u, { noStroke: 1 });
+      // czarny pas nad biodrami, jak u robota
+      shp(x, rrP(cx - fw * .35, top + H * .79, fw * .7, H * .07, 0), d.visor, u, { noStroke: 1 });
+    });
     // wizor na głowie
     shp(x, rrP(cx - vw / 2, vy, vw, vh, Math.min(vh * .45, vw / 2)), d.visor, u);
     // odblask na szybie wizora
     x.save(); x.globalAlpha *= .5; shp(x, rrP(cx - vw * .32, vy + vh * .12, vw * .22, vh * .1, vh * .05), '#5A5A5E', u, { noStroke: 1 }); x.restore();
     // logo Groka: pierścień z przerwą w prawym górnym rogu, kreska wychodzi przez przerwę
-    const r = Math.min(fw * .12, H * .08);
-    x.save(); x.translate(cx, top + H * .66); x.scale(Math.max(.05, co), 1);
+    const r = Math.min(fw * .1, H * .075);
+    x.save(); x.translate(cx, top + H * .6); x.scale(Math.max(.05, co), 1);
     x.strokeStyle = tone(d.logo); x.lineWidth = Math.max(1, r * .28); x.lineCap = 'butt';
     x.beginPath(); x.ellipse(0, 0, r, r, 0, -Math.PI * .15, Math.PI * 1.6); x.stroke();
     x.beginPath(); x.moveTo(-r * .55, r * .55); x.lineTo(r * 1.35, -r * 1.35); x.stroke();

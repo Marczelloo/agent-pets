@@ -99,9 +99,9 @@ describe('skins for agents', () => {
     expect([ACCENT.cursor, ACCENT.grok, ACCENT.zcode]).toEqual(['#D0D0D0', '#9A9AA6', '#2F6BFF']);
     expect(PREVIEW_AGENTS).toEqual(expect.arrayContaining(['cursor', 'grok', 'zcode']));
   });
-  const draw = (agent: Agent) => {
+  const draw = (agent: Agent, state: Parameters<typeof petFor>[1] = 'idle') => {
     const rec = recorder();
-    drawPet(rec.ctx, petFor({ agent, agent_name: null }, 'idle'), 60, 40, 1, 0.5);
+    drawPet(rec.ctx, petFor({ agent, agent_name: null }, state), 60, 40, 1, 0.5);
     return rec.log;
   };
   it('Cursor is a dark faceted block with a lighter facet and a bright edge', () => {
@@ -114,7 +114,8 @@ describe('skins for agents', () => {
     const g = SKINS.grok, d = g.droid!;
     expect(d).toEqual({ visor: '#0E0E10', logo: '#1A1A1A', hands: '#222222' });
     expect(g.pal.m).toBe('#ECECEA');
-    expect(g.height).toBeGreaterThan(g.width);
+    // stojąc (tułów + nogi) jest wyższy niż szeroki
+    expect(g.height + g.legLen!).toBeGreaterThan(g.width);
     expect(g.eyeColor).toBe('#FFFFFF');
     expect(g.eyeTilt!).toBeLessThan(0);
     expect(g.eyeY!).toBeLessThan(.36);
@@ -134,18 +135,30 @@ describe('skins for agents', () => {
       p.forEach((a, i) => { const b = p[(i + 1) % p.length]; if (a[1] !== b[1] && (a[1] - y) * (b[1] - y) <= 0) xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1])); });
       return Math.max(...xs) - Math.min(...xs);
     };
-    const head = at(20), neck = at(42.5), shoulders = at(56), waist = at(98);
+    const head = at(18), neck = at(39), shoulders = at(52), waist = at(80), hips = at(98);
     expect(neck).toBeGreaterThan(0);
-    expect(head).toBeLessThan(shoulders * .75);
+    expect(head).toBeLessThan(shoulders * .6);
     expect(neck).toBeLessThan(head * .6);
-    expect(waist).toBeLessThan(shoulders * .85);
-    expect(waist).toBeGreaterThan(shoulders * .5);
+    expect(waist).toBeLessThan(shoulders * .6);
+    expect(hips).toBeGreaterThan(waist);
+    expect(hips).toBeLessThan(shoulders * .7);
     for (const q of p) for (const v of q) expect(Number.isFinite(v)).toBe(true);
+  });
+  it('Grok stands on long legs with dark knees and feet, and has thinner arms', () => {
+    const g = SKINS.grok;
+    expect(g.legLen!).toBeGreaterThanOrEqual(26);
+    expect(g.armThk!).toBeLessThan(9);
+    // w idle siedzi (nogi schowane) — nogi widać na stojąco
+    const log = draw('grok', 'thinking');
+    // dwie dłonie, dwa kolana, dwie stopy
+    expect(log.filter(l => l === `fillStyle=${g.droid!.hands}`).length).toBeGreaterThanOrEqual(6);
   });
   it('eyes stay upright for skins without a tilt, and other pets keep their own hands', () => {
     for (const s of ['clawd', 'kodek', 'copilot', 'cursor', 'zcode'] as const) {
       expect(SKINS[s].eyeTilt, s).toBeUndefined();
       expect(SKINS[s].droid, s).toBeUndefined();
+      expect(SKINS[s].legLen, s).toBeUndefined();
+      expect(SKINS[s].armThk, s).toBeUndefined();
     }
   });
   it('ZCode is a panda: ears, patches under the eyes and a headband with a Z', () => {

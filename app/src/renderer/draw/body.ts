@@ -27,7 +27,7 @@ const hw=cl(P.hopW.x);h*=hw;sq*=hw*pen.squash;
 const wb=Math.abs(Math.sin(t*10))*walk,br=Math.sin(t*(2.3-loaf))*.02*(1+cl(P.sleep.x)*1.5),tb=Math.abs(Math.sin(t*20))*.008*cl(P.typeW.x);
 const pil=c.prop==='pillow'?cl(P.propA.x)*loaf:0;
 const lift=floatLift(sk,t,(c.nb??1)*2)*u,hopY=(h*24+wb*2.5+pil*4)*u+lift,fl=sk.float?1-lift/(30*u):1;
-const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=17*u,bot=(sk.legs.length?-12*u:0)*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(st.line.minPx,2.4*u*st.line.scale);
+const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=(sk.legLen??17)*u,bot=(sk.legs.length?-((sk.legLen??17)-5)*u:0)*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(st.line.minPx,2.4*u*st.line.scale);
 const hW=(W*Math.abs(co)+Dp*Math.abs(si))/2,XX=X+P.lx.x*u;
 const sc=1+.1*lean,rot=Math.sin(t*4)*.1*wob+Math.sin(t*1.4)*.035*cl(P.think.x)+loaf*.06+pil*.08+P.tilt.x,scx=sc*(1-(sq+br)*.6),scy=sc*(1+sq+br+tb),oy=-hopY+lean*4*u,cr=Math.cos(rot),sr=Math.sin(rot);
 const toW=(lx: any,ly: any)=>{const a=lx*scx,b=ly*scy;return [a*cr-b*sr,a*sr+b*cr+oy];};
@@ -38,7 +38,7 @@ const pj=(lx: any,lz: any)=>[lx*co+lz*si,-lx*si+lz*co];
 if(st.sketch){x.save();x.strokeStyle='rgba(59,58,56,0.35)';x.lineWidth=Math.max(.8,1.2*u);x.beginPath();for(let i=-2;i<=2;i++){const w=hW*1.1*(1-Math.abs(i)*.18)*(1-h*.3);x.moveTo(XX-w,Y+i*2*u);x.lineTo(XX+w,Y+i*2*u);}x.stroke();x.restore();}else{
 x.save();if(st.softShadow)x.filter=`blur(${Math.max(1,3*u)}px)`;x.fillStyle='rgba(0,0,0,0.16)';x.beginPath();x.ellipse(XX,Y,hW*1.1*(1-h*.3)*fl,Math.max(2,7*u)*(1-h*.3)*fl,0,0,TAU);x.fill();x.restore();}
 worldT();drawPillow(x,c,u,lw);x.restore();
-const shY=top+H*.52,AL=(sk.armLen)*u,thk=9*u,mr=(sk.mitt)*u,hc=sk.droid?.hands??cm;
+const shY=top+H*.52,AL=(sk.armLen)*u,thk=(sk.armThk??9)*u,mr=(sk.mitt)*u,hc=sk.droid?.hands??cm;
 const arms=[-1,1].map((s: any)=>{const k=s<0?'L':'R',q=pj(s*.46*W,0),sw0=toW(q[0],shY);const a=P['arm'+k].x+P['osc'+k].x*Math.sin(t*c.f+(s<0?1.7:0)),fw=walk*Math.sin(t*10+(s<0?0:PI))*.6;const ox=s*Math.sin(a),oy=Math.cos(a),up=Math.max(0,-oy),oz=.22+.2*up+fw,n=Math.hypot(ox,oy,oz)||1,hq=pj(ox/n,oz/n),pl=Math.hypot(hq[0],oy/n),AE=AL*(1+.75*up);const ah=[sw0[0]+hq[0]*AE*.92,sw0[1]+oy/n*AE*.92];const ik=cl(P['ik'+k].x);const dE=(q[1]+hq[1]*AL*.5)*(1-ik)+ik*10*u,fr=cl((dE+3*u)/(6*u));let sw=sw0;if(q[1]<0){const m=cl(-q[1]/(8*u))*fr,e=toW(Math.sign(q[0]||s)*(hW-3*u),shY);sw=[sw0[0]+(e[0]-sw0[0])*m,sw0[1]+(e[1]-sw0[1])*m];}return {s,k,sw,ah,ik,fr,L:AL*ik+(1-ik)*AE*cl(pl*.97,.3,1),hx:ah[0]*(1-ik)+P['hx'+k].x*u*ik,hy:ah[1]*(1-ik)+P['hy'+k].x*u*ik};});
 
 c.hand=arms.map((a: any)=>[a.hx/u,a.hy/u]);c.aHand=arms.map((a: any)=>[a.ah[0]/u,a.ah[1]/u]);
@@ -46,7 +46,9 @@ bodyT();
 const LG=sk.legs,lwid=(sk.legW)*u;
 const legs=LG.map(([a,b],i)=>{const q=pj(a*W,b*Dp);return {x:q[0],z:q[1],i};}).sort((a: any,b: any)=>a.z-b.z);
 const lLen=legH*(1-down);
-if(lLen>1)legs.forEach((g: any)=>{const lift=Math.max(0,Math.sin(t*10+g.i*PI))*5*u*walk;shp(x,rrP(g.x-lwid/2,bot-5*u-lift,lwid,lLen+5*u,3.5*u),g.z<-.5*u?cs:cm,u);});
+if(lLen>1)legs.forEach((g: any)=>{const lift=Math.max(0,Math.sin(t*10+g.i*PI))*5*u*walk;shp(x,rrP(g.x-lwid/2,bot-5*u-lift,lwid,lLen+5*u,3.5*u),g.z<-.5*u?cs:cm,u);
+// Grok: czarne kolano i stopa
+if(sk.droid){const k=sk.droid.hands;shp(x,rrP(g.x-lwid*.55,bot+lLen*.42-lift,lwid*1.1,3.5*u,1.5*u),k,u);shp(x,rrP(g.x-lwid*.65,bot+lLen-lift-4*u,lwid*1.3,5*u,2.5*u),k,u);}});
 x.restore();
 worldT();arms.forEach((a: any)=>{if(a.fr<1){hose(x,a,a.L,thk,cm,u,lw);mitt(x,a,mr,hc,u);}});const netBack=c.hold==='net'&&P.pole.x<-.3;if(netBack)drawItems(x,c,arms,u,t,lw);x.restore();
 bodyT();
