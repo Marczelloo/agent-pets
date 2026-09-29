@@ -1,4 +1,4 @@
-//! Panel nad paskiem: lista sesji, limity, „Przejdź”. Okno pokazywane i chowane wyłącznie przez API Tauri.
+//! Panel above the taskbar: session list, limits, "Jump". Show and hide the window only through the Tauri API.
 use crate::shell::placement::Rect;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -15,8 +15,8 @@ impl PanelToggle {
     pub fn shown(&mut self) { self.visible = true; self.blurred_at = None; }
     pub fn blurred(&mut self, now: i64) { self.visible = false; self.blurred_at = Some(now); }
     pub fn hidden(&mut self) { self.visible = false; }
-    /// Czy po kliknięciu panel ma być widoczny. Kliknięcie ikony albo sceny samo zabiera panelowi fokus,
-    /// więc klik tuż po utracie fokusu to „zamknij”, a nie „zamknij i otwórz”.
+    /// Whether the panel should be visible after a click. Clicking the icon or stage removes panel focus,
+    /// so a click immediately after focus loss means "close", not "close and reopen".
     pub fn toggle(&mut self, now: i64) -> bool {
         if self.visible { return false; }
         !matches!(self.blurred_at, Some(t) if now - t < BLUR_GRACE_MS)
@@ -26,8 +26,8 @@ impl PanelToggle {
 #[derive(Default)]
 pub struct Panel(pub Mutex<PanelToggle>);
 
-/// Lewy górny róg panelu (piksele fizyczne): nad paskiem przy prawej krawędzi, jak wysuwane panele Windows 11.
-/// Pasek schowany (auto-ukrywanie) albo nieznany: nad dolną krawędzią ekranu.
+/// Panel top-left corner (physical pixels): above the taskbar at the right edge, like Windows 11 flyouts.
+/// If the taskbar is hidden (auto-hide) or unknown: above the bottom edge of the screen.
 pub fn origin(tray: Option<Rect>, screen: Rect, scale: f64) -> (i32, i32) {
     let (w, h, m) = (W * scale, H * scale, MARGIN * scale);
     let bottom = match tray {
@@ -37,7 +37,7 @@ pub fn origin(tray: Option<Rect>, screen: Rect, scale: f64) -> (i32, i32) {
     ((screen.right as f64 - w - m).round() as i32, (bottom as f64 - h - m).round() as i32)
 }
 
-/// Panel przy scenie pływającej: nad nią (albo pod nią, gdy brak miejsca), wyśrodkowany, w obszarze roboczym.
+/// Panel near a floating stage: centered above it (or below it if there is no room), within the work area.
 pub fn origin_near(stage: Rect, work: Rect, scale: f64) -> (i32, i32) {
     let (w, h, m) = ((W * scale).round() as i32, (H * scale).round() as i32, (MARGIN * scale).round() as i32);
     let x = ((stage.left + stage.right) / 2 - w / 2).clamp(work.left + m, (work.right - w - m).max(work.left + m));
@@ -91,7 +91,7 @@ pub fn open(app: &AppHandle, focus: Option<String>) {
     if let Some(id) = focus { let _ = app.emit_to("panel", "panel://focus", id); }
 }
 
-/// Otwiera panel z komunikatem w pasku statusu (np. wynik „Przejdź” z toastu).
+/// Open the panel with a status-bar message (e.g. a "Jump" result from a toast).
 pub fn open_with_status(app: &AppHandle, focus: Option<String>, status: String) {
     open(app, focus);
     let _ = app.emit_to("panel", "panel://status", status);
@@ -121,11 +121,11 @@ mod tests {
     #[test]
     fn click_that_caused_the_blur_closes_instead_of_reopening() {
         let mut t = PanelToggle::default();
-        assert!(t.toggle(1_000), "zamknięty → otwórz");
+        assert!(t.toggle(1_000), "closed → open");
         t.shown();
         t.blurred(2_000);
-        assert!(!t.toggle(2_100), "klik zaraz po utracie fokusu: zostaje zamknięty");
-        assert!(t.toggle(3_000), "późniejszy klik otwiera");
+        assert!(!t.toggle(2_100), "click just after focus loss: remains closed");
+        assert!(t.toggle(3_000), "later click opens");
     }
 
     #[test]

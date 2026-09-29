@@ -1,9 +1,9 @@
-"""Anonimizuje pliki JSON/JSONL: zachowuje strukturę, typy, nazwy narzędzi i liczby,
-zastępuje treść wiadomości i ścieżki.
+"""Anonymize JSON/JSONL files: preserve structure, types, tool names, and numbers,
+while replacing message content and paths.
 
-Użycie:
-    python tools/anonymize.py plik.jsonl > wynik.jsonl     # każda linia osobno
-    python tools/anonymize.py --json plik.json > wynik.json
+Usage:
+    python tools/anonymize.py input.jsonl > output.jsonl   # each line separately
+    python tools/anonymize.py --json input.json > output.json
 """
 import json
 import re
@@ -19,12 +19,12 @@ REDACT_KEYS = {
     "aiTitle", "customTitle", "lastPrompt", "encrypted_content", "summary", "output", "stdout", "stderr",
 }
 PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
-# "Users\<nazwa>", "Users\\<nazwa>" (w JSON) i "Users/<nazwa>"
+# "Users\<name>", "Users\\<name>" (in JSON), and "Users/<name>"
 USER_RE = re.compile(r"(?i)(Users(?:\\\\|\\|/))[^\\/\"]+")
 
 
 def safe(line):
-    """Ostatnia linia obrony: żadna ścieżka profilu użytkownika nie może zostać w wyniku."""
+    """Last line of defense: no user profile path may remain in the output."""
     return USER_RE.sub(r"\1user", line)
 
 

@@ -1,7 +1,7 @@
-//! Okno dymków nad sceną (spec 0.8, 2.3): przezroczyste, zawsze na wierzchu, bez fokusu i bez przycisku w pasku.
-//! Strona liczy, które dymki pokazać, i prosi o rozmiar (`bubbles_place`); Rust stawia okno nad sceną
-//! (przy górnej krawędzi monitora pod nią). Mysz: okno przepuszcza kliknięcia poza dymkami; klik w dymek
-//! rozpoznaje wątek kursora (30 ms), jak w oknie pływającym.
+//! Bubble window above the stage (spec 0.8, 2.3): transparent, always on top, unfocused, and absent from the taskbar.
+//! The page chooses which bubbles to show and requests a size (`bubbles_place`); Rust places the window above the stage
+//! (or below it near the monitor's top edge). Pointer: clicks outside bubbles pass through; the cursor thread
+//! detects clicks on bubbles every 30 ms, as with the floating window.
 use crate::shell::{self, placement::Rect, Shell};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, 
 #[serde(rename_all = "snake_case")]
 pub enum Kind { Question, Action }
 
-/// Dymek do kliknięcia: prostokąt w px CSS okna dymków.
+/// Clickable bubble: rectangle in bubble-window CSS pixels.
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct Hit { pub id: String, pub kind: Kind, pub x: f64, pub y: f64, pub w: f64, pub h: f64 }
 
@@ -20,11 +20,11 @@ pub fn hit(hits: &[Hit], x: f64, y: f64) -> Option<&Hit> {
     hits.iter().find(|h| x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h)
 }
 
-/// Pas dymków: prostokąt okna (px ekranu), przesunięcie lewej krawędzi sceny względem okna i strona sceny.
+/// Bubble strip: window rectangle (screen pixels), stage left-edge offset within the window, and stage side.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Band { pub rect: Rect, pub offset: i32, pub above: bool }
 
-/// Okno `pw`×`ph` z zapasem `margin` po obu stronach sceny, w granicach monitora; nad sceną albo pod nią.
+/// `pw`×`ph` window with `margin` on both sides of the stage, within the monitor; above or below the stage.
 pub fn band(stage: Rect, monitor: Rect, pw: i32, ph: i32, margin: i32) -> Band {
     let left = (stage.left - margin).clamp(monitor.left, (monitor.right - pw).max(monitor.left));
     let above = stage.top - ph >= monitor.top;
@@ -32,10 +32,10 @@ pub fn band(stage: Rect, monitor: Rect, pw: i32, ph: i32, margin: i32) -> Band {
     Band { rect: Rect { left, top, right: left + pw, bottom: top + ph }, offset: stage.left - left, above }
 }
 
-/// Dymki tylko przy widocznej scenie i bez aplikacji na pełnym ekranie (strona mogła przegapić `pets://visibility`).
+/// Show bubbles only when the stage is visible and no app is fullscreen (the page may have missed `pets://visibility`).
 pub fn allowed(fullscreen: bool, stage_shown: bool) -> bool { !fullscreen && stage_shown }
 
-/// Zapas okna po obu stronach sceny (px CSS): dymek skrajnego zwierzaka może wystawać poza scenę.
+/// Window margin on both sides of the stage (CSS pixels): the outermost pet's bubble may extend beyond the stage.
 pub const MARGIN_CSS: f64 = 150.0;
 
 #[derive(Default)]
@@ -47,18 +47,18 @@ struct Inner { hits: Vec<Hit>, shown: bool }
 impl Bubbles {
     pub fn set_hits(&self, hits: Vec<Hit>) { self.inner.lock().unwrap().hits = hits; }
 
-    /// Nad zwierzakiem sesji widać teraz jakiś dymek: najechanie go rozwija zamiast pokazywać tooltip.
+    /// A bubble is visible above this session's pet: hovering expands it instead of showing a tooltip.
     pub fn showing(&self, id: &str) -> bool { self.inner.lock().unwrap().hits.iter().any(|h| h.id == id) }
 
-    /// Nad zwierzakiem sesji widać teraz dymek z jej pytaniem (zastępuje toast „czeka na Ciebie”).
+    /// This session's question bubble is visible above its pet (replaces the "waiting for you" toast).
     pub fn asking(&self, id: &str) -> bool {
         let s = self.inner.lock().unwrap();
-        // schowanie okna czyści prostokąty, więc wystarczy spojrzeć na nie
+        // hiding the window clears the rectangles, so checking them is enough
         s.hits.iter().any(|h| h.kind == Kind::Question && h.id == id)
     }
 }
 
-/// Odpowiedź na `bubbles_place`: przesunięcie sceny w oknie (px CSS) i czy pas jest nad sceną.
+/// Response to `bubbles_place`: stage offset in the window (CSS pixels) and whether the strip is above the stage.
 #[derive(Serialize, Clone, Copy, Debug)]
 pub struct Placed { pub offset: f64, pub above: bool }
 
@@ -73,7 +73,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Pozycje widocznych zwierzaków ze sceny (px CSS sceny) dla strony dymków.
+/// Visible pet positions from the stage (stage CSS pixels) for the bubble page.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PetAt { pub id: String, pub x: f64 }
 
@@ -110,11 +110,11 @@ pub fn hide(app: &AppHandle, state: &Bubbles) {
     }
 }
 
-/// Prostokąty dymków do kliknięcia (po każdym rysowaniu).
+/// Clickable bubble rectangles (after each render).
 #[tauri::command]
 pub fn bubbles_hits(state: State<Bubbles>, hits: Vec<Hit>) { state.set_hits(hits); }
 
-/// Klik w dymek z pytaniem przenosi do sesji, w dymek z akcją otwiera panel na tej sesji.
+/// Clicking a question bubble jumps to the session; clicking an action bubble opens its panel.
 fn click(app: &AppHandle, h: &Hit) {
     match h.kind {
         Kind::Question => {
@@ -125,18 +125,18 @@ fn click(app: &AppHandle, h: &Hit) {
     }
 }
 
-/// Dymek pod kursorem po zmianie (`Some(nowy)`), albo `None`, gdy nic się nie zmieniło.
+/// Bubble under the cursor after a change (`Some(new)`), or `None` if nothing changed.
 pub fn hover_change(prev: &Option<String>, target: Option<&Hit>) -> Option<Option<String>> {
     let now = target.map(|h| h.id.clone());
     (now != *prev).then_some(now)
 }
 
-/// Kursor nad dymkiem: okno łapie mysz (bez fokusu); poza dymkami przepuszcza kliknięcia do okien pod spodem.
+/// Cursor over a bubble: the window captures the pointer (without focus); elsewhere clicks pass to windows beneath it.
 fn spawn_pointer(app: AppHandle) {
     std::thread::spawn(move || {
         let mut was_down = false;
         let mut over = false;
-        // dymek pod kursorem rozwija się do pełnej treści, jak po najechaniu na zwierzaka
+        // the bubble under the cursor expands to its full text, as when hovering over a pet
         let mut hovering: Option<String> = None;
         loop {
             std::thread::sleep(Duration::from_millis(30));
@@ -154,7 +154,7 @@ fn spawn_pointer(app: AppHandle) {
                 if let Some(t) = &target {
                     let a = app.clone();
                     let t = t.clone();
-                    // „Przejdź” uruchamia procesy: poza wątkiem kursora, jak przycisk w toaście
+                    // "Jump" starts processes: run it outside the cursor thread, like the toast button
                     std::thread::spawn(move || click(&a, &t));
                 }
             }
@@ -183,7 +183,7 @@ mod tests {
         let right = Rect { left: 2400, top: 1392, right: 2550, bottom: 1440 };
         let b = band(right, MON, 450, 80, 150);
         assert_eq!((b.rect.left, b.rect.right), (2110, 2560));
-        assert_eq!(b.offset, 2400 - 2110, "strona przesuwa dymki o to, o ile okno nie mogło wyjść za ekran");
+        assert_eq!(b.offset, 2400 - 2110, "the page shifts bubbles by the amount the window could not extend past the screen");
     }
 
     #[test]
@@ -214,7 +214,7 @@ mod tests {
     fn the_bubble_under_the_cursor_is_reported_once_per_change() {
         let h = Hit { id: "a".into(), kind: Kind::Question, x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
         assert_eq!(hover_change(&None, Some(&h)), Some(Some("a".into())));
-        assert_eq!(hover_change(&Some("a".into()), Some(&h)), None, "bez zmiany nic nie wysyłamy");
+        assert_eq!(hover_change(&Some("a".into()), Some(&h)), None, "send nothing when there is no change");
         assert_eq!(hover_change(&Some("a".into()), None), Some(None));
         assert_eq!(hover_change(&None, None), None);
     }
@@ -227,15 +227,15 @@ mod tests {
         ];
         assert_eq!(hit(&hits, 15.0, 45.0).map(|h| (h.id.as_str(), h.kind)), Some(("a", Kind::Question)));
         assert_eq!(hit(&hits, 150.0, 69.0).map(|h| h.id.as_str()), Some("b"));
-        assert!(hit(&hits, 115.0, 45.0).is_none(), "przerwa między dymkami przepuszcza klik");
+        assert!(hit(&hits, 115.0, 45.0).is_none(), "the gap between bubbles lets clicks through");
         assert!(hit(&hits, 15.0, 10.0).is_none());
     }
 
     #[test]
     fn no_bubbles_over_a_fullscreen_app_or_a_hidden_stage() {
         assert!(allowed(false, true));
-        assert!(!allowed(true, true), "gra na pełnym ekranie");
-        assert!(!allowed(false, false), "scena schowana (ukryty pasek, brak miejsca)");
+        assert!(!allowed(true, true), "fullscreen game");
+        assert!(!allowed(false, false), "stage hidden (hidden taskbar, no space)");
     }
 
     #[test]
@@ -245,8 +245,8 @@ mod tests {
         b.set_hits(vec![Hit { id: "a".into(), kind: Kind::Question, x: 0.0, y: 0.0, w: 10.0, h: 10.0 },
                         Hit { id: "b".into(), kind: Kind::Action, x: 20.0, y: 0.0, w: 10.0, h: 10.0 }]);
         assert!(b.asking("a"));
-        assert!(!b.asking("b"), "dymek z akcją to nie pytanie");
+        assert!(!b.asking("b"), "an action bubble is not a question");
         b.set_hits(vec![]);
-        assert!(!b.asking("a"), "dymek zniknął (pełny ekran, „+N”): toast znowu potrzebny");
+        assert!(!b.asking("a"), "bubble disappeared (fullscreen, +N): toast needed again");
     }
 }

@@ -1,4 +1,4 @@
-//! Statystyki (spec 0.9): wątek skanu historii o niskim priorytecie, okno „Statystyki” i jego komendy.
+//! Statistics (spec 0.9): low-priority history scan thread, "Statistics" window, and its commands.
 use std::sync::Mutex;
 use std::time::Duration;
 use pets_core::i18n::{tr, Lang};
@@ -7,7 +7,7 @@ use pets_core::stats::summary::{summary, Metric, Period, Query, RaceBy, StatsVie
 use pets_core::stats::Book;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-/// Porcja jednego kroku skanu (bajty); między krokami wątek oddaje procesor.
+/// Chunk size for one scan step (bytes); the thread yields between steps.
 pub const STEP_BYTES: u64 = 4 * 1024 * 1024;
 const SAVE_EVERY_MS: i64 = 5_000;
 const RESCAN: Duration = Duration::from_secs(30);
@@ -16,12 +16,12 @@ const PROGRESS_EVERY_MS: i64 = 500;
 pub struct StatsState {
     pub scanner: Mutex<Scanner>,
     pub progress: Mutex<Progress>,
-    /// zapis dozwolony dopiero po udanym odczycie księgi z dysku
+    /// Writing is allowed only after successfully reading the ledger from disk.
     pub writable: std::sync::atomic::AtomicBool,
 }
 
 impl StatsState {
-    /// Pusta księga do czasu odczytu z dysku w wątku skanu (`spawn`).
+    /// Empty ledger until the scan thread (`spawn`) reads it from disk.
     pub fn load(home: &std::path::Path) -> StatsState {
         let roots = vec![home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
         StatsState { scanner: Mutex::new(Scanner::new(roots, Book::default())), progress: Mutex::new(Progress::default()),
@@ -29,14 +29,14 @@ impl StatsState {
     }
 }
 
-/// Jeden przebieg: kolejka zmienionych plików i skan do końca, z pauzą (pełny ekran), zapisem co `SAVE_EVERY_MS`
-/// i na końcu. Zamek skanera trzymamy tylko na czas kroku, więc okno może w tym czasie liczyć widok.
+/// One pass: queue changed files and scan to completion, pausing for fullscreen apps and saving every `SAVE_EVERY_MS`
+/// and at the end. Hold the scanner lock only during each step so the window can compute its view meanwhile.
 pub fn run_until_done(sc: &Mutex<Scanner>, step: u64, pause: &dyn Fn() -> bool, save: &mut dyn FnMut(&Book),
     now: &dyn Fn() -> i64, progress: &mut dyn FnMut(Progress), sleep: &dyn Fn(u64)) -> Progress {
     let queued = sc.lock().unwrap().refresh();
     let mut last_save = now();
     loop {
-        // pełny ekran: nie czytamy nic, nawet jednej porcji (przegląd 0.9)
+        // fullscreen: read nothing, not even one chunk (0.9 review)
         if pause() { sleep(1_000); continue; }
         let p = sc.lock().unwrap().step(step, pause);
         progress(p);
@@ -50,28 +50,28 @@ pub fn run_until_done(sc: &Mutex<Scanner>, step: u64, pause: &dyn Fn() -> bool, 
     }
 }
 
-/// Sesje opencode z jego bazy do księgi (spec 0.11 §4.4): tylko przy włączonej integracji i bez gry na pełnym ekranie.
-/// Zwraca liczbę przeliczonych sesji (0 = nic do zapisu).
+/// Add opencode sessions from its database to the ledger (spec 0.11 §4.4): only when integration is enabled and no fullscreen game runs.
+/// Return the number of processed sessions (0 = nothing to save).
 pub fn sync_opencode(sc: &Mutex<Scanner>, db_path: &std::path::Path, on: bool, pause: &dyn Fn() -> bool) -> usize {
     if !on || pause() { return 0; }
     let Some(c) = pets_core::opencode_db::open(db_path) else { return 0 };
     pets_core::stats::opencode::sync(&mut sc.lock().unwrap().book, &c, pause)
 }
 
-/// Księga z dysku; błąd odczytu (np. blokada antywirusa przy starcie) ponawiamy, a gdy nie mija, zwracamy `None`:
-/// wtedy nic nie zapisujemy, żeby pusta księga nie nadpisała historii (przegląd 0.9, I4).
+/// Ledger from disk; retry read errors (e.g. antivirus lock at startup), then return `None` if they persist:
+/// write nothing so an empty ledger cannot overwrite history (0.9 review, I4).
 pub fn open_book(path: &std::path::Path, tries: u32, sleep: &dyn Fn(u64)) -> Option<Book> {
     for i in 0..tries {
         match Book::load_checked(path) {
             Ok(b) => return Some(b),
             Err(e) if i + 1 < tries => { let _ = e; sleep(1_000) }
-            Err(e) => eprintln!("agent-pets: statystyki: nie da się odczytać księgi ({e}); bez zapisu do końca sesji"),
+            Err(e) => eprintln!("agent-pets: statistics: cannot read ledger ({e}); writes disabled for this session"),
         }
     }
     None
 }
 
-/// Przesunięcie czasu lokalnego względem UTC (ms) w chwili `ts`, z czasem letnim.
+/// Local time offset from UTC (ms) at `ts`, including daylight saving time.
 pub fn tz_offset(ts: i64) -> i64 {
     use windows::Win32::Foundation::{FILETIME, SYSTEMTIME};
     use windows::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToFileTime, SystemTimeToTzSpecificLocalTime};
@@ -88,7 +88,7 @@ pub fn tz_offset(ts: i64) -> i64 {
     }
 }
 
-/// Wątek skanu: cała historia przy pierwszym uruchomieniu, potem co 30 s tylko zmienione pliki.
+/// Scan thread: all history on first launch, then only changed files every 30 s.
 pub fn spawn(app: AppHandle) {
     std::thread::spawn(move || {
         unsafe {
@@ -125,7 +125,7 @@ pub fn spawn(app: AppHandle) {
     });
 }
 
-/// Zapis przy wyjściu z aplikacji (bez czekania na zamek skanera w trakcie długiego kroku).
+/// Save when the app exits (without waiting on the scanner lock during a long step).
 pub fn save_now(app: &AppHandle) {
     if let Some(st) = app.try_state::<StatsState>() {
         if !st.writable.load(std::sync::atomic::Ordering::Relaxed) { return; }
@@ -135,7 +135,7 @@ pub fn save_now(app: &AppHandle) {
 
 pub fn window_title(lang: Lang) -> &'static str { tr(lang, "Agent Pets: statystyki", "Agent Pets: statistics") }
 
-/// Otwiera okno statystyk; drugie wywołanie tylko je pokazuje.
+/// Open the statistics window; subsequent calls only show it.
 pub fn open(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("stats") {
         let _ = w.unminimize();
@@ -143,11 +143,11 @@ pub fn open(app: &AppHandle) {
         let _ = w.set_focus();
         return;
     }
-    // jak okno ustawień: budowa w osobnym wątku (zakleszczenie w obsłudze zdarzeń na Windows)
+    // like the settings window: build on a separate thread (Windows event-handler deadlock)
     let app = app.clone();
     std::thread::spawn(move || {
         let lang = app.state::<crate::settings::SettingsState>().lang();
-        // 800×720 mieści całe okno (podium, wyścig, kalendarz, odznaki i pasek wczytywania) bez przewijania
+        // 800×720 fits the whole window (podium, race, calendar, badges, and loading bar) without scrolling
         let (w, h) = crate::settings::fit_size((800.0, 720.0), crate::settings::work_area(&app));
         let _ = WebviewWindowBuilder::new(&app, "stats", WebviewUrl::App("stats.html".into()))
             .title(window_title(lang)).inner_size(w, h).min_inner_size(620.0, 460.0).center().build();
@@ -198,9 +198,9 @@ mod tests {
         let (d, roots) = home_with(1);
         let sc = Mutex::new(Scanner::new(roots, Book::default()));
         let db = d.path().join("opencode.db");
-        assert_eq!(sync_opencode(&sc, &db, false, &|| false), 0, "wyłączony opencode");
-        assert_eq!(sync_opencode(&sc, &db, true, &|| false), 0, "brak bazy");
-        assert_eq!(sync_opencode(&sc, &db, true, &|| true), 0, "gra na pełnym ekranie");
+        assert_eq!(sync_opencode(&sc, &db, false, &|| false), 0, "opencode disabled");
+        assert_eq!(sync_opencode(&sc, &db, true, &|| false), 0, "database missing");
+        assert_eq!(sync_opencode(&sc, &db, true, &|| true), 0, "fullscreen game");
         assert!(sc.lock().unwrap().book.files.is_empty());
     }
 

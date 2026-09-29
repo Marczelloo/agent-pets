@@ -1,4 +1,4 @@
-//! Jedna wersja w trzech miejscach: Cargo (workspace), `tauri.conf.json` (instalator, updater) i `package.json`.
+//! One version in three places: Cargo (workspace), `tauri.conf.json` (installer, updater), and `package.json`.
 #[cfg(test)]
 mod tests {
     fn version_of(json: &str) -> String {

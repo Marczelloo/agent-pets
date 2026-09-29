@@ -1,4 +1,4 @@
-//! Czysta geometria sceny w pasku zadań (bez Win32), w pikselach fizycznych ekranu.
+//! Pure geometry for the stage in the taskbar (without Win32), in physical screen pixels.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Rect { pub left: i32, pub top: i32, pub right: i32, pub bottom: i32 }
@@ -10,38 +10,38 @@ impl Rect {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Metrics {
     pub tray: Rect,
-    /// lewa krawędź zasobnika (`TrayNotifyWnd`) albo zegara drugiego paska
+    /// Left edge of the tray (`TrayNotifyWnd`) or secondary-taskbar clock.
     pub notify_left: Option<i32>,
-    /// prawa krawędź ostatniego elementu paska (Start, wyszukiwanie, ikony aplikacji) z UI Automation
+    /// Right edge of the last taskbar item (Start, search, app icons) from UI Automation.
     pub icons_right: Option<i32>,
-    /// lewa krawędź pierwszego elementu grupy ikon (`StartButton`) z UI Automation
+    /// Left edge of the first icon-group item (`StartButton`) from UI Automation.
     pub first_left: Option<i32>,
-    /// prawa krawędź elementów przed Startem (przycisk Widżetów), jeśli są
+    /// Right edge of items before Start (Widgets button), if any.
     pub widgets_right: Option<i32>,
     pub scale: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placement {
-    /// pozycja we współrzędnych klienta paska (okno jest jego dzieckiem)
+    /// Position in taskbar client coordinates (the window is its child).
     pub x: i32,
     pub w: i32,
     pub h: i32,
-    /// wolne miejsce w pikselach CSS; UI mieści w nim tylu zwierzaków, ilu się da
+    /// Free space in CSS pixels; the UI fits as many pets as possible.
     pub max_css: f64,
     pub height_css: f64,
-    /// tryb „lewa” bez lewej strefy (ikony do lewej): scena stoi przy zasobniku
+    /// "Left" mode without a left zone (icons extend left): stage sits near the tray.
     pub left_fallback: bool,
 }
 
 pub const GAP_CSS: f64 = 8.0;
-/// Gdy UI Automation nie powie, gdzie kończą się ikony (brak UIA, zmiana paska w nowym Windows),
-/// scena zostaje mała przy zasobniku (do 2 zwierzaków), zamiast ryzykować zasłonięcie ikon.
+/// If UI Automation cannot find where icons end (no UIA, new Windows taskbar layout),
+/// keep the stage small near the tray (up to 2 pets) to avoid covering icons.
 pub const FALLBACK_MAX_CSS: f64 = 200.0;
-/// Najwęższa strefa, w której mieści się jeden zwierzak (sloty sceny przy u = 0,3 i marginesy).
+/// Narrowest zone that fits one pet (stage slots at u = 0.3 and margins).
 pub const MIN_ZONE_CSS: f64 = 70.0;
 
-/// Wolny od ikon fragment paska w pikselach ekranu, już z odstępami `GAP_CSS`.
+/// Icon-free taskbar segment in screen pixels, with `GAP_CSS` spacing included.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Zone { pub left: i32, pub right: i32 }
 
@@ -50,15 +50,15 @@ impl Zone {
     fn distance(&self, x: i32) -> i32 { if x < self.left { self.left - x } else if x > self.right { x - self.right } else { 0 } }
 }
 
-/// Po której stronie okna jest kotwica, czyli w którą stronę okno rośnie.
+/// Which side of the window holds the anchor, hence which way the window grows.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Anchor { Left, Center, Right }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mode { Right, Left, Custom { at: f64, anchor: Anchor } }
 
-/// Strefy: lewa (od krawędzi paska albo za Widżetami do pierwszego elementu grupy ikon), jeśli mieści zwierzaka,
-/// i prawa (od ostatniej ikony do zasobnika).
+/// Zones: left (from taskbar edge or after Widgets to the first icon-group item), if it fits a pet,
+/// and right (from the last icon to the tray).
 pub fn zones(m: &Metrics) -> (Option<Zone>, Zone) {
     let gap = (GAP_CSS * m.scale).round() as i32;
     let right = m.notify_left.filter(|l| *l > m.tray.left && *l <= m.tray.right).unwrap_or(m.tray.right) - gap;
@@ -71,7 +71,7 @@ pub fn zones(m: &Metrics) -> (Option<Zone>, Zone) {
     (lz, Zone { left, right })
 }
 
-/// Okno w strefie przy kotwicy `a`: szerokość treści przycięta do strefy, okno dosunięte do jej wnętrza.
+/// Window in a zone at anchor `a`: content width clipped to the zone, window moved inside it.
 fn in_zone(m: &Metrics, z: Zone, a: i32, anchor: Anchor, want_css: f64, left_fallback: bool) -> Placement {
     let w = ((want_css.max(0.0) * m.scale).round() as i32).min(z.width());
     let x = match anchor { Anchor::Left => a, Anchor::Center => a - w / 2, Anchor::Right => a - w };
@@ -82,7 +82,7 @@ fn in_zone(m: &Metrics, z: Zone, a: i32, anchor: Anchor, want_css: f64, left_fal
     }
 }
 
-/// Strefa zawierająca punkt albo najbliższa (przy remisie prawa, jak domyślna pozycja).
+/// Zone containing the point or nearest to it (right wins ties, as with the default position).
 fn nearest(m: &Metrics, x: i32) -> Zone {
     match zones(m) {
         (Some(l), r) if l.distance(x) < r.distance(x) => l,
@@ -90,8 +90,8 @@ fn nearest(m: &Metrics, x: i32) -> Zone {
     }
 }
 
-/// Scena w wybranym trybie. Zawsze w wolnej strefie, nigdy na ikonach aplikacji.
-/// `None`, gdy pomiar jest chwilowo niewiarygodny (w trakcie zmiany skali pasek ma wysokość 0).
+/// Stage in the selected mode. Always in a free zone, never over app icons.
+/// `None` when a measurement is temporarily unreliable (taskbar height is 0 during a scale change).
 pub fn place_mode(m: &Metrics, want_css: f64, mode: Mode) -> Option<Placement> {
     if m.tray.height() <= 0 || m.scale <= 0.0 { return None; }
     let (lz, rz) = zones(m);
@@ -109,34 +109,34 @@ pub fn place_mode(m: &Metrics, want_css: f64, mode: Mode) -> Option<Placement> {
     })
 }
 
-/// Scena przy zasobniku (tryb „prawa”, zachowanie z 0.6); testy z 0.6 sprawdzają nim te same liczby.
+/// Stage near the tray ("right" mode, 0.6 behavior); 0.6 tests check the same values through it.
 #[cfg(test)]
 pub fn place(m: &Metrics, want_css: f64) -> Option<Placement> { place_mode(m, want_css, Mode::Right) }
 
-/// Kotwica przeciągniętej sceny (px ekranu) → ułamek szerokości paska, przyciągnięty do najbliższej strefy.
+/// Dragged-stage anchor (screen pixels) → fraction of taskbar width, snapped to the nearest zone.
 pub fn custom_at(m: &Metrics, anchor_x: i32) -> f64 {
     let z = nearest(m, anchor_x);
     let width = (m.tray.right - m.tray.left).max(1) as f64;
     (anchor_x.clamp(z.left, z.right) - m.tray.left) as f64 / width
 }
 
-/// Monitor dla karty „Pasek”: `id` to nazwa urządzenia (`szDevice`), `index` od 1 w kolejności Windows.
+/// Monitor for the "Taskbar" tab: `id` is the device name (`szDevice`), `index` starts at 1 in Windows order.
 #[derive(serde::Serialize, Clone, Debug, PartialEq)]
 pub struct MonitorInfo { pub id: String, pub primary: bool, pub width: i32, pub height: i32, pub index: u32, pub has_bar: bool }
 
-/// Który monitor: wybrany, jeśli jest podłączony i (w pasku) ma pasek; inaczej główny (ustawienie się nie zmienia).
-/// Okno pływające nie potrzebuje paska, tylko obszaru roboczego.
+/// Which monitor: selected if connected and (in taskbar mode) it has a taskbar; otherwise primary (setting stays unchanged).
+/// A floating window needs only the work area, not a taskbar.
 pub fn pick(monitors: &[(MonitorInfo, bool)], want: &str, floating: bool) -> usize {
     let primary = monitors.iter().position(|(m, _)| m.primary).unwrap_or(0);
     if want == pets_core::settings::PRIMARY { return primary; }
     monitors.iter().position(|(m, bar)| (*bar || floating) && m.id == want).unwrap_or(primary)
 }
 
-/// Odstęp okna pływającego od paska przy pozycji domyślnej (px CSS).
+/// Gap between the floating window and taskbar at the default position (CSS pixels).
 pub const FLOAT_MARGIN_CSS: f64 = 16.0;
 
-/// Okno pływające w pikselach ekranu. `at`: kotwica (px CSS od lewego górnego rogu obszaru roboczego) na dolnej
-/// krawędzi okna, po stronie `anchor`; brak: środek nad paskiem. Wynik zawsze w obszarze roboczym.
+/// Floating window in screen pixels. `at`: anchor (CSS pixels from work area's top left) on the window's bottom
+/// edge, on the `anchor` side; absent: centered above the taskbar. Result always stays in the work area.
 pub fn float_rect(work: Rect, at: Option<(f64, f64)>, anchor: Anchor, w_css: f64, h_css: f64, scale: f64) -> Rect {
     let (w, h) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32);
     let (ax, ay, anchor) = match at {
@@ -149,13 +149,13 @@ pub fn float_rect(work: Rect, at: Option<(f64, f64)>, anchor: Anchor, w_css: f64
     Rect { left: x, top: y, right: x + w, bottom: y + h }
 }
 
-/// Odwrotność `float_rect`: kotwica okna do zapisania w ustawieniach.
+/// Inverse of `float_rect`: window anchor to save in settings.
 pub fn float_anchor(work: Rect, r: Rect, anchor: Anchor, scale: f64) -> (f64, f64) {
     let x = match anchor { Anchor::Left => r.left, Anchor::Center => (r.left + r.right) / 2, Anchor::Right => r.right };
     ((x - work.left) as f64 / scale, (r.bottom - work.top) as f64 / scale)
 }
 
-/// Tooltip nad sceną (albo pod nią, gdy nad nią brak miejsca), w granicach monitora sceny.
+/// Tooltip above the stage (or below when there is no room above), within the stage monitor.
 pub fn tooltip_pos(anchor_x: i32, stage: Rect, monitor: Rect, pw: i32, ph: i32, scale: f64) -> (i32, i32) {
     let (m4, gap) = ((4.0 * scale).round() as i32, (6.0 * scale).round() as i32);
     let x = (anchor_x - pw / 2).clamp(monitor.left + m4, (monitor.right - pw - m4).max(monitor.left + m4));
@@ -163,7 +163,7 @@ pub fn tooltip_pos(anchor_x: i32, stage: Rect, monitor: Rect, pw: i32, ph: i32, 
     (x, if above >= monitor.top { above } else { stage.bottom + gap })
 }
 
-/// Autoukryty pasek chowa się za dolną krawędź ekranu, zostawiając ok. 2 px.
+/// Auto-hidden taskbar moves below the screen edge, leaving about 2 px.
 pub fn taskbar_visible(tray: Rect, screen: Rect) -> bool {
     screen.bottom - tray.top > 4 && tray.bottom > screen.top
 }
@@ -177,7 +177,7 @@ mod tests {
     fn m(icons: Option<i32>, scale: f64) -> Metrics {
         Metrics { tray: TRAY, notify_left: Some(2291), icons_right: icons, first_left: None, widgets_right: None, scale }
     }
-    /// Ikony na środku jak na maszynie deweloperskiej (spike S2): Start od 882, ostatnia ikona do 1657.
+    /// Centered icons as on the development machine (spike S2): Start at 882, last icon ends at 1657.
     fn centered() -> Metrics { Metrics { first_left: Some(882), ..m(Some(1657), 1.0) } }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn custom_anchor_inside_the_icons_snaps_to_the_nearest_zone() {
-        // kotwica 1200 px leży w ikonach (882–1657): bliżej lewej strefy (koniec 874) niż prawej (początek 1665)
+        // anchor at 1200 px lies among icons (882–1657): closer to left zone (ends 874) than right (starts 1665)
         let p = place_mode(&centered(), 200.0, Mode::Custom { at: 1200.0 / 2560.0, anchor: Anchor::Right }).unwrap();
         assert_eq!((p.x, p.w), (874 - 200, 200));
         let q = place_mode(&centered(), 200.0, Mode::Custom { at: 1600.0 / 2560.0, anchor: Anchor::Left }).unwrap();
@@ -217,12 +217,12 @@ mod tests {
         let at = 1700.0 / 2560.0;
         let before = place_mode(&centered(), 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
         assert_eq!(before.x, 1700);
-        // przybyło ikon: ostatnia kończy się teraz na 1900
+        // more icons: the last one now ends at 1900
         let grown = Metrics { icons_right: Some(1900), ..centered() };
         let after = place_mode(&grown, 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
         assert!(after.x >= 1908, "{after:?}");
         assert!(after.x + after.w <= 2283);
-        // strefa węższa niż treść: okno przycięte do strefy
+        // zone narrower than content: clip window to the zone
         let tight = Metrics { icons_right: Some(2100), ..centered() };
         let t = place_mode(&tight, 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
         assert_eq!((t.x, t.w), (2108, 2283 - 2108));
@@ -237,7 +237,7 @@ mod tests {
             assert!((got - x).abs() <= 1, "{anchor:?}: {got} vs {x}");
         }
         assert_eq!(custom_at(&centered(), 1200), 874.0 / 2560.0, "an anchor in the icons is stored snapped");
-        // ten sam ułamek na pasku 1920 px (ikony 662–1242) zostaje w lewej strefie
+        // same fraction on a 1920 px taskbar (icons 662–1242) stays in the left zone
         let small = Metrics { tray: Rect { left: 0, top: 1032, right: 1920, bottom: 1080 }, notify_left: Some(1700),
             icons_right: Some(1242), first_left: Some(662), widgets_right: None, scale: 1.0 };
         let p = place_mode(&small, 120.0, Mode::Custom { at: 300.0 / 2560.0, anchor: Anchor::Left }).unwrap();
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn sits_left_of_the_tray_with_a_gap() {
-        // liczby zmierzone na maszynie deweloperskiej przez UI Automation (ostatnia ikona kończy się na 1657)
+        // numbers measured on the development machine via UI Automation (last icon ends at 1657)
         let p = place(&m(Some(1657), 1.0), 400.0).unwrap();
         assert_eq!((p.x, p.w, p.h), (2291 - 8 - 400, 400, 48));
         assert_eq!(p.max_css, (2291 - 8 - (1657 + 8)) as f64);
@@ -305,7 +305,7 @@ mod tests {
         assert_eq!(pick(&[], "primary", false), 0);
     }
 
-    // obszar roboczy drugiego monitora ze spike'a S1: na lewo od głównego, przesunięty w pionie
+    // secondary monitor work area from spike S1: left of primary, vertically offset
     const WORK2: Rect = Rect { left: -1920, top: 139, right: 0, bottom: 1171 };
 
     #[test]

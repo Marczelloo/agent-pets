@@ -9,7 +9,7 @@ license.workspace = true
 name = "agent_pets_lib"
 
 [features]
-# test lokalny aktualizacji: AGENT_PETS_UPDATE_URL działa także w buildzie release (docs/building.md)
+# local update testing: AGENT_PETS_UPDATE_URL also works in release builds (docs/building.md)
 update-test = []
 
 [build-dependencies]

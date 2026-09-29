@@ -1,4 +1,4 @@
-//! Pasek zadań Windows 11: uchwyty, pomiary (Win32 + UI Automation), osadzenie okna sceny.
+//! Windows 11 taskbar: handles, measurements (Win32 + UI Automation), stage-window embedding.
 use super::memo::KeyedCache;
 use super::placement::{Metrics, MonitorInfo, Placement, Rect};
 use std::cell::RefCell;
@@ -32,12 +32,12 @@ pub fn screen_rect() -> Rect {
     unsafe { Rect { left: 0, top: 0, right: GetSystemMetrics(SM_CXSCREEN), bottom: GetSystemMetrics(SM_CYSCREEN) } }
 }
 
-/// Aplikacja pełnoekranowa (gra, film, prezentacja): wtedy nie rysujemy.
+/// Fullscreen app (game, movie, presentation): do not render then.
 pub fn fullscreen_app() -> bool {
     matches!(unsafe { SHQueryUserNotificationState() }, Ok(s) if s == QUNS_BUSY || s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE)
 }
 
-/// Elementy paska Win11 są w XAML i nie mają własnych HWND, więc koniec ikon mierzy UI Automation.
+/// Win11 taskbar elements use XAML and have no HWNDs, so UI Automation measures the end of the icons.
 pub struct Uia { auto: IUIAutomation, walker: IUIAutomationTreeWalker, frame: RefCell<KeyedCache<isize, IUIAutomationElement>> }
 
 impl Uia {
@@ -61,8 +61,8 @@ impl Uia {
         None
     }
 
-    /// Krawędzie grupy ikon z dzieci `TaskbarFrame` (spike S1/S2): prawa krawędź ostatniego elementu,
-    /// lewa krawędź Startu (albo pierwszego elementu) i prawa krawędź tego, co stoi przed Startem (Widżety).
+    /// Icon-group edges from `TaskbarFrame` children (spikes S1/S2): right edge of the last item,
+    /// left edge of Start (or the first item), and right edge of items before Start (Widgets).
     pub fn edges(&self, tray: HWND) -> Option<Edges> {
         let frame = self.frame.borrow_mut().get(tray.0 as isize, || {
             let root = unsafe { self.auto.ElementFromHandle(tray) }.ok()?;
@@ -77,14 +77,14 @@ impl Uia {
             }
             c = unsafe { self.walker.GetNextSiblingElement(&ch) }.ok();
         }
-        // element nieaktualny (np. przebudowany pasek): następnym razem szukamy od nowa
+        // stale element (e.g. rebuilt taskbar): search again next time
         if boxes.is_empty() { self.frame.borrow_mut().invalidate(); return None; }
         Some(edges_of(&boxes))
     }
 }
 
 impl Uia {
-    /// Lewa krawędź zegara i ikon zasobnika drugiego paska (tam nie ma `TrayNotifyWnd`): elementy `SystemTray.*`.
+    /// Left edge of the clock and tray icons on a secondary taskbar (no `TrayNotifyWnd` there): `SystemTray.*` items.
     pub fn tray_left(&self, bar: HWND) -> Option<i32> {
         let root = unsafe { self.auto.ElementFromHandle(bar) }.ok()?;
         let mut best: Option<i32> = None;
@@ -108,7 +108,7 @@ impl Uia {
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Edges { pub icons_right: Option<i32>, pub first_left: Option<i32>, pub widgets_right: Option<i32> }
 
-/// `(left, right, czy to Start)` dzieci `TaskbarFrame` → krawędzie grupy ikon.
+/// `(left, right, is Start)` for `TaskbarFrame` children → icon-group edges.
 pub fn edges_of(boxes: &[(i32, i32, bool)]) -> Edges {
     let icons_right = boxes.iter().map(|b| b.1).max();
     let first_left = boxes.iter().find(|b| b.2).map(|b| b.0).or_else(|| boxes.iter().map(|b| b.0).min());
@@ -134,7 +134,7 @@ pub fn embed(stage: HWND, tray: HWND) -> windows::core::Result<()> {
     Ok(())
 }
 
-/// Osadzone okno: współrzędne klienta paska. Szerokość 0 → okno ukryte (brak treści albo miejsca).
+/// Embedded window: taskbar client coordinates. Width 0 → hidden window (no content or space).
 pub fn apply(stage: HWND, p: Option<Placement>) {
     unsafe {
         match p {
@@ -144,7 +144,7 @@ pub fn apply(stage: HWND, p: Option<Placement>) {
     }
 }
 
-/// Plan awaryjny, gdy `SetParent` zawiedzie: zwykłe okno tuż nad paskiem, na tej samej pozycji.
+/// Fallback when `SetParent` fails: ordinary window just above the taskbar, at the same position.
 pub fn apply_floating(stage: HWND, m: &Metrics, p: Option<Placement>) {
     unsafe {
         match p {
@@ -154,7 +154,7 @@ pub fn apply_floating(stage: HWND, m: &Metrics, p: Option<Placement>) {
     }
 }
 
-/// Monitor z obszarem roboczym, skalą i paskiem zadań (jeśli Windows go tam pokazuje).
+/// Monitor with work area, scale, and taskbar (if Windows shows one there).
 pub struct Mon { pub info: MonitorInfo, pub monitor: Rect, pub work: Rect, pub scale: f64, pub bar: Option<HWND> }
 
 fn rect_from(r: &RECT) -> Rect { Rect { left: r.left, top: r.top, right: r.right, bottom: r.bottom } }
@@ -167,7 +167,7 @@ fn monitor_info(h: HMONITOR) -> Option<(String, Rect, Rect, bool)> {
     Some((dev, rect_from(&mi.monitorInfo.rcMonitor), rect_from(&mi.monitorInfo.rcWork), mi.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0))
 }
 
-/// Paski zadań wszystkich monitorów: główny `Shell_TrayWnd` i `Shell_SecondaryTrayWnd` (spike S1).
+/// Taskbars on all monitors: primary `Shell_TrayWnd` and `Shell_SecondaryTrayWnd` (spike S1).
 fn bars() -> Vec<HWND> {
     unsafe extern "system" fn collect(h: HWND, l: LPARAM) -> BOOL {
         let out = &mut *(l.0 as *mut Vec<HWND>);
@@ -200,13 +200,13 @@ pub fn monitors() -> Vec<Mon> {
     }).collect()
 }
 
-/// Monitor, na którym jest okno (prostokąt monitora i obszaru roboczego).
+/// Monitor containing the window (monitor and work-area rectangles).
 pub fn monitor_of(h: HWND) -> Option<(Rect, Rect)> {
     let m = unsafe { MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) };
     monitor_info(m).map(|(_, mon, work, _)| (mon, work))
 }
 
-/// Okno pływające: z powrotem zwykłe okno najwyższego poziomu (bez rodzica), zawsze na wierzchu, bez fokusu.
+/// Floating window: restore an ordinary top-level window (no parent), always on top and without focus.
 pub fn detach(stage: HWND) {
     unsafe {
         let _ = SetParent(stage, None);
@@ -226,7 +226,7 @@ pub fn apply_rect(stage: HWND, r: Option<Rect>) {
     }
 }
 
-/// Przezroczystość dla myszy (jak `set_ignore_cursor_events` w Tauri): kliknięcia trafiają do okna pod spodem.
+/// Pointer transparency (like Tauri's `set_ignore_cursor_events`): clicks go to the window beneath.
 pub fn passthrough(stage: HWND, on: bool) {
     unsafe {
         let ex = GetWindowLongW(stage, GWL_EXSTYLE) as u32;
@@ -236,7 +236,7 @@ pub fn passthrough(stage: HWND, on: bool) {
     }
 }
 
-/// Prostokąt rodzica okna (paska, w którym scena jest osadzona).
+/// Parent-window rectangle (the taskbar embedding the stage).
 pub fn parent_rect(h: HWND) -> Option<Rect> { unsafe { GetParent(h) }.ok().and_then(rect_of) }
 
 pub fn hide(h: HWND) { unsafe { let _ = ShowWindow(h, SW_HIDE); } }
@@ -250,7 +250,7 @@ pub fn no_activate(h: HWND) {
     }
 }
 
-/// Kursor względem okna (px CSS wg DPI okna) i lewy przycisk.
+/// Cursor relative to window (CSS pixels at window DPI) and left button.
 pub fn cursor_rel(h: HWND) -> Option<(f64, f64, bool)> {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn edges_from_the_taskbar_children() {
-        // spike S2: Start 882–927, wyszukiwanie, ikony do 1679
+        // spike S2: Start 882–927, search, icons through 1679
         let e = edges_of(&[(882, 927, true), (929, 1149, false), (1151, 1195, false), (1635, 1679, false)]);
         assert_eq!(e, Edges { icons_right: Some(1679), first_left: Some(882), widgets_right: None });
         let w = edges_of(&[(0, 160, false), (882, 927, true), (1635, 1679, false)]);
@@ -292,8 +292,8 @@ mod tests {
 
     #[test]
     fn hide_undoes_show_no_activate() {
-        // Regresja: tooltip pokazany przez Win32 nie znikał, bo chowaliśmy go przez Tauri (`hide()`),
-        // które nie wiedziało o pokazaniu i nic nie robiło.
+        // Regression: a tooltip shown through Win32 did not disappear when hidden through Tauri (`hide()`),
+        // which did not know it was shown and did nothing.
         unsafe {
             let h = CreateWindowExW(WS_EX_TOOLWINDOW, w!("STATIC"), w!("agent-pets-test"), WS_POPUP,
                 0, 0, 50, 20, None, None, None, None).unwrap();

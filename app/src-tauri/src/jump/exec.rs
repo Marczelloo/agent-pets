@@ -1,4 +1,4 @@
-//! Wykonanie kroków „Przejdź”. Pierwszy udany krok kończy łańcuch; schowek zawsze kończy łańcuch.
+//! Execute "Jump" steps. The first successful step ends the chain; the clipboard always ends it.
 use pets_core::i18n::{tr, Lang};
 use super::{JumpResult, Step};
 use std::os::windows::process::CommandExt;
@@ -17,7 +17,7 @@ fn deep_link(url: &str) -> bool {
     r.0 as isize > 32
 }
 
-/// Widoczne okno najwyższego poziomu z tytułem, należące do `pid`.
+/// Visible titled top-level window belonging to `pid`.
 fn window_of(pid: u32) -> Option<HWND> {
     struct Find { pid: u32, found: Option<HWND> }
     unsafe extern "system" fn cb(h: HWND, l: LPARAM) -> BOOL {
@@ -35,14 +35,14 @@ fn window_of(pid: u32) -> Option<HWND> {
     f.found
 }
 
-/// Okno sesji: sam proces albo najbliższy przodek z oknem (claude.exe ← pwsh ← WindowsTerminal).
+/// Session window: the process itself or the nearest ancestor with a window (claude.exe ← pwsh ← WindowsTerminal).
 pub fn session_window(pid: u32) -> Option<HWND> {
     owner_pid(pid, pets_core::pid::process_entry, |p| window_of(p).is_some()).and_then(window_of)
 }
 
-/// Najbliższy proces z oknem, idąc w górę drzewa od `pid`. `entry(p)` zwraca (rodzic, plik exe procesu `p`).
+/// Nearest process with a window, walking up from `pid`. `entry(p)` returns (parent, executable of process `p`).
 pub(crate) fn owner_pid(pid: u32, entry: impl Fn(u32) -> Option<(u32, String)>, has_window: impl Fn(u32) -> bool) -> Option<u32> {
-    // Procesy powłoki systemu: ich okna (Eksplorator, pulpit) nie są oknem sesji, więc tu wspinaczka się kończy.
+    // System shell processes: their windows (Explorer, desktop) are not session windows, so stop climbing here.
     const STOP: [&str; 6] = ["explorer.exe", "sihost.exe", "svchost.exe", "services.exe", "wininit.exe", "winlogon.exe"];
     let mut p = pid;
     for _ in 0..6 {
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn never_settles_on_the_shell_or_the_desktop() {
-        // powłoka uruchomiona z Eksploratora: rodzicem jest explorer.exe, którego okno to nie okno sesji
+        // shell launched from Explorer: its parent is explorer.exe, whose window is not the session window
         assert_eq!(owner_pid(11, tree, |p| p == 31), None);
     }
 }
@@ -85,7 +85,7 @@ fn focus(pid: u32) -> bool {
     unsafe {
         if IsIconic(h).as_bool() { let _ = ShowWindow(h, SW_RESTORE); }
         if SetForegroundWindow(h).as_bool() { return true; }
-        // Windows odmawia fokusu procesowi w tle (np. po kliknięciu toastu). Naciśnięcie Alt zdejmuje tę blokadę.
+        // Windows denies focus to background processes (e.g. after clicking a toast). Pressing Alt lifts the restriction.
         keybd_event(VK_MENU.0 as u8, 0, Default::default(), 0);
         keybd_event(VK_MENU.0 as u8, 0, KEYEVENTF_KEYUP, 0);
         SetForegroundWindow(h).as_bool()
@@ -94,7 +94,7 @@ fn focus(pid: u32) -> bool {
 
 fn terminal(cwd: &str, program: &str, args: &[String]) -> bool {
     use std::process::Command;
-    // `wt` dzieli swój wiersz poleceń na średnikach, więc katalog ze średnikiem idzie od razu do zapasowej ścieżki.
+    // `wt` splits its command line on semicolons, so a directory containing one goes straight to the fallback path.
     if !cwd.contains(';') && Command::new("wt.exe").arg("-d").arg(cwd).arg(program).args(args).spawn().is_ok() {
         return true;
     }

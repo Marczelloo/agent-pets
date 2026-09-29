@@ -1,20 +1,20 @@
-//! Muzyka w Windows: sesje odtwarzania z GSMTC (`GlobalSystemMediaTransportControlsSessionManager`), czyli to,
-//! co pokazuje kafelek multimediów przy głośności: Spotify, Apple Music, przeglądarki, VLC… Bez tytułów utworów:
-//! scena potrzebuje tylko „gra / nie gra” i nazwy aplikacji.
+//! Music in Windows: playback sessions from GSMTC (`GlobalSystemMediaTransportControlsSessionManager`), the source
+//! shown by the media tile near the volume control: Spotify, Apple Music, browsers, VLC… No track titles:
+//! the stage needs only "playing / not playing" and the app name.
 use serde::Serialize;
 use std::sync::Mutex;
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Media {
     pub playing: bool,
-    /// AUMID aplikacji, która gra (np. `Spotify.exe`, `AppleInc.AppleMusicWin_…!App`)
+    /// AUMID of the playing app (e.g. `Spotify.exe`, `AppleInc.AppleMusicWin_…!App`).
     pub app: Option<String>,
 }
 
 #[derive(Default)]
 pub struct MediaState(pub Mutex<Media>);
 
-/// Z listy sesji `(aplikacja, gra?)`: pierwsza grająca wygrywa.
+/// From sessions `(app, playing?)`: the first playing app wins.
 pub fn pick(sessions: &[(String, bool)]) -> Media {
     match sessions.iter().find(|(_, on)| *on) {
         Some((app, _)) => Media { playing: true, app: Some(app.clone()) },
@@ -22,7 +22,7 @@ pub fn pick(sessions: &[(String, bool)]) -> Media {
     }
 }
 
-/// Sesje odtwarzania: `(AUMID, gra?)`. Błąd WinRT (np. usługa niedostępna) = brak sesji.
+/// Playback sessions: `(AUMID, playing?)`. A WinRT error (e.g. service unavailable) means no sessions.
 pub fn sessions() -> Vec<(String, bool)> { read_sessions().unwrap_or_default() }
 
 #[cfg(windows)]
@@ -32,7 +32,7 @@ fn read_sessions() -> windows::core::Result<Vec<(String, bool)>> {
         GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
     };
     thread_local! {
-        // menedżer z pierwszego odpytania, a nie nowe połączenie z usługą co 2 s; po błędzie łączymy się od nowa
+        // reuse the manager from the first query instead of reconnecting every 2 s; reconnect after an error
         static MGR: std::cell::RefCell<Option<Manager>> = const { std::cell::RefCell::new(None) };
     }
     let mgr = match MGR.with_borrow(|m| m.clone()) {
@@ -56,7 +56,7 @@ fn read_sessions() -> windows::core::Result<Vec<(String, bool)>> {
 #[cfg(not(windows))]
 fn read_sessions() -> Result<Vec<(String, bool)>, ()> { Ok(Vec::new()) }
 
-/// Liczy stan muzyki i rozsyła `pets://media`, gdy się zmienia. Wyłączone w ustawieniach = nic nie gra.
+/// Compute media state and emit `pets://media` when it changes. Disabled in settings = nothing is playing.
 pub fn refresh_media(app: &tauri::AppHandle) {
     use tauri::{Emitter, Manager};
     let on = app.state::<crate::settings::SettingsState>().get().pets.react_to_media;
@@ -70,7 +70,7 @@ pub fn refresh_media(app: &tauri::AppHandle) {
     }
 }
 
-/// Stan odtwarzania co 2 s (odpytanie GSMTC to jedno wywołanie WinRT, bez zdarzeń per sesja).
+/// Poll playback state every 2 s (GSMTC query is one WinRT call, without per-session events).
 pub fn watch_media(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         refresh_media(&app);
@@ -95,7 +95,7 @@ mod tests {
         );
     }
 
-    /// Na żywo: `cargo test -p agent-pets live_sessions -- --ignored --nocapture` przy grającej muzyce.
+    /// Live: `cargo test -p agent-pets live_sessions -- --ignored --nocapture` while music is playing.
     #[test]
     #[ignore]
     fn live_sessions() { println!("{:?} -> {:?}", read_sessions(), pick(&sessions())); }

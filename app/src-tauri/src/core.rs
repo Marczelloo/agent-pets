@@ -1,4 +1,4 @@
-//! Wątek rdzenia: zdarzenia z `pets-core` → migawka stanu dla UI (`pets://snapshot`).
+//! Core thread: events from `pets-core` → state snapshot for the UI (`pets://snapshot`).
 use pets_core::dismiss::{self, Dismissed};
 use pets_core::i18n::{tr, Lang};
 use pets_core::model::{Limit, Session};
@@ -17,16 +17,16 @@ use tauri::{AppHandle, Emitter};
 pub struct Snapshot {
     pub sessions: Vec<Session>,
     pub limits: Vec<Limit>,
-    /// sumy dnia agentów z własną bazą (opencode, spec 0.11 §4.2)
+    /// Daily totals for agents with their own database (opencode, spec 0.11 §4.2).
     pub agent_usage: Vec<pets_core::model::AgentUsage>,
-    /// zegar rdzenia (ms); w trybie odtwarzania różni się od zegara ściennego
+    /// Core clock (ms); differs from wall clock in replay mode.
     pub now: i64,
 }
 
 pub type Shared = Arc<Mutex<Snapshot>>;
 
-/// Migawka bez sesji ukrytych ręcznie (te, które od ukrycia coś zrobiły, wracają).
-/// Dziecko (subagent) jest widoczne tylko z widocznym rodzicem: ukrycie rodzica ukrywa jego dzieci.
+/// Snapshot without manually hidden sessions (those active since being hidden return).
+/// A child (subagent) is visible only with a visible parent: hiding the parent hides its children.
 pub fn snapshot_of(store: &Store, now: i64, hidden: &mut Dismissed) -> Snapshot {
     let sessions = with_parents(hidden.filter(store.sessions().into_iter().cloned().collect()));
     Snapshot { sessions, limits: store.limits().to_vec(), agent_usage: store.agent_usage().to_vec(), now }
@@ -41,8 +41,8 @@ fn with_parents(mut v: Vec<Session>) -> Vec<Session> {
     }
 }
 
-/// „Usuń nieaktywne”: ukrywa widoczne sesje w stanach bezczynnych i zwraca ich id (do „Cofnij”).
-/// Dziecka nie ukrywa się osobno: znika z rodzicem albo samo, gdy skończy.
+/// "Remove inactive": hides visible sessions in idle states and returns their IDs (for "Undo").
+/// A child is not hidden separately: it disappears with its parent or on its own when finished.
 pub fn dismiss_inactive(store: &Store, hidden: &mut Dismissed, now: i64) -> Vec<String> {
     let ids: Vec<String> = hidden.filter(store.sessions().into_iter().cloned().collect())
         .into_iter().filter(|s| s.parent.is_none() && dismiss::inactive(s)).map(|s| s.id).collect();
@@ -64,8 +64,8 @@ impl Mode {
     }
 }
 
-/// Polecenia dla wątku rdzenia: lista aplikacji z ustawień i ręczne ukrywanie sesji.
-/// Ukrywanie odpowiada listą ukrytych id (do „Cofnij”).
+/// Commands for the core thread: app list from settings and manual session hiding.
+/// Hiding responds with a list of hidden IDs (for "Undo").
 pub enum CoreMsg {
     Apps(pets_core::settings::Apps),
     Lang(Lang),
@@ -76,14 +76,14 @@ pub enum CoreMsg {
 
 pub struct Control(pub std::sync::Mutex<Sender<CoreMsg>>);
 
-/// Polecenie z odpowiedzią (ukryte id). Rdzeń, który nie słucha (tryb odtwarzania), odpowiada od razu pustą listą.
+/// Command with a response (hidden IDs). A non-listening core (replay mode) responds immediately with an empty list.
 pub fn ask(control: &Sender<CoreMsg>, make: impl FnOnce(Sender<Vec<String>>) -> CoreMsg) -> Vec<String> {
     let (tx, rx) = std::sync::mpsc::channel();
     if control.send(make(tx)).is_err() { return Vec::new(); }
     rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default()
 }
 
-/// `snaps`: każda publikowana migawka trafia też do tego kanału (powiadomienia).
+/// `snaps`: each published snapshot also goes to this channel (notifications).
 pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Snapshot>>,
              msgs: std::sync::mpsc::Receiver<CoreMsg>) {
     std::thread::spawn(move || {
@@ -95,12 +95,12 @@ pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Sn
         };
         let result = match mode {
             Mode::Live => live(&app, msgs, &publish),
-            // odtwarzanie nie obsługuje poleceń: zamknięty kanał daje natychmiastową odpowiedź zamiast czekania 2 s
+            // replay does not handle commands: a closed channel responds immediately instead of waiting 2 s
             Mode::Replay { path, speed } => { drop(msgs); replay(&path, speed, &publish) }
         };
         if let Err(e) = result {
-            eprintln!("agent-pets: rdzeń danych zatrzymany: {e:#}");
-            // wydanie nie ma konsoli: bez tego użytkownik widziałby tylko pusty pasek
+            eprintln!("agent-pets: data core stopped: {e:#}");
+            // release builds have no console: otherwise the user would see only an empty taskbar area
             {
                 use tauri::Manager;
                 let lang = pets_core::i18n::current(app.state::<crate::settings::SettingsState>().get().language);
@@ -110,7 +110,7 @@ pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Sn
     });
 }
 
-/// Podpowiedź ikony w trayu przy awarii rdzenia; Windows ucina ją do 127 znaków.
+/// Tray icon tooltip on core failure; Windows truncates it to 127 characters.
 pub fn failure_text(e: &anyhow::Error, lang: Lang) -> String {
     let head = tr(lang, "Agent Pets: rdzeń danych nie działa (", "Agent Pets: data core stopped (");
     let room = 127 - head.chars().count() - 1;
@@ -129,16 +129,16 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     cfg.apps = app.state::<crate::settings::SettingsState>().get().apps;
     cfg.lang = pets_core::i18n::current(app.state::<crate::settings::SettingsState>().get().language);
     let mut rt = Runtime::start(cfg)?;
-    // limity konta Claude z serwera Anthropic (dokładne czasy resetu, bez sesji CLI), tylko za zgodą
+    // claude account limits from the Anthropic server (exact reset times, independent of CLI sessions), only with consent
     let (usage_tx, usage) = std::sync::mpsc::channel();
     let a = app.clone();
     let has_token = crate::usage::spawn(usage_tx, move || a.state::<crate::settings::SettingsState>().get().claude_plan_usage);
-    // limity Antigravity z jego lokalnego serwera, gdy Antigravity jest włączone w ustawieniach
+    // antigravity limits from its local server when Antigravity is enabled in settings
     let (ag_tx, ag_usage) = std::sync::mpsc::channel();
     let a = app.clone();
     crate::antigravity_usage::spawn(ag_tx, move || a.state::<crate::settings::SettingsState>().get().apps.antigravity);
-    // Pierwsza migawka czeka chwilę na limity z serwera: reguły powiadomień uznają wtedy zastany limit
-    // powyżej 90% za stan sprzed startu, a nie za nowy.
+    // The first snapshot briefly waits for server limits: notification rules then treat an existing limit
+    // above 90% as preexisting at launch rather than new.
     if has_token {
         if let Ok(e) = usage.recv_timeout(Duration::from_secs(3)) { rt.apply_external(e); }
     }
@@ -168,7 +168,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     }
 }
 
-/// Nagrania demo służą do podglądu: nic w nich nie jest ukrywane.
+/// Demo recordings are for preview: nothing is hidden in them.
 fn replay(path: &Path, speed: f64, publish: &dyn Fn(&Store, i64, &mut Dismissed)) -> anyhow::Result<()> {
     let mut none = Dismissed::default();
     let mut rp = Replay::load(path, speed)?;
@@ -177,7 +177,7 @@ fn replay(path: &Path, speed: f64, publish: &dyn Fn(&Store, i64, &mut Dismissed)
         std::thread::sleep(Duration::from_millis(d));
         if let Some(clock) = rp.apply_next(&mut store) { publish(&store, clock, &mut none); }
     }
-    // Po nagraniu zegar płynie dalej w czasie rzeczywistym, więc działają progi (done → idle itd.).
+    // After the recording, the clock continues in real time so thresholds still work (done → idle, etc.).
     let end = Instant::now();
     loop {
         std::thread::sleep(Duration::from_millis(250));
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn asking_a_core_that_does_not_listen_answers_at_once() {
         let (tx, rx) = std::sync::mpsc::channel::<CoreMsg>();
-        drop(rx); // tryb odtwarzania nie czyta poleceń
+        drop(rx); // replay mode does not read commands
         let t = std::time::Instant::now();
         assert!(ask(&tx, |r| CoreMsg::Dismiss(vec!["a".into()], r)).is_empty());
         assert!(t.elapsed() < std::time::Duration::from_millis(100));
@@ -259,8 +259,8 @@ mod tests {
 
     #[test]
     fn failure_text_names_the_problem_and_fits_the_tray_tooltip() {
-        let short = failure_text(&anyhow::anyhow!("brak katalogu domowego"), Lang::Pl);
-        assert_eq!(short, "Agent Pets: rdzeń danych nie działa (brak katalogu domowego)");
+        let short = failure_text(&anyhow::anyhow!("home directory missing"), Lang::Pl);
+        assert_eq!(short, "Agent Pets: rdzeń danych nie działa (home directory missing)");
         let long = failure_text(&anyhow::anyhow!("{}", "ż".repeat(300)), Lang::Pl);
         assert!(long.chars().count() <= 127, "{}", long.chars().count());
         assert!(long.ends_with("…)"));

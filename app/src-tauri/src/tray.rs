@@ -1,17 +1,17 @@
-//! Ikona w zasobniku: lewy klik przełącza panel, prawy pokazuje menu („Statystyki”, „Ustawienia”, „Zakończ”).
+//! Tray icon: left click toggles the panel; right click shows the menu ("Statistics", "Settings", "Quit").
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use pets_core::i18n::{tr, Lang};
 use tauri::{AppHandle, Manager, Wry};
 
-/// Pozycje menu, żeby zmiana języka przepisała ich tekst bez przebudowy ikony.
+/// Menu items, so changing language updates their text without rebuilding the icon.
 pub struct TrayItems { items: Vec<MenuItem<Wry>> }
 
 const STATS: (&str, &str) = ("Statystyki", "Statistics");
 const SETTINGS: (&str, &str) = ("Ustawienia", "Settings");
 const QUIT: (&str, &str) = ("Zakończ Agent Pets", "Quit Agent Pets");
 
-/// Pozycje menu w kolejności: id i tekst w języku `lang`.
+/// Menu items in order: ID and text in `lang`.
 pub fn tray_items(lang: Lang) -> Vec<(&'static str, &'static str)> {
     [("stats", STATS), ("settings", SETTINGS), ("quit", QUIT)].iter().map(|(id, t)| (*id, tr(lang, t.0, t.1))).collect()
 }
@@ -40,14 +40,14 @@ pub fn build(app: &AppHandle, lang: Lang) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Nowy język menu (zmiana w ustawieniach).
+/// New menu language (changed in settings).
 pub fn relabel(app: &AppHandle, lang: Lang) {
     if let Some(t) = app.try_state::<TrayItems>() {
         for (item, (_, label)) in t.items.iter().zip(tray_items(lang)) { let _ = item.set_text(label); }
     }
 }
 
-/// Zmienia podpowiedź ikony (np. na opis awarii rdzenia danych).
+/// Change the icon tooltip (e.g. to describe a data-core failure).
 pub fn set_status(app: &AppHandle, text: &str) {
     if let Some(t) = app.tray_by_id("main") { let _ = t.set_tooltip(Some(text)); }
 }
