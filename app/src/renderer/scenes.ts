@@ -2,6 +2,7 @@ import { PI, TAU, cl, ease, kf, hr } from "./math";
 import { foldHW } from "./fold";
 import { rng } from "./rng";
 import type { Pet } from "./pet";
+import { SKINS, type SkinId } from "../skins";
 export type Act = [name: string, dur: number, fn: (a: number, c: Pet, t: number) => Record<string, any> | undefined, onStart?: (c: Pet) => void, onEnd?: (c: Pet) => void,
   /** hak kroku (tylko Dynamiczny): cząsteczki, uderzenia, słowa; `a` = czas akcji po tym kroku */
   hook?: (a: number, c: Pet, t: number, dt: number) => void];
@@ -14,6 +15,9 @@ export const BEAT=1.8;
 const sway=(t: any)=>Math.sin(t*PI*BEAT);
 const kb=(t: any,ph: any,x0: any)=>[x0+2.5*Math.sin(t*5.3+ph),-30-3.5*Math.max(0,Math.sin(t*18+ph))];
 const TYPE=(xl: any,xr: any)=>(_a: any,_c: any,t: any)=>{const L=kb(t,0,xl),R=kb(t,PI,xr);return {ikL:1,ikR:1,hxL:L[0],hyL:L[1],hxR:R[0],hyR:R[1],typeW:1};};
+/** Prawa dłoń pod brodą. Grok (humanoid, głowa wysoko) trzyma ją pod swoją brodą i obraca razem z głową; stała pozycja
+ *  zostawała w miejscu przy brzuchu, a tułów obracał się pod nią. Pozostałe ciała bez zmian (zgodność z prototypem v6). */
+const CHIN=(c: any,wob=0)=>{const f=c.face;return SKINS[c.type as SkinId].droid&&f?{ikR:1,hxR:f[0]+9,hyR:f[1]+13+wob}:{ikR:1,hxR:14,hyR:-27+wob};};
 const REST=(xl: any,xr: any,o: any)=>Object.assign({ikL:1,ikR:1,hxL:xl,hyL:-29,hxR:xr,hyR:-29},o);
 const SHEET=(a: any)=>({ikL:1,hxL:-22+.8*Math.sin(a*1.3),hyL:-19+.8*Math.sin(a*1.7),ikR:1,hxR:22+.8*Math.sin(a*1.3),hyR:-19+.8*Math.sin(a*1.7+.4)});
 export const NETKF=[[0,.45,.25],[.85,.45,.25],[1.15,1.95,.5],[1.5,.05,.05],[2.1,.35,.2],[2.8,.45,.25]];
@@ -32,9 +36,9 @@ podium_third:{base:{happy:.5,look:-.2},acts:[
 run:{base:{walkW:1,hopW:.3,th:.9,look:.1,ex:.6},acts:[
 ['biegnie',2,()=>({})]]},
 thinking:{base:{th:-.3,look:-1,think:1},acts:[
-['zamyśla się (ręka pod brodą)',3.5,(_a: any,_c: any,t: any)=>({ikR:1,hxR:14,hyR:-27+1.5*Math.sin(t*3)})],
+['zamyśla się (ręka pod brodą)',3.5,(_a: any,c: any,t: any)=>CHIN(c,1.5*Math.sin(t*3))],
 ['chodzi w tę i z powrotem',4,(a: any)=>a<1.6?{th:PI/2,lx:26*ease(a/1.6),walkW:1,look:-.3}:a<2.1?{th:-PI/2,lx:26,look:-.3}:a<3.7?{th:-PI/2,lx:26*(1-ease((a-2.1)/1.6)),walkW:1,look:-.3}:{}],
-['rozgląda się',3,(a: any,_c: any,_t: any)=>({th:-.3+.6*Math.sin(a*2.2),look:-.6,ikR:1,hxR:14,hyR:-27})]]},
+['rozgląda się',3,(a: any,c: any,_t: any)=>({th:-.3+.6*Math.sin(a*2.2),look:-.6,...CHIN(c)})]]},
 edit:{base:{th:.3,look:.2,ex:.75,_prop:'desk',_parts:'code'},acts:[
 ['pisze kod',6,TYPE(-2,18)],
 ['przeciąga się',2,()=>({armL:2.8,armR:2.8,look:-.7,th:.15})],
