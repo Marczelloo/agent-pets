@@ -178,7 +178,8 @@ fn disable_copilot(home: &Path, lang: Lang) -> Result<String, String> {
 fn antigravity_entry(hook: &Path) -> serde_json::Value {
     let cmd = |ev: &str| serde_json::json!({"type": "command", "command": hook_command(hook, "antigravity", ev), "timeout": 5});
     let groups: serde_json::Map<String, serde_json::Value> = ANTIGRAVITY_EVENTS.iter().map(|ev| {
-        let g = if ev.ends_with("ToolUse") { serde_json::json!({"matcher": "*", "hooks": [cmd(ev)]}) } else { serde_json::json!({"hooks": [cmd(ev)]}) };
+        // tylko zdarzenia narzędzi mają grupy z `matcher`; reszta to lista komend wprost (docs Antigravity: Hooks)
+        let g = if ev.ends_with("ToolUse") { serde_json::json!({"matcher": "*", "hooks": [cmd(ev)]}) } else { cmd(ev) };
         (ev.to_string(), serde_json::json!([g]))
     }).collect();
     serde_json::Value::Object(groups)
@@ -528,10 +529,13 @@ mod tests {
         let ours = v["agent-pets"].as_object().unwrap();
         assert_eq!(ours.len(), ANTIGRAVITY_EVENTS.len());
         for ev in ANTIGRAVITY_EVENTS {
+            // narzędzia: grupy {matcher, hooks: [...]}; PreInvocation i Stop: komendy wprost pod zdarzeniem (inaczej
+            // Antigravity 2.5 odrzuca cały plik: „command hook must specify 'command'”)
             let group = &ours[ev][0];
-            let cmd = group["hooks"][0]["command"].as_str().unwrap();
+            let hook = if ev.ends_with("ToolUse") { &group["hooks"][0] } else { group };
+            let cmd = hook["command"].as_str().unwrap_or_else(|| panic!("{ev}: {group}"));
             assert!(cmd.ends_with(&format!("hook.exe --agent antigravity --event {ev}")), "{cmd}");
-            assert_eq!(group["hooks"][0]["timeout"], 5);
+            assert_eq!((hook["type"].as_str(), &hook["timeout"]), (Some("command"), &json!(5)), "{ev}");
             assert_eq!(group.get("matcher").and_then(|m| m.as_str()), if ev.ends_with("ToolUse") { Some("*") } else { None }, "{ev}");
         }
         assert!(f.with_file_name("hooks.json.agent-pets.bak").exists(), "kopia przed zmianą");
@@ -555,13 +559,13 @@ mod tests {
         // naprawa przy starcie aplikacji: nic się nie zmieniło, więc nic nie zapisujemy
         enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         assert_eq!((std::fs::read(&f).unwrap(), std::fs::read(&bak).unwrap()), (file.clone(), backup.clone()));
-        // nowa ścieżka hook.exe (np. po aktualizacji): wpis się zmienia, ale kopia zostaje pierwotna
+        // stary wpis (inna ścieżka hook.exe, `Stop` w grupie jak przed poprawką): wpis się zmienia, kopia zostaje pierwotna
         let mut v: Value = serde_json::from_slice(&file).unwrap();
-        v["agent-pets"]["Stop"][0]["hooks"][0]["command"] = json!("C:/old/hook.exe --agent antigravity --event Stop");
+        v["agent-pets"]["Stop"] = json!([{"hooks": [{"type": "command", "command": "C:/old/hook.exe --agent antigravity --event Stop", "timeout": 5}]}]);
         std::fs::write(&f, serde_json::to_string(&v).unwrap()).unwrap();
         enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         assert_eq!(std::fs::read(&bak).unwrap(), original.as_bytes());
-        assert!(ag_json(h.path())["agent-pets"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap().contains(".agent-pets"));
+        assert!(ag_json(h.path())["agent-pets"]["Stop"][0]["command"].as_str().unwrap().contains(".agent-pets"));
     }
 
     #[test]

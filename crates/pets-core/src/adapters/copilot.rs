@@ -38,6 +38,9 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
         },
         "Stop" => (Kind::TurnEnd, top.clone(), None),
         "errorOccurred" if get("recoverable", "recoverable").and_then(|v| v.as_bool()) != Some(true) => (Kind::Error, top.clone(), None),
+        // JetBrains kończy tak każdą turę (po `Stop`), choć rozmowa trwa; zwierzak zostaje „gotowy”,
+        // a znika z procesem Copilota albo po zwykłym czasie ciszy
+        "sessionEnd" if s("reason", "reason") == Some("complete") => return vec![],
         "sessionEnd" => (Kind::SessionEnd, top.clone(), None),
         // podagenci: jeden mini-zwierzak na nazwę (hook startu nie podaje id)
         "SubagentStart" | "SubagentStop" => {
@@ -102,6 +105,29 @@ mod tests {
             (Kind::ToolEnd, top.clone()), (Kind::NeedsInput, top.clone()), (Kind::ToolStart, top.clone()), (Kind::ToolEnd, top.clone()),
             (Kind::Prompt, kid.clone()), (Kind::SessionEnd, kid), (Kind::TurnEnd, top.clone()), (Kind::Error, top.clone()),
             (Kind::SessionEnd, top)]);
+    }
+
+    /// Nagranie z CLion (Copilot 1.6): po każdej turze `Stop`, a zaraz po nim `sessionEnd` z `reason: complete`,
+    /// choć rozmowa w IDE trwa dalej. Zwierzak zostaje w stanie „gotowe”.
+    #[test]
+    fn a_jetbrains_turn_ends_done_and_the_pet_stays() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/copilot/live-jetbrains.jsonl");
+        let live: Vec<AgentEnvelope> = std::fs::read_to_string(p).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let v: Vec<Event> = live.iter().flat_map(|e| events(e, Lang::Pl)).collect();
+        assert_eq!(v.last().map(|e| e.kind), Some(Kind::TurnEnd));
+        assert!(!v.iter().any(|e| e.kind == Kind::SessionEnd));
+        assert_eq!(v.iter().filter(|e| e.kind == Kind::NeedsInput).count(), 4);
+        assert!(v.iter().all(|e| e.session_id == "copilot:cop_live" && e.data.pid == Some(4242)));
+        // łatka jako tekst (`apply_patch`) nie trafia do akcji
+        assert!(v.iter().all(|e| !e.data.action.as_deref().unwrap_or("").contains("Begin Patch")));
+    }
+
+    #[test]
+    fn only_a_real_exit_ends_the_session() {
+        for (reason, ends) in [("complete", false), ("user_exit", true), ("abort", true), ("error", true)] {
+            let v = events(&env("sessionEnd", json!({"sessionId": "s1", "reason": reason})), Lang::Pl);
+            assert_eq!(v.iter().any(|e| e.kind == Kind::SessionEnd), ends, "{reason}");
+        }
     }
 
     #[test]
