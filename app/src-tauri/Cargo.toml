@@ -2,12 +2,14 @@
 name = "agent-pets"
 edition.workspace = true
 version.workspace = true
+authors.workspace = true
+license.workspace = true
 
 [lib]
 name = "agent_pets_lib"
 
 [features]
-# test lokalny aktualizacji: AGENT_PETS_UPDATE_URL działa także w buildzie release (docs/release.md)
+# test lokalny aktualizacji: AGENT_PETS_UPDATE_URL działa także w buildzie release (docs/building.md)
 update-test = []
 
 [build-dependencies]

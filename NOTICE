@@ -1,0 +1,60 @@
+Agent Pets
+Copyright (c) 2026 Marczelloo (https://github.com/Marczelloo)
+
+Agent Pets is licensed under the PolyForm Noncommercial License 1.0.0
+(see LICENSE). You may use, change and share it for noncommercial
+purposes, as long as you keep this notice and the Required Notice line
+in LICENSE.
+
+Earlier versions
+----------------
+Versions up to and including 0.12.2 were released under the MIT License.
+Copies of those versions keep the MIT terms they were published with.
+
+Contributions made under the MIT License
+----------------------------------------
+Parts of this project were contributed while it was MIT licensed:
+
+- al3ksh (https://github.com/al3ksh): the music break (pull request #1,
+  released in 0.9.1) and the Android robot pet with Gemini limits for
+  Antigravity (pull request #2, released in 0.12.2).
+
+Those contributions remain available under the MIT License:
+
+  MIT License
+
+  Copyright (c) 2026 Marczelloo and contributors
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to
+  the following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Third-party artwork
+-------------------
+The Antigravity pet is based on the Android robot, which is reproduced or
+modified from work created and shared by Google and used according to
+terms described in the Creative Commons 3.0 Attribution License
+(https://creativecommons.org/licenses/by/3.0/).
+
+Trademarks
+----------
+Agent Pets is an independent project. It is not affiliated with, endorsed
+by or sponsored by Anthropic, OpenAI, GitHub, Google, Anysphere (Cursor),
+xAI, Zhipu AI (Z.ai), the opencode project or any other company whose
+products it works with. Product names and logos belong to their owners
+and are used only to show which program a pet stands for.
