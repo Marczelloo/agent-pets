@@ -315,8 +315,12 @@ fn has_hooks(v: &serde_json::Value, events: &[&str], entry: impl Fn(&str) -> ser
     events.iter().all(|ev| v["hooks"][*ev].as_array().is_some_and(|a| a.contains(&entry(ev))))
 }
 
+/// Cursor 3.22 uruchamia hooki przez PowerShell: zwykła ścieżka zostaje w formie sprawdzonej na żywo, a ścieżka
+/// z cudzysłowem (spacja, apostrof…) dostaje operator wywołania, bo `"…" --agent` to w PowerShellu błąd składni.
 fn cursor_entry(hook: &Path, ev: &str) -> serde_json::Value {
-    serde_json::json!({"command": hook_command(hook, "cursor", ev), "timeout": 5})
+    let cmd = hook_command(hook, "cursor", ev);
+    let cmd = if cmd.starts_with('"') { hook_command_ps(hook, "cursor", ev) } else { cmd };
+    serde_json::json!({"command": cmd, "timeout": 5})
 }
 fn is_cursor(e: &serde_json::Value) -> bool { ours(e, "cursor") }
 
@@ -1260,12 +1264,43 @@ mod tests {
             let hook = installed_hook(&h).to_string_lossy().into_owned();
             let c = rd(&cursor_hooks_path(&h))["hooks"]["stop"][0]["command"].as_str().unwrap().to_string();
             let g = rd(&grok_hooks(&h))["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
-            for cmd in [c, g] { assert!(cmd.starts_with('"') && cmd.contains(&hook.replace('\\', "/")), "{cmd}"); }
+            // Cursor uruchamia hooki przez PowerShell (sprawdzone na żywo): tam `"ścieżka" --agent` to błąd składni
+            #[cfg(windows)]
+            assert_eq!(ps_program(&c), Some((hook.replace('\\', "/"), 5)), "{c}");
+            assert!(g.starts_with('"') && g.contains(&hook.replace('\\', "/")), "{g}");
             let z = rd(&zcode_config(&h, None))["hooks"]["events"]["Stop"][0]["hooks"][0].clone();
             assert_eq!(z["command"].as_str(), Some(hook.as_str()));
             assert_eq!(z["args"].as_array().unwrap().len(), 4);
             for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { assert!(status(id, &h, Lang::Pl).installed, "{id:?}"); }
         }
+    }
+
+    /// Jak PowerShell czyta komendę: (program, liczba elementów wywołania) albo None przy błędzie składni. Tylko parser, nic nie jest uruchamiane.
+    #[cfg(windows)]
+    fn ps_program(cmd: &str) -> Option<(String, usize)> {
+        let script = "$e=$null; $a=[System.Management.Automation.Language.Parser]::ParseInput($env:AP_CMD,[ref]$null,[ref]$e); \
+            if ($e.Count) { 'ERR' } else { $c=$a.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) | Select-Object -First 1; \
+            $c.CommandElements[0].Value; $c.CommandElements.Count }";
+        let out = std::process::Command::new("powershell").args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .env("AP_CMD", cmd).output().unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        let mut l = text.lines();
+        match (l.next(), l.next()) {
+            (Some(p), Some(n)) if p != "ERR" => Some((p.to_string(), n.trim().parse().unwrap())),
+            _ => None,
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_plain_cursor_command_reads_the_same_in_powershell() {
+        let h = home();
+        dirs(h.path());
+        enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        let c = rd(&cursor_hooks_path(h.path()))["hooks"]["stop"][0]["command"].as_str().unwrap().to_string();
+        let hook = installed_hook(h.path()).to_string_lossy().replace('\\', "/");
+        assert_eq!(ps_program(&c), Some((hook, 5)), "{c}");
+        assert_eq!(ps_program("\"C:/a b/hook.exe\" --agent cursor --event stop"), None, "tak wyglądał błąd");
     }
 
     #[test]
