@@ -57,6 +57,6 @@ describe('każdy styl × ruch × skórka × scena przez PetPainter: bez NaN, sta
         expect(rec.log.some(l => l.includes('NaN')), `${skin}/${scene}`).toBe(false);
         expect(rec.log.filter(l => l === 'save()').length).toBe(rec.log.filter(l => l === 'restore()').length);
       }
-    });
+    }, 30_000); // szkic × 6 skórek × wszystkie sceny trwa ok. 5 s: bez zapasu domyślny limit łapie obciążoną maszynę
   }
 });

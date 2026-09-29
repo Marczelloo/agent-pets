@@ -41,8 +41,8 @@ export function googleFill(x: CanvasRenderingContext2D, p: number[][]) {
  * soczewki gogli stykające się na środku, u góry. Oczy rysuje potem zwykły kod oczu, na wizjerze. */
 export function drawPilot(x: CanvasRenderingContext2D, cx: number, top: number, fw: number, H: number, u: number,
   g: { frame: string; lens: string; visor: string }) {
-  shp(x, rrP(cx - fw * .36, top + H * .5, fw * .72, H * .42, H * .17), g.visor, u);
-  const lw = fw * .43, lh = H * .36, ly = top + H * .13, inset = Math.min(3 * u, lw / 5, lh / 5);
+  shp(x, rrP(cx - fw * .36, top + H * .34, fw * .72, H * .44, H * .17), g.visor, u);
+  const lw = fw * .43, lh = H * .28, ly = top + H * .05, inset = Math.min(3 * u, lw / 5, lh / 5);
   for (const s of [-1, 1]) {
     const lx = cx + s * lw / 2;
     shp(x, rrP(lx - lw / 2, ly, lw, lh, lh * .42), g.frame, u);

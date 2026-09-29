@@ -57,7 +57,8 @@ describe('skins for agents', () => {
     // wizjer przed oczami: oczy rysują się na nim, nie pod nim
     const visor = rec.log.findIndex(l => l.includes(g.visor)), eye = rec.log.findIndex(l => l.includes(SKINS.copilot.eyeColor!));
     expect(visor).toBeLessThan(eye);
-    expect(SKINS.copilot.eyeY!).toBeGreaterThan(.6);
+    // oczy nad linią ramion (H·0,52): przy biurku ręce i blat nie zasłaniają twarzy
+    expect(SKINS.copilot.eyeY!).toBeLessThan(.52);
   });
   it('Antigravity floats without legs over its shadow and wears the Google colours', () => {
     expect([SKINS.antigravity.legs.length, SKINS.antigravity.float, SKINS.antigravity.shape]).toEqual([0, true, 'arch']);
