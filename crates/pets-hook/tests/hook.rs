@@ -6,12 +6,7 @@ use std::sync::mpsc::channel;
 use std::time::{Duration, Instant};
 
 fn run_hook(endpoint_path: &std::path::Path, stdin: &str) -> std::process::Output {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_hook"))
-        .env("AGENT_PETS_ENDPOINT", endpoint_path)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().unwrap();
-    c.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
-    c.wait_with_output().unwrap()
+    run_with(endpoint_path, &[], &[], stdin)
 }
 
 #[test]
@@ -81,12 +76,26 @@ fn report_errors_go_to_stderr_with_code_2() {
 }
 
 fn run_agent(endpoint_path: &std::path::Path, args: &[&str], stdin: &str) -> std::process::Output {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_hook")).args(args)
-        .env("AGENT_PETS_ENDPOINT", endpoint_path)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().unwrap();
-    c.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
-    c.wait_with_output().unwrap()
+    run_with(endpoint_path, args, &[], stdin)
+}
+
+/// Zmienne, po których `hook.exe` poznaje obcego wywołującego; w testach tylko te, które test ustawia.
+const CALLER_VARS: [&str; 3] = ["GROK_HOOK_EVENT", "GROK_SESSION_ID", "ZCODE_SESSION_ID"];
+
+fn run_with(endpoint_path: &std::path::Path, args: &[&str], vars: &[(&str, &str)], stdin: &str) -> std::process::Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_hook"));
+    cmd.args(args).env("AGENT_PETS_ENDPOINT", endpoint_path)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    for k in CALLER_VARS { cmd.env_remove(k); }
+    for (k, v) in vars { cmd.env(k, v); }
+    let mut c = cmd.spawn().unwrap();
+    // wejście w osobnym wątku: przy dużym JSON-ie hook może skończyć, zanim przeczyta całość
+    let mut si = c.stdin.take().unwrap();
+    let body = stdin.as_bytes().to_vec();
+    let w = std::thread::spawn(move || { let _ = si.write_all(&body); });
+    let out = c.wait_with_output().unwrap();
+    let _ = w.join();
+    out
 }
 
 fn agents_open() -> std::sync::Arc<pets_core::ingest::Doors> {
@@ -197,4 +206,117 @@ fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
     let out = Command::new("powershell").args(["-NoProfile", "-Command", &plain]).env("AGENT_PETS_ENDPOINT", &missing)
         .stdin(Stdio::null()).output().unwrap();
     stop(out, "powershell plain");
+}
+
+fn new_agents_open() -> std::sync::Arc<pets_core::ingest::Doors> {
+    std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps { cursor: true, grok: true, zcode: true, ..Default::default() }))
+}
+
+fn widget() -> (Ingest, std::sync::mpsc::Receiver<Incoming>, tempfile::TempDir, std::path::PathBuf) {
+    let (tx, rx) = channel();
+    let ing = Ingest::start("tok".into(), tx, new_agents_open()).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("endpoint.json");
+    ing.endpoint().write(&p).unwrap();
+    (ing, rx, dir, p)
+}
+
+#[test]
+fn cursor_hooks_are_forwarded_and_always_let_cursor_go_on() {
+    let (ing, rx, _dir, p) = widget();
+    let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"],
+        r#"{"conversation_id":"conv_1","cursor_version":"1.7.2","hook_event_name":"beforeSubmitPrompt","prompt":"sekret"}"#);
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    assert_eq!((env.event.as_str(), env.payload["conversation_id"].as_str()), ("beforeSubmitPrompt", Some("conv_1")));
+    assert!(env.payload.get("prompt").is_none(), "prompt nie wychodzi z hooka");
+    let tool = run_agent(&p, &["--agent", "cursor", "--event", "preToolUse"], r#"{"conversation_id":"conv_1","cursor_version":"1.7.2"}"#);
+    assert_eq!(String::from_utf8_lossy(&tool.stdout).trim(), "{}");
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::Cursor(_)));
+    ing.stop();
+}
+
+#[test]
+fn grok_and_zcode_hooks_are_forwarded_and_say_nothing() {
+    let (ing, rx, _dir, p) = widget();
+    let out = run_with(&p, &["--agent", "grok", "--event", "Stop"], &[("GROK_HOOK_EVENT", "Stop")], r#"{"sessionId":"g1","hookEventName":"Stop"}"#);
+    assert!(out.status.success() && out.stdout.is_empty());
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::Grok(_)));
+    let out = run_with(&p, &["--agent", "zcode", "--event", "Stop"], &[("ZCODE_SESSION_ID", "zc_1")], r#"{"sessionId":"zc_1","hookEventName":"Stop"}"#);
+    assert!(out.status.success() && out.stdout.is_empty());
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::Zcode(_)));
+    ing.stop();
+}
+
+#[test]
+fn grok_takes_the_session_id_from_its_environment() {
+    let (ing, rx, _dir, p) = widget();
+    run_with(&p, &["--agent", "grok", "--event", "PreToolUse"], &[("GROK_HOOK_EVENT", "PreToolUse"), ("GROK_SESSION_ID", "g1")],
+        r#"{"hookEventName":"PreToolUse","toolName":"bash"}"#);
+    let Incoming::Grok(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    assert_eq!(env.payload["sessionId"], "g1");
+    ing.stop();
+}
+
+#[test]
+fn cursor_still_gets_its_answer_when_the_widget_is_down_or_the_input_is_bad() {
+    let dir = tempfile::tempdir().unwrap();
+    let t = Instant::now();
+    let out = run_agent(&dir.path().join("missing.json"), &["--agent", "cursor", "--event", "beforeSubmitPrompt"], r#"{"cursor_version":"1"}"#);
+    assert!(out.status.success() && t.elapsed() < Duration::from_secs(1));
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
+    let bad = run_agent(&dir.path().join("missing.json"), &["--agent", "cursor", "--event", "beforeSubmitPrompt"], "nie-json");
+    assert!(bad.status.success());
+    assert_eq!(String::from_utf8_lossy(&bad.stdout).trim(), r#"{"continue":true}"#);
+}
+
+#[test]
+fn a_hook_run_by_another_agent_sends_nothing() {
+    let (ing, rx, _dir, p) = widget();
+    // Grok czyta hooki Cursora: nie udajemy Cursora, ale Cursor-owa odpowiedź zostaje
+    let out = run_with(&p, &["--agent", "cursor", "--event", "preToolUse"], &[("GROK_HOOK_EVENT", "PreToolUse")], r#"{"conversation_id":"c"}"#);
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "{}");
+    // Cursor i Grok czytają hooki Claude'a: to nie są sesje Claude'a
+    run_with(&p, &[], &[], r#"{"hook_event_name":"Stop","session_id":"abc","cursor_version":"1.7.2"}"#);
+    run_with(&p, &[], &[("GROK_HOOK_EVENT", "Stop")], r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
+    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nic nie wysłano");
+    ing.stop();
+}
+
+#[test]
+fn claude_started_from_zcode_is_still_claude() {
+    let (tx, rx) = channel();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default()))).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("endpoint.json");
+    ing.endpoint().write(&p).unwrap();
+    run_with(&p, &[], &[("ZCODE_SESSION_ID", "zc_1")], r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
+    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    assert_eq!(env.payload["session_id"], "abc");
+    ing.stop();
+}
+
+#[test]
+fn a_huge_cursor_prompt_never_leaves_the_hook() {
+    let (ing, rx, _dir, p) = widget();
+    let big = format!(r#"{{"conversation_id":"conv_1","cursor_version":"1.7.2","prompt":"{}"}}"#, "a".repeat(2 << 20));
+    let t = Instant::now();
+    let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"], &big);
+    assert!(t.elapsed() < Duration::from_secs(1), "{:?}", t.elapsed());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    assert!(env.payload.get("prompt").is_none());
+    assert!(serde_json::to_vec(&env).unwrap().len() < 1 << 20);
+    ing.stop();
+}
+
+#[test]
+fn a_bad_cursor_event_name_sends_nothing() {
+    let (ing, rx, _dir, p) = widget();
+    let out = run_agent(&p, &["--agent", "cursor", "--event", "a b"], r#"{"cursor_version":"1"}"#);
+    assert!(out.status.success());
+    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nic nie wysłano");
+    ing.stop();
 }

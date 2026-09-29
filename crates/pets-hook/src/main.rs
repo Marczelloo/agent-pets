@@ -7,8 +7,11 @@
 //! `hook.exe report --agent <id> --session <id> --state <stan> [...]` (furtka, spec 0.10 §8): komenda dla ludzi i skryptów,
 //! nie hook. Jako jedyna wypisuje błąd na stderr i kończy się kodem 2.
 //!
-//! `hook.exe --agent <copilot|antigravity> --event <nazwa>` (spec 0.11 §2): hook Copilota albo Antigravity. Koperta
-//! `AgentEnvelope` do widżetu; na wyjście tylko to, czego wymaga agent (Antigravity: `{}`, przy `Stop` decyzja „stop”).
+//! `hook.exe --agent <copilot|antigravity|cursor|grok|zcode> --event <nazwa>` (spec 0.11 §2, 0.12 §2): hook innego
+//! agenta. Koperta `AgentEnvelope` do widżetu; na wyjście tylko to, czego wymaga agent (Antigravity: `{}`, przy `Stop`
+//! decyzja „stop”; Cursor: `{}`, przy `beforeSubmitPrompt` `{"continue":true}`).
+//!
+//! Cursor i Grok uruchamiają też hooki Claude'a, a Grok hooki Cursora. Taki hook nic nie wysyła (spec 0.12 §2.2).
 use pets_core::claude::{HookEnvelope, StatuslineEnvelope};
 use pets_core::endpoint::Endpoint;
 use pets_core::{host, pid, statusline_install, time};
@@ -16,11 +19,16 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
-fn read_stdin() -> Vec<u8> {
+fn read_stdin() -> Vec<u8> { read_stdin_max(1 << 20) }
+
+fn read_stdin_max(max: u64) -> Vec<u8> {
     let mut buf = Vec::new();
-    let _ = std::io::stdin().take(1 << 20).read_to_end(&mut buf);
+    let _ = std::io::stdin().take(max).read_to_end(&mut buf);
     buf
 }
+
+/// Zmienna środowiska; pusta = brak.
+fn env_var(k: &str) -> Option<String> { std::env::var(k).ok().filter(|v| !v.is_empty()) }
 
 fn post(path_suffix: &str, body: serde_json::Value) -> Option<()> { send(path_suffix, body).ok().map(|_| ()) }
 
@@ -57,6 +65,8 @@ fn report(args: &[String]) -> i32 {
 
 fn run() -> Option<()> {
     let payload: serde_json::Value = serde_json::from_slice(&read_stdin()).ok()?;
+    // hook Claude'a uruchomiony przez Cursora albo Groka: to nie jest sesja Claude'a
+    if pets_core::adapters::caller(&payload, &env_var).is_some() { return None; }
     let ppid = pid::agent_pid();
     // program-gospodarz tylko tam, gdzie rdzeń go czyta: jeden zrzut procesów na start sesji i prompt
     let host = match payload.get("hook_event_name").and_then(|v| v.as_str()) {
@@ -92,9 +102,13 @@ fn arg<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str)
 }
 
-/// Hook Copilota albo Antigravity: koperta do widżetu, potem odpowiedź, jakiej wymaga agent (spec 0.11 §2).
+/// Hook innego agenta: koperta do widżetu (spec 0.11 §2, 0.12 §4). Wejście do 16 MB: Cursor wysyła cały prompt
+/// z załącznikami, a `slim` i tak go usuwa, zanim cokolwiek wyjdzie z procesu.
 fn agent_hook(agent: &str, event: &str) -> Option<()> {
-    let payload: serde_json::Value = serde_json::from_slice(&read_stdin()).ok()?;
+    let mut payload: serde_json::Value = serde_json::from_slice(&read_stdin_max(16 << 20)).ok()?;
+    if pets_core::adapters::caller(&payload, &env_var).is_some_and(|c| c.id() != agent) { return None; }
+    if agent == "grok" { pets_core::adapters::grok::fill_session(&mut payload, env_var("GROK_SESSION_ID")); }
+    pets_core::adapters::slim(&mut payload);
     let ppid = pid::agent_pid();
     let host = if pets_core::adapters::host_event(agent, event) {
         ppid.and_then(|p| host::host_of(&host::ProcTable::snapshot(), p))
@@ -104,15 +118,19 @@ fn agent_hook(agent: &str, event: &str) -> Option<()> {
 }
 
 fn agent_mode(args: &[String]) {
-    let Some(agent) = arg(args, "--agent").filter(|a| matches!(*a, "copilot" | "antigravity")) else { return };
+    let Some(agent) = arg(args, "--agent").filter(|a| matches!(*a, "copilot" | "antigravity" | "cursor" | "grok" | "zcode")) else { return };
     let Some(event) = arg(args, "--event").filter(|e| (1..=32).contains(&e.len()) && e.chars().all(|c| c.is_ascii_alphabetic())) else { return };
     let _ = std::panic::catch_unwind(|| agent_hook(agent, event));
-    // odpowiedź zawsze, także gdy widżet nie działa albo wejście jest złe: bez niej Antigravity nie skończy pracy
-    if agent == "antigravity" {
-        let mut out = std::io::stdout();
-        let _ = writeln!(out, "{}", pets_core::adapters::antigravity::reply(event));
-        let _ = out.flush();
-    }
+    // odpowiedź zawsze, także gdy widżet nie działa albo wejście jest złe: bez niej Antigravity nie skończy pracy,
+    // a Cursor nie przepuści promptu
+    let reply = match agent {
+        "antigravity" => pets_core::adapters::antigravity::reply(event),
+        "cursor" => pets_core::adapters::cursor::reply(event),
+        _ => return,
+    };
+    let mut out = std::io::stdout();
+    let _ = writeln!(out, "{reply}");
+    let _ = out.flush();
 }
 
 fn main() {

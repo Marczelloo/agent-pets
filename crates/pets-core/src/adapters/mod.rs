@@ -2,7 +2,9 @@
 //! Tekst z zewnątrz jest niezaufany: bez znaków sterujących, przycięty.
 pub mod antigravity;
 pub mod copilot;
+pub mod cursor;
 pub mod generic;
+pub mod grok;
 pub mod opencode;
 
 use serde::{Deserialize, Serialize};
@@ -35,7 +37,36 @@ pub fn action_from(claude_name: &str, args: Option<&serde_json::Value>, keys: &[
 
 /// Zdarzenia początku tury, przy których `hook.exe` liczy program (jeden zrzut procesów).
 pub fn host_event(agent: &str, event: &str) -> bool {
-    matches!((agent, event), ("copilot", "SessionStart" | "UserPromptSubmit") | ("antigravity", "PreInvocation"))
+    matches!((agent, event), ("copilot" | "grok" | "zcode", "SessionStart" | "UserPromptSubmit") | ("antigravity", "PreInvocation")
+        | ("cursor", "sessionStart" | "beforeSubmitPrompt"))
+}
+
+/// Agent, który uruchamia cudze hooki (Cursor i Grok czytają hooki Claude'a, Grok także Cursora).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Caller { Cursor, Grok, Zcode }
+
+impl Caller {
+    pub fn id(self) -> &'static str {
+        match self { Caller::Cursor => "cursor", Caller::Grok => "grok", Caller::Zcode => "zcode" }
+    }
+}
+
+/// Kto naprawdę uruchomił hook (spec 0.12 §2.2); pierwszy pasujący wiersz wygrywa. Pusta zmienna = brak zmiennej.
+pub fn caller(payload: &serde_json::Value, env: &dyn Fn(&str) -> Option<String>) -> Option<Caller> {
+    let set = |k: &str| env(k).is_some_and(|v| !v.is_empty());
+    if set("GROK_HOOK_EVENT") { return Some(Caller::Grok); }
+    if payload.get("cursor_version").is_some() { return Some(Caller::Cursor); }
+    if set("ZCODE_SESSION_ID") && payload.get("hookEventName").is_some() { return Some(Caller::Zcode); }
+    None
+}
+
+/// Pola korzenia payloadu, których żaden adapter nie czyta: treść promptów, wyniki narzędzi, dane konta.
+pub const SLIM: [&str; 12] = ["prompt", "attachments", "user_email", "transcript_path", "transcriptPath",
+    "workspace_roots", "tool_output", "tool_response", "toolResponse", "toolResult", "response", "output"];
+
+/// Usuwa z korzenia payloadu pola z `SLIM` (prywatność i limit 1 MB trasy); inne wartości zostają bez zmian.
+pub fn slim(payload: &mut serde_json::Value) {
+    if let Some(o) = payload.as_object_mut() { for k in SLIM { o.remove(k); } }
 }
 
 /// Tekst z zewnątrz: znaki sterujące zamienione na spacje, obcięte brzegi, najwyżej `max` znaków.
@@ -58,8 +89,61 @@ mod tests {
     fn the_program_is_looked_up_only_at_the_start_of_a_turn() {
         for (a, e, want) in [("copilot", "SessionStart", true), ("copilot", "UserPromptSubmit", true), ("copilot", "PreToolUse", false),
                              ("copilot", "Stop", false), ("antigravity", "PreInvocation", true), ("antigravity", "PreToolUse", false),
-                             ("antigravity", "Stop", false), ("claude", "SessionStart", false)] {
+                             ("antigravity", "Stop", false), ("claude", "SessionStart", false),
+                             ("cursor", "sessionStart", true), ("cursor", "beforeSubmitPrompt", true), ("cursor", "preToolUse", false),
+                             ("cursor", "SessionStart", false), ("grok", "SessionStart", true), ("grok", "UserPromptSubmit", true),
+                             ("grok", "PreToolUse", false), ("zcode", "SessionStart", true), ("zcode", "UserPromptSubmit", true),
+                             ("zcode", "Stop", false)] {
             assert_eq!(host_event(a, e), want, "{a} {e}");
+        }
+    }
+
+    fn vars(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |k| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.to_string())
+    }
+
+    #[test]
+    fn the_real_caller_of_a_hook_is_recognised() {
+        use serde_json::json;
+        let cursor = json!({"cursor_version": "1.7.2", "hook_event_name": "stop"});
+        let claude = json!({"hook_event_name": "Stop", "session_id": "c1"});
+        let zcode = json!({"hookEventName": "Stop", "sessionId": "zc_1"});
+        assert_eq!(caller(&cursor, &vars(&[("GROK_HOOK_EVENT", "PreToolUse")])), Some(Caller::Grok), "Grok wygrywa");
+        assert_eq!(caller(&cursor, &vars(&[])), Some(Caller::Cursor));
+        assert_eq!(caller(&zcode, &vars(&[("ZCODE_SESSION_ID", "zc_1")])), Some(Caller::Zcode));
+        assert_eq!(caller(&claude, &vars(&[("ZCODE_SESSION_ID", "zc_1")])), None, "Claude uruchomiony z ZCode to dalej Claude");
+        assert_eq!(caller(&claude, &vars(&[("GROK_SESSION_ID", "g1")])), None);
+        assert_eq!(caller(&claude, &vars(&[("GROK_HOOK_EVENT", "")])), None);
+        assert_eq!(caller(&zcode, &vars(&[("ZCODE_SESSION_ID", "")])), None);
+        assert_eq!(caller(&claude, &vars(&[])), None);
+        assert_eq!([Caller::Cursor.id(), Caller::Grok.id(), Caller::Zcode.id()], ["cursor", "grok", "zcode"]);
+    }
+
+    #[test]
+    fn slim_drops_only_the_fields_no_adapter_reads() {
+        use serde_json::json;
+        let mut p = json!({"tool_input": {"command": "ls"}, "tool_name": "Shell", "conversation_id": "c", "model": "m", "cwd": "C:/x"});
+        for k in SLIM { p[k] = json!("x"); }
+        slim(&mut p);
+        let mut keys: Vec<&str> = p.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort();
+        assert_eq!(keys, ["conversation_id", "cwd", "model", "tool_input", "tool_name"]);
+        let mut not_obj = json!([1, 2]);
+        slim(&mut not_obj);
+        assert_eq!(not_obj, json!([1, 2]));
+    }
+
+    #[test]
+    fn slim_envelopes_give_the_same_copilot_and_antigravity_events() {
+        type Events = fn(&AgentEnvelope, crate::i18n::Lang) -> Vec<crate::model::Event>;
+        for (name, events) in [("copilot", copilot::events as Events), ("antigravity", antigravity::events as Events)] {
+            let p = format!("{}/tests/fixtures/{name}/session.jsonl", env!("CARGO_MANIFEST_DIR"));
+            for line in std::fs::read_to_string(p).unwrap().lines() {
+                let e: AgentEnvelope = serde_json::from_str(line).unwrap();
+                let mut s = e.clone();
+                slim(&mut s.payload);
+                assert_eq!(events(&s, crate::i18n::Lang::Pl), events(&e, crate::i18n::Lang::Pl), "{name}: {}", e.event);
+            }
         }
     }
 
