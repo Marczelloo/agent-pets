@@ -110,19 +110,16 @@ describe('skins for agents', () => {
     const log = draw('cursor');
     for (const c of [f.light, f.edge, SKINS.cursor.eyeColor!]) expect(log.some(l => l.includes(c)), c).toBe(true);
   });
-  it('Grok is a mini humanoid: white body, black visor with slanted eyes, the Grok logo on the chest, black hands', () => {
+  it('Grok is a mini humanoid: white body, black visor with upright eyes, the Grok logo on the chest, black hands', () => {
     const g = SKINS.grok, d = g.droid!;
     expect(d).toEqual({ visor: '#0E0E10', logo: '#1A1A1A', hands: '#222222' });
     expect(g.pal.m).toBe('#ECECEA');
     // stojąc (tułów + nogi) jest wyższy niż szeroki
     expect(g.height + g.legLen!).toBeGreaterThan(g.width);
     expect(g.eyeColor).toBe('#FFFFFF');
-    expect(g.eyeTilt!).toBeLessThan(0);
     expect(g.eyeY!).toBeLessThan(.36);
     const log = draw('grok');
     for (const c of [d.visor, d.logo, d.hands]) expect(log.some(l => l.includes(c)), c).toBe(true);
-    // obie pigułki pochylone: górą w lewo
-    expect(log.filter(l => l === `rotate(${Math.round(g.eyeTilt! * 1000) / 1000})`).length).toBe(2);
     // logo: pierścień z przerwą w prawym górnym rogu (łuk krótszy niż pełne koło)
     const arcs = log.filter(l => l.startsWith('ellipse(')).map(l => l.slice(8, -1).split(',').map(Number));
     expect(arcs.some(a => a[6] - a[5] > Math.PI && a[6] - a[5] < 2 * Math.PI - .3)).toBe(true);
@@ -157,9 +154,10 @@ describe('skins for agents', () => {
     // dwie dłonie, dwa kolana, dwie stopy
     expect(log.filter(l => l === `fillStyle=${g.droid!.hands}`).length).toBeGreaterThanOrEqual(6);
   });
-  it('eyes stay upright for skins without a tilt, and other pets keep their own hands', () => {
+  it('every pet keeps its eyes upright (no tilt), and other pets keep their own hands', () => {
+    // Grok też: skośne oczy odrzucone przez użytkownika
+    for (const s of Object.keys(SKINS) as (keyof typeof SKINS)[]) expect('eyeTilt' in SKINS[s], s).toBe(false);
     for (const s of ['clawd', 'kodek', 'copilot', 'cursor', 'zcode'] as const) {
-      expect(SKINS[s].eyeTilt, s).toBeUndefined();
       expect(SKINS[s].droid, s).toBeUndefined();
       expect(SKINS[s].legLen, s).toBeUndefined();
       expect(SKINS[s].armThk, s).toBeUndefined();
