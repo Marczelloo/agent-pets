@@ -1,4 +1,4 @@
-// Buduje hook.exe (release) i kopiuje go do zasobów paczki: instalator niesie go do instalacji hooków Claude Code.
+// Builds hook.exe (release) and copies it into the bundle resources: the installer ships it for the Claude Code hooks.
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
