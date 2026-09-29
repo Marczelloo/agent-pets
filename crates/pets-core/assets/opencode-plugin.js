@@ -1,13 +1,13 @@
 // agent-pets plugin v1
-// Agent Pets (https://github.com/Marczelloo/agent-pets): stan sesji opencode dla zwierzaka na pasku zadań.
-// Wysyła tylko stan, rodzaj narzędzia, krótki opis akcji, pytanie i nazwę modelu na 127.0.0.1.
-// Nigdy nie wysyła treści wiadomości, odpowiedzi ani plików. Plik zarządzany przez Agent Pets:
-// wyłącz integrację opencode w ustawieniach Agent Pets zamiast go edytować.
+// Agent Pets (https://github.com/Marczelloo/agent-pets): opencode session state for the taskbar pet.
+// Sends only state, tool kind, short action description, question, and model name to 127.0.0.1.
+// Never sends message content, responses, or files. This file is managed by Agent Pets:
+// disable the opencode integration in Agent Pets settings instead of editing it.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// pola argumentów narzędzi, z których widżet składa opis akcji (nazwa pliku, komenda, wzorzec, host)
+// tool argument fields used by the widget to build action descriptions (file name, command, pattern, host)
 const INPUT = { filePath: "file_path", path: "file_path", command: "command", pattern: "pattern", url: "url", query: "query", description: "description" };
 
 function endpoint() {
@@ -24,8 +24,8 @@ function str(v, max) {
   return typeof v === "string" && v ? v.slice(0, max) : undefined;
 }
 
-// Widżet mógł się zrestartować (nowy port i token), więc endpoint czytamy przy każdym zdarzeniu.
-// Limit 300 ms i żadnych wyjątków na zewnątrz: plugin nigdy nie przeszkadza opencode.
+// The widget may have restarted (new port and token), so read the endpoint for every event.
+// A 300 ms limit and no escaping exceptions ensure the plugin never interferes with opencode.
 async function send(body) {
   try {
     const e = endpoint();
@@ -37,7 +37,7 @@ async function send(body) {
       signal: AbortSignal.timeout(300),
     });
   } catch {
-    // widżet wyłączony albo zajęty: pomijamy
+    // widget is off or busy: skip it
   }
 }
 

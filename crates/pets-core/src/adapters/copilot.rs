@@ -1,16 +1,16 @@
-//! GitHub Copilot: hooki z `~/.copilot/hooks/agent-pets.json` przez `hook.exe --agent copilot --event <nazwa>`
-//! na `/v1/events/copilot` (spec 0.11 §3.1–3.2). Zdarzenia znane VS Code mają zapis PascalCase z polami snake_case,
-//! zdarzenia tylko z CLI zapis camelCase z polami camelCase; adapter czyta oba.
+//! GitHub Copilot: hooks from `~/.copilot/hooks/agent-pets.json` via `hook.exe --agent copilot --event <name>`
+//! to `/v1/events/copilot` (spec 0.11 §3.1–3.2). VS Code events use PascalCase with snake_case fields,
+//! CLI-only events use camelCase with camelCase fields; the adapter reads both.
 use super::{action_from, clean_text, safe_id, AgentEnvelope};
 use crate::i18n::Lang;
 use crate::model::*;
 use crate::tools::from_copilot;
 
-/// Argumenty narzędzi do tekstu akcji: (klucz Copilota, klucz Claude'a). Treść plików i diffy nigdy.
+/// Tool arguments for action text: (Copilot key, Claude key). Never file contents or diffs.
 const KEYS: [(&str, &str); 8] = [("command", "command"), ("path", "file_path"), ("file_path", "file_path"), ("filePath", "file_path"),
     ("pattern", "pattern"), ("query", "pattern"), ("url", "url"), ("description", "description")];
 
-/// Narzędzie Claude'a o tym samym tekście akcji.
+/// Claude tool with the same action text.
 fn claude_name(tool: Tool) -> Option<&'static str> {
     Some(match tool {
         Tool::Bash => "Bash", Tool::Edit => "Edit", Tool::Read => "Read", Tool::Grep => "Grep", Tool::Web => "WebFetch", Tool::Agent => "Task",
@@ -20,7 +20,7 @@ fn claude_name(tool: Tool) -> Option<&'static str> {
 
 pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     let p = &env.payload;
-    // ten sam sens w dwóch zapisach: PascalCase (snake_case) i camelCase
+    // same meaning in two forms: PascalCase (snake_case) and camelCase
     let get = |a: &str, b: &str| p.get(a).filter(|v| !v.is_null()).or_else(|| p.get(b)).filter(|v| !v.is_null());
     let s = |a: &str, b: &str| get(a, b).and_then(|v| v.as_str());
     let text = |a: &str, b: &str, max: usize| s(a, b).map(|x| clean_text(x, max)).filter(|x| !x.is_empty());
@@ -33,17 +33,17 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
         "PreToolUse" => (Kind::ToolStart, top.clone(), Some(from_copilot(tool))),
         "PostToolUse" | "postToolUseFailure" => (Kind::ToolEnd, top.clone(), None),
         "notification" => match s("notification_type", "notificationType").unwrap_or("") {
-            // `permission_prompt` Copilot wysyła przy każdym narzędziu, także zatwierdzonym samo, więc nie znaczy „czekam”
+            // Copilot sends `permission_prompt` for every tool, including auto-approved ones, so it does not mean "waiting"
             "elicitation_dialog" => (Kind::NeedsInput, top.clone(), None),
             _ => return vec![],
         },
         "Stop" => (Kind::TurnEnd, top.clone(), None),
         "errorOccurred" if get("recoverable", "recoverable").and_then(|v| v.as_bool()) != Some(true) => (Kind::Error, top.clone(), None),
-        // JetBrains kończy tak każdą turę (po `Stop`, a przerwaną bez niego), choć rozmowa trwa; zwierzak zostaje
-        // „gotowy”, a znika z procesem Copilota albo po zwykłym czasie ciszy
+        // JetBrains ends every turn this way (after `Stop`, or without it if interrupted) while the conversation continues;
+        // the pet remains "ready" and disappears with the Copilot process or after the usual quiet period
         "sessionEnd" if s("reason", "reason") == Some("complete") => (Kind::TurnEnd, top.clone(), None),
         "sessionEnd" => (Kind::SessionEnd, top.clone(), None),
-        // podagenci: jeden mini-zwierzak na nazwę (hook startu nie podaje id)
+        // subagents: one mini pet per name (the start hook provides no ID)
         "SubagentStart" | "SubagentStop" => {
             let name = s("agent_name", "agentName").filter(|n| safe_id(n)).unwrap_or("sub");
             let kind = if env.event == "SubagentStart" { Kind::Prompt } else { Kind::SessionEnd };
@@ -108,8 +108,8 @@ mod tests {
             (Kind::SessionEnd, top)]);
     }
 
-    /// Nagranie z CLion (Copilot 1.6): po każdej turze `Stop`, a zaraz po nim `sessionEnd` z `reason: complete`,
-    /// choć rozmowa w IDE trwa dalej. Zwierzak zostaje w stanie „gotowe”.
+    /// CLion capture (Copilot 1.6): each turn has `Stop` followed immediately by `sessionEnd` with `reason: complete`,
+    /// although the IDE conversation continues. The pet remains "ready".
     #[test]
     fn a_jetbrains_turn_ends_done_and_the_pet_stays() {
         let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/copilot/live-jetbrains.jsonl");
@@ -117,11 +117,11 @@ mod tests {
         let v: Vec<Event> = live.iter().flat_map(|e| events(e, Lang::Pl)).collect();
         assert_eq!(v.last().map(|e| e.kind), Some(Kind::TurnEnd));
         assert!(!v.iter().any(|e| e.kind == Kind::SessionEnd));
-        // `permission_prompt` przychodzi przy każdym narzędziu, też zatwierdzonym samo (git status ruszył 1 s później),
-        // więc nie znaczy, że Copilot czeka na człowieka
+        // `permission_prompt` arrives for every tool, including auto-approved ones (git status ran 1 s later),
+        // so it does not mean Copilot is waiting for a person
         assert!(!v.iter().any(|e| e.kind == Kind::NeedsInput));
         assert!(v.iter().all(|e| e.session_id == "copilot:cop_live" && e.data.pid == Some(4242)));
-        // łatka jako tekst (`apply_patch`) nie trafia do akcji
+        // patch text (`apply_patch`) does not enter the action
         assert!(v.iter().all(|e| !e.data.action.as_deref().unwrap_or("").contains("Begin Patch")));
     }
 
@@ -138,7 +138,7 @@ mod tests {
         for e in fixture().iter().flat_map(|e| events(e, Lang::Pl)) {
             assert_eq!((e.source, e.agent()), (Source::Copilot, Agent::Copilot));
             assert_eq!((e.data.pid, e.data.cwd.as_deref(), e.data.origin), (Some(4242), Some("C:/work/app"), Some(Origin::Cli)));
-            assert!((1_790_000_000_000..1_790_000_002_000).contains(&e.ts), "czas z koperty");
+            assert!((1_790_000_000_000..1_790_000_002_000).contains(&e.ts), "time from envelope");
         }
     }
 
@@ -147,10 +147,10 @@ mod tests {
         let f = fixture();
         let s = one(f[0].clone());
         assert_eq!((s.data.app, s.data.host_pid), (Some(App::Jetbrains), Some(900)));
-        assert_eq!(one(f[2].clone()).data.app, None, "bez programu w kopercie nic nie nadpisuje");
+        assert_eq!(one(f[2].clone()).data.app, None, "missing host in envelope overwrites nothing");
     }
 
-    /// JetBrains podaje nazwy narzędzi jak Claude (`Bash`, `Edit`, `Read`, `Glob`): edycja to edycja, nie „inne narzędzie”.
+    /// JetBrains uses Claude-style tool names (`Bash`, `Edit`, `Read`, `Glob`): editing is editing, not "another tool".
     #[test]
     fn jetbrains_tool_names_pick_the_right_tool() {
         let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/copilot/live-jetbrains.jsonl");
@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(bash.data.action.as_deref(), Some("git status --short"));
     }
 
-    /// Przerwana tura nie ma `Stop`: JetBrains wysyła tylko `sessionEnd` z `complete`. Zwierzak kończy wtedy animację.
+    /// An interrupted turn has no `Stop`: JetBrains sends only `sessionEnd` with `complete`. The pet then ends its animation.
     #[test]
     fn an_interrupted_jetbrains_turn_ends_done() {
         let v: Vec<Event> = [env("PreToolUse", json!({"session_id": "s", "tool_name": "Bash", "tool_input": {"command": "sleep 65"}})),
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(one(f[4].clone()).data.question.as_deref(), Some("Run npm test or npm run e2e?"));
         let kid = one(f[7].clone());
         assert_eq!(kid.data.parent.as_deref(), Some("copilot:cop_1"));
-        let sub = kid.data.sub.expect("dziecko");
+        let sub = kid.data.sub.expect("child");
         assert_eq!((sub.kind, sub.agent_type.as_deref(), sub.description.as_deref()),
             (SubKind::Copilot, Some("explore"), Some("Explore the codebase")));
         let long = one(env("notification", json!({"sessionId": "s", "notification_type": "elicitation_dialog", "message": "q".repeat(400)})));

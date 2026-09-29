@@ -1,12 +1,12 @@
 //! Przelotka statusline: `statusLine` w `~/.claude/settings.json` wskazuje `hook.exe --agent-pets-statusline`,
-//! a dotychczasowa konfiguracja leży w `~/.agent-pets/statusline-original.json`.
+//! and the previous configuration is stored in `~/.agent-pets/statusline-original.json`.
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
 pub const MARK_ARG: &str = "--agent-pets-statusline";
 
-/// `~/.agent-pets/statusline-original.json` (katalog domowy, nie `AppData`: patrz `Endpoint::default_path`).
-/// `AGENT_PETS_STATUSLINE_ORIGINAL` podmienia ścieżkę w testach.
+/// `~/.agent-pets/statusline-original.json` (home directory, not `AppData`: see `Endpoint::default_path`).
+/// `AGENT_PETS_STATUSLINE_ORIGINAL` overrides the path in tests.
 pub fn original_path() -> PathBuf {
     std::env::var_os("AGENT_PETS_STATUSLINE_ORIGINAL").map(PathBuf::from).unwrap_or_else(|| {
         dirs::home_dir().unwrap_or_else(std::env::temp_dir).join(".agent-pets").join("statusline-original.json")
@@ -17,7 +17,7 @@ fn is_ours(v: &Value) -> bool {
     v["command"].as_str().map(|c| c.ends_with(MARK_ARG)).unwrap_or(false)
 }
 
-/// Ustawia przelotkę. Zwraca poprzedni `statusLine` (albo `Null`), gdy trzeba go zapamiętać.
+/// Set up pass-through. Return the previous `statusLine` (or `Null`) when it needs to be saved.
 pub fn install(settings: &mut Value, hook_exe: &str) -> Option<Value> {
     if !settings.is_object() { *settings = json!({}); }
     let prev = settings.get("statusLine").cloned().unwrap_or(Value::Null);
@@ -26,7 +26,7 @@ pub fn install(settings: &mut Value, hook_exe: &str) -> Option<Value> {
     remember
 }
 
-/// Przywraca oryginał, jeśli obecny `statusLine` jest nasz.
+/// Restore the original if the current `statusLine` is ours.
 pub fn uninstall(settings: &mut Value, original: Option<Value>) {
     if !settings.get("statusLine").map(is_ours).unwrap_or(false) { return; }
     match original {
@@ -43,7 +43,7 @@ pub fn uninstall_file(settings: &Path) -> std::io::Result<()> {
     uninstall_file_at(settings, &original_path())
 }
 
-/// Jak `install_file`, z jawną ścieżką zapamiętanego oryginału (instalator, testy).
+/// Like `install_file`, with an explicit path to the saved original (installer, tests).
 pub fn install_file_at(settings: &Path, hook_exe: &str, original: &Path) -> std::io::Result<()> {
     let mut remembered = None;
     crate::hooks_install::edit_file(settings, |v| remembered = install(v, hook_exe))?;
@@ -59,7 +59,7 @@ pub fn uninstall_file_at(settings: &Path, original: &Path) -> std::io::Result<()
     crate::hooks_install::edit_file(settings, |v| uninstall(v, original))
 }
 
-/// Czy `statusLine` w ustawieniach Claude Code to nasza przelotka.
+/// Whether `statusLine` in Claude Code settings is our pass-through.
 pub fn is_installed(settings: &Value) -> bool { settings.get("statusLine").map(is_ours).unwrap_or(false) }
 
 #[cfg(test)]
@@ -73,7 +73,7 @@ mod tests {
         let orig = install(&mut s, r"C:\h\hook.exe");
         assert_eq!(orig, Some(json!({"type": "command", "command": "my-line.exe"})));
         assert_eq!(s["statusLine"]["command"], r#""C:\h\hook.exe" --agent-pets-statusline"#);
-        assert_eq!(install(&mut s, r"C:\h\hook.exe"), None, "drugi raz nie nadpisuje zapamiętanego oryginału");
+        assert_eq!(install(&mut s, r"C:\h\hook.exe"), None, "second install does not overwrite the saved original");
         assert_eq!(s["theme"], "dark");
     }
 

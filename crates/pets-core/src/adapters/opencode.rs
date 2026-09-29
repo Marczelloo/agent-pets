@@ -1,6 +1,6 @@
 //! opencode: koperty z naszego pluginu (`assets/opencode-plugin.js`) na `/v1/events/opencode`.
 //! Kontrakt (plan 0.10, task 5): `{v, ts, pid, event, session, cwd, status, tool, title, model, question, input, parent}`.
-//! `input` to biała lista pól do tekstu akcji; wszystko spoza kontraktu jest pomijane.
+//! `input` is an allowlist of fields for action text; everything outside the contract is ignored.
 use super::{clean_text, safe_id};
 use crate::action::action_text;
 use crate::i18n::Lang;
@@ -8,10 +8,10 @@ use crate::model::*;
 use crate::tools::from_opencode;
 use serde_json::{Map, Value};
 
-/// Pola `input`, z których składamy tekst akcji (jak u Claude'a: nazwa pliku, komenda, wzorzec, host).
+/// `input` fields used for action text (as with Claude: file name, command, pattern, host).
 const INPUT_KEYS: [&str; 6] = ["file_path", "command", "pattern", "url", "query", "description"];
 
-/// Nazwa narzędzia Claude'a o tym samym tekście akcji.
+/// Claude tool name with the same action text.
 fn claude_name(tool: &str) -> Option<&'static str> {
     Some(match tool {
         "edit" | "write" | "patch" | "multiedit" => "Edit",
@@ -63,7 +63,7 @@ pub fn events(env: &Value, lang: Lang) -> Vec<Event> {
     d.pid = env.get("pid").and_then(|v| v.as_u64()).and_then(|p| u32::try_from(p).ok()).filter(|p| *p > 0);
     d.cwd = text("cwd", 260);
     d.origin = Some(Origin::Cli);
-    // sesja uruchomiona narzędziem `task` (subagent) należy do rodzica: mini-zwierzak przy nim, jak u Claude'a
+    // a session started by the `task` tool (subagent) belongs to its parent: a mini pet beside it, as with Claude
     if let Some(p) = s("parent").filter(|p| safe_id(p) && *p != session) {
         d.parent = Some(format!("opencode:{p}"));
         d.sub = Some(SubInfo { kind: SubKind::Opencode, agent_type: None, description: text("title", 80), background: false });
@@ -72,7 +72,7 @@ pub fn events(env: &Value, lang: Lang) -> Vec<Event> {
         "tool.before" => d.action = action(tool, env.get("input"), lang),
         "permission.asked" | "question.asked" => d.question = text("question", 300),
         "session.updated" => d.title = text("title", 80),
-        // `providerID/modelID`: do wyświetlenia tylko model
+        // `providerID/modelID`: display only the model
         "chat.message" => d.model = s("model").and_then(|m| m.rsplit('/').next()).map(|m| clean_text(m, 64)).filter(|m| !m.is_empty()),
         _ => {}
     }
@@ -107,7 +107,7 @@ mod tests {
         for e in fixture().iter().flat_map(|v| events(v, Lang::Pl)) {
             assert_eq!((e.source, e.agent(), e.session_id.as_str()), (Source::Opencode, Agent::Opencode, "opencode:ses_3f2a"));
             assert_eq!((e.data.pid, e.data.cwd.as_deref(), e.data.origin), (Some(4242), Some("C:/work/app"), Some(Origin::Cli)));
-            assert!((1_790_000_000_000..1_790_000_002_000).contains(&e.ts), "czas z koperty");
+            assert!((1_790_000_000_000..1_790_000_002_000).contains(&e.ts), "time from envelope");
         }
     }
 
@@ -130,7 +130,7 @@ mod tests {
     fn a_task_session_is_a_child_of_its_parent() {
         let e = one(json!({"event": "session.created", "session": "ses_kid", "parent": "ses_p", "title": "Find tests (@general subagent)"}));
         assert_eq!(e.data.parent.as_deref(), Some("opencode:ses_p"));
-        let sub = e.data.sub.expect("dziecko");
+        let sub = e.data.sub.expect("child");
         assert_eq!((sub.kind, sub.description.as_deref()), (SubKind::Opencode, Some("Find tests (@general subagent)")));
         let bad = one(json!({"event": "session.created", "session": "ses_kid", "parent": "../x"}));
         assert_eq!((bad.data.parent, bad.data.sub), (None, None));

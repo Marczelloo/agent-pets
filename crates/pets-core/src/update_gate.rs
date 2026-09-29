@@ -1,17 +1,17 @@
-//! Kiedy wolno zainstalować aktualizację w trybie automatycznym: dopiero w spokojnym momencie.
+//! When an automatic update may be installed: only during a quiet period.
 use crate::model::State;
 
-/// Tyle nieprzerwanego spokoju musi minąć przed instalacją.
+/// Required uninterrupted quiet time before installation.
 pub const CALM_MS: i64 = 120_000;
 
-/// Zajęty: agent myśli, pracuje, kompaktuje albo czeka na użytkownika; gra lub prezentacja na pełnym ekranie;
-/// otwarty panel albo okno ustawień.
+/// Busy: an agent is thinking, working, compacting, or waiting for the user; a full-screen game or presentation;
+/// or the panel or settings window is open.
 pub fn busy(states: &[State], fullscreen: bool, ui_open: bool) -> bool {
     fullscreen || ui_open
         || states.iter().any(|s| matches!(s, State::Thinking | State::Working | State::Compacting | State::NeedsYou))
 }
 
-/// Licznik spokoju: `true`, gdy od `CALM_MS` nic nie było zajęte.
+/// Quiet timer: `true` when nothing has been busy for `CALM_MS`.
 #[derive(Default, Debug)]
 pub struct Calm { since: Option<i64> }
 

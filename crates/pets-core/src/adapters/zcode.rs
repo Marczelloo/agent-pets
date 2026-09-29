@@ -1,15 +1,15 @@
-//! ZCode (Z.ai): hooki z ustawień ZCode przez `hook.exe --agent zcode --event <nazwa>` na `/v1/events/zcode`
-//! (spec 0.12 §5). Zdarzenia jak w Claude Code; pola w dwóch zapisach, camelCase i snake_case, adapter czyta oba.
+//! ZCode (Z.ai): hooks from ZCode settings via `hook.exe --agent zcode --event <name>` to `/v1/events/zcode`
+//! (spec 0.12 §5). Events as in Claude Code; fields use camelCase or snake_case, and the adapter reads both.
 use super::{action_from, clean_text, safe_id, AgentEnvelope};
 use crate::i18n::Lang;
 use crate::model::*;
 use crate::tools::from_keywords;
 
-/// Argumenty narzędzi do tekstu akcji: (klucz ZCode, klucz Claude'a). Treść plików i diffy nigdy.
+/// Tool arguments for action text: (ZCode key, Claude key). Never file contents or diffs.
 const KEYS: [(&str, &str); 8] = [("command", "command"), ("cmd", "command"), ("file_path", "file_path"), ("filePath", "file_path"),
     ("path", "file_path"), ("pattern", "pattern"), ("query", "pattern"), ("url", "url")];
 
-/// Narzędzie Claude'a o tym samym tekście akcji.
+/// Claude tool with the same action text.
 fn claude_name(tool: Tool) -> Option<&'static str> {
     Some(match tool {
         Tool::Bash => "Bash", Tool::Edit => "Edit", Tool::Read => "Read", Tool::Grep => "Grep", Tool::Web => "WebFetch", Tool::Agent => "Task",
@@ -29,7 +29,7 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
         "SessionStart" => Kind::SessionStart,
         "UserPromptSubmit" => Kind::Prompt,
         "PreToolUse" => Kind::ToolStart,
-        // `reason` pisze model i może cytować cokolwiek z rozmowy, więc pytanie to tylko akcja albo nazwa narzędzia
+        // The model writes `reason` and may quote any conversation text, so the question uses only the action or tool name
         "PermissionRequest" => Kind::NeedsInput,
         "PostToolUse" => Kind::ToolEnd,
         "PostToolUseFailure" if get("isInterrupt", "is_interrupt").and_then(|v| v.as_bool()) == Some(true) => Kind::TurnEnd,

@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-/// Transkrypt Claude'a nie ma znacznika końca sesji, więc odtwarzamy tylko sesje z rejestru
-/// żywych (`claude::registry`). Rollouty Codexa mają `task_complete` i wracają zawsze.
+/// Claude transcripts have no session end marker, so restore only sessions in the live registry
+/// (`claude::registry`). Codex rollouts have `task_complete` and are always restored.
 pub fn keep_for_rehydration(files: &[PathBuf], live_claude: &std::collections::HashSet<String>) -> Vec<PathBuf> {
     use crate::watch::{kind_of, FileKind};
     files.iter().filter(|p| match kind_of(p) {
         Some(FileKind::ClaudeTranscript) => p.file_stem().and_then(|s| s.to_str()).map(|s| live_claude.contains(s)).unwrap_or(false),
-        // subagent wraca z żywym rodzicem: `…/<sesja>/subagents/agent-<id>.jsonl`
+        // a subagent returns with its live parent: `…/<session>/subagents/agent-<id>.jsonl`
         Some(FileKind::ClaudeSubagent) => p.parent().and_then(|d| d.parent()).and_then(|d| d.file_name()).and_then(|s| s.to_str())
             .map(|s| live_claude.contains(s)).unwrap_or(false),
         Some(FileKind::CodexRollout) => true,
@@ -15,7 +15,7 @@ pub fn keep_for_rehydration(files: &[PathBuf], live_claude: &std::collections::H
     }).cloned().collect()
 }
 
-/// Pliki `*.jsonl` zmodyfikowane w ostatnim `max_age`, rekurencyjnie, od najstarszego.
+/// `*.jsonl` files modified within `max_age`, recursively, oldest first.
 pub fn recent_files(root: &Path, max_age: Duration) -> Vec<PathBuf> {
     let now = SystemTime::now();
     let mut out: Vec<(SystemTime, PathBuf)> = Vec::new();

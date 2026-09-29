@@ -3,7 +3,7 @@ use std::path::Path;
 
 pub const EVENTS: [&str; 9] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification",
                               "Stop", "SubagentStop", "PreCompact", "SessionEnd"];
-/// Wpisy widżetu rozpoznajemy po tym sufiksie komendy; hook.exe ignoruje argumenty.
+/// Identify widget entries by this command suffix; hook.exe ignores the arguments.
 const MARK: &str = " --agent-pets";
 
 fn is_ours(h: &Value) -> bool { h["command"].as_str().map(|c| c.ends_with(MARK)).unwrap_or(false) }
@@ -22,7 +22,7 @@ pub fn uninstall(settings: &mut Value) {
     if hooks.is_empty() { settings.as_object_mut().unwrap().remove("hooks"); }
 }
 
-/// Ile z dziewięciu zdarzeń ma nasz hook (9 = komplet).
+/// Number of the nine events with our hook (9 = complete).
 pub fn installed_count(settings: &Value) -> usize {
     let Some(hooks) = settings.get("hooks").and_then(|h| h.as_object()) else { return 0 };
     EVENTS.iter().filter(|ev| hooks.get(**ev).and_then(|g| g.as_array()).map(|arr| arr.iter()
@@ -47,10 +47,10 @@ pub fn install(settings: &mut Value, hook_exe: &str) {
     }
 }
 
-/// Zmiana pliku z kopią `<nazwa>.agent-pets.bak` i zapisem atomowym. Zepsuty JSON kończy się błędem bez zapisu.
+/// Edit the file with a `<name>.agent-pets.bak` backup and atomic write. Invalid JSON fails without writing.
 pub(crate) fn edit_file(path: &Path, f: impl FnOnce(&mut Value)) -> std::io::Result<()> { edit_file_opts(path, true, f) }
 
-/// Jak `edit_file`; `backup = false` zostawia istniejącą kopię (np. pierwotny plik sprzed naszej pierwszej zmiany).
+/// Like `edit_file`; `backup = false` keeps the existing backup (e.g. the original file before our first edit).
 pub(crate) fn edit_file_opts(path: &Path, backup: bool, f: impl FnOnce(&mut Value)) -> std::io::Result<()> {
     let mut v: Value = match std::fs::read_to_string(path) {
         Ok(s) => {

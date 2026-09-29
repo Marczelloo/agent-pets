@@ -1,6 +1,6 @@
-//! Zadania Agent Routera z `~/.agent-router/status.json` (plik publiczny routera, wersja 1).
-//! Zadanie łączy się ze zwierzakiem Codexa po `threadId` (to samo id ma sesja z rolloutu),
-//! daje mu tytuł zadania i dane do „zdrowia”, a nieudane zadanie pokazuje błąd (spec 5.1).
+//! Agent Router tasks from `~/.agent-router/status.json` (public router file, version 1).
+//! A task links to a Codex pet by `threadId` (the rollout session has the same ID),
+//! gives it the task title and health data, and shows an error for a failed task (spec 5.1).
 use crate::model::*;
 use crate::time::rfc3339_ms;
 use serde_json::Value;
@@ -42,16 +42,16 @@ pub struct Poller { path: PathBuf, next_check: i64, seen: Option<SystemTime> }
 impl Poller {
     pub fn new(path: PathBuf) -> Poller { Poller { path, next_check: i64::MIN, seen: None } }
 
-    /// Następne `poll` przeczyta plik od nowa (np. po ponownym włączeniu routera w ustawieniach).
+    /// The next `poll` rereads the file (e.g. after re-enabling the router in settings).
     pub fn reset(&mut self) { self.seen = None; self.next_check = i64::MIN; }
 
-    /// Co `POLL_MS` sprawdza mtime; czyta cały (mały) plik tylko po zmianie.
+    /// Check mtime every `POLL_MS`; read the entire (small) file only after a change.
     pub fn poll(&mut self, now: i64) -> Vec<Event> {
         if now < self.next_check { return vec![]; }
         self.next_check = now + POLL_MS;
         let Some(m) = std::fs::metadata(&self.path).ok().and_then(|m| m.modified().ok()) else { return vec![] };
         if self.seen == Some(m) { return vec![]; }
-        // datę zapamiętujemy dopiero po udanym odczycie: nieudany (plik chwilowo zablokowany) powtórzymy
+        // remember the timestamp only after a successful read; retry a failed read (temporarily locked file)
         let Ok(bytes) = std::fs::read(&self.path) else { return vec![] };
         self.seen = Some(m);
         to_events(&bytes)
@@ -101,16 +101,16 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn a_failed_read_is_retried_instead_of_losing_the_change() {
-        // np. antywirus trzyma plik: data się zmieniła, ale odczyt się nie udał
+        // an antivirus may hold the file: the timestamp changed, but reading failed
         use std::os::windows::fs::OpenOptionsExt;
         let d = tempfile::tempdir().unwrap();
         let f = d.path().join(FILE);
         std::fs::write(&f, fixture()).unwrap();
         let mut p = Poller::new(f.clone());
         let lock = std::fs::OpenOptions::new().read(true).share_mode(0).open(&f).unwrap();
-        assert!(p.poll(0).is_empty(), "plik zablokowany");
+        assert!(p.poll(0).is_empty(), "file locked");
         drop(lock);
-        assert_eq!(p.poll(POLL_MS).len(), 3, "ta sama zmiana przeczytana przy następnej próbie");
+        assert_eq!(p.poll(POLL_MS).len(), 3, "same change read on the next attempt");
     }
 
     #[test]
@@ -120,10 +120,10 @@ mod tests {
         std::fs::write(&f, fixture()).unwrap();
         let mut p = Poller::new(f.clone());
         assert_eq!(p.poll(0).len(), 3);
-        assert!(p.poll(POLL_MS).is_empty(), "plik się nie zmienił");
+        assert!(p.poll(POLL_MS).is_empty(), "file did not change");
         std::thread::sleep(std::time::Duration::from_millis(20));
         std::fs::write(&f, fixture()).unwrap();
-        assert!(p.poll(POLL_MS + 1).is_empty(), "za wcześnie");
+        assert!(p.poll(POLL_MS + 1).is_empty(), "too early");
         assert_eq!(p.poll(2 * POLL_MS).len(), 3);
     }
 }

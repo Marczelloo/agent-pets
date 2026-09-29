@@ -2,7 +2,7 @@ pub fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
-/// Lokalna północ dnia, w którym wypada `ts` (ms UTC), z czasem letnim według strefy Windows.
+/// Local midnight on the day containing `ts` (UTC ms), with daylight saving time from the Windows time zone.
 #[cfg(windows)]
 pub fn local_midnight(ts: i64) -> i64 {
     use windows_sys::Win32::Foundation::{FILETIME, SYSTEMTIME};
@@ -28,7 +28,7 @@ pub fn local_midnight(ts: i64) -> i64 {
 #[cfg(not(windows))]
 pub fn local_midnight(ts: i64) -> i64 { ts - ts.rem_euclid(86_400_000) }
 
-/// Dni od 1970-01-01 dla daty kalendarza gregoriańskiego (algorytm H. Hinnanta).
+/// Days since 1970-01-01 for a Gregorian calendar date (H. Hinnant's algorithm).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = (if y >= 0 { y } else { y - 399 }) / 400;
@@ -39,7 +39,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// Milisekundy od epoki jako `YYYY-MM-DDTHH:MM:SS.mmmZ` (algorytm civil_from_days H. Hinnanta).
+/// Milliseconds since epoch as `YYYY-MM-DDTHH:MM:SS.mmmZ` (H. Hinnant's civil_from_days algorithm).
 pub fn rfc3339(ms: i64) -> String {
     let (days, rem) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
     let z = days + 719_468;
@@ -68,7 +68,7 @@ pub fn rfc3339_ms(s: &str) -> Option<i64> {
         let padded = format!("{:0<3}", &digits[..digits.len().min(3)]);
         padded.parse::<i64>().ok()?
     } else { 0 };
-    // strefa: `Z` albo `±HH:MM`
+    // zone: `Z` or `±HH:MM`
     let offset_s = match rest.as_bytes() {
         [b'Z'] => 0,
         [sign @ (b'+' | b'-'), _, _, b':', _, _] => {

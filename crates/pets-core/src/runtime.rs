@@ -1,4 +1,4 @@
-//! Rdzeń danych na żywo: ingest hooków, obserwacja plików, odtworzenie stanu po starcie i zegar.
+//! Live data core: hook ingestion, file watching, state restoration at startup, and the clock.
 use crate::claude::{self, hook::{HookState, TaskTracker}, HookEnvelope};
 use crate::endpoint::Endpoint;
 use crate::ingest::{Incoming, Ingest};
@@ -17,22 +17,22 @@ use std::time::Duration;
 pub struct RuntimeConfig {
     pub home: PathBuf,
     pub endpoint_path: PathBuf,
-    /// Opcjonalny zapis znormalizowanych zdarzeń (JSONL), jak `pets-cli run --record`.
+    /// Optional recording of normalized events (JSONL), as with `pets-cli run --record`.
     pub record: Option<File>,
-    /// Pliki `plan-usage-history.json` aplikacji Claude (limity konta bez CLI).
+    /// Claude app `plan-usage-history.json` files (account limits without CLI).
     pub claude_usage_files: Vec<PathBuf>,
-    /// Publiczny plik stanu zadań Agent Routera (`~/.agent-router/status.json`).
+    /// Public Agent Router task status file (`~/.agent-router/status.json`).
     pub router_status: Option<PathBuf>,
-    /// Aplikacje, dla których są zwierzaki (ustawienia).
+    /// Apps with pets (settings).
     pub apps: crate::settings::Apps,
-    /// Język tekstów akcji i pytań.
+    /// Language of action and question text.
     pub lang: crate::i18n::Lang,
 }
 
 impl RuntimeConfig {
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(RuntimeConfig {
-            home: dirs::home_dir().context("brak katalogu domowego")?,
+            home: dirs::home_dir().context("home directory not found")?,
             endpoint_path: Endpoint::default_path(),
             record: None,
             claude_usage_files: claude::desktop_usage::candidate_files(
@@ -50,7 +50,7 @@ pub struct Runtime {
     tasks: TaskTracker,
     hook_state: HookState,
     lang: crate::i18n::Lang,
-    /// zadania routera → sesje, które je zleciły (tylko id, `~/.agent-pets/links.json`)
+    /// Router tasks → sessions that requested them (IDs only, `~/.agent-pets/links.json`).
     links: crate::links::Links,
     links_path: PathBuf,
     record: Option<File>,
@@ -61,13 +61,13 @@ pub struct Runtime {
     apps: crate::settings::Apps,
     last_seen: std::collections::BTreeMap<&'static str, i64>,
     _ingest: Ingest,
-    /// trasy włączane z ustawień (furtka, Copilot, Antigravity), wspólne z wątkiem endpointu
+    /// Routes enabled in settings (door, Copilot, Antigravity), shared with the endpoint thread.
     doors: std::sync::Arc<crate::ingest::Doors>,
-    /// program-gospodarz sesji opencode, liczony raz na sesję (jeden zrzut procesów)
+    /// Host program for an opencode session, resolved once per session (one process snapshot).
     opencode_hosts: std::collections::HashMap<String, Option<crate::host::Host>>,
-    /// katalog domowy (baza opencode)
+    /// Home directory (opencode database).
     home: PathBuf,
-    /// ostatni odczyt zużycia opencode i prośba o odczyt od razu (koniec tury)
+    /// Last opencode usage read and request for an immediate read (turn end).
     usage_at: Option<i64>,
     usage_due: bool,
     _watcher: Option<notify::RecommendedWatcher>,
@@ -81,7 +81,7 @@ impl Runtime {
         let (tx, hooks) = channel();
         let doors = std::sync::Arc::new(crate::ingest::Doors::new(&cfg.apps));
         let ingest = Ingest::start(Endpoint::new_token(), tx, doors.clone())?;
-        ingest.endpoint().write(&cfg.endpoint_path).context("zapis endpoint.json")?;
+        ingest.endpoint().write(&cfg.endpoint_path).context("writing endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
             hook_state: HookState::default(), lang: cfg.lang, links, links_path,
@@ -92,7 +92,7 @@ impl Runtime {
         };
         rt.sources.lang = rt.lang;
         let roots = [cfg.home.join(".claude").join("projects"), cfg.home.join(".codex").join("sessions")];
-        // Odtworzenie stanu: żywe sesje Claude'a z rejestru, potem ich transkrypty i rollouty Codexa.
+        // Restore state: live Claude sessions from the registry, then their transcripts and Codex rollouts.
         let live: Vec<_> = claude::registry::read_registry(&cfg.home.join(".claude").join("sessions"))
             .into_iter().filter(|s| pid::is_alive(s.pid)).collect();
         for s in &live { rt.apply(s.to_event()); }
@@ -102,7 +102,7 @@ impl Runtime {
         rt.end_answered_subagents(crate::time::now_ms());
         if let Some(claude::desktop_usage::Usage::Limits(e)) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
         rt.poll_router(crate::time::now_ms());
-        // jeden takt przed pierwszą migawką: stare wątki z niedawno dotkniętych plików znikają, zanim się pokażą
+        // one tick before the first snapshot: old threads from recently touched files disappear before being shown
         rt.store.tick(crate::time::now_ms(), &pid::is_alive);
         let (ftx, files) = channel();
         rt._watcher = Some(watch(&roots, ftx)?);
@@ -112,11 +112,11 @@ impl Runtime {
 
     pub fn store(&self) -> &Store { &self.store }
 
-    /// Zdarzenie z zewnątrz rdzenia (np. limity konta Claude pobrane przez aplikację). Zwraca, czy stan się zmienił.
+    /// Event from outside the core (e.g. Claude account limits fetched by the app). Return whether state changed.
     pub fn apply_external(&mut self, e: Event) -> bool { self.apply(e) }
 
-    /// Limity Antigravity odczytane przez aplikację z jego lokalnego serwera; `Stale` (Antigravity zamknięte)
-    /// zdejmuje je od razu, bo czekanie do resetu pokazywałoby stare liczby przez godziny.
+    /// Antigravity limits read by the app from its local server; `Stale` (Antigravity closed)
+    /// removes them immediately because waiting until reset would show old numbers for hours.
     pub fn antigravity_usage(&mut self, u: crate::adapters::antigravity_usage::Usage) -> bool {
         use crate::adapters::antigravity_usage::Usage;
         match u {
@@ -125,7 +125,7 @@ impl Runtime {
         }
     }
 
-    /// Włącza i wyłącza aplikacje w locie: sesje i limity wyłączonych znikają od razu. Zwraca, czy stan się zmienił.
+    /// Enable and disable apps live: sessions and limits of disabled apps disappear immediately. Return whether state changed.
     pub fn set_apps(&mut self, apps: crate::settings::Apps) -> bool {
         if apps == self.apps { return false; }
         if apps.agent_router && !self.apps.agent_router {
@@ -138,13 +138,13 @@ impl Runtime {
         removed | self.store.retain_limits(|l| agent_on(apps, l.agent))
     }
 
-    /// Język nowych tekstów akcji i pytań (zmiana w ustawieniach).
+    /// Language of new action and question text (settings change).
     pub fn set_lang(&mut self, lang: crate::i18n::Lang) { self.lang = lang; self.sources.lang = lang; }
 
-    /// Czas ostatniego zdarzenia z każdego źródła (diagnostyka).
+    /// Last event time from each source (diagnostics).
     pub fn last_seen(&self) -> std::collections::BTreeMap<&'static str, i64> { self.last_seen.clone() }
 
-    /// Przetwarza zaległe zdarzenia i przesuwa zegar. Zwraca `true`, gdy stan się zmienił.
+    /// Process pending events and advance the clock. Return `true` when state changed.
     pub fn step(&mut self, now: i64) -> bool {
         let mut changed = false;
         while let Ok(msg) = self.hooks.try_recv() {
@@ -186,7 +186,7 @@ impl Runtime {
 
     fn apply(&mut self, mut e: Event) -> bool {
         if !event_on(self.apps, &e) {
-            // sesja wyłączonej aplikacji odpada, ale limity konta (np. Codexa z wątku routera) mogą zostać
+            // a disabled app's session is removed, but account limits (e.g. Codex from a router thread) may remain
             let limits: Vec<_> = e.data.limits.iter().filter(|l| agent_on(self.apps, l.agent)).copied().collect();
             if limits.is_empty() { return false; }
             let mut only = Event::new(e.source, e.session_id.clone(), crate::model::Kind::Limits, e.ts);
@@ -198,7 +198,7 @@ impl Runtime {
         *seen = (*seen).max(e.ts);
         self.as_child_of_caller(&mut e);
         if let Some(f) = &mut self.record {
-            // teksty akcji i pytań (nazwy plików, komendy) nigdy nie trafiają na dysk
+            // action and question text (file names, commands) is never written to disk
             let mut clean = e.clone();
             clean.data.action = None;
             clean.data.question = None;
@@ -206,7 +206,7 @@ impl Runtime {
         }
         let mut changed = !self.store.apply(&e).is_empty();
         if let Some(task) = e.data.router_link.clone() {
-            // zlecone z subagenta (albo wątku-dziecka Codexa): dzieckiem sesji głównej, bo wnuków nikt nie rysuje
+            // requested by a subagent (or Codex child thread): attach as a child of the main session, since grandchildren are not drawn
             let owner = e.data.parent.clone().or_else(|| self.store.session(&e.session_id).and_then(|s| s.parent.clone()))
                 .unwrap_or_else(|| e.session_id.clone());
             changed |= self.link(&task, &owner, e.ts);
@@ -214,7 +214,7 @@ impl Runtime {
         changed
     }
 
-    /// Zadanie routera zlecone przez śledzoną sesję jest jej dzieckiem (sklep robi z niego sierotę, gdy rodzica nie ma).
+    /// A router task requested by a tracked session is its child (the store orphans it when the parent is absent).
     fn as_child_of_caller(&self, e: &mut Event) {
         let Some(task) = e.data.router_task.as_ref() else { return };
         let Some(parent) = self.links.parent_of(&task.task_id) else { return };
@@ -224,7 +224,7 @@ impl Runtime {
         });
     }
 
-    /// Zapisuje powiązanie i od razu dołącza do rodzica zadanie, które już jest na scenie.
+    /// Save the link and immediately attach an already visible task to its parent.
     fn link(&mut self, task: &str, parent: &str, ts: i64) -> bool {
         self.links.link(task, parent, ts);
         let _ = self.links.save_if_dirty(&self.links_path);
@@ -233,7 +233,7 @@ impl Runtime {
             .map(|s| (s.id.clone(), s.title.clone(), s.last_activity)).collect();
         let mut changed = false;
         for (id, title, last) in known {
-            // czas sprzed ostatniej aktywności: dołączenie zmienia tylko dane, nie stan ani aktywność
+            // time before last activity: attaching changes only data, not state or activity
             let mut m = Event::new(crate::model::Source::Router, id, crate::model::Kind::Meta, last - 1);
             m.data.parent = Some(parent.to_string());
             m.data.sub = Some(crate::model::SubInfo {
@@ -248,7 +248,7 @@ impl Runtime {
         use crate::watch::{kind_of, FileKind};
         match kind_of(p) {
             Some(FileKind::ClaudeTranscript | FileKind::ClaudeSubagent) if !self.apps.claude_code => return false,
-            // rollouty Codexa niosą też wątki routera
+            // Codex rollouts also carry router threads
             Some(FileKind::CodexRollout) if !self.apps.codex && !self.apps.agent_router => return false,
             _ => {}
         }
@@ -257,7 +257,7 @@ impl Runtime {
         changed
     }
 
-    /// Po odtworzeniu: subagent, którego plik kończy się odpowiedzią sprzed chwili, już skończył (hooków nie odtwarzamy).
+    /// After restoration: a subagent whose file ends in a recent response has finished (hooks are not replayed).
     fn end_answered_subagents(&mut self, now: i64) {
         for (id, ts) in self.sources.finished_subagents() {
             if now - ts < 30_000 || self.store.session(&id).map(|s| s.state == crate::model::State::Ended).unwrap_or(true) { continue; }
@@ -271,7 +271,7 @@ impl Runtime {
         if !self.apps.opencode { return false; }
         let mut changed = false;
         for mut e in crate::adapters::opencode::events(env, self.lang) {
-            // nowa (albo wróciła) sesja: program z drzewa procesów nad procesem opencode
+            // new (or returning) session: host program from the process tree above opencode
             if self.store.session(&e.session_id).is_none() {
                 let pid = e.data.pid;
                 let host = self.opencode_hosts.entry(e.session_id.clone())
@@ -283,15 +283,15 @@ impl Runtime {
                 }
             }
             if e.kind == crate::model::Kind::SessionEnd { self.opencode_hosts.remove(&e.session_id); }
-            // koniec tury: nowe tokeny w bazie, odczyt przy najbliższym kroku
+            // turn end: new tokens in the database; read them at the next step
             if e.kind == crate::model::Kind::TurnEnd { self.usage_due = true; }
             changed |= self.apply(e);
         }
         changed
     }
 
-    /// Zużycie opencode z jego bazy (spec 0.11 §4.2–4.3): tylko przy włączonej integracji i żywym zwierzaku opencode,
-    /// co 30 s albo zaraz po końcu tury.
+    /// opencode usage from its database (spec 0.11 §4.2–4.3): only with the integration enabled and a live opencode pet,
+    /// every 30 s or immediately after turn end.
     #[cfg(feature = "opencode-db")]
     fn poll_opencode_usage(&mut self, now: i64) -> bool {
         use crate::opencode_db as db;
@@ -319,7 +319,7 @@ impl Runtime {
         if !self.apps.claude_code { return false; }
         let mut changed = false;
         if let Some(tp) = claude::hook::transcript_path(&env) { changed |= self.poll_file(&tp); }
-        // linie subagenta przed jego `SubagentStop`: spóźnione nie ożywią zakończonego dziecka
+        // subagent lines before its `SubagentStop`: late ones will not revive a finished child
         if let Some(sp) = claude::hook::subagent_transcript_path(&env) { changed |= self.poll_file(&sp); }
         for e in self.hook_state.events(&env, self.lang) { changed |= self.apply(e); }
         if let Some(e) = self.tasks.observe(&env) { changed |= self.apply(e); }
@@ -330,7 +330,7 @@ impl Runtime {
 fn agent_on(apps: crate::settings::Apps, agent: crate::model::Agent) -> bool {
     match agent {
         crate::model::Agent::Claude => apps.claude_code,
-        // router zleca zadania na tym samym koncie Codexa
+        // router requests tasks on the same Codex account
         crate::model::Agent::Codex => apps.codex || apps.agent_router,
         crate::model::Agent::Opencode => apps.opencode,
         crate::model::Agent::Other => apps.generic,
@@ -417,7 +417,7 @@ mod tests {
         std::fs::create_dir_all(h.path().join("Claude")).unwrap();
         std::fs::write(h.path().join("Claude").join(claude::desktop_usage::FILE),
             serde_json::json!({"version": 2, "samples": [{"t": now, "org": "o", "u": {"fh": 42, "sd": 7}}]}).to_string()).unwrap();
-        // już w pierwszej migawce po starcie: inaczej reguły powiadomień uznałyby zastany limit za nowy
+        // already in the first post-startup snapshot: otherwise notification rules would treat an existing limit as new
         let rt = Runtime::start(cfg(&h)).unwrap();
         let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
         assert_eq!(five.map(|l| l.used_pct), Some(42.0));
@@ -436,7 +436,7 @@ mod tests {
         assert_eq!(rt.store().limits().iter().filter(|l| l.agent == Agent::Antigravity).map(|l| l.used_pct).collect::<Vec<_>>(), vec![25.0]);
         assert!(rt.antigravity_usage(Usage::Stale));
         assert!(rt.store().limits().iter().all(|l| l.agent != Agent::Antigravity));
-        assert!(!rt.store().sessions().iter().any(|s| s.agent == Agent::Antigravity), "limity nie tworzą zwierzaka");
+        assert!(!rt.store().sessions().iter().any(|s| s.agent == Agent::Antigravity), "limits do not create a pet");
     }
 
     #[test]
@@ -451,7 +451,7 @@ mod tests {
         assert!(rt.store().limits().iter().all(|l| l.agent != Agent::Antigravity));
     }
 
-    /// Nagranie z czasami przesuniętymi tak, że ostatnie zdarzenie było przed chwilą.
+    /// Recording with times shifted so the last event happened just now.
     fn fresh(path: &str) -> String {
         let lines: Vec<serde_json::Value> = std::fs::read_to_string(path).unwrap().lines()
             .map(|l| serde_json::from_str(l).unwrap()).collect();
@@ -467,8 +467,8 @@ mod tests {
     fn rehydrates_recent_codex_rollouts() {
         let h = home();
         let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/codex/router-task.jsonl");
-        // zapis zamiast fs::copy: kopiowanie na Windows zachowuje starą datę modyfikacji,
-        // a odtwarzamy tylko pliki zmienione w ostatnich 30 minutach
+        // write instead of fs::copy: Windows copying preserves the old modification time,
+        // and restore only files changed within the last 30 minutes
         std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-test.jsonl"), fresh(fixture)).unwrap();
         let rt = Runtime::start(cfg(&h)).unwrap();
         assert!(rt.store().sessions().iter().any(|s| s.agent == Agent::Codex && s.origin == Origin::Router));
@@ -491,16 +491,16 @@ mod tests {
         let thread = "01a04e96-7474-79a1-a173-8c3cc2919eeb";
         router_status(&h, thread, "running", crate::time::now_ms());
         let rt = Runtime::start(cfg(&h)).unwrap();
-        let s = rt.store().session(thread).expect("jedna sesja na wątek");
+        let s = rt.store().session(thread).expect("one session per thread");
         assert_eq!((s.origin, s.title.as_str()), (Origin::Router, "Policz pliki"));
         assert_eq!(s.router_task.as_ref().map(|r| r.task_id.as_str()), Some("t1"));
-        assert_eq!(rt.store().sessions().len(), 1, "bez drugiego zwierzaka dla tego samego zadania");
+        assert_eq!(rt.store().sessions().len(), 1, "no second pet for the same task");
     }
 
     #[test]
     fn an_old_failed_router_task_does_not_appear_at_startup() {
         let h = home();
-        router_status(&h, "stary-watek", "failed", crate::time::now_ms() - 2 * 3_600_000);
+        router_status(&h, "old-thread", "failed", crate::time::now_ms() - 2 * 3_600_000);
         let rt = Runtime::start(cfg(&h)).unwrap();
         assert!(rt.store().sessions().is_empty());
     }
@@ -564,7 +564,7 @@ mod tests {
             .set("Authorization", &format!("Bearer {token}")).send_string(body)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
         let env = r#"{"ts":1,"ppid":5,"event":"Stop","payload":{"sessionId":"s"}}"#;
-        for agent in ["copilot", "antigravity"] { assert_eq!(send(agent, &ep.token, env), 404, "{agent} zamknięty"); }
+        for agent in ["copilot", "antigravity"] { assert_eq!(send(agent, &ep.token, env), 404, "{agent} closed"); }
         rt.set_apps(crate::settings::Apps { copilot: true, antigravity: true, ..Default::default() });
         for agent in ["copilot", "antigravity"] {
             assert_eq!(send(agent, &ep.token, env), 204, "{agent}");
@@ -579,7 +579,7 @@ mod tests {
         let h = home();
         let mut rt = Runtime::start(cfg(&h)).unwrap();
         let all = [(Source::Cursor, "cursor:a", Agent::Cursor), (Source::Grok, "grok:a", Agent::Grok), (Source::Zcode, "zcode:a", Agent::Zcode)];
-        for (x, id, _) in all { assert!(!rt.apply_external(event(x, id, Kind::Prompt)), "{id} wyłączony"); }
+        for (x, id, _) in all { assert!(!rt.apply_external(event(x, id, Kind::Prompt)), "{id} disabled"); }
         rt.set_apps(crate::settings::Apps { cursor: true, grok: true, zcode: true, ..Default::default() });
         for (x, id, a) in all {
             assert!(rt.apply_external(event(x, id, Kind::Prompt)), "{id}");
@@ -599,7 +599,7 @@ mod tests {
             .set("Authorization", &format!("Bearer {token}")).send_string(body)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
         let env = r#"{"ts":1,"ppid":5,"event":"stop","payload":{"sessionId":"s"}}"#;
-        for agent in ["cursor", "grok", "zcode"] { assert_eq!(send(agent, &ep.token, env), 404, "{agent} zamknięty"); }
+        for agent in ["cursor", "grok", "zcode"] { assert_eq!(send(agent, &ep.token, env), 404, "{agent} closed"); }
         rt.set_apps(crate::settings::Apps { cursor: true, grok: true, zcode: true, ..Default::default() });
         for agent in ["cursor", "grok", "zcode"] {
             assert_eq!(send(agent, &ep.token, env), 204, "{agent}");
@@ -680,7 +680,7 @@ mod tests {
         assert_eq!(post_agent(&ep, "copilot", &body), 204);
         let deadline = Instant::now() + Duration::from_secs(2);
         while rt.store().session("copilot:cop_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
-        let s = rt.store().session("copilot:cop_1").expect("sesja Copilota");
+        let s = rt.store().session("copilot:cop_1").expect("Copilot session");
         assert_eq!((s.agent, s.jump.pid, s.tool), (Agent::Copilot, Some(std::process::id()), Some(crate::model::Tool::Bash)));
         assert_eq!(s.action.as_deref(), Some("cargo test"));
     }
@@ -697,7 +697,7 @@ mod tests {
         assert_eq!(post_agent(&ep, "antigravity", &body), 204);
         let deadline = Instant::now() + Duration::from_secs(2);
         while rt.store().session("antigravity:d5f1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
-        let s = rt.store().session("antigravity:d5f1").expect("sesja Antigravity");
+        let s = rt.store().session("antigravity:d5f1").expect("Antigravity session");
         assert_eq!((s.agent, s.state, s.model.as_deref()), (Agent::Antigravity, crate::model::State::Thinking, Some("gemini-3.5-pro")));
     }
 
@@ -726,7 +726,7 @@ mod tests {
         assert_eq!(s.usage, Some(Usage { tokens: 1175, cost: 0.0, account: Some(Agent::Codex) }));
         assert_eq!(rt.store().agent_usage(), &[AgentUsage { agent: Agent::Opencode, tokens_today: 438, cost_today: 0.0 }]);
         assert!(rt.set_apps(crate::settings::Apps { opencode: false, ..Default::default() }));
-        assert!(rt.store().agent_usage().is_empty(), "wyłączony opencode bez sumy dnia");
+        assert!(rt.store().agent_usage().is_empty(), "disabled opencode has no daily total");
     }
 
     #[cfg(feature = "opencode-db")]
@@ -741,13 +741,13 @@ mod tests {
         rt.apply_external(event(Source::Opencode, "opencode:ses_1", Kind::Prompt));
         let before = opens();
         for i in 0..40 { rt.step(now + i * 1000); }
-        assert_eq!(opens(), before, "opencode wyłączony");
+        assert_eq!(opens(), before, "opencode disabled");
         rt.set_apps(crate::settings::Apps { opencode: true, ..Default::default() });
         for i in 0..40 { rt.step(now + i * 1000); }
-        assert_eq!(opens(), before, "bez zwierzaka opencode");
+        assert_eq!(opens(), before, "no opencode pet");
         rt.apply_external(event(Source::Opencode, "opencode:ses_1", Kind::Prompt));
         for i in 0..40 { rt.step(now + i * 1000); }
-        assert_eq!(opens(), before + 2, "od razu, potem co 30 s");
+        assert_eq!(opens(), before + 2, "immediately, then every 30 s");
     }
 
     #[test]
@@ -762,7 +762,7 @@ mod tests {
         assert_eq!(send(&ep), 204);
         let deadline = Instant::now() + Duration::from_secs(2);
         while rt.store().session("generic:kilo:a").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
-        let s = rt.store().session("generic:kilo:a").expect("sesja z furtki");
+        let s = rt.store().session("generic:kilo:a").expect("door session");
         assert_eq!((s.agent, s.state, s.tool), (Agent::Other, crate::model::State::Working, Some(crate::model::Tool::Bash)));
         rt.set_apps(crate::settings::Apps { generic: false, ..Default::default() });
         assert_eq!(send(&ep), 404);
@@ -782,7 +782,7 @@ mod tests {
         assert_eq!(r.status(), 204);
         let deadline = Instant::now() + Duration::from_secs(2);
         while rt.store().session("opencode:ses_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
-        let s = rt.store().session("opencode:ses_1").expect("sesja opencode");
+        let s = rt.store().session("opencode:ses_1").expect("opencode session");
         assert_eq!((s.agent, s.jump.pid), (Agent::Opencode, Some(std::process::id())));
         assert_eq!(s.action.as_deref(), Some("cargo test"));
     }
@@ -801,9 +801,9 @@ mod tests {
         let apps = crate::settings::Apps { claude_code: true, codex: false, agent_router: false, ..Default::default() };
         assert!(rt.set_apps(apps));
         let ids: Vec<&str> = rt.store().sessions().iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, vec!["c1"], "sesja routera znika z routerem, choć to wątek Codexa");
+        assert_eq!(ids, vec!["c1"], "router session disappears with the router despite being a Codex thread");
         assert!(rt.store().limits().is_empty());
-        assert!(!rt.set_apps(apps), "druga taka sama zmiana niczego nie zmienia");
+        assert!(!rt.set_apps(apps), "repeating the same change changes nothing");
         assert!(!rt.apply_external(event(Source::Codex, "x2", Kind::Prompt)));
     }
 
@@ -819,7 +819,7 @@ mod tests {
 
     #[test]
     fn long_dead_rollouts_touched_recently_do_not_appear_at_startup() {
-        // aplikacja Codex zmienia daty starych rolloutów; ich zdarzenia są sprzed dni, więc zwierzak nie ma się pojawiać
+        // the Codex app changes old rollout dates; their events are days old, so the pet must not appear
         let h = home();
         let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/codex/router-task.jsonl");
         std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-old.jsonl"), std::fs::read(fixture).unwrap()).unwrap();
@@ -867,7 +867,7 @@ mod tests {
         let sub = s.sub.clone().unwrap();
         assert_eq!((sub.kind, sub.description.as_deref()), (crate::model::SubKind::Router, Some("Policz pliki")));
         let saved = std::fs::read_to_string(crate::links::path(h.path())).unwrap();
-        assert!(saved.contains("t1") && saved.contains("p1") && !saved.contains("Policz"), "tylko id: {saved}");
+        assert!(saved.contains("t1") && saved.contains("p1") && !saved.contains("Policz"), "IDs only: {saved}");
     }
 
     #[test]
@@ -876,7 +876,7 @@ mod tests {
         let now = crate::time::now_ms();
         router_status(&h, "th1", "running", now);
         let mut rt = Runtime::start(cfg(&h)).unwrap();
-        assert_eq!(rt.store().session("th1").map(|s| s.parent.clone()), Some(None), "bez powiązania: zwykły zwierzak jak w 0.7");
+        assert_eq!(rt.store().session("th1").map(|s| s.parent.clone()), Some(None), "without a link: ordinary pet as in 0.7");
         delegated(&mut rt, "p1", "t1", now);
         assert_eq!(rt.store().session("th1").and_then(|s| s.parent.clone()).as_deref(), Some("p1"));
     }
@@ -913,9 +913,9 @@ mod tests {
         rt.apply_external(n);
         drop(rt);
         let text = std::fs::read_to_string(&rec).unwrap();
-        assert_eq!(text.lines().count(), 2, "zdarzenia są nagrane");
+        assert_eq!(text.lines().count(), 2, "events are recorded");
         assert!(!text.contains("sekret"), "{text}");
-        assert!(rt_store_kept_text(&h), "w pamięci tekst zostaje");
+        assert!(rt_store_kept_text(&h), "text remains in memory");
     }
 
     fn rt_store_kept_text(h: &tempfile::TempDir) -> bool {
@@ -942,7 +942,7 @@ mod tests {
         router_status(&h, "th1", "running", now);
         rt.step(now + 2_000);
         assert_eq!(rt.store().session("th1").and_then(|s| s.parent.clone()).as_deref(), Some("p1"),
-            "wnuków nikt nie rysuje: zadanie trafia do sesji głównej");
+            "grandchildren are not drawn: task attaches to the main session");
     }
 
     #[test]
@@ -961,7 +961,7 @@ mod tests {
         std::fs::write(dir.join("agent-a.meta.json"), r#"{"agentType":"general-purpose","requestShape":"background"}"#).unwrap();
         std::fs::write(dir.join("agent-b.jsonl"), [line("b", "user", serde_json::json!("y"), 60_000), running("b", 5_000)].join("\n") + "\n").unwrap();
         let rt = Runtime::start(cfg(&h)).unwrap();
-        assert!(rt.store().session("p1/a").map(|s| s.state == crate::model::State::Ended).unwrap_or(true), "skończony subagent w tle: {:?}", rt.store().session("p1/a").map(|s| (s.state, s.last_activity, s.parent.clone())));
-        assert_eq!(rt.store().session("p1/b").map(|s| s.state), Some(crate::model::State::Working), "pracujący zostaje");
+        assert!(rt.store().session("p1/a").map(|s| s.state == crate::model::State::Ended).unwrap_or(true), "finished background subagent: {:?}", rt.store().session("p1/a").map(|s| (s.state, s.last_activity, s.parent.clone())));
+        assert_eq!(rt.store().session("p1/b").map(|s| s.state), Some(crate::model::State::Working), "working one remains");
     }
 }

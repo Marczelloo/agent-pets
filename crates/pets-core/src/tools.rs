@@ -13,7 +13,7 @@ pub fn from_claude(name: &str) -> Tool {
     }
 }
 
-/// `None` oznacza narzędzie pomocnicze, które nie zmienia animacji.
+/// `None` means an auxiliary tool that does not change the animation.
 pub fn from_codex(name: &str) -> Option<Tool> {
     match name {
         "shell_command" | "exec_command" | "write_stdin" | "shell" | "local_shell" => Some(Tool::Bash),
@@ -29,7 +29,7 @@ pub fn from_codex(name: &str) -> Option<Tool> {
     }
 }
 
-/// Nazwy narzędzi opencode (spike S1, z dokumentacji). Nazwa z `_` spoza listy to narzędzie MCP (`serwer_narzędzie`).
+/// opencode tool names (spike S1, from documentation). A name with `_` outside the list is an MCP tool (`server_tool`).
 pub fn from_opencode(name: &str) -> Tool {
     match name {
         "bash" => Tool::Bash,
@@ -43,8 +43,8 @@ pub fn from_opencode(name: &str) -> Tool {
     }
 }
 
-/// Nazwy narzędzi Copilota: CLI (`bash`, `view`, `edit`…) i tryb agenta VS Code (`run_in_terminal`, `read_file`…).
-/// MCP w CLI to `serwer/narzędzie`, w VS Code `mcp_…`.
+/// Copilot tool names: CLI (`bash`, `view`, `edit`…) and VS Code agent mode (`run_in_terminal`, `read_file`…).
+/// MCP in the CLI is `server/tool`, in VS Code `mcp_…`.
 pub fn from_copilot(name: &str) -> Tool {
     match name {
         "bash" | "powershell" | "run_in_terminal" | "shell" => Tool::Bash,
@@ -54,12 +54,12 @@ pub fn from_copilot(name: &str) -> Tool {
         "web_fetch" | "fetch_webpage" | "web_search" => Tool::Web,
         "task" | "runSubagent" => Tool::Agent,
         n if n.contains('/') || n.starts_with("mcp_") => Tool::Mcp,
-        // JetBrains podaje nazwy jak Claude (`Bash`, `Edit`, `Read`, `Glob`)
+        // JetBrains uses Claude-style names (`Bash`, `Edit`, `Read`, `Glob`)
         n => from_claude(n),
     }
 }
 
-/// Nazwy narzędzi Antigravity (spike S2; do potwierdzenia nagraniem na żywo). MCP: `mcp_…`.
+/// Antigravity tool names (spike S2; pending live capture confirmation). MCP: `mcp_…`.
 pub fn from_antigravity(name: &str) -> Tool {
     match name {
         "run_command" => Tool::Bash,
@@ -74,8 +74,8 @@ pub fn from_antigravity(name: &str) -> Tool {
     }
 }
 
-/// Rodzaj narzędzia ze słów w nazwie (Grok Build, ZCode); pierwszy pasujący wiersz wygrywa. Sieć przed szukaniem
-/// (`web_search`), zapis przed odczytem (`create_file`, `edit_file`).
+/// Tool kind from words in the name (Grok Build, ZCode); the first matching row wins. Network before search
+/// (`web_search`), write before read (`create_file`, `edit_file`).
 pub fn from_keywords(name: &str) -> Tool {
     let n = name.to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
@@ -89,7 +89,7 @@ pub fn from_keywords(name: &str) -> Tool {
     else { Tool::Other }
 }
 
-/// Nazwy narzędzi Cursora (hooki `preToolUse`). MCP: `MCP:<serwer>`.
+/// Cursor tool names (`preToolUse` hooks). MCP: `MCP:<server>`.
 pub fn from_cursor(name: &str) -> Tool {
     match name {
         "Shell" => Tool::Bash,
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(from_codex("spawn_agent"), Some(Tool::Agent));
         assert_eq!(from_codex("mcp__node_repl__js"), Some(Tool::Mcp));
         assert_eq!(from_codex("js"), Some(Tool::Mcp));
-        // narzędzia pomocnicze nie zmieniają animacji
+        // auxiliary tools do not change the animation
         assert_eq!(from_codex("update_plan"), None);
         assert_eq!(from_codex("wait"), None);
         assert_eq!(from_codex("sleep"), None);

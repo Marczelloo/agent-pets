@@ -1,17 +1,17 @@
-//! Limity konta Claude z aplikacji desktopowej. Aplikacja co 5–15 min pobiera zużycie planu i dopisuje próbkę do
-//! `plan-usage-history.json`: `{"version":2,"samples":[{"t":<ms>,"org":"<uuid>","u":{"fh":<5h %>,"sd":<tydzień %>}}]}`.
-//! Plik ma tylko procenty, bez czasu resetu. Czytamy go lokalnie, bez sieci i bez danych logowania.
+//! Claude account limits from the desktop app. Every 5–15 min the app fetches plan usage and appends a sample to
+//! `plan-usage-history.json`: `{"version":2,"samples":[{"t":<ms>,"org":"<uuid>","u":{"fh":<5h %>,"sd":<weekly %>}}]}`.
+//! The file has percentages only, without reset times. Read it locally, without network or login data.
 use crate::model::*;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub const FILE: &str = "plan-usage-history.json";
-/// Próbka starsza niż to jest nieaktualna (aplikacja zamknięta): nie zgłaszamy jej.
+/// An older sample is stale (app closed) and is not reported.
 pub const MAX_AGE_MS: i64 = 30 * 60 * 1000;
 pub const POLL_MS: i64 = 60_000;
 pub const SESSION_ID: &str = "claude-desktop-usage";
 
-/// Instalacja MSIX (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`) i zwykła (`%APPDATA%\Claude`).
+/// MSIX installation (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`) and standard (`%APPDATA%\Claude`).
 pub fn candidate_files(local_appdata: &Path, appdata: &Path) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = std::fs::read_dir(local_appdata.join("Packages")).into_iter().flatten().flatten()
         .filter(|e| e.file_name().to_string_lossy().starts_with("Claude_"))
@@ -22,7 +22,7 @@ pub fn candidate_files(local_appdata: &Path, appdata: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Najnowsza próbka jako zdarzenie limitów. `None` dla nieznanego formatu, pustej historii i próbki nieaktualnej.
+/// Latest sample as a limits event. `None` for unknown format, empty history, or a stale sample.
 pub fn latest(bytes: &[u8], now: i64) -> Option<Event> {
     let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     if v.get("version")?.as_i64()? != 2 { return None; }
@@ -42,9 +42,9 @@ pub fn latest(bytes: &[u8], now: i64) -> Option<Event> {
 
 #[derive(Debug)]
 pub enum Usage {
-    /// nowa próbka
+    /// New sample.
     Limits(Event),
-    /// ostatnia zgłoszona próbka jest starsza niż `MAX_AGE_MS` (aplikacja zamknięta): jej limity trzeba zdjąć
+    /// Last reported sample is older than `MAX_AGE_MS` (app closed): remove its limits.
     Stale,
 }
 
@@ -52,14 +52,14 @@ pub struct Poller {
     files: Vec<PathBuf>,
     next_check: i64,
     seen: Option<(PathBuf, SystemTime)>,
-    /// czas ostatniej zgłoszonej próbki, dopóki jej limity są w użyciu
+    /// Time of the last reported sample while its limits are in use.
     reported: Option<i64>,
 }
 
 impl Poller {
     pub fn new(files: Vec<PathBuf>) -> Poller { Poller { files, next_check: i64::MIN, seen: None, reported: None } }
 
-    /// Co `POLL_MS` sprawdza pliki; czyta tylko ten z najnowszym mtime i tylko gdy się zmienił.
+    /// Check files every `POLL_MS`; read only the one with the latest mtime and only if it changed.
     pub fn poll(&mut self, now: i64) -> Option<Usage> {
         if now < self.next_check { return None; }
         self.next_check = now + POLL_MS;
@@ -147,20 +147,20 @@ mod tests {
         std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 1 } }]))).unwrap();
         let mut p = Poller::new(vec![d.path().join("missing.json"), f.clone()]);
         assert_eq!(pct(&limits(p.poll(now)), Window::FiveHour), Some(1.0));
-        assert!(p.poll(now + POLL_MS).is_none(), "plik się nie zmienił");
+        assert!(p.poll(now + POLL_MS).is_none(), "file did not change");
         std::thread::sleep(std::time::Duration::from_millis(20));
         std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 2 } }]))).unwrap();
-        assert!(p.poll(now + POLL_MS + 1).is_none(), "za wcześnie od ostatniego sprawdzenia");
+        assert!(p.poll(now + POLL_MS + 1).is_none(), "too soon since the last check");
         assert_eq!(pct(&limits(p.poll(now + 2 * POLL_MS)), Window::FiveHour), Some(2.0));
     }
 
     fn limits(u: Option<Usage>) -> Event {
-        match u { Some(Usage::Limits(e)) => e, other => panic!("oczekiwano limitów, jest {other:?}") }
+        match u { Some(Usage::Limits(e)) => e, other => panic!("expected limits, got {other:?}") }
     }
 
     #[test]
     fn poller_reports_once_when_the_app_stops_updating() {
-        // aplikacja Claude zamknięta: plik przestaje się zmieniać, a ostatnia próbka się starzeje
+        // Claude app closed: the file stops changing and the last sample grows stale
         let d = tempfile::tempdir().unwrap();
         let f = d.path().join(FILE);
         let now = crate::time::now_ms();
@@ -169,6 +169,6 @@ mod tests {
         limits(p.poll(now));
         assert!(p.poll(now + MAX_AGE_MS - POLL_MS).is_none());
         assert!(matches!(p.poll(now + MAX_AGE_MS + POLL_MS), Some(Usage::Stale)));
-        assert!(p.poll(now + MAX_AGE_MS + 3 * POLL_MS).is_none(), "tylko raz");
+        assert!(p.poll(now + MAX_AGE_MS + 3 * POLL_MS).is_none(), "only once");
     }
 }

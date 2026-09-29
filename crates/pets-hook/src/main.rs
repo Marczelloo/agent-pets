@@ -1,17 +1,17 @@
-//! hook.exe: przekazuje JSON hooka Claude Code do widżetu. Nigdy nie blokuje agenta:
-//! limit 300 ms, zawsze kod 0. W trybie hooka nic nie wypisuje.
+//! hook.exe: forwards Claude Code hook JSON to the widget. Never blocks the agent:
+//! 300 ms limit, always exits with code 0. Prints nothing in hook mode.
 //!
-//! Tryb `--agent-pets-statusline` (przelotka statusline): przekazuje JSON statusline do widżetu, a na wyjście
-//! wypisuje wyłącznie wyjście dotychczasowej komendy statusline użytkownika, bajt w bajt.
+//! `--agent-pets-statusline` mode (statusline pass-through): forwards statusline JSON to the widget and prints
+//! only the output of the user's existing statusline command, byte for byte.
 //!
-//! `hook.exe report --agent <id> --session <id> --state <stan> [...]` (furtka, spec 0.10 §8): komenda dla ludzi i skryptów,
-//! nie hook. Jako jedyna wypisuje błąd na stderr i kończy się kodem 2.
+//! `hook.exe report --agent <id> --session <id> --state <state> [...]` (door, spec 0.10 §8): a command for people and scripts,
+//! not a hook. It alone prints errors to stderr and exits with code 2.
 //!
-//! `hook.exe --agent <copilot|antigravity|cursor|grok|zcode> --event <nazwa>` (spec 0.11 §2, 0.12 §2): hook innego
-//! agenta. Koperta `AgentEnvelope` do widżetu; na wyjście tylko to, czego wymaga agent (Antigravity: `{}`, przy `Stop`
-//! decyzja „stop”; Cursor: `{}`, przy `beforeSubmitPrompt` `{"continue":true}`).
+//! `hook.exe --agent <copilot|antigravity|cursor|grok|zcode> --event <name>` (spec 0.11 §2, 0.12 §2): another
+//! agent's hook. Sends an `AgentEnvelope` to the widget; outputs only what that agent requires (Antigravity: `{}`, at `Stop`
+//! a "stop" decision; Cursor: `{}`, at `beforeSubmitPrompt` `{"continue":true}`).
 //!
-//! Cursor i Grok uruchamiają też hooki Claude'a, a Grok hooki Cursora. Taki hook nic nie wysyła (spec 0.12 §2.2).
+//! Cursor and Grok also run Claude hooks, and Grok runs Cursor hooks. Such a hook sends nothing (spec 0.12 §2.2).
 use pets_core::claude::{HookEnvelope, StatuslineEnvelope};
 use pets_core::endpoint::Endpoint;
 use pets_core::{host, pid, statusline_install, time};
@@ -21,7 +21,7 @@ use std::time::Duration;
 
 fn read_stdin() -> Vec<u8> { read_stdin_max(1 << 20) }
 
-/// JSON z wejścia, także z BOM-em UTF-8: Cursor uruchamia hooki przez pwsh, który go dokleja (sprawdzone na żywo, 0.12).
+/// Input JSON, including a UTF-8 BOM: Cursor runs hooks through pwsh, which adds one (verified live, 0.12).
 fn json_of(buf: &[u8]) -> Option<serde_json::Value> {
     serde_json::from_slice(buf.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(buf)).ok()
 }
@@ -32,17 +32,17 @@ fn read_stdin_max(max: u64) -> Vec<u8> {
     buf
 }
 
-/// Zmienna środowiska; pusta = brak.
+/// Environment variable; empty means absent.
 fn env_var(k: &str) -> Option<String> { std::env::var(k).ok().filter(|v| !v.is_empty()) }
 
 fn post(path_suffix: &str, body: serde_json::Value) -> Option<()> { send(path_suffix, body).ok().map(|_| ()) }
 
-/// Kod odpowiedzi widżetu albo powód, dla którego nie odpowiedział.
+/// Widget response code or the reason it did not respond.
 fn send(path_suffix: &str, body: serde_json::Value) -> Result<u16, String> {
     let path = std::env::var_os("AGENT_PETS_ENDPOINT").map(PathBuf::from).unwrap_or_else(Endpoint::default_path);
     let ep = Endpoint::read(&path).map_err(|_| format!("Agent Pets is not running (no {})", path.display()))?;
-    // Windows ponawia połączenie z zamkniętym portem na localhoście ok. 2 s,
-    // a `timeout` nie obejmuje fazy łączenia, więc limit łączenia ustawiamy osobno.
+    // Windows retries a closed localhost port for about 2 s,
+    // and `timeout` does not cover connection setup, so set a separate connection limit.
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_millis(150))
         .timeout(Duration::from_millis(300))
@@ -70,10 +70,10 @@ fn report(args: &[String]) -> i32 {
 
 fn run() -> Option<()> {
     let payload = json_of(&read_stdin())?;
-    // hook Claude'a uruchomiony przez Cursora albo Groka: to nie jest sesja Claude'a
+    // a Claude hook run by Cursor or Grok is not a Claude session
     if pets_core::adapters::caller(&payload, &env_var).is_some() { return None; }
     let ppid = pid::agent_pid();
-    // program-gospodarz tylko tam, gdzie rdzeń go czyta: jeden zrzut procesów na start sesji i prompt
+    // resolve the host only where the core reads it: one process snapshot at session start and prompt
     let host = match payload.get("hook_event_name").and_then(|v| v.as_str()) {
         Some("SessionStart" | "UserPromptSubmit") => ppid.and_then(|p| host::host_of(&host::ProcTable::snapshot(), p)),
         _ => None,
@@ -82,7 +82,7 @@ fn run() -> Option<()> {
     post("/v1/events/claude", serde_json::to_value(&env).ok()?)
 }
 
-/// Przelotka statusline: dane do widżetu, a użytkownik widzi dokładnie wyjście swojego statusline.
+/// Statusline pass-through: data goes to the widget, while the user sees their statusline's exact output.
 fn statusline() {
     let buf = read_stdin();
     if let Some(payload) = json_of(&buf) {
@@ -94,21 +94,21 @@ fn statusline() {
     let Some(cmd) = original.as_ref().and_then(|o| o["command"].as_str()) else { return };
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
-    // `/S /C "<komenda>"`: cmd zdejmuje tylko zewnętrzne cudzysłowy, a komendę z własnymi cudzysłowami
-    // (np. `"C:\x y\line.exe" --opt`) uruchamia bez zmian. Zwykłe `args` cytowałyby ją po swojemu.
+    // `/S /C "<command>"`: cmd removes only the outer quotes and runs a command with its own quotes
+    // (e.g. `"C:\x y\line.exe" --opt`) unchanged. Ordinary `args` would quote it differently.
     let Ok(mut child) = Command::new("cmd").raw_arg(format!("/S /C \"{cmd}\""))
         .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() else { return };
     if let Some(mut si) = child.stdin.take() { let _ = si.write_all(&buf); }
     if let Ok(out) = child.wait_with_output() { let _ = std::io::stdout().write_all(&out.stdout); }
 }
 
-/// Wartość po `--nazwa` w argumentach.
+/// Value following `--name` in the arguments.
 fn arg<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str)
 }
 
-/// Hook innego agenta: koperta do widżetu (spec 0.11 §2, 0.12 §4). Wejście do 16 MB: Cursor wysyła cały prompt
-/// z załącznikami, a `slim` i tak go usuwa, zanim cokolwiek wyjdzie z procesu.
+/// Another agent's hook: envelope to the widget (spec 0.11 §2, 0.12 §4). Input up to 16 MB: Cursor sends the whole prompt
+/// with attachments, and `slim` removes it before anything leaves the process.
 fn agent_hook(agent: &str, event: &str) -> Option<()> {
     let mut payload = json_of(&read_stdin_max(16 << 20))?;
     if pets_core::adapters::caller(&payload, &env_var).is_some_and(|c| c.id() != agent) { return None; }
@@ -127,8 +127,8 @@ fn agent_mode(args: &[String]) {
     let Some(agent) = arg(args, "--agent").filter(|a| matches!(*a, "copilot" | "antigravity" | "cursor" | "grok" | "zcode")) else { return };
     let Some(event) = arg(args, "--event").filter(|e| (1..=32).contains(&e.len()) && e.chars().all(|c| c.is_ascii_alphabetic())) else { return };
     let _ = std::panic::catch_unwind(|| agent_hook(agent, event));
-    // odpowiedź zawsze, także gdy widżet nie działa albo wejście jest złe: bez niej Antigravity nie skończy pracy,
-    // a Cursor nie przepuści promptu
+    // always reply, even when the widget is down or input is invalid: without it Antigravity cannot finish,
+    // and Cursor will not submit the prompt
     let reply = match agent {
         "antigravity" => pets_core::adapters::antigravity::reply(event),
         "cursor" => pets_core::adapters::cursor::reply(event),

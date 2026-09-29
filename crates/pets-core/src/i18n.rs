@@ -1,11 +1,11 @@
-//! Język tekstów pokazywanych użytkownikowi (tray, powiadomienia, opisy integracji). Logi zostają po polsku.
+//! Language of user-visible text (tray, notifications, integration descriptions). Logs use English.
 use crate::settings::Language;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Lang { Pl, En }
 
-/// `Auto`: polski tylko przy polskim interfejsie Windows; każdy inny → angielski.
+/// `Auto`: Polish only with a Polish Windows interface; any other → English.
 pub fn resolve(setting: Language, system_polish: bool) -> Lang {
     match setting {
         Language::Pl => Lang::Pl,
@@ -16,20 +16,20 @@ pub fn resolve(setting: Language, system_polish: bool) -> Lang {
 
 pub fn tr(l: Lang, pl: &'static str, en: &'static str) -> &'static str { match l { Lang::Pl => pl, Lang::En => en } }
 
-/// Język interfejsu Windows (LANG_POLISH = 0x15 w młodszych bitach LANGID).
+/// Windows interface language (LANG_POLISH = 0x15 in the low bits of LANGID).
 #[cfg(windows)]
 pub fn system_polish() -> bool {
-    // SAFETY: funkcja bez argumentów, tylko odczyt ustawienia użytkownika.
+    // SAFETY: function has no arguments and only reads a user setting.
     let id = unsafe { windows_sys::Win32::Globalization::GetUserDefaultUILanguage() };
     id & 0x3ff == 0x15
 }
 #[cfg(not(windows))]
 pub fn system_polish() -> bool { std::env::var("LANG").map(|v| v.starts_with("pl")).unwrap_or(false) }
 
-/// Język Windows jako `Lang` (to, co wybiera `Auto`).
+/// Windows language as `Lang` (what `Auto` selects).
 pub fn system() -> Lang { resolve(Language::Auto, system_polish()) }
 
-/// Język z ustawień i systemu.
+/// Language from settings and the system.
 pub fn current(setting: Language) -> Lang { resolve(setting, system_polish()) }
 
 #[cfg(test)]

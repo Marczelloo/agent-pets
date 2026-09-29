@@ -1,15 +1,15 @@
 //! Limity konta Claude prosto z serwera Anthropic (`GET https://api.anthropic.com/api/oauth/usage`), tak jak robi
-//! to `/usage` w Claude Code: dokładne procenty i czasy resetu, bez sesji CLI. Tu jest tylko czysta część
-//! (token, odpowiedź → zdarzenie); zapytanie sieciowe wysyła aplikacja.
+//! matches `/usage` in Claude Code: exact percentages and reset times, without a CLI session. Only the pure part
+//! is here (token, response → event); the app sends the network request.
 use crate::model::*;
 use serde_json::Value;
 
 pub const URL: &str = "https://api.anthropic.com/api/oauth/usage";
-/// Nagłówek wymagany przez endpointy OAuth (jak w Claude Code).
+/// Header required by OAuth endpoints (as in Claude Code).
 pub const BETA: &str = "oauth-2025-04-20";
 pub const SESSION_ID: &str = "claude-account-usage";
 
-/// Token dostępu z `~/.claude/.credentials.json`, jeśli jeszcze ważny. Claude Code sam go odświeża.
+/// Access token from `~/.claude/.credentials.json` if still valid. Claude Code refreshes it itself.
 pub fn token(credentials: &[u8], now: i64) -> Option<String> {
     let v: Value = serde_json::from_slice(credentials).ok()?;
     let o = v.get("claudeAiOauth")?;
@@ -18,7 +18,7 @@ pub fn token(credentials: &[u8], now: i64) -> Option<String> {
     Some(tok.to_string())
 }
 
-/// Odpowiedź `api/oauth/usage` jako zdarzenie limitów. Brak `utilization` to brak danych, nie 0%.
+/// `api/oauth/usage` response as a limits event. Missing `utilization` means no data, not 0%.
 pub fn to_event(body: &Value, now: i64) -> Option<Event> {
     let limits: Vec<Limit> = [("five_hour", Window::FiveHour), ("seven_day", Window::Weekly)].into_iter()
         .filter_map(|(k, window)| {
@@ -46,7 +46,7 @@ mod tests {
     fn valid_token_only() {
         let creds = |exp: i64| serde_json::to_vec(&json!({"claudeAiOauth": {"accessToken": "tok", "expiresAt": exp}})).unwrap();
         assert_eq!(token(&creds(NOW + 60_000), NOW).as_deref(), Some("tok"));
-        assert_eq!(token(&creds(NOW - 1), NOW), None, "wygasły: czekamy, aż Claude Code go odświeży");
+        assert_eq!(token(&creds(NOW - 1), NOW), None, "expired: wait for Claude Code to refresh it");
         assert_eq!(token(b"{bad", NOW), None);
         assert_eq!(token(br#"{"claudeAiOauth":{"accessToken":""}}"#, NOW), None);
     }

@@ -9,7 +9,7 @@ use crate::endpoint::Endpoint;
 pub enum Incoming {
     ClaudeHook(HookEnvelope),
     ClaudeStatusline(StatuslineEnvelope),
-    /// zdarzenie z furtki, już sprawdzone (`adapters::generic::to_event`)
+    /// Event from the door, already validated (`adapters::generic::to_event`).
     Generic(crate::model::Event),
     /// koperta pluginu opencode (`adapters::opencode::events`)
     Opencode(serde_json::Value),
@@ -25,7 +25,7 @@ pub enum Incoming {
     Zcode(crate::adapters::AgentEnvelope),
 }
 
-/// Trasy włączane w locie z ustawień; zamknięta wygląda jak brak trasy (404).
+/// Routes enabled live from settings; a closed route appears absent (404).
 #[derive(Debug, Default)]
 pub struct Doors {
     pub generic: AtomicBool, pub copilot: AtomicBool, pub antigravity: AtomicBool,
@@ -57,10 +57,10 @@ pub struct Ingest {
 const MAX_BODY: u64 = 1 << 20;
 
 impl Ingest {
-    /// `doors`: które trasy włączane z ustawień są otwarte (furtka, Copilot, Antigravity); przełączane w locie.
+    /// `doors`: which settings-controlled routes are open (door, Copilot, Antigravity); changed live.
     pub fn start(token: String, tx: Sender<Incoming>, doors: Arc<Doors>) -> anyhow::Result<Ingest> {
         let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").map_err(|e| anyhow::anyhow!(e))?);
-        let port = server.server_addr().to_ip().map(|a| a.port()).ok_or_else(|| anyhow::anyhow!("brak portu"))?;
+        let port = server.server_addr().to_ip().map(|a| a.port()).ok_or_else(|| anyhow::anyhow!("no port"))?;
         let endpoint = Endpoint { port, token: token.clone() };
         let srv = server.clone();
         let handle = std::thread::spawn(move || {
@@ -89,7 +89,7 @@ fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Inco
         "/v1/events/claude" => Route::Claude,
         "/v1/events/claude-statusline" => Route::Statusline,
         "/v1/events/opencode" => Route::Opencode,
-        // wyłączona furtka albo integracja wygląda jak brak trasy
+        // a disabled door or integration appears as a missing route
         "/v1/events/generic" if doors.generic.load(Ordering::Relaxed) => Route::Generic,
         "/v1/events/copilot" if doors.copilot.load(Ordering::Relaxed) => Route::Copilot,
         "/v1/events/antigravity" if doors.antigravity.load(Ordering::Relaxed) => Route::Antigravity,
@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(post(port, "/v1/events/claude", "secret", body), 204);
         match rx.recv_timeout(Duration::from_secs(2)).unwrap() {
             Incoming::ClaudeHook(h) => assert_eq!(h.ppid, Some(5)),
-            _ => panic!("zła trasa"),
+            _ => panic!("wrong route"),
         }
         assert_eq!(post(port, "/v1/events/claude", "wrong", body), 401);
         assert_eq!(post(port, "/nope", "secret", body), 404);
@@ -170,7 +170,7 @@ mod tests {
                 assert_eq!((e.agent(), e.session_id.as_str()), (crate::model::Agent::Other, "generic:kilo:abc"));
                 assert_eq!(e.data.agent_name.as_deref(), Some("Kilo CLI"));
             }
-            _ => panic!("zła trasa"),
+            _ => panic!("wrong route"),
         }
         ing.stop();
     }
@@ -188,7 +188,7 @@ mod tests {
         assert_eq!(post(port, "/v1/events/generic", "wrong", &ev("kilo", "abc")), 401);
         let big = format!(r#"{{"agent":"kilo","session":"abc","state":"done","title":"{}"}}"#, "x".repeat(1 << 20));
         assert_eq!(post(port, "/v1/events/generic", "secret", &big), 413);
-        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "nic nie trafiło do kanału");
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "nothing reached the channel");
         ing.stop();
     }
 
@@ -201,7 +201,7 @@ mod tests {
         assert_eq!(post(port, "/v1/events/opencode", "secret", body), 204);
         match rx.recv_timeout(Duration::from_secs(2)).unwrap() {
             Incoming::Opencode(v) => assert_eq!(v["session"], "ses_1"),
-            _ => panic!("zła trasa"),
+            _ => panic!("wrong route"),
         }
         assert_eq!(post(port, "/v1/events/opencode", "wrong", body), 401);
         assert_eq!(post(port, "/v1/events/opencode", "secret", "[1]"), 400);
@@ -218,7 +218,7 @@ mod tests {
         assert_eq!(post(port, "/v1/events/generic", "secret", body), 404);
         assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
         d.generic.store(true, std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(post(port, "/v1/events/generic", "secret", body), 204, "przełącznik działa w locie");
+        assert_eq!(post(port, "/v1/events/generic", "secret", body), 204, "switch works live");
         ing.stop();
     }
 
@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(post(port, "/v1/events/claude-statusline", "secret", body), 204);
         match rx.recv_timeout(Duration::from_secs(2)).unwrap() {
             Incoming::ClaudeStatusline(s) => assert_eq!(s.payload["session_id"], "s"),
-            _ => panic!("zła trasa"),
+            _ => panic!("wrong route"),
         }
         assert_eq!(post(port, "/v1/events/claude-statusline", "wrong", body), 401);
         ing.stop();

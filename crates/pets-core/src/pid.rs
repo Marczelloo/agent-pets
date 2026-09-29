@@ -5,7 +5,7 @@ pub fn is_alive(pid: u32) -> bool {
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if h.is_null() {
-            // chroniony proces istnieje, ale nie wolno go otworzyć
+            // the protected process exists but cannot be opened
             return GetLastError() == ERROR_ACCESS_DENIED;
         }
         let mut code = 0u32;
@@ -39,7 +39,7 @@ pub fn process_entry(pid: u32) -> Option<(u32, String)> {
     }
 }
 
-/// Wszystkie procesy z jednego zrzutu: `(pid, rodzic, nazwa pliku)`.
+/// All processes from one snapshot: `(pid, parent, file name)`.
 #[cfg(windows)]
 pub fn process_list() -> Vec<(u32, u32, String)> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
@@ -61,7 +61,7 @@ pub fn process_list() -> Vec<(u32, u32, String)> {
     out
 }
 
-/// Czas utworzenia procesu (FILETIME, 100 ns od 1601); `None` bez dostępu albo po zakończeniu.
+/// Process creation time (FILETIME, 100 ns since 1601); `None` if inaccessible or exited.
 #[cfg(windows)]
 pub fn process_created(pid: u32) -> Option<u64> {
     use windows_sys::Win32::Foundation::{CloseHandle, FILETIME};
@@ -77,7 +77,7 @@ pub fn process_created(pid: u32) -> Option<u64> {
     }
 }
 
-/// Wiersz poleceń procesu tego samego użytkownika; `None` bez dostępu albo po zakończeniu.
+/// Command line of a process owned by the same user; `None` if inaccessible or exited.
 #[cfg(windows)]
 pub fn command_line(pid: u32) -> Option<String> {
     use windows_sys::Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation};
@@ -86,7 +86,7 @@ pub fn command_line(pid: u32) -> Option<String> {
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if h.is_null() { return None; }
-        // odpowiedź: UNICODE_STRING, a za nim jego tekst; bufor z u64 dla wyrównania wskaźnika
+        // response: UNICODE_STRING followed by its text; u64 buffer for pointer alignment
         let mut buf = vec![0u64; 8 * 1024];
         let mut len = 0u32;
         let st = NtQueryInformationProcess(h, ProcessCommandLineInformation, buf.as_mut_ptr().cast(), (buf.len() * 8) as u32, &mut len);
@@ -94,7 +94,7 @@ pub fn command_line(pid: u32) -> Option<String> {
         if st < 0 { return None; }
         let us = &*(buf.as_ptr() as *const UNICODE_STRING);
         if us.Buffer.is_null() { return None; }
-        // tekst musi leżeć w całości w naszym buforze i w tym, co system faktycznie zapisał
+        // text must fit entirely in our buffer and in what the system actually wrote
         let (start, end) = (buf.as_ptr() as usize, buf.as_ptr() as usize + buf.len() * 8);
         let (text, bytes) = (us.Buffer as usize, us.Length as usize);
         if text < start || text + bytes > end || text + bytes > start + len as usize { return None; }
@@ -102,7 +102,7 @@ pub fn command_line(pid: u32) -> Option<String> {
     }
 }
 
-/// Porty TCP (IPv4), na których proces nasłuchuje.
+/// TCP (IPv4) ports on which the process listens.
 #[cfg(windows)]
 pub fn listening_ports(pid: u32) -> Vec<u16> {
     use windows_sys::Win32::NetworkManagement::IpHelper::{GetExtendedTcpTable, MIB_TCPROW_OWNER_PID, TCP_TABLE_OWNER_PID_LISTENER};
@@ -110,11 +110,11 @@ pub fn listening_ports(pid: u32) -> Vec<u16> {
     let mut size = 0u32;
     unsafe {
         GetExtendedTcpTable(std::ptr::null_mut(), &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0);
-        // tabela mogła urosnąć między zapytaniami: zapas
+        // allow for the table growing between queries
         let mut buf = vec![0u32; size as usize / 4 + 64];
         size = (buf.len() * 4) as u32;
         if GetExtendedTcpTable(buf.as_mut_ptr().cast(), &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) != 0 { return Vec::new(); }
-        // liczba wierszy z tabeli, ale nie więcej, niż mieści bufor (wiersz to 6 × u32)
+        // row count from the table, capped by buffer capacity (each row is 6 × u32)
         let n = (buf[0] as usize).min((buf.len() - 1) / 6);
         let rows = std::slice::from_raw_parts(buf.as_ptr().add(1) as *const MIB_TCPROW_OWNER_PID, n);
         let mut out: Vec<u16> = rows.iter().filter(|r| r.dwOwningPid == pid).map(|r| u16::from_be(r.dwLocalPort as u16)).collect();
@@ -126,7 +126,7 @@ pub fn listening_ports(pid: u32) -> Vec<u16> {
 
 const SHELLS: [&str; 6] = ["cmd.exe", "bash.exe", "sh.exe", "pwsh.exe", "powershell.exe", "conhost.exe"];
 
-/// PID agenta: pierwszy przodek bieżącego procesu, który nie jest powłoką.
+/// Agent PID: first ancestor of the current process that is not a shell.
 #[cfg(windows)]
 pub fn agent_pid() -> Option<u32> {
     let (mut pid, _) = process_entry(std::process::id())?;

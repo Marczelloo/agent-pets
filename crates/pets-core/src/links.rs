@@ -1,5 +1,5 @@
-//! Powiązania zadań Agent Routera z sesjami, które je zleciły (`taskId` → id sesji rodzica).
-//! Trwałe (`~/.agent-pets/links.json`, tylko id), żeby dziecko wróciło do rodzica po restarcie; wpisy wygasają po 7 dniach.
+//! Links between Agent Router tasks and the sessions that requested them (`taskId` → parent session ID).
+//! Persistent (`~/.agent-pets/links.json`, IDs only), so children return to their parents after restart; entries expire after 7 days.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -10,19 +10,19 @@ pub fn path(home: &Path) -> PathBuf { home.join(".agent-pets").join("links.json"
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Links {
-    /// `taskId` → (id sesji rodzica, czas powiązania ms)
+    /// `taskId` → (parent session ID, link time in ms)
     tasks: BTreeMap<String, (String, i64)>,
     #[serde(skip)]
     dirty: bool,
 }
 
 impl Links {
-    /// Brak albo uszkodzony plik: brak powiązań (zadania zostają zwykłymi zwierzakami, jak w 0.7).
+    /// Missing or damaged file: no links (tasks remain ordinary pets, as in 0.7).
     pub fn load(path: &Path) -> Links {
         std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
 
-    /// Zapis atomowy, tylko po zmianie.
+    /// Atomic write, only after a change.
     pub fn save_if_dirty(&mut self, path: &Path) -> std::io::Result<()> {
         if !self.dirty { return Ok(()); }
         if let Some(dir) = path.parent() { std::fs::create_dir_all(dir)?; }
@@ -76,7 +76,7 @@ mod tests {
         std::fs::remove_file(&p).unwrap();
         let mut again = back;
         again.save_if_dirty(&p).unwrap();
-        assert!(!p.exists(), "bez zmian nie ma zapisu");
+        assert!(!p.exists(), "no write without changes");
     }
 
     #[test]
@@ -95,6 +95,6 @@ mod tests {
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(&p, "{zepsuty").unwrap();
         assert_eq!(Links::load(&p).parent_of("x"), None);
-        assert_eq!(Links::load(&d.path().join("brak.json")).parent_of("x"), None);
+        assert_eq!(Links::load(&d.path().join("missing.json")).parent_of("x"), None);
     }
 }

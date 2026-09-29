@@ -1,4 +1,4 @@
-//! Statystyki z rolloutów Codexa (`sessions/**/rollout-*.jsonl`).
+//! Statistics from Codex rollouts (`sessions/**/rollout-*.jsonl`).
 use serde_json::Value;
 use crate::codex::rollout::{js_tool_calls, ASK};
 use crate::model::Tool;
@@ -7,8 +7,8 @@ use crate::tools::from_codex;
 use super::claude::project_of;
 use super::{active_tick, FileEntry, StatAgent};
 
-/// Jedna linia rolloutu → wkład w `e` (spec 2.2). Suma `total_token_usage` jest narastająca: liczymy przyrost.
-/// Wątek-dziecko zaczyna się kopią historii rodzica; linie przed `subagent_history_start_ordinal` pomijamy.
+/// One rollout line → contribution to `e` (spec 2.2). `total_token_usage` is cumulative: count the increase.
+/// A child thread starts with a copy of the parent's history; skip lines before `subagent_history_start_ordinal`.
 pub fn codex_line(e: &mut FileEntry, line: &str) {
     let index = e.cursor.line;
     e.cursor.line += 1;
@@ -25,7 +25,7 @@ pub fn codex_line(e: &mut FileEntry, line: &str) {
         if ps("thread_source") == Some("subagent") {
             let parent = p.pointer("/source/subagent/thread_spawn/parent_thread_id").and_then(Value::as_str).filter(|v| !v.is_empty());
             if parent.is_none() {
-                // wątek pomocniczy bez rodzica (np. guardian): nie liczymy nic z tego pliku
+                // auxiliary thread without a parent (e.g. guardian): count nothing from this file
                 e.cursor.skip_until = u64::MAX;
                 return;
             }

@@ -1,16 +1,16 @@
-//! Cursor: hooki z `~/.cursor/hooks.json` przez `hook.exe --agent cursor --event <nazwa>` na `/v1/events/cursor`
-//! (spec 0.12 §3). Czytamy tylko id, folder (`cwd`), model, nazwę narzędzia i jego argumenty z białej listy.
+//! Cursor: hooks from `~/.cursor/hooks.json` via `hook.exe --agent cursor --event <name>` to `/v1/events/cursor`
+//! (spec 0.12 §3). Read only the ID, folder (`cwd`), model, tool name, and allowlisted tool arguments.
 use super::{action_from, clean_text, safe_id, AgentEnvelope};
 use crate::i18n::Lang;
 use crate::model::*;
 use crate::tools::from_cursor;
 
-/// Argumenty narzędzi do tekstu akcji: (klucz Cursora, klucz Claude'a). Treść plików i diffy nigdy.
+/// Tool arguments for action text: (Cursor key, Claude key). Never file contents or diffs.
 const KEYS: [(&str, &str); 6] = [("command", "command"), ("file_path", "file_path"), ("path", "file_path"), ("pattern", "pattern"),
     ("url", "url"), ("query", "pattern")];
 
-/// Folder sesji z `workspace_roots[0]`, gdy `cwd` brak albo jest puste: Cursor 3.22 go nie wysyła, a korzenie
-/// podaje jako `/C:/…` (sprawdzone na żywo). Wołane w hook.exe przed `slim`, który korzenie usuwa.
+/// Session folder from `workspace_roots[0]` when `cwd` is absent or empty: Cursor 3.22 omits it and reports roots
+/// as `/C:/…` (verified live). Called in hook.exe before `slim` removes the roots.
 pub fn fill_cwd(payload: &mut serde_json::Value) {
     let Some(o) = payload.as_object_mut() else { return };
     if o.get("cwd").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) { return; }
@@ -22,7 +22,7 @@ pub fn fill_cwd(payload: &mut serde_json::Value) {
     o.insert("cwd".into(), root);
 }
 
-/// Narzędzie Claude'a o tym samym tekście akcji.
+/// Claude tool with the same action text.
 fn claude_name(tool: Tool) -> Option<&'static str> {
     Some(match tool {
         Tool::Bash => "Bash", Tool::Read => "Read", Tool::Edit => "Edit", Tool::Grep => "Grep", Tool::Agent => "Task",
@@ -34,7 +34,7 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     let p = &env.payload;
     let s = |k: &str| p.get(k).and_then(|v| v.as_str());
     let text = |k: &str, max: usize| s(k).map(|x| clean_text(x, max)).filter(|x| !x.is_empty());
-    // `draft-…`: szkic nowego czatu, który nigdy nie dostaje dalszych zdarzeń (sprawdzone na żywo)
+    // `draft-…`: new chat draft that never receives further events (verified live)
     let Some(sid) = s("conversation_id").or_else(|| s("session_id")).filter(|x| safe_id(x) && !x.starts_with("draft-"))
         else { return vec![] };
     let top = format!("cursor:{sid}");
@@ -46,7 +46,7 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
         "postToolUseFailure" if p.get("is_interrupt").and_then(|v| v.as_bool()) == Some(true) => (Kind::TurnEnd, top.clone(), None),
         "postToolUseFailure" => (Kind::ToolEnd, top.clone(), None),
         "stop" if s("status") == Some("error") => (Kind::Error, top.clone(), None),
-        // `completed`, `aborted` (przerwana tura) i brak statusu: tura skończona
+        // `completed`, `aborted` (interrupted turn), and missing status all mean the turn ended
         "stop" => (Kind::TurnEnd, top.clone(), None),
         "preCompact" => (Kind::Compact, top.clone(), None),
         "sessionEnd" => (Kind::SessionEnd, top.clone(), None),
@@ -82,7 +82,7 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     vec![e]
 }
 
-/// Odpowiedź dla Cursora na wyjściu hooka: `beforeSubmitPrompt` musi przepuścić prompt, reszta nic nie zmienia.
+/// Cursor response on hook output: `beforeSubmitPrompt` must let the prompt through; others change nothing.
 pub fn reply(event: &str) -> &'static str { if event == "beforeSubmitPrompt" { r#"{"continue":true}"# } else { "{}" } }
 
 #[cfg(test)]
@@ -124,7 +124,7 @@ mod tests {
                 (Agent::Cursor, Some(4242), Some("C:/work/app"), Some("claude-4.5-sonnet"), Some(Origin::Cli)), "{e:?}");
         }
         assert_eq!((v[0].data.app, v[0].data.host_pid), (Some(App::Cursor), Some(900)));
-        assert_eq!(v[2].data.app, None, "program tylko z koperty");
+        assert_eq!(v[2].data.app, None, "host only from envelope");
     }
 
     #[test]
@@ -183,8 +183,8 @@ mod tests {
         }
     }
 
-    /// Nagranie z Cursora 3.22 (zanonimizowane): przerwana tura z Shell, szkic nowego czatu, druga tura z narzędziami
-    /// równolegle, przerwana, po której przychodzą spóźnione `postToolUseFailure`. Koperty idą tą samą drogą co w hook.exe.
+    /// Cursor 3.22 capture (anonymized): interrupted turn with Shell, new chat draft, second turn with parallel tools,
+    /// interrupted, followed by late `postToolUseFailure` events. Envelopes take the same path as in hook.exe.
     #[test]
     fn a_live_cursor_recording_leaves_two_finished_pets_with_their_folder() {
         let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cursor/live-3.22.jsonl");
@@ -209,7 +209,7 @@ mod tests {
         for t in [Tool::Bash, Tool::Grep, Tool::Read] { assert!(tools.contains(&Some(t)), "{t:?}"); }
     }
 
-    /// nowy czat zaczyna się od `sessionStart` z id `draft-…`, a prompt idzie już pod prawdziwym id (sprawdzone na żywo)
+    /// A new chat starts with `sessionStart` ID `draft-…`, but the prompt uses the real ID (verified live).
     #[test]
     fn a_draft_conversation_makes_no_pet() {
         for ev in ["sessionStart", "beforeSubmitPrompt", "stop"] {
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn the_folder_comes_from_the_first_workspace_root_when_cwd_is_empty() {
-        // sprawdzone na żywo (Cursor 3.22): `cwd` brak albo puste, korzenie jako `/C:/…`
+        // verified live (Cursor 3.22): `cwd` missing or empty, roots as `/C:/…`
         let mut p = json!({"workspace_roots": ["/C:/w/app", "/D:/b"]});
         fill_cwd(&mut p);
         assert_eq!(p["cwd"], "C:/w/app");

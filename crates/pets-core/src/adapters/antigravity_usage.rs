@@ -1,8 +1,8 @@
-//! Limity Antigravity z jego lokalnego serwera (`language_server.exe`, tylko 127.0.0.1). Serwer wymaga nagłówka
-//! `X-Codeium-Csrf-Token` z tokenem, który sam dostaje w argumentach (`--csrf_token`); to nie jest dane logowania.
-//! Pytamy o `RetrieveUserQuotaSummary` (aplikacja 2.0): grupy modeli z oknem 5 h i tygodniowym. Starsze wersje
-//! i IDE zwracają tu 404, wtedy `GetUserStatus`: limit per model, tylko okno 5 h. Bierzemy wyłącznie pulę Gemini;
-//! e-mail, plan i reszta `GetUserStatus` nigdzie nie trafiają. Zapytanie sieciowe wysyła aplikacja.
+//! Antigravity limits from its local server (`language_server.exe`, 127.0.0.1 only). The server requires an
+//! `X-Codeium-Csrf-Token` header with the token it receives in its own arguments (`--csrf_token`); this is not a login credential.
+//! Query `RetrieveUserQuotaSummary` (app 2.0): model groups with 5-hour and weekly windows. Older versions
+//! and the IDE return 404, then use `GetUserStatus`: per-model limits, 5-hour window only. Use only the Gemini pool;
+//! email, plan, and the rest of `GetUserStatus` go nowhere. The app sends the network request.
 use crate::model::*;
 use serde_json::Value;
 
@@ -11,13 +11,13 @@ pub const POLL_MS: i64 = 60_000;
 pub const SUMMARY: &str = "RetrieveUserQuotaSummary";
 pub const USER_STATUS: &str = "GetUserStatus";
 
-/// Adres metody Connect na lokalnym serwerze.
+/// Connect method address on the local server.
 pub fn url(port: u16, method: &str) -> String {
     format!("http://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/{method}")
 }
 
-/// Token CSRF z wiersza poleceń serwera Antigravity (`--csrf_token X` albo `--csrf_token=X`). Serwery innych
-/// programów na tym samym silniku (np. Windsurf) pomijamy.
+/// CSRF token from the Antigravity server command line (`--csrf_token X` or `--csrf_token=X`). Skip servers of other
+/// programs using the same engine (e.g. Windsurf).
 pub fn csrf_token(cmdline: &str) -> Option<String> {
     let lower = cmdline.to_lowercase();
     if !lower.contains("antigravity") { return None; }
@@ -33,8 +33,8 @@ pub fn csrf_token(cmdline: &str) -> Option<String> {
     None
 }
 
-/// Zużycie w procentach z `remainingFraction`. Proto3 w JSON-ie pomija zero: limit z czasem resetu, ale bez
-/// ułamka, jest wyczerpany. Ułamek może też przyjść jako `{ "value": … }`.
+/// Percentage used from `remainingFraction`. Proto3 omits zero in JSON: a limit with reset time but without a
+/// fraction is exhausted. The fraction may also arrive as `{ "value": … }`.
 fn used_pct(o: &Value) -> Option<f32> {
     let f = match o.get("remainingFraction") {
         Some(v) => v.as_f64().or_else(|| v.get("value")?.as_f64())?,
@@ -58,7 +58,7 @@ fn event(limits: Vec<Limit>, now: i64) -> Option<Event> {
     Some(e)
 }
 
-/// Odpowiedź `RetrieveUserQuotaSummary`: kubełki `gemini-5h` i `gemini-weekly`.
+/// `RetrieveUserQuotaSummary` response: `gemini-5h` and `gemini-weekly` buckets.
 pub fn from_summary(body: &Value, now: i64) -> Option<Event> {
     let groups = body.get("response").unwrap_or(body).get("groups")?.as_array()?;
     let buckets: Vec<&Value> = groups.iter().filter_map(|g| g.get("buckets")?.as_array()).flatten().collect();
@@ -69,7 +69,7 @@ pub fn from_summary(body: &Value, now: i64) -> Option<Event> {
     event(limits, now)
 }
 
-/// Odpowiedź `GetUserStatus` (starsze wersje, IDE): najbardziej zużyty model Gemini jako okno 5 h.
+/// `GetUserStatus` response (older versions, IDE): the most used Gemini model as a 5-hour window.
 pub fn from_user_status(body: &Value, now: i64) -> Option<Event> {
     let models = body.get("userStatus")?.get("cascadeModelConfigData")?.get("clientModelConfigs")?.as_array()?;
     let worst = models.iter()
@@ -82,7 +82,7 @@ pub fn from_user_status(body: &Value, now: i64) -> Option<Event> {
 #[derive(Clone, PartialEq)]
 pub struct Server { pub port: u16, pub token: String }
 
-/// Bez tokenu: `{:?}` w logu albo w panice nie może go ujawnić.
+/// Without the token: `{:?}` in a log or panic must not reveal it.
 impl std::fmt::Debug for Server {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Server").field("port", &self.port).finish_non_exhaustive()
@@ -91,20 +91,20 @@ impl std::fmt::Debug for Server {
 
 #[derive(Debug, PartialEq)]
 pub enum Failure {
-    /// serwer odpowiedział tym kodem HTTP
+    /// Server responded with this HTTP code.
     Status(u16),
-    /// brak połączenia, przekroczony czas, nie-JSON
+    /// Connection failure, timeout, or non-JSON response.
     Io,
 }
 
 #[derive(Debug)]
 pub enum Usage {
     Limits(Event),
-    /// serwer zniknął (Antigravity zamknięte): zgłoszone limity trzeba zdjąć
+    /// Server disappeared (Antigravity closed): remove reported limits.
     Stale,
 }
 
-/// Co `POLL_MS` pyta znany serwer; gdy ten nie odpowiada (restart Antigravity: nowy port i token), szuka go od nowa.
+/// Query the known server every `POLL_MS`; when it fails (Antigravity restart: new port and token), search again.
 #[derive(Default)]
 pub struct Poller {
     server: Option<Server>,
@@ -120,7 +120,7 @@ impl Poller {
         if now < self.next { return None; }
         self.next = now + POLL_MS;
         let known = self.server.take();
-        // szukanie procesów tylko wtedy, gdy znany serwer nie odpowiada
+        // search processes only when the known server does not respond
         let fresh = std::iter::once_with(find).flatten().filter(|s| Some(s) != known.as_ref());
         for s in known.clone().into_iter().chain(fresh) {
             if let Some(e) = ask(&s, now, post) {
@@ -136,14 +136,14 @@ impl Poller {
 fn ask(s: &Server, now: i64, post: &dyn Fn(&Server, &str) -> Result<Value, Failure>) -> Option<Event> {
     match post(s, SUMMARY) {
         Ok(v) => from_summary(&v, now).or_else(|| post(s, USER_STATUS).ok().and_then(|v| from_user_status(&v, now))),
-        // metody nie ma w tej wersji
+        // method is unavailable in this version
         Err(Failure::Status(404)) => post(s, USER_STATUS).ok().and_then(|v| from_user_status(&v, now)),
-        // zły port (np. HTTPS obok HTTP), zły token, serwer zamknięty
+        // wrong port (e.g. HTTPS beside HTTP), wrong token, or closed server
         Err(_) => None,
     }
 }
 
-/// Serwery Antigravity działające teraz: każdy port nasłuchu z tokenem swojego procesu.
+/// Currently running Antigravity servers: each listening port with its process token.
 #[cfg(windows)]
 pub fn find_servers() -> Vec<Server> {
     crate::pid::process_list().into_iter()
@@ -224,7 +224,7 @@ mod tests {
         let e = from_user_status(&user_status(), NOW).unwrap();
         assert_eq!(e.data.limits, vec![Limit { agent: Agent::Antigravity, window: Window::FiveHour, used_pct: 40.0,
             resets_at: crate::time::rfc3339_ms("2026-09-29T17:40:00Z") }]);
-        // nic z konta (e-mail, plan) nie przechodzi dalej
+        // no account details (email, plan) go further
         assert!(!serde_json::to_string(&e).unwrap().contains("x@y"));
     }
 
@@ -253,19 +253,19 @@ mod tests {
         assert!(matches!(p.poll(NOW, &find, &|_, _| Ok(summary())), Some(Usage::Limits(_))));
         assert!(p.poll(NOW + POLL_MS - 1, &find, &|_, _| unreachable!()).is_none());
         assert!(matches!(p.poll(NOW + POLL_MS, &|| unreachable!(), &|_, _| Ok(summary())), Some(Usage::Limits(_))));
-        assert_eq!(*found.borrow(), 1, "znany serwer nie wymaga szukania");
+        assert_eq!(*found.borrow(), 1, "known server needs no search");
     }
 
     #[test]
     fn a_restarted_server_is_found_again_and_a_closed_one_drops_the_limits_once() {
         let mut p = Poller::new();
         assert!(p.poll(NOW, &|| vec![srv(5)], &|_, _| Ok(summary())).is_some());
-        // restart: stary port odmawia (401 po zmianie tokenu), nowy działa
+        // restart: old port denies (401 after token change), new one works
         let post = |s: &Server, _: &str| if s.port == 5 { Err(Failure::Status(401)) } else { Ok(summary()) };
         assert!(matches!(p.poll(NOW + POLL_MS, &|| vec![srv(6)], &post), Some(Usage::Limits(_))));
-        // zamknięte: nie ma serwera
+        // closed: no server
         assert!(matches!(p.poll(NOW + 2 * POLL_MS, &Vec::new, &|_, _| Err(Failure::Io)), Some(Usage::Stale)));
-        assert!(p.poll(NOW + 3 * POLL_MS, &Vec::new, &|_, _| Err(Failure::Io)).is_none(), "tylko raz");
+        assert!(p.poll(NOW + 3 * POLL_MS, &Vec::new, &|_, _| Err(Failure::Io)).is_none(), "only once");
     }
 
     #[test]

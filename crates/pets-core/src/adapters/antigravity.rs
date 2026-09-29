@@ -1,12 +1,12 @@
-//! Antigravity: hooki z `~/.gemini/config/hooks.json` przez `hook.exe --agent antigravity --event <nazwa>`
-//! na `/v1/events/antigravity` (spec 0.11 §3.3–3.4). Hooki nie mają startu sesji, promptu ani prośby o zgodę:
-//! zwierzak myśli, pracuje, kończy i zgłasza błąd, ale nie pokazuje „czeka na Ciebie”.
+//! Antigravity: hooks from `~/.gemini/config/hooks.json` via `hook.exe --agent antigravity --event <name>`
+//! to `/v1/events/antigravity` (spec 0.11 §3.3–3.4). Hooks have no session start, prompt, or permission request:
+//! the pet thinks, works, finishes, and reports errors, but never shows "waiting for you".
 use super::{action_from, clean_text, safe_id, AgentEnvelope};
 use crate::i18n::Lang;
 use crate::model::*;
 use crate::tools::from_antigravity;
 
-/// Argumenty narzędzi do tekstu akcji: (klucz Antigravity, klucz Claude'a). Treść plików (`CodeContent`…) nigdy.
+/// Tool arguments for action text: (Antigravity key, Claude key). Never file contents (`CodeContent`…).
 const KEYS: [(&str, &str); 9] = [("CommandLine", "command"), ("command", "command"), ("AbsolutePath", "file_path"),
     ("TargetFile", "file_path"), ("file_path", "file_path"), ("Query", "pattern"), ("Pattern", "pattern"), ("SearchPath", "pattern"), ("Url", "url")];
 
@@ -27,16 +27,16 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     let canceled = s("terminationReason").is_some_and(|r| r.to_ascii_lowercase().contains("cancel"));
     let (kind, t) = match env.event.as_str() {
         "PreInvocation" => (Kind::Prompt, None),
-        // `PreToolUse` nie rejestrujemy (bramka zgód, spec 0.12.1); zostaje dla wpisów sprzed naprawy przy starcie
+        // Do not register `PreToolUse` (permission gate, spec 0.12.1); retain it for older entries on startup
         "PreToolUse" => (Kind::ToolStart, Some(from_antigravity(tool))),
-        // narzędzie już się skończyło, ale pokazujemy je jako pracę z tekstem akcji: model woła potem `PreInvocation`
-        // (myśli) albo kolejne narzędzie. Para start + koniec naraz nie pokazałaby nic (koniec kasuje czekający start).
+        // the tool has finished, but show it as work with action text: the model then calls `PreInvocation`
+        // (thinking) or another tool. A start and end together would show nothing (the end clears the pending start).
         "PostToolUse" => (Kind::ToolStart, Some(from_antigravity(tool))),
         "Stop" if failed => (Kind::Error, None),
-        // przerwane przez użytkownika: koniec tury, choćby `fullyIdle` nie przyszło
+        // user interruption ends the turn even without `fullyIdle`
         "Stop" if canceled => (Kind::TurnEnd, None),
         "Stop" if p.get("fullyIdle").and_then(|v| v.as_bool()) == Some(true) => (Kind::TurnEnd, None),
-        // `Stop` bez `fullyIdle`: pracują jeszcze podagenci
+        // `Stop` without `fullyIdle`: subagents are still working
         _ => return vec![],
     };
     let ts = Some(env.ts).filter(|t| *t > 0).unwrap_or_else(crate::time::now_ms);
@@ -58,8 +58,8 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     vec![e]
 }
 
-/// Odpowiedź dla Antigravity: `Stop` wymaga decyzji; cokolwiek innego niż `continue` pozwala skończyć.
-/// Nigdy nie zmieniamy decyzji o zgodzie, więc przy pozostałych zdarzeniach pusty obiekt.
+/// Antigravity response: `Stop` requires a decision; anything other than `continue` lets it finish.
+/// Never alter permission decisions, so return an empty object for other events.
 pub fn reply(event: &str) -> &'static str { if event == "Stop" { r#"{"decision":"stop"}"# } else { "{}" } }
 
 #[cfg(test)]
@@ -110,15 +110,15 @@ mod tests {
         assert_eq!((edit.tool, edit.data.action.as_deref()), (Some(Tool::Edit), Some("Edytuje lib.rs")));
     }
 
-    /// Bez `PreToolUse` (Antigravity bierze `{}` za odmowę, a `ask` wymusza pytanie) narzędzie widać dopiero po jego końcu:
-    /// `PostToolUse` to praca z tekstem akcji, aż model znów pomyśli (`PreInvocation`) albo skończy turę.
+    /// Without `PreToolUse` (Antigravity treats `{}` as denial and `ask` forces a prompt), the tool appears only after it ends:
+    /// `PostToolUse` is work with action text until the model thinks again (`PreInvocation`) or ends the turn.
     #[test]
     fn a_finished_tool_shows_what_it_did() {
         let e = one(env("PostToolUse", json!({"conversationId": "c", "toolCall": {"name": "replace_file_content", "args": {"TargetFile": "C:/a/lib.rs"}}})));
         assert_eq!((e.kind, e.tool, e.data.action.as_deref()), (Kind::ToolStart, Some(Tool::Edit), Some("Edytuje lib.rs")));
     }
 
-    /// Szybkie narzędzie między dwoma wywołaniami modelu: zwierzak i tak chwilę pracuje (minimalny czas stanu), potem myśli.
+    /// A quick tool between model calls: the pet still works briefly (minimum state duration), then thinks.
     #[test]
     fn a_quick_tool_between_model_calls_still_shows_as_work() {
         use crate::store::{Store, Timing};
@@ -140,10 +140,10 @@ mod tests {
         assert_eq!(one(env("Stop", json!({"conversationId": "c", "terminationReason": "error", "fullyIdle": true}))).kind, Kind::Error);
         assert_eq!(one(env("Stop", json!({"conversationId": "c", "error": "boom", "fullyIdle": false}))).kind, Kind::Error);
         assert!(events(&env("Stop", json!({"conversationId": "c", "error": "", "fullyIdle": false})), Lang::Pl).is_empty());
-        assert!(events(&env("Stop", json!({"conversationId": "c"})), Lang::Pl).is_empty(), "bez fullyIdle agent jeszcze pracuje");
+        assert!(events(&env("Stop", json!({"conversationId": "c"})), Lang::Pl).is_empty(), "without fullyIdle the agent is still working");
     }
 
-    /// Przerwanie przez użytkownika (`TERMINATION_REASON_USER_CANCELED`) kończy turę, nawet bez `fullyIdle`.
+    /// User cancellation (`TERMINATION_REASON_USER_CANCELED`) ends the turn even without `fullyIdle`.
     #[test]
     fn a_canceled_stop_ends_the_turn() {
         for r in ["user_canceled", "USER_CANCELED", "TERMINATION_REASON_USER_CANCELED"] {

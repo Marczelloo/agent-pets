@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use super::FileEntry;
 
-/// Wersja formatu; starsza księga jest przeliczana od nowa z historii (2: projekty „bez projektu”, kwadranse).
+/// Format version; an older ledger is recalculated from history (2: "no project" projects, quarter hours).
 pub const VERSION: u32 = 2;
 
-/// Księga statystyk (`~/.agent-pets/stats.json`): wpis na każdy przeczytany plik historii.
+/// Statistics ledger (`~/.agent-pets/stats.json`): one entry per history file read.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Book { pub v: u32, pub files: BTreeMap<String, FileEntry> }
 
@@ -16,10 +16,10 @@ impl Default for Book { fn default() -> Self { Book { v: VERSION, files: BTreeMa
 impl Book {
     pub fn default_path() -> PathBuf { dirs::home_dir().unwrap_or_default().join(".agent-pets").join("stats.json") }
 
-    /// Brak pliku to pusta księga; uszkodzony plik odkładamy jako `.bad` i zaczynamy od nowa.
+    /// Missing file means an empty ledger; move a damaged file to `.bad` and start over.
     pub fn load(path: &Path) -> Book {
         let Ok(text) = std::fs::read_to_string(path) else { return Book::default() };
-        // inna wersja formatu to nie uszkodzony plik: przeliczamy historię od nowa, bez odkładania `.bad`
+        // a different format version is not a damaged file: recalculate history without saving `.bad`
         #[derive(Deserialize)]
         struct Head { v: u32 }
         if serde_json::from_str::<Head>(&text).is_ok_and(|h| h.v != VERSION) { return Book::default(); }
@@ -32,8 +32,8 @@ impl Book {
         }
     }
 
-    /// Jak `load`, ale błąd odczytu inny niż brak pliku (np. blokada antywirusa) jest błędem, a nie pustą księgą:
-    /// pusta księga zapisana potem na dysk skasowałaby historię plików, których już nie ma (przegląd 0.9, I4).
+    /// Like `load`, but a read error other than a missing file (e.g. antivirus lock) is an error, not an empty ledger:
+    /// saving an empty ledger later would erase history for files that no longer exist (review 0.9, I4).
     pub fn load_checked(path: &Path) -> io::Result<Book> {
         match std::fs::read_to_string(path) {
             Ok(_) => Ok(Book::load(path)),
@@ -42,7 +42,7 @@ impl Book {
         }
     }
 
-    /// Zapis atomowy: plik tymczasowy i zamiana.
+    /// Atomic write: temporary file and replacement.
     pub fn save(&self, path: &Path) -> io::Result<()> {
         if let Some(d) = path.parent() { std::fs::create_dir_all(d)?; }
         let tmp = path.with_extension("json.tmp");
@@ -50,7 +50,7 @@ impl Book {
             use std::io::Write;
             let mut f = std::fs::File::create(&tmp)?;
             f.write_all(&serde_json::to_vec(self).map_err(io::Error::other)?)?;
-            // na dysku przed zamianą: po zaniku zasilania nie zostaje pusty plik
+            // write to disk before replacement: a power loss cannot leave an empty file
             f.sync_all()?;
         }
         std::fs::rename(&tmp, path)
@@ -72,7 +72,7 @@ mod tests {
         e.cursor.offset = 42;
         b.files.insert("a.jsonl".into(), e);
         b.save(&p).unwrap();
-        assert!(!dir.path().join("stats.json.tmp").exists(), "zapis przez plik tymczasowy i rename");
+        assert!(!dir.path().join("stats.json.tmp").exists(), "write via temporary file and rename");
         let l = Book::load(&p);
         assert_eq!(l.v, VERSION);
         assert_eq!(l.files, b.files);
@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn a_read_error_is_not_an_empty_book() {
         let dir = tempfile::tempdir().unwrap();
-        // katalog w miejscu pliku: błąd odczytu inny niż „brak pliku”
+        // directory in place of a file: a read error other than "file not found"
         let p = dir.path().join("stats.json");
         std::fs::create_dir(&p).unwrap();
         assert!(Book::load_checked(&p).is_err());
@@ -111,10 +111,10 @@ mod tests {
     fn a_broken_file_is_kept_aside_and_the_book_starts_empty() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("stats.json");
-        std::fs::write(&p, "{ nie json").unwrap();
+        std::fs::write(&p, "{ not json").unwrap();
         let b = Book::load(&p);
         assert_eq!(b.files.len(), 0);
-        assert_eq!(std::fs::read_to_string(dir.path().join("stats.json.bad")).unwrap(), "{ nie json");
+        assert_eq!(std::fs::read_to_string(dir.path().join("stats.json.bad")).unwrap(), "{ not json");
         assert!(!p.exists());
     }
 }

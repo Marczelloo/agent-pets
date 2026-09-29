@@ -1,5 +1,5 @@
-//! Sesje ukryte ręcznie (✕ w panelu, „Usuń z paska”): ukryte, dopóki nie zrobią czegoś nowego.
-//! Trwałe (`~/.agent-pets/dismissed.json`), więc odtworzone po restarcie sesje nie wracają; wpisy wygasają po 7 dniach.
+//! Manually hidden sessions (✕ in the panel, "Remove from taskbar"): hidden until they do something new.
+//! Persistent (`~/.agent-pets/dismissed.json`), so sessions restored after restart stay hidden; entries expire after 7 days.
 use crate::model::{Session, State};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -9,24 +9,24 @@ pub const KEEP_MS: i64 = 7 * 24 * 3_600_000;
 
 pub fn path(home: &Path) -> PathBuf { home.join(".agent-pets").join("dismissed.json") }
 
-/// Stany zdejmowane przez „Usuń nieaktywne”. Błąd zostaje, bo zwykle wymaga reakcji.
+/// States removed by "Remove inactive". Errors remain because they usually need attention.
 pub fn inactive(s: &Session) -> bool { matches!(s.state, State::Idle | State::Done | State::Sleep | State::Ended) }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Dismissed {
-    /// id sesji → czas ukrycia (zegar rdzenia, ms)
+    /// Session ID → hide time (core clock, ms).
     at: BTreeMap<String, i64>,
     #[serde(skip)]
     dirty: bool,
 }
 
 impl Dismissed {
-    /// Brak albo uszkodzony plik: nic nie jest ukryte.
+    /// Missing or damaged file: nothing is hidden.
     pub fn load(path: &Path) -> Dismissed {
         std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
 
-    /// Zapis atomowy, tylko po zmianie.
+    /// Atomic write, only after a change.
     pub fn save_if_dirty(&mut self, path: &Path) -> std::io::Result<()> {
         if !self.dirty { return Ok(()); }
         if let Some(dir) = path.parent() { std::fs::create_dir_all(dir)?; }
@@ -46,8 +46,8 @@ impl Dismissed {
         for id in ids { self.dirty |= self.at.remove(id).is_some(); }
     }
 
-    /// Zostawia sesje nieukryte; sesja aktywna po ukryciu wraca, a jej wpis znika.
-    /// Zamknięcie ukrytej sesji to nie powrót: jej pożegnanie zostaje ukryte, wpis wygaśnie sam.
+    /// Retain unhidden sessions; a session active after being hidden returns and its entry disappears.
+    /// Ending a hidden session is not a return: its goodbye remains hidden, and the entry expires on its own.
     pub fn filter(&mut self, sessions: Vec<Session>) -> Vec<Session> {
         sessions.into_iter().filter(|s| match self.at.get(&s.id) {
             Some(at) if s.last_activity <= *at || s.state == State::Ended => false,
@@ -125,7 +125,7 @@ mod tests {
         d.save_if_dirty(&p).unwrap();
         assert!(!p.with_extension("json.tmp").exists());
         let mut again = Dismissed::load(&p);
-        // sesja odtworzona z historii ma ten sam czas ostatniej aktywności
+        // a session restored from history has the same last activity time
         assert!(again.filter(vec![sess("a", State::Idle, 1_500)]).is_empty());
         std::fs::write(&p, "{bad").unwrap();
         assert!(Dismissed::load(&p).is_empty());

@@ -1,16 +1,16 @@
-//! Statystyki z transkryptów Claude Code (`projects/*/*.jsonl`) i plików subagentów (`subagents/agent-*.jsonl`).
+//! Statistics from Claude Code transcripts (`projects/*/*.jsonl`) and subagent files (`subagents/agent-*.jsonl`).
 use serde_json::Value;
 use crate::time::rfc3339_ms;
 use crate::tools::from_claude;
 use super::{active_tick, Cell, FileEntry, StatAgent};
 
-/// Stały skrót tekstu (FNV-1a 64): nie zmienia się między wersjami kompilatora, więc może leżeć w księdze.
+/// Stable text hash (FNV-1a 64): does not change between compiler versions, so it can be stored in the ledger.
 pub fn fnv64(s: &str) -> u64 {
     s.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
 }
 
-/// Klucz „bez projektu”: rozmowa w aplikacji Claude albo Codex bez folderu projektu, katalog domowy albo
-/// tymczasowy. Okno pokazuje go jako „Bez projektu”.
+/// "No project" key: a Claude app or Codex conversation without a project folder, in the home or a
+/// temporary directory. The window shows it as "No project".
 pub const NO_PROJECT: &str = ":no-project";
 
 fn is_date(s: &str) -> bool {
@@ -18,24 +18,24 @@ fn is_date(s: &str) -> bool {
     b.len() == 10 && b[4] == b'-' && b[7] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
 }
 
-/// Nazwa projektu z `cwd`: ostatni człon ścieżki, a dla folderów, które nie są projektami, `NO_PROJECT`.
+/// Project name from `cwd`: the last path component, or `NO_PROJECT` for folders that are not projects.
 pub fn project_of(cwd: &str) -> Option<String> {
     let parts: Vec<&str> = cwd.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
     let last = *parts.last()?;
     let low: Vec<String> = parts.iter().map(|p| p.to_ascii_lowercase()).collect();
     let n = low.len();
     let pair = |a: &str, b: &str| low.windows(2).any(|w| w[0] == a && w[1] == b);
-    let none = low.iter().any(|p| p == "scratch-workspaces")                              // Claude: rozmowa bez projektu
+    let none = low.iter().any(|p| p == "scratch-workspaces")                              // Claude: conversation without a project
         || (n >= 3 && low[n - 3] == "codex" && is_date(parts[n - 2]))                      // Codex: Documents\Codex\<data>\<czat>
         || pair("local", "temp")                                                           // katalog tymczasowy
-        || (n == 3 && parts[0].ends_with(':') && low[1] == "users")                        // C:\Users\<nazwa>
-        || (n == 2 && (low[0] == "home" || low[0] == "users"));                            // /home/<nazwa>, /Users/<nazwa>
+        || (n == 3 && parts[0].ends_with(':') && low[1] == "users")                        // C:\Users\<name>
+        || (n == 2 && (low[0] == "home" || low[0] == "users"));                            // /home/<name>, /Users/<name>
     Some(if none { NO_PROJECT.to_string() } else { last.to_string() })
 }
 
 
-/// Jedna linia transkryptu → wkład w `e` (spec 2.2). Ta sama odpowiedź (`message.id`) powtarza się w kolejnych
-/// wierszach, raz na blok treści: liczymy przyrost względem poprzedniego wiersza, więc suma to ostatnie liczby.
+/// One transcript line → contribution to `e` (spec 2.2). The same response (`message.id`) repeats on later
+/// lines, once per content block: count the increase from the previous line, so the total is the last values.
 pub fn claude_line(e: &mut FileEntry, line: &str, sub: bool) {
     e.cursor.line += 1;
     let Ok(d) = serde_json::from_str::<Value>(line) else { return };
@@ -55,9 +55,9 @@ pub fn claude_line(e: &mut FileEntry, line: &str, sub: bool) {
     let (true, Some(m)) = (assistant, msg) else { return };
     if let Some(id) = m.get("id").and_then(Value::as_str) {
         let current = e.cursor.last_msg.as_ref().is_some_and(|(i, _)| i == id);
-        // odpowiedź już policzona, dopisana w pliku jeszcze raz (wznowienie, kompaktowanie): ani tokenów, ani narzędzi
+        // already counted response appended again (resume, compaction): count neither tokens nor tools
         if !e.cursor.seen.insert(fnv64(id)) && !current {
-            // po powtórce żadna odpowiedź nie jest „bieżąca”: powtórzona też bywa ta ostatnio policzona
+            // after a repeat, no response is "current": even the last counted response may be repeated
             e.cursor.last_msg = None;
             return;
         }
@@ -135,7 +135,7 @@ mod tests {
             asst("10:00:00", "A", usage(10, 900, 100, 5), json!([])),
             asst("10:00:01", "A", usage(10, 900, 100, 40), tool("Bash", json!({}))),
             asst("10:00:05", "B", usage(20, 0, 0, 7), tool("Edit", json!({}))),
-            // Claude Code dopisuje starsze odpowiedzi jeszcze raz (resume, kompaktowanie), ze starym czasem
+            // Claude Code appends older responses again (resume, compaction), with their old timestamps
             asst("10:00:00", "A", usage(10, 900, 100, 0), json!([])),
             asst("10:00:01", "A", usage(10, 900, 100, 40), tool("Bash", json!({}))),
             asst("10:00:05", "B", usage(20, 0, 0, 7), tool("Edit", json!({}))),
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn broken_lines_change_only_the_line_counter() {
-        let e = feed(&["{ nie json".to_string(), json!({"type": "user"}).to_string()], false);
+        let e = feed(&["{ not json".to_string(), json!({"type": "user"}).to_string()], false);
         assert!(e.buckets.is_empty());
         assert_eq!(e.cursor.line, 2);
     }

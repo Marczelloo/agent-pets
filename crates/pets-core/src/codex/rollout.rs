@@ -6,7 +6,7 @@ use crate::model::*;
 use crate::time::rfc3339_ms;
 use crate::tools::from_codex;
 
-/// Wartość tekstowa pola `key:` w kodzie JS (`command: "…"`, `cmd: '…'`), z odkodowanymi znakami ucieczki.
+/// Text value of a `key:` field in JS code (`command: "…"`, `cmd: '…'`), with escape sequences decoded.
 pub fn js_string_field(src: &str, keys: &[&str]) -> Option<String> {
     for key in keys {
         let mut from = 0;
@@ -38,10 +38,10 @@ pub fn js_string_field(src: &str, keys: &[&str]) -> Option<String> {
 }
 
 const SHELLS: [&str; 4] = ["shell_command", "exec_command", "shell", "local_shell"];
-/// Narzędzia routera, których wynik wiąże zadanie z wątkiem, który je zlecił.
+/// Router tools whose results link a task to the thread that requested it.
 const ROUTER_LINKING: [&str; 3] = ["codex_delegate", "codex_continue", "codex_review"];
 
-/// Nazwy narzędzi wywoływanych w kodzie JS narzędzia `exec`, np. `tools.exec_command(`.
+/// Names of tools called in `exec` tool JS code, e.g. `tools.exec_command(`.
 pub fn js_tool_calls(src: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = src;
@@ -55,10 +55,10 @@ pub fn js_tool_calls(src: &str) -> Vec<String> {
 }
 
 pub(crate) const ASK: [&str; 3] = ["request_user_input", "request_user_input_async", "request_permissions"];
-/// Pytanie, które nie blokuje narzędzia: wraca od razu, a odpowiedź przychodzi jako nowa tura.
+/// A question that does not block the tool: returns immediately, with the answer arriving as a new turn.
 const ASYNC_ASK: &str = "request_user_input_async";
 
-/// Okno limitu rozpoznajemy po `window_minutes`; `primary`/`secondary` nie mają stałego znaczenia.
+/// Identify a limit window by `window_minutes`; `primary`/`secondary` have no fixed meaning.
 fn limits_from(rl: &Value) -> Vec<Limit> {
     ["primary", "secondary"].iter().filter_map(|k| {
         let w = rl.get(*k)?;
@@ -72,16 +72,16 @@ fn limits_from(rl: &Value) -> Vec<Limit> {
     }).collect()
 }
 
-/// Program z `session_meta.originator` (nazwa klienta app-servera Codexa). Spike S2: t3code to `t3code_desktop`.
+/// Program from `session_meta.originator` (Codex app-server client name). Spike S2: t3code is `t3code_desktop`.
 fn host(originator: &str, source: Option<&str>) -> (Origin, Option<App>, Option<String>) {
     let o = originator.trim().to_ascii_lowercase();
     if o == "codex-tui" || o == "codex_exec" || source == Some("cli") { return (Origin::Cli, Some(App::Terminal), None); }
     let app = match o.as_str() {
-        // pusty `originator` (stare logi) traktujemy jak dotąd: aplikacja Codex
+        // treat empty `originator` (old logs) as before: the Codex app
         "codex desktop" | "" => App::CodexApp,
         "codex_vscode" => App::Vscode,
         "t3code_desktop" => App::T3code,
-        // warianty aplikacji Codex (np. `codex_work_desktop`)
+        // Codex app variants (e.g. `codex_work_desktop`)
         x if x.starts_with("codex") && x.ends_with("desktop") => App::CodexApp,
         _ => return (Origin::Desktop, Some(App::Other), Some(originator.trim().chars().filter(|c| !c.is_control()).take(40).collect())),
     };
@@ -95,13 +95,13 @@ pub struct RolloutParser {
     skip: bool,
     router: bool,
     titled: bool,
-    /// Po `request_user_input_async` tura kończy się bez odpowiedzi; czekamy na następną turę (odpowiedź użytkownika).
+    /// After `request_user_input_async`, the turn ends without an answer; wait for the next turn (user response).
     waiting: bool,
-    /// numer bieżącej linii pliku
+    /// Current file line number.
     line: usize,
-    /// wątek-dziecko z historią skopiowaną od rodzica (`subagent_history_start_ordinal`): własne linie od tej
+    /// Child thread with history copied from parent (`subagent_history_start_ordinal`): own lines from this point.
     skip_until: usize,
-    /// ostatni wysłany model (`turn_context` przychodzi co turę)
+    /// Last sent model (`turn_context` arrives every turn).
     model: Option<String>,
 }
 
@@ -119,7 +119,7 @@ impl RolloutParser {
     fn ev(&self, kind: Kind, ts: i64) -> Option<Event> {
         let src = if self.router { Source::Router } else { Source::Codex };
         let mut e = Event::new(src, self.sid.clone()?, kind, ts);
-        // dziecko zna rodzica w każdym zdarzeniu: po zniknięciu wraca przy kolejnej turze jako dziecko, nie osobny zwierzak
+        // every child event knows its parent: after disappearing, it returns next turn as a child, not a separate pet
         e.data.parent = self.parent.clone();
         Some(e)
     }
@@ -138,7 +138,7 @@ impl RolloutParser {
         self.ev(Kind::NeedsInput, ts).map(|mut e| { e.data.question = question; vec![e] }).unwrap_or_default()
     }
 
-    /// Tekst akcji narzędzia wywołanego z kodu JS narzędzia `exec`.
+    /// Action text for a tool called from `exec` tool JS code.
     fn js_action(&self, call: &str, src: &str) -> Option<String> {
         if SHELLS.contains(&call) {
             let cmd = js_string_field(src, &["command", "cmd"])?;
@@ -148,7 +148,7 @@ impl RolloutParser {
         None
     }
 
-    /// Koniec tury dziecka zdejmuje też pozę „deleguje” z rodzica.
+    /// Ending a child's turn also clears the parent's "delegating" pose.
     fn with_parent_end(&self, mut out: Vec<Event>, ts: i64) -> Vec<Event> {
         if let Some(par) = &self.parent { out.push(Event::new(Source::Codex, par.clone(), Kind::ToolEnd, ts)); }
         out
@@ -157,7 +157,7 @@ impl RolloutParser {
     pub fn parse_line(&mut self, line: &str) -> Vec<Event> {
         let index = self.line;
         self.line += 1;
-        // kopia historii rodzica w pliku wątku-dziecka (razem z jego `session_meta`) nie należy do dziecka
+        // parent history copied into the child thread file (with its `session_meta`) does not belong to the child
         if index < self.skip_until { return vec![]; }
         let Ok(d) = serde_json::from_str::<Value>(line) else { return vec![] };
         let Some(ts) = d.get("timestamp").and_then(|v| v.as_str()).and_then(rfc3339_ms) else { return vec![] };
@@ -168,7 +168,7 @@ impl RolloutParser {
         let ps = |k: &str| p.get(k).and_then(|v| v.as_str());
 
         if ty == "session_meta" {
-            // plik ma jednego właściciela: kolejne metadane to kopia z innego wątku
+            // a file has one owner: later metadata is a copy from another thread
             if self.sid.is_some() || self.skip { return vec![]; }
             let id = ps("id").or(ps("session_id")).unwrap_or("").to_string();
             if ps("thread_source") == Some("subagent") {
@@ -176,13 +176,13 @@ impl RolloutParser {
                 let sp = |k: &str| spawn.and_then(|s| s.get(k)).and_then(|v| v.as_str()).filter(|v| !v.is_empty()).map(String::from);
                 self.parent = sp("parent_thread_id");
                 let Some(par) = self.parent.clone() else {
-                    // wątki pomocnicze bez rodzica (np. guardian) pomijamy
+                    // skip auxiliary threads without a parent (e.g. guardian)
                     self.skip = true;
                     return vec![];
                 };
                 self.sid = Some(id);
                 self.skip_until = p.get("subagent_history_start_ordinal").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                // nazwa dziecka pochodzi z metadanych; wiadomość od rodzica bywa zaszyfrowana
+                // child name comes from metadata; the parent's message may be encrypted
                 self.titled = true;
                 let sub = SubInfo { kind: SubKind::Codex, agent_type: sp("agent_role"), description: sp("agent_nickname"), background: false };
                 let mut e = self.ev(Kind::SessionStart, ts).unwrap();
@@ -211,7 +211,7 @@ impl RolloutParser {
         if self.waiting {
             match (ty, pt) {
                 ("event_msg", "task_started") => self.waiting = false,
-                // kontekst i limity nadal się liczą; stan zostaje „czeka na Ciebie”
+                // context and limits still count; state remains "waiting for you"
                 ("event_msg", "token_count") => {}
                 _ => return vec![],
             }
@@ -353,7 +353,7 @@ mod tests {
         assert_eq!(host("Codex Desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
         assert_eq!(host("codex desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
         assert_eq!(host("codex_vscode", json!("vscode")), (Some(Origin::Desktop), Some(App::Vscode), None));
-        // warianty aplikacji Codex spotkane w prawdziwych logach
+        // Codex app variants seen in real logs
         assert_eq!(host("codex_work_desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::CodexApp), None));
         assert_eq!(host("t3code_desktop", json!("vscode")), (Some(Origin::Desktop), Some(App::T3code), None));
         let long = "x".repeat(60);
@@ -367,7 +367,7 @@ mod tests {
         started(&mut p);
         let e = p.parse_line(&l("turn_context", json!({"model": "gpt-6-sol", "cwd": "C:\\p"})));
         assert_eq!((e[0].kind, e[0].data.model.as_deref()), (Kind::Meta, Some("gpt-6-sol")));
-        assert!(p.parse_line(&l("turn_context", json!({"model": "gpt-6-sol"}))).is_empty(), "bez zmiany modelu nic nowego");
+        assert!(p.parse_line(&l("turn_context", json!({"model": "gpt-6-sol"}))).is_empty(), "no new event without a model change");
         assert!(p.parse_line(&l("turn_context", json!({}))).is_empty());
     }
 
@@ -389,12 +389,12 @@ mod tests {
         assert_eq!((par.kind, par.tool), (Kind::ToolStart, Some(Tool::Agent)));
         let e = p.parse_line(&l("event_msg", json!({"type": "task_started"})));
         assert_eq!((e[0].session_id.as_str(), e[0].kind), ("t1", Kind::Prompt));
-        assert_eq!(e[0].data.parent.as_deref(), Some("parent1"), "każde zdarzenie dziecka zna rodzica (np. po kolejnej turze)");
+        assert_eq!(e[0].data.parent.as_deref(), Some("parent1"), "every child event knows its parent (e.g. after another turn)");
         let patch = "*** Begin Patch\n*** Update File: src/a.rs\n*** End Patch";
         let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "apply_patch", "input": patch})));
         assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.action.as_deref()), ("t1", Kind::ToolStart, Some("Edytuje a.rs")));
         let um = p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": {"type": "UserMessage", "content": [{"type": "text", "text": "zadanie od rodzica"}]}})));
-        assert!(um.is_empty(), "dziecko ma nazwę z metadanych, nie z wiadomości");
+        assert!(um.is_empty(), "child name comes from metadata, not the message");
         let e = p.parse_line(&l("event_msg", json!({"type": "task_complete"})));
         let kinds: Vec<(&str, Kind)> = e.iter().map(|e| (e.session_id.as_str(), e.kind)).collect();
         assert_eq!(kinds, vec![("t1", Kind::TurnEnd), ("parent1", Kind::ToolEnd)]);
@@ -452,14 +452,14 @@ mod tests {
 
     #[test]
     fn async_question_keeps_waiting_until_the_user_answers() {
-        // `request_user_input_async` wraca od razu z „accepted”, a tura się kończy; odpowiedź przychodzi jako nowa tura.
+        // `request_user_input_async` returns "accepted" immediately and the turn ends; the answer arrives as a new turn.
         let mut p = RolloutParser::new();
         started(&mut p);
         let kinds = |e: Vec<Event>| e.into_iter().map(|e| e.kind).collect::<Vec<_>>();
         let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "request_user_input_async", "arguments": "{}"})));
         assert_eq!(kinds(e), vec![Kind::NeedsInput]);
         assert!(p.parse_line(&l("response_item", json!({"type": "function_call_output", "output": "{\"accepted\":true}"}))).is_empty());
-        assert!(p.parse_line(&l("event_msg", json!({"type": "task_complete"}))).is_empty(), "nadal czeka na odpowiedź");
+        assert!(p.parse_line(&l("event_msg", json!({"type": "task_complete"}))).is_empty(), "still waiting for an answer");
         assert_eq!(kinds(p.parse_line(&l("event_msg", json!({"type": "task_started"})))), vec![Kind::Prompt]);
         assert_eq!(kinds(p.parse_line(&l("event_msg", json!({"type": "task_complete"})))), vec![Kind::TurnEnd]);
     }
@@ -511,8 +511,8 @@ mod tests {
             let mut p = RolloutParser::new();
             let text = std::fs::read_to_string(f.path()).unwrap();
             let evs: Vec<Event> = text.lines().flat_map(|x| p.parse_line(x)).collect();
-            assert!(evs.iter().any(|e| e.kind == Kind::SessionStart), "brak SessionStart w {:?}", f.path());
-            assert!(evs.iter().any(|e| e.kind == Kind::Prompt), "brak Prompt w {:?}", f.path());
+            assert!(evs.iter().any(|e| e.kind == Kind::SessionStart), "missing SessionStart in {:?}", f.path());
+            assert!(evs.iter().any(|e| e.kind == Kind::Prompt), "missing Prompt in {:?}", f.path());
         }
     }
 
@@ -542,7 +542,7 @@ mod tests {
         let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "exec", "input": js})));
         assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Edit), Some("Edytuje x.rs")));
         let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "exec", "input": "await tools.view_image({path: 'a.png'})"})));
-        assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Read), None), "narzędzie bez tekstu");
+        assert_eq!((e[0].tool, e[0].data.action.as_deref()), (Some(Tool::Read), None), "tool without text");
     }
 
     #[test]
@@ -572,7 +572,7 @@ mod tests {
 
     #[test]
     fn a_forked_subagent_skips_the_copied_parent_history() {
-        // Codex Desktop 09-2026: plik dziecka zaczyna się od jego metadanych, potem kopia metadanych i historii rodzica
+        // Codex Desktop 09-2026: child file starts with its metadata, then a copy of parent metadata and history
         let mut p = RolloutParser::new();
         let meta = l("session_meta", json!({"id": "c1", "session_id": "par", "forked_from_id": "par", "thread_source": "subagent",
             "cwd": "C:\\p", "originator": "Codex Desktop", "subagent_history_start_ordinal": 4,
@@ -583,8 +583,8 @@ mod tests {
         evs.extend(p.parse_line(&l("event_msg", json!({"type": "task_complete"}))));
         let own = p.parse_line(&l("event_msg", json!({"type": "task_started"})));
         assert!(evs.iter().all(|e| e.session_id == "c1" || (e.session_id == "par" && e.kind == Kind::ToolStart)),
-            "kopia historii nie zmienia rodzica: {:?}", evs.iter().map(|e| (&e.session_id, e.kind)).collect::<Vec<_>>());
-        assert!(!evs.iter().any(|e| e.session_id == "c1" && e.kind == Kind::TurnEnd), "kopia tur rodzica nie należy do dziecka");
+            "copied history does not change the parent: {:?}", evs.iter().map(|e| (&e.session_id, e.kind)).collect::<Vec<_>>());
+        assert!(!evs.iter().any(|e| e.session_id == "c1" && e.kind == Kind::TurnEnd), "copied parent turns do not belong to the child");
         assert_eq!((own[0].session_id.as_str(), own[0].kind, own[0].data.parent.as_deref()), ("c1", Kind::Prompt, Some("par")));
     }
 }
