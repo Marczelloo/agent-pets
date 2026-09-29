@@ -39,9 +39,9 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
         },
         "Stop" => (Kind::TurnEnd, top.clone(), None),
         "errorOccurred" if get("recoverable", "recoverable").and_then(|v| v.as_bool()) != Some(true) => (Kind::Error, top.clone(), None),
-        // JetBrains kończy tak każdą turę (po `Stop`), choć rozmowa trwa; zwierzak zostaje „gotowy”,
-        // a znika z procesem Copilota albo po zwykłym czasie ciszy
-        "sessionEnd" if s("reason", "reason") == Some("complete") => return vec![],
+        // JetBrains kończy tak każdą turę (po `Stop`, a przerwaną bez niego), choć rozmowa trwa; zwierzak zostaje
+        // „gotowy”, a znika z procesem Copilota albo po zwykłym czasie ciszy
+        "sessionEnd" if s("reason", "reason") == Some("complete") => (Kind::TurnEnd, top.clone(), None),
         "sessionEnd" => (Kind::SessionEnd, top.clone(), None),
         // podagenci: jeden mini-zwierzak na nazwę (hook startu nie podaje id)
         "SubagentStart" | "SubagentStop" => {
@@ -148,6 +148,28 @@ mod tests {
         let s = one(f[0].clone());
         assert_eq!((s.data.app, s.data.host_pid), (Some(App::Jetbrains), Some(900)));
         assert_eq!(one(f[2].clone()).data.app, None, "bez programu w kopercie nic nie nadpisuje");
+    }
+
+    /// JetBrains podaje nazwy narzędzi jak Claude (`Bash`, `Edit`, `Read`, `Glob`): edycja to edycja, nie „inne narzędzie”.
+    #[test]
+    fn jetbrains_tool_names_pick_the_right_tool() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/copilot/live-jetbrains.jsonl");
+        let live: Vec<AgentEnvelope> = std::fs::read_to_string(p).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let tools: Vec<Option<Tool>> = live.iter().flat_map(|e| events(e, Lang::Pl)).filter(|e| e.kind == Kind::ToolStart).map(|e| e.tool).collect();
+        assert_eq!(&tools[..3], &[Some(Tool::Bash), Some(Tool::Edit), Some(Tool::Bash)]);
+        for (name, tool) in [("Read", Tool::Read), ("Glob", Tool::Grep), ("Edit", Tool::Edit)] {
+            assert_eq!(one(env("PreToolUse", json!({"session_id": "s", "tool_name": name, "tool_input": {}}))).tool, Some(tool), "{name}");
+        }
+        let bash = one(live[2].clone());
+        assert_eq!(bash.data.action.as_deref(), Some("git status --short"));
+    }
+
+    /// Przerwana tura nie ma `Stop`: JetBrains wysyła tylko `sessionEnd` z `complete`. Zwierzak kończy wtedy animację.
+    #[test]
+    fn an_interrupted_jetbrains_turn_ends_done() {
+        let v: Vec<Event> = [env("PreToolUse", json!({"session_id": "s", "tool_name": "Bash", "tool_input": {"command": "sleep 65"}})),
+            env("sessionEnd", json!({"sessionId": "s", "reason": "complete"}))].iter().flat_map(|e| events(e, Lang::Pl)).collect();
+        assert_eq!(v.iter().map(|e| e.kind).collect::<Vec<_>>(), vec![Kind::ToolStart, Kind::TurnEnd]);
     }
 
     #[test]

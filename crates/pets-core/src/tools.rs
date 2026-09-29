@@ -54,7 +54,8 @@ pub fn from_copilot(name: &str) -> Tool {
         "web_fetch" | "fetch_webpage" | "web_search" => Tool::Web,
         "task" | "runSubagent" => Tool::Agent,
         n if n.contains('/') || n.starts_with("mcp_") => Tool::Mcp,
-        _ => Tool::Other,
+        // JetBrains podaje nazwy jak Claude (`Bash`, `Edit`, `Read`, `Glob`)
+        n => from_claude(n),
     }
 }
 
