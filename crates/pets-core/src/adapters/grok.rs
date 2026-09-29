@@ -39,7 +39,7 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
             if !waits { return vec![]; }
             (Kind::NeedsInput, None)
         }
-        "Stop" => (Kind::TurnEnd, None),
+        "Stop" | "StopCancelled" => (Kind::TurnEnd, None),
         "StopFailure" => (Kind::Error, None),
         "PreCompact" => (Kind::Compact, None),
         "SessionEnd" => (Kind::SessionEnd, None),
@@ -135,6 +135,13 @@ mod tests {
             assert!(events(&env("Stop", bad.clone()), Lang::Pl).is_empty(), "{bad}");
         }
         assert!(events(&env("SubagentStart", json!({"sessionId": "g1"})), Lang::Pl).is_empty());
+    }
+
+    /// przerwana tura (Ctrl+C, odrzucona zgoda, limit tur) wysyła `StopCancelled` zamiast `Stop` (dokumentacja Groka)
+    #[test]
+    fn a_cancelled_turn_ends_the_turn() {
+        let v = events(&env("StopCancelled", json!({"sessionId": "g1", "reason": "user_interrupt"})), Lang::Pl);
+        assert_eq!(v.iter().map(|e| e.kind).collect::<Vec<_>>(), [Kind::TurnEnd]);
     }
 
     #[test]

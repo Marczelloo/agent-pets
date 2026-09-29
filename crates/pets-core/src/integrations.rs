@@ -102,8 +102,8 @@ const ANTIGRAVITY_KEY: &str = "agent-pets";
 
 pub const CURSOR_EVENTS: [&str; 10] = ["sessionStart", "sessionEnd", "beforeSubmitPrompt", "preToolUse", "postToolUse",
     "postToolUseFailure", "subagentStart", "subagentStop", "preCompact", "stop"];
-pub const GROK_EVENTS: [&str; 10] = ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse",
-    "PostToolUseFailure", "Notification", "Stop", "StopFailure", "PreCompact"];
+pub const GROK_EVENTS: [&str; 11] = ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+    "PostToolUseFailure", "Notification", "Stop", "StopFailure", "StopCancelled", "PreCompact"];
 pub const ZCODE_EVENTS: [&str; 7] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse",
     "PostToolUseFailure", "Stop"];
 
@@ -1042,6 +1042,7 @@ mod tests {
         let f = grok_hooks(h.path());
         let v = rd(&f);
         assert_eq!(v["hooks"].as_object().unwrap().len(), GROK_EVENTS.len());
+        assert!(GROK_EVENTS.contains(&"StopCancelled"), "przerwana tura");
         for ev in GROK_EVENTS {
             let group = &v["hooks"][ev][0];
             let cmd = &group["hooks"][0];
