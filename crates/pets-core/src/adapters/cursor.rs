@@ -9,6 +9,19 @@ use crate::tools::from_cursor;
 const KEYS: [(&str, &str); 6] = [("command", "command"), ("file_path", "file_path"), ("path", "file_path"), ("pattern", "pattern"),
     ("url", "url"), ("query", "pattern")];
 
+/// Folder sesji z `workspace_roots[0]`, gdy `cwd` brak albo jest puste: Cursor 3.22 go nie wysyła, a korzenie
+/// podaje jako `/C:/…` (sprawdzone na żywo). Wołane w hook.exe przed `slim`, który korzenie usuwa.
+pub fn fill_cwd(payload: &mut serde_json::Value) {
+    let Some(o) = payload.as_object_mut() else { return };
+    if o.get("cwd").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) { return; }
+    let Some(root) = o.get("workspace_roots").and_then(|r| r.get(0)).and_then(|v| v.as_str()) else { return };
+    let b = root.as_bytes();
+    let root = if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' { &root[1..] } else { root };
+    if root.is_empty() { return; }
+    let root = serde_json::Value::String(root.to_string());
+    o.insert("cwd".into(), root);
+}
+
 /// Narzędzie Claude'a o tym samym tekście akcji.
 fn claude_name(tool: Tool) -> Option<&'static str> {
     Some(match tool {
@@ -166,6 +179,26 @@ mod tests {
                 "subagent_id": "sub_1", "subagent_type": "explore"});
             for e in events(&env(ev, p), Lang::Pl) { assert!(!format!("{e:?}").contains("SEKRET"), "{ev}: {e:?}"); }
         }
+    }
+
+    #[test]
+    fn the_folder_comes_from_the_first_workspace_root_when_cwd_is_empty() {
+        // sprawdzone na żywo (Cursor 3.22): `cwd` brak albo puste, korzenie jako `/C:/…`
+        let mut p = json!({"workspace_roots": ["/C:/w/app", "/D:/b"]});
+        fill_cwd(&mut p);
+        assert_eq!(p["cwd"], "C:/w/app");
+        let mut empty = json!({"cwd": "", "workspace_roots": ["/home/u/app"]});
+        fill_cwd(&mut empty);
+        assert_eq!(empty["cwd"], "/home/u/app");
+        let mut own = json!({"cwd": "C:/own", "workspace_roots": ["/C:/w/app"]});
+        fill_cwd(&mut own);
+        assert_eq!(own["cwd"], "C:/own");
+        let mut none = json!({"workspace_roots": []});
+        fill_cwd(&mut none);
+        assert!(none.get("cwd").is_none());
+        let mut arr = json!([1]);
+        fill_cwd(&mut arr);
+        assert_eq!(arr, json!([1]));
     }
 
     #[test]

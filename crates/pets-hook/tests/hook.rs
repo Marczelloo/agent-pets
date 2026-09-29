@@ -234,6 +234,17 @@ fn cursor_input_with_a_utf8_bom_still_reaches_the_widget() {
 }
 
 #[test]
+fn the_cursor_folder_is_kept_although_the_workspace_roots_are_slimmed_away() {
+    let (ing, rx, _dir, p) = widget();
+    run_agent(&p, &["--agent", "cursor", "--event", "sessionStart"],
+        r#"{"conversation_id":"conv_1","cursor_version":"3.22.12","workspace_roots":["/C:/w/app"]}"#);
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("zła trasa") };
+    assert_eq!(env.payload["cwd"], "C:/w/app");
+    assert!(env.payload.get("workspace_roots").is_none());
+    ing.stop();
+}
+
+#[test]
 fn cursor_hooks_are_forwarded_and_always_let_cursor_go_on() {
     let (ing, rx, _dir, p) = widget();
     let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"],

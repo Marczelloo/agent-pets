@@ -113,6 +113,7 @@ fn agent_hook(agent: &str, event: &str) -> Option<()> {
     let mut payload = json_of(&read_stdin_max(16 << 20))?;
     if pets_core::adapters::caller(&payload, &env_var).is_some_and(|c| c.id() != agent) { return None; }
     if agent == "grok" { pets_core::adapters::grok::fill_session(&mut payload, env_var("GROK_SESSION_ID")); }
+    if agent == "cursor" { pets_core::adapters::cursor::fill_cwd(&mut payload); }
     pets_core::adapters::slim(&mut payload);
     let ppid = pid::agent_pid();
     let host = if pets_core::adapters::host_event(agent, event) {
