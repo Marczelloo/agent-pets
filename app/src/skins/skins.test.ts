@@ -109,17 +109,25 @@ describe('skins for agents', () => {
     const log = draw('cursor');
     for (const c of [f.light, f.edge, SKINS.cursor.eyeColor!]) expect(log.some(l => l.includes(c)), c).toBe(true);
   });
-  it('Grok is a dark ball with an open ring and a slash, like its logo', () => {
+  it('Grok is a black ball with two slanted white eyes up and to the right, like its mascot', () => {
     const g = SKINS.grok;
     expect(g.radius).toBe(g.width / 2);
     expect(Math.abs(g.width - g.height)).toBeLessThanOrEqual(g.width * .1);
-    expect(g.ring).toBe('#F5F5F5');
-    expect('brows' in g).toBe(false);
+    expect(g.pal.m).toBe('#0A0A0A');
+    expect(g.eyeColor).toBe('#FFFFFF');
+    expect(g.eyeShift!).toBeGreaterThan(.1);
+    expect(g.eyeTilt!).toBeLessThan(0);
+    expect(g.eyeY!).toBeLessThan(.36);
+    for (const k of ['slash', 'ring', 'brows']) expect(k in g, k).toBe(false);
     const log = draw('grok');
-    expect(log.some(l => l.includes(g.slash!))).toBe(true);
-    // pierścień z przerwą w prawym górnym rogu: łuk krótszy niż pełne koło
-    const arcs = log.filter(l => l.startsWith('ellipse(')).map(l => l.slice(8, -1).split(',').map(Number));
-    expect(arcs.some(a => a[6] - a[5] > Math.PI && a[6] - a[5] < 2 * Math.PI - .3)).toBe(true);
+    // obie pigułki pochylone: górą w lewo
+    expect(log.filter(l => l === `rotate(${Math.round(g.eyeTilt! * 1000) / 1000})`).length).toBe(2);
+  });
+  it('eyes stay where they were for skins without a shift or a tilt', () => {
+    for (const s of ['clawd', 'kodek', 'copilot', 'cursor', 'zcode'] as const) {
+      expect(SKINS[s].eyeShift, s).toBeUndefined();
+      expect(SKINS[s].eyeTilt, s).toBeUndefined();
+    }
   });
   it('ZCode is a panda: ears, patches under the eyes and a headband with a Z', () => {
     const p = SKINS.zcode.panda!;

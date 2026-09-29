@@ -26,7 +26,7 @@ function inside(x: CanvasRenderingContext2D, fp: number[][], draw: () => void) {
 export interface Face { cx: number; top: number; fw: number; H: number; u: number; co: number; ey: number; eyes: number[]; eh: number }
 
 /**
- * Znaki na przodzie ciała, po ciele i przed oczami: fasetka Cursora, pierścień i ukośna kreska Groka, łaty i opaska pandy ZCode.
+ * Znaki na przodzie ciała, po ciele i przed oczami: fasetka Cursora, łaty i opaska pandy ZCode.
  * `fp` = obrys przodu.
  */
 export function drawMarks(x: CanvasRenderingContext2D, sk: Skin, fp: number[][], f: Face) {
@@ -36,20 +36,6 @@ export function drawMarks(x: CanvasRenderingContext2D, sk: Skin, fp: number[][],
     inside(x, fp, () => {
       x.fillStyle = tone(fc.light); x.beginPath(); x.moveTo(X + c, top); x.lineTo(X + fw - c, top); x.lineTo(X, top + H / 2); x.closePath(); x.fill();
       x.strokeStyle = tone(fc.edge); x.lineWidth = Math.max(.8, 1.8 * u); x.beginPath(); x.moveTo(X + fw - c, top); x.lineTo(X, top + H / 2); x.stroke();
-    });
-  }
-  if (sk.ring) {
-    const rg = sk.ring;
-    x.save(); x.strokeStyle = tone(rg); x.lineWidth = Math.max(1, fw * .07); x.lineCap = 'butt';
-    // przerwa od -72° do -27° (prawy górny róg): tam wychodzi kreska, jak w logo
-    x.beginPath(); x.ellipse(cx, top + H * .47, fw * .36, H * .36, 0, -Math.PI * .15, Math.PI * 1.6); x.stroke();
-    x.restore();
-  }
-  if (sk.slash) {
-    const sl = sk.slash;
-    inside(x, fp, () => {
-      x.strokeStyle = tone(sl); x.lineWidth = Math.max(1, fw * .07); x.lineCap = 'butt';
-      x.beginPath(); x.moveTo(X + fw, top); x.lineTo(X, top + H); x.stroke();
     });
   }
   if (sk.panda) {

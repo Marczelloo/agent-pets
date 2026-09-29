@@ -26,10 +26,10 @@ export interface Skin {
   shape?: 'arch';
   /** Cursor: ścięte boki (sześciokąt), jaśniejszy trójkąt przodu od lewego górnego rogu i jasna krawędź */
   facet?: { light: string; edge: string };
-  /** Grok: ukośna kreska przez przód, od prawego górnego do lewego dolnego skraju */
-  slash?: string;
-  /** Grok: pierścień wokół oczu z przerwą w prawym górnym rogu, przez którą wychodzi kreska (logo) */
-  ring?: string;
+  /** przesunięcie obu oczu w bok jako ułamek szerokości ciała (Grok: w prawo) */
+  eyeShift?: number;
+  /** pochylenie pigułek oczu w radianach; ujemne = górą w lewo (Grok) */
+  eyeTilt?: number;
   /** ZCode: okrągłe uszy, łaty pod oczami (oczy na nich) i opaska z literą „Z” */
   panda?: { ears: string; patches: string; band: string; mark: string };
 }
