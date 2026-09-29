@@ -100,8 +100,21 @@ pub const ANTIGRAVITY_EVENTS: [&str; 4] = ["PreInvocation", "PreToolUse", "PostT
 /// Klucz naszego hooka w `hooks.json` Antigravity.
 const ANTIGRAVITY_KEY: &str = "agent-pets";
 
+pub const CURSOR_EVENTS: [&str; 10] = ["sessionStart", "sessionEnd", "beforeSubmitPrompt", "preToolUse", "postToolUse",
+    "postToolUseFailure", "subagentStart", "subagentStop", "preCompact", "stop"];
+pub const GROK_EVENTS: [&str; 10] = ["SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+    "PostToolUseFailure", "Notification", "Stop", "StopFailure", "PreCompact"];
+pub const ZCODE_EVENTS: [&str; 7] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse",
+    "PostToolUseFailure", "Stop"];
+
 pub fn copilot_hooks(home: &Path) -> PathBuf { home.join(".copilot").join("hooks").join("agent-pets.json") }
 pub fn antigravity_hooks(home: &Path) -> PathBuf { home.join(".gemini").join("config").join("hooks.json") }
+pub fn cursor_hooks_path(home: &Path) -> PathBuf { home.join(".cursor").join("hooks.json") }
+pub fn grok_hooks(home: &Path) -> PathBuf { home.join(".grok").join("hooks").join("agent-pets.json") }
+/// Katalog danych ZCode: `ZCODE_DATA_BASE_DIR`, jeśli ustawiony, inaczej `~/.zcode`.
+pub fn zcode_dir(home: &Path, base: Option<PathBuf>) -> PathBuf { base.unwrap_or_else(|| home.join(".zcode")) }
+pub fn zcode_config(home: &Path, base: Option<PathBuf>) -> PathBuf { zcode_dir(home, base).join("cli").join("config.json") }
+fn zcode_base() -> Option<PathBuf> { std::env::var_os("ZCODE_DATA_BASE_DIR").filter(|v| !v.is_empty()).map(PathBuf::from) }
 
 /// Wszystkie komendy w drzewie JSON (pola `command` i `powershell`).
 fn commands(v: &serde_json::Value, out: &mut Vec<String>) {
@@ -134,12 +147,26 @@ fn copilot_json(hook: &Path) -> serde_json::Value {
 
 enum HookFile { Missing, Ours, Foreign }
 
-fn copilot_file(home: &Path) -> HookFile {
-    match std::fs::read(copilot_hooks(home)) {
+/// Plik hooków, który w całości należy do nas (Copilot, Grok).
+fn own_file(f: &Path, agent: &str) -> HookFile {
+    match std::fs::read(f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => HookFile::Missing,
-        Ok(b) if serde_json::from_slice::<serde_json::Value>(&b).is_ok_and(|v| ours(&v, "copilot")) => HookFile::Ours,
+        Ok(b) if serde_json::from_slice::<serde_json::Value>(&b).is_ok_and(|v| ours(&v, agent)) => HookFile::Ours,
         _ => HookFile::Foreign,
     }
+}
+
+fn copilot_file(home: &Path) -> HookFile { own_file(&copilot_hooks(home), "copilot") }
+
+/// Zapisuje nasz plik tylko przy zmianie treści; atomowo, więc agent nigdy nie wczyta połowy pliku.
+fn write_own_file(f: &Path, text: &str, lang: Lang) -> Result<(), String> {
+    if std::fs::read_to_string(f).ok().as_deref() == Some(text) { return Ok(()); }
+    let dir = f.parent().expect("hooks/");
+    let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
+    std::fs::create_dir_all(dir).map_err(err)?;
+    let tmp = dir.join(".agent-pets.json.tmp");
+    std::fs::write(&tmp, text).map_err(err)?;
+    std::fs::rename(&tmp, f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e) })
 }
 
 fn foreign_copilot(lang: Lang) -> String {
@@ -151,17 +178,8 @@ fn enable_copilot(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<St
     if !home.join(".copilot").is_dir() { return Err(detect(AppId::Copilot, home, lang).note.unwrap_or_default()); }
     if let HookFile::Foreign = copilot_file(home) { return Err(foreign_copilot(lang)); }
     let hook = place_hook(home, hook_src, lang)?;
-    let f = copilot_hooks(home);
     let text = serde_json::to_string_pretty(&copilot_json(&hook)).map_err(|e| e.to_string())?;
-    if std::fs::read_to_string(&f).ok().as_deref() != Some(text.as_str()) {
-        let dir = f.parent().expect("hooks/");
-        let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
-        std::fs::create_dir_all(dir).map_err(err)?;
-        // zapis atomowy: Copilot nigdy nie wczyta połowy pliku
-        let tmp = dir.join(".agent-pets.json.tmp");
-        std::fs::write(&tmp, &text).map_err(err)?;
-        std::fs::rename(&tmp, &f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e) })?;
-    }
+    write_own_file(&copilot_hooks(home), &text, lang)?;
     Ok(tr(lang, "Hooki Copilota zapisane. Uruchom ponownie otwarte sesje Copilota.",
         "Copilot hooks written. Restart open Copilot sessions.").into())
 }
@@ -235,6 +253,159 @@ fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, String> {
     Ok(tr(lang, "Hooki Antigravity usunięte.", "Antigravity hooks removed.").into())
 }
 
+/// Plik z mapą `hooks` {zdarzenie: [wpisy]} (Cursor, ZCode). `None` = brak pliku; błąd = zły JSON albo nietypowy kształt,
+/// wtedy nic nie zmieniamy.
+fn read_hook_map(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
+    let unusual = || format!("{} {}, {}", tr(lang, "Nietypowy plik", "Unusual file"), f.display(),
+        tr(lang, "nic nie zmieniam.", "leaving it unchanged."));
+    let v: serde_json::Value = match std::fs::read(f) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+        Ok(b) => serde_json::from_slice(&b).map_err(|_| unusual())?,
+    };
+    let shape = v.is_object() && match v.get("hooks") {
+        None => true,
+        Some(h) => h.as_object().is_some_and(|m| m.values().all(|l| l.is_array())),
+    };
+    if shape { Ok(Some(v)) } else { Err(unusual()) }
+}
+
+/// Usuwa nasze wpisy ze wszystkich list w `hooks`; listy, które przez to opustoszały, znikają. Zwraca, czy coś usunięto.
+fn strip_hooks(v: &mut serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -> bool) -> bool {
+    let Some(hooks) = v.get_mut("hooks").and_then(|h| h.as_object_mut()) else { return false };
+    let mut removed = false;
+    hooks.retain(|_, list| {
+        let Some(a) = list.as_array_mut() else { return true };
+        let n = a.len();
+        a.retain(|e| !is_ours(e));
+        removed |= a.len() != n;
+        !(n > 0 && a.is_empty())
+    });
+    removed
+}
+
+/// Dopisuje nasz wpis na koniec listy każdego zdarzenia; cudze wpisy zostają przed naszymi. Bez zmian nic nie zapisujemy,
+/// a kopia (`.agent-pets.bak`) powstaje tylko z pliku bez naszych wpisów, więc zostaje plikiem sprzed naszej pierwszej zmiany.
+fn join_hooks(f: &Path, current: Option<&serde_json::Value>, mut v: serde_json::Value, events: &[&str],
+              entry: impl Fn(&str) -> serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -> bool, lang: Lang) -> Result<(), String> {
+    let had_ours = strip_hooks(&mut v, is_ours);
+    let hooks = v.as_object_mut().expect("sprawdzone").entry("hooks").or_insert_with(|| serde_json::json!({}));
+    for ev in events {
+        hooks.as_object_mut().expect("sprawdzone").entry(ev.to_string()).or_insert_with(|| serde_json::json!([]))
+            .as_array_mut().expect("sprawdzone").push(entry(ev));
+    }
+    if current == Some(&v) { return Ok(()); }
+    crate::hooks_install::edit_file_opts(f, !had_ours, |x| *x = v)
+        .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), f.display()))
+}
+
+/// Czy każde zdarzenie ma dokładnie nasz aktualny wpis.
+fn has_hooks(v: &serde_json::Value, events: &[&str], entry: impl Fn(&str) -> serde_json::Value) -> bool {
+    events.iter().all(|ev| v["hooks"][*ev].as_array().is_some_and(|a| a.contains(&entry(ev))))
+}
+
+fn cursor_entry(hook: &Path, ev: &str) -> serde_json::Value {
+    serde_json::json!({"command": hook_command(hook, "cursor", ev), "timeout": 5})
+}
+fn is_cursor(e: &serde_json::Value) -> bool { ours(e, "cursor") }
+
+fn enable_cursor(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+    if !home.join(".cursor").is_dir() { return Err(detect(AppId::Cursor, home, lang).note.unwrap_or_default()); }
+    let f = cursor_hooks_path(home);
+    let current = read_hook_map(&f, lang)?;
+    let hook = place_hook(home, hook_src, lang)?;
+    let mut v = current.clone().unwrap_or_else(|| serde_json::json!({}));
+    if v.get("version").is_none() { v["version"] = serde_json::json!(1); }
+    join_hooks(&f, current.as_ref(), v, &CURSOR_EVENTS, |ev| cursor_entry(&hook, ev), &is_cursor, lang)?;
+    Ok(tr(lang, "Hooki Cursora zapisane (kopia: hooks.json.agent-pets.bak). Uruchom ponownie Cursor.",
+        "Cursor hooks written (backup: hooks.json.agent-pets.bak). Restart Cursor.").into())
+}
+
+fn disable_cursor(home: &Path, lang: Lang) -> Result<String, String> {
+    let f = cursor_hooks_path(home);
+    let Some(mut v) = read_hook_map(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
+    if !strip_hooks(&mut v, &is_cursor) { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()); }
+    let empty = v.get("hooks").and_then(|h| h.as_object()).is_none_or(|h| h.is_empty());
+    // bez kopii plik był nasz od początku: po wyłączeniu nic w nim nie zostało
+    if empty && !f.with_file_name("hooks.json.agent-pets.bak").exists() {
+        std::fs::remove_file(&f).map_err(|e| e.to_string())?;
+    } else {
+        crate::hooks_install::edit_file_opts(&f, false, |x| *x = v).map_err(|e| e.to_string())?;
+    }
+    Ok(tr(lang, "Hooki Cursora usunięte.", "Cursor hooks removed.").into())
+}
+
+fn grok_json(hook: &Path) -> serde_json::Value {
+    let hooks: serde_json::Map<String, serde_json::Value> = GROK_EVENTS.iter().map(|ev| {
+        let mut g = serde_json::json!({"hooks": [{"type": "command", "command": hook_command(hook, "grok", ev), "timeout": 5}]});
+        // `matcher` tylko przy zdarzeniach narzędzi, jak w Claude Code
+        if ev.contains("ToolUse") { g["matcher"] = serde_json::json!("*"); }
+        (ev.to_string(), serde_json::json!([g]))
+    }).collect();
+    serde_json::json!({ "hooks": hooks })
+}
+
+fn grok_text(hook: &Path) -> String { serde_json::to_string_pretty(&grok_json(hook)).expect("json") }
+
+fn foreign_grok(lang: Lang) -> String {
+    tr(lang, "Plik agent-pets.json w ~/.grok/hooks nie jest nasz, nie nadpisuję.",
+        "agent-pets.json in ~/.grok/hooks is not ours; not overwriting it.").into()
+}
+
+fn enable_grok(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+    if !home.join(".grok").is_dir() { return Err(detect(AppId::Grok, home, lang).note.unwrap_or_default()); }
+    if let HookFile::Foreign = own_file(&grok_hooks(home), "grok") { return Err(foreign_grok(lang)); }
+    let hook = place_hook(home, hook_src, lang)?;
+    write_own_file(&grok_hooks(home), &grok_text(&hook), lang)?;
+    Ok(tr(lang, "Hooki Groka zapisane. Uruchom ponownie otwarte sesje Grok Build.",
+        "Grok hooks written. Restart open Grok Build sessions.").into())
+}
+
+fn disable_grok(home: &Path, lang: Lang) -> Result<String, String> {
+    match own_file(&grok_hooks(home), "grok") {
+        HookFile::Ours => {
+            std::fs::remove_file(grok_hooks(home)).map_err(|e| e.to_string())?;
+            Ok(tr(lang, "Hooki Groka usunięte.", "Grok hooks removed.").into())
+        }
+        _ => Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()),
+    }
+}
+
+/// Hook procesu ZCode: ścieżka wprost (bez powłoki, więc bez cudzysłowów) i argumenty osobno.
+fn zcode_entry(hook: &Path, ev: &str) -> serde_json::Value {
+    serde_json::json!({"matcher": "*", "hooks": [{"type": "process", "command": hook.to_string_lossy(),
+        "args": ["--agent", "zcode", "--event", ev], "timeoutMs": 5000}]})
+}
+
+fn is_zcode(e: &serde_json::Value) -> bool {
+    e["hooks"].as_array().is_some_and(|a| !a.is_empty() && a.iter().all(|h| {
+        let args = h["args"].as_array();
+        let has = |w: &str| args.is_some_and(|a| a.iter().any(|x| x.as_str() == Some(w)));
+        let cmd = h["command"].as_str().unwrap_or("").to_lowercase();
+        has("--agent") && has("zcode") && (cmd.ends_with(".agent-pets\\hook.exe") || cmd.ends_with(".agent-pets/hook.exe"))
+    }))
+}
+
+fn enable_zcode(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+    if !zcode_dir(home, zcode_base()).is_dir() { return Err(detect(AppId::Zcode, home, lang).note.unwrap_or_default()); }
+    let f = zcode_config(home, zcode_base());
+    let current = read_hook_map(&f, lang)?;
+    let hook = place_hook(home, hook_src, lang)?;
+    let v = current.clone().unwrap_or_else(|| serde_json::json!({}));
+    join_hooks(&f, current.as_ref(), v, &ZCODE_EVENTS, |ev| zcode_entry(&hook, ev), &is_zcode, lang)?;
+    Ok(tr(lang, "Hooki ZCode zapisane (kopia: config.json.agent-pets.bak). Uruchom ponownie ZCode.",
+        "ZCode hooks written (backup: config.json.agent-pets.bak). Restart ZCode.").into())
+}
+
+fn disable_zcode(home: &Path, lang: Lang) -> Result<String, String> {
+    let f = zcode_config(home, zcode_base());
+    let Some(mut v) = read_hook_map(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
+    if !strip_hooks(&mut v, &is_zcode) { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()); }
+    if v["hooks"].as_object().is_some_and(|h| h.is_empty()) { v.as_object_mut().expect("sprawdzone").remove("hooks"); }
+    crate::hooks_install::edit_file_opts(&f, false, |x| *x = v).map_err(|e| e.to_string())?;
+    Ok(tr(lang, "Hooki ZCode usunięte.", "ZCode hooks removed.").into())
+}
+
 fn home_folder(id: AppId) -> &'static str {
     match id {
         AppId::ClaudeCode => ".claude", AppId::Codex => ".codex", AppId::AgentRouter => ".agent-router",
@@ -250,7 +421,8 @@ fn other_folder(id: AppId) -> Option<&'static str> {
 
 /// Aplikację wykrywamy po jej katalogu w domu użytkownika: tworzy go przy pierwszym uruchomieniu.
 pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
-    let dir = std::iter::once(home_folder(id)).chain(other_folder(id)).map(|f| home.join(f)).find(|d| d.is_dir());
+    let base = if id == AppId::Zcode { zcode_base() } else { None };
+    let dir = base.into_iter().chain(std::iter::once(home_folder(id)).chain(other_folder(id)).map(|f| home.join(f))).find(|d| d.is_dir());
     if let Some(dir) = dir {
         return Detected { found: true, path: Some(dir.to_string_lossy().into_owned()), note: None };
     }
@@ -305,6 +477,25 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
             Err(e) => Status { installed: false, detail: e },
         };
     }
+    if id == AppId::Cursor {
+        return match read_hook_map(&cursor_hooks_path(home), lang) {
+            Ok(v) => hooks(v.is_some_and(|v| has_hooks(&v, &CURSOR_EVENTS, |ev| cursor_entry(&installed_hook(home), ev)))),
+            Err(e) => Status { installed: false, detail: e },
+        };
+    }
+    if id == AppId::Zcode {
+        return match read_hook_map(&zcode_config(home, zcode_base()), lang) {
+            Ok(v) => hooks(v.is_some_and(|v| has_hooks(&v, &ZCODE_EVENTS, |ev| zcode_entry(&installed_hook(home), ev)))),
+            Err(e) => Status { installed: false, detail: e },
+        };
+    }
+    if id == AppId::Grok {
+        return match own_file(&grok_hooks(home), "grok") {
+            HookFile::Ours => hooks(std::fs::read_to_string(grok_hooks(home)).ok() == Some(grok_text(&installed_hook(home)))),
+            HookFile::Missing => hooks(false),
+            HookFile::Foreign => Status { installed: false, detail: foreign_grok(lang) },
+        };
+    }
     if id == AppId::Opencode {
         return match plugin_file(home) {
             PluginFile::Ours(_) => Status { installed: true, detail: tr(lang, "Plugin: zainstalowany", "Plugin: installed").into() },
@@ -341,6 +532,9 @@ pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Re
     if id == AppId::Opencode { return enable_opencode(home, lang); }
     if id == AppId::Copilot { return enable_copilot(home, hook_src, lang); }
     if id == AppId::Antigravity { return enable_antigravity(home, hook_src, lang); }
+    if id == AppId::Cursor { return enable_cursor(home, hook_src, lang); }
+    if id == AppId::Grok { return enable_grok(home, hook_src, lang); }
+    if id == AppId::Zcode { return enable_zcode(home, hook_src, lang); }
     if id != AppId::ClaudeCode { return Ok(tr(lang, "Nic do instalowania", "Nothing to install").into()); }
     read_claude_settings(home, lang)?;
     let hook = place_hook(home, hook_src, lang)?;
@@ -354,6 +548,9 @@ pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, String> {
     if id == AppId::Opencode { return disable_opencode(home, lang); }
     if id == AppId::Copilot { return disable_copilot(home, lang); }
     if id == AppId::Antigravity { return disable_antigravity(home, lang); }
+    if id == AppId::Cursor { return disable_cursor(home, lang); }
+    if id == AppId::Grok { return disable_grok(home, lang); }
+    if id == AppId::Zcode { return disable_zcode(home, lang); }
     if id != AppId::ClaudeCode { return nothing(); }
     let Some(v) = read_claude_settings(home, lang)? else { return nothing() };
     let settings = claude_settings(home);
@@ -747,5 +944,240 @@ mod tests {
         assert_eq!(status(AppId::Codex, h.path(), Lang::En).detail, "Nothing to install");
         assert_eq!(status(AppId::ClaudeCode, h.path(), Lang::Pl).detail, "Hooki: brak");
         assert_eq!(disable(AppId::Codex, h.path(), Lang::En).unwrap(), "Nothing to remove");
+    }
+
+    fn rd(p: &Path) -> Value { serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap() }
+    fn dirs(h: &Path) { for d in [".cursor", ".grok", ".zcode"] { std::fs::create_dir_all(h.join(d)).unwrap(); } }
+
+    #[test]
+    fn cursor_hooks_need_the_cursor_folder() {
+        let h = home();
+        let e = enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_err();
+        assert!(e.contains("~/.cursor"), "{e}");
+        assert!(!cursor_hooks_path(h.path()).exists());
+    }
+
+    #[test]
+    fn cursor_hooks_install_once_and_a_file_we_made_goes_away() {
+        let h = home();
+        dirs(h.path());
+        let f = cursor_hooks_path(h.path());
+        assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed);
+        enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        let v = rd(&f);
+        assert_eq!(v["version"], json!(1));
+        assert_eq!(v["hooks"].as_object().unwrap().len(), CURSOR_EVENTS.len());
+        for ev in CURSOR_EVENTS {
+            let a = v["hooks"][ev].as_array().unwrap();
+            assert_eq!(a.len(), 1, "{ev}");
+            assert!(a[0]["command"].as_str().unwrap().ends_with(&format!("hook.exe --agent cursor --event {ev}")), "{ev}");
+            assert_eq!(a[0]["timeout"], json!(5));
+        }
+        assert!(!f.with_file_name("hooks.json.agent-pets.bak").exists(), "nie było czego kopiować");
+        assert!(status(AppId::Cursor, h.path(), Lang::Pl).installed);
+        let before = std::fs::read(&f).unwrap();
+        enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        assert_eq!(std::fs::read(&f).unwrap(), before);
+        disable(AppId::Cursor, h.path(), Lang::Pl).unwrap();
+        assert!(!f.exists(), "plik, który sami utworzyliśmy, znika");
+        assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed);
+        assert!(disable(AppId::Cursor, h.path(), Lang::Pl).is_ok());
+    }
+
+    #[test]
+    fn cursor_hooks_join_someone_elses_hooks_and_leave_them_alone() {
+        let h = home();
+        dirs(h.path());
+        let f = cursor_hooks_path(h.path());
+        let original = "{\n  \"version\": 1,\n  \"hooks\": {\"stop\": [{\"command\": \"./audit.sh\"}]}\n}";
+        std::fs::write(&f, original).unwrap();
+        let bak = f.with_file_name("hooks.json.agent-pets.bak");
+        enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        let v = rd(&f);
+        assert_eq!(v["hooks"]["stop"][0], json!({"command": "./audit.sh"}), "cudzy wpis zostaje pierwszy");
+        assert_eq!(v["hooks"]["stop"].as_array().unwrap().len(), 2);
+        assert!(v["hooks"]["stop"][1]["command"].as_str().unwrap().contains("--agent cursor --event stop"));
+        assert_eq!(std::fs::read(&bak).unwrap(), original.as_bytes());
+        enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        assert_eq!(rd(&f)["hooks"]["stop"].as_array().unwrap().len(), 2, "bez dubli");
+        // stara ścieżka hook.exe: jeden wpis z nową, kopia zostaje pierwotna
+        let mut v = rd(&f);
+        v["hooks"]["stop"][1]["command"] = json!("C:/old/hook.exe --agent cursor --event stop");
+        std::fs::write(&f, serde_json::to_string(&v).unwrap()).unwrap();
+        assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed, "stara ścieżka to nie instalacja");
+        enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        let stop = rd(&f)["hooks"]["stop"].as_array().unwrap().clone();
+        assert_eq!(stop.len(), 2);
+        assert!(stop[1]["command"].as_str().unwrap().contains(".agent-pets"));
+        assert_eq!(std::fs::read(&bak).unwrap(), original.as_bytes());
+        disable(AppId::Cursor, h.path(), Lang::Pl).unwrap();
+        assert_eq!(rd(&f), json!({"version": 1, "hooks": {"stop": [{"command": "./audit.sh"}]}}));
+    }
+
+    #[test]
+    fn an_unusual_cursor_file_is_left_as_it_is() {
+        let h = home();
+        dirs(h.path());
+        let f = cursor_hooks_path(h.path());
+        for text in ["{nie json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"stop":{}}}"#] {
+            std::fs::write(&f, text).unwrap();
+            let e = enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_err();
+            assert!(e.contains("nic nie zmieniam"), "{text}: {e}");
+            let _ = disable(AppId::Cursor, h.path(), Lang::Pl);
+            uninstall_all(h.path(), false, Lang::Pl);
+            assert_eq!(std::fs::read_to_string(&f).unwrap(), text, "{text}");
+            assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed, "{text}");
+        }
+        std::fs::write(&f, "[]").unwrap();
+        assert!(enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::En).unwrap_err().contains("leaving it unchanged"));
+    }
+
+    #[test]
+    fn grok_hooks_install_once_and_uninstall() {
+        let h = home();
+        let src = hook_src(h.path());
+        assert!(enable(AppId::Grok, h.path(), Some(&src), Lang::Pl).is_err(), "bez ~/.grok");
+        dirs(h.path());
+        enable(AppId::Grok, h.path(), Some(&src), Lang::Pl).unwrap();
+        let f = grok_hooks(h.path());
+        let v = rd(&f);
+        assert_eq!(v["hooks"].as_object().unwrap().len(), GROK_EVENTS.len());
+        for ev in GROK_EVENTS {
+            let group = &v["hooks"][ev][0];
+            let cmd = &group["hooks"][0];
+            assert!(cmd["command"].as_str().unwrap().ends_with(&format!("hook.exe --agent grok --event {ev}")), "{ev}");
+            assert_eq!((cmd["type"].as_str(), &cmd["timeout"]), (Some("command"), &json!(5)), "{ev}");
+            let tool = matches!(ev, "PreToolUse" | "PostToolUse" | "PostToolUseFailure");
+            assert_eq!(group.get("matcher").and_then(|m| m.as_str()), tool.then_some("*"), "{ev}");
+        }
+        assert!(status(AppId::Grok, h.path(), Lang::Pl).installed);
+        let before = std::fs::read(&f).unwrap();
+        enable(AppId::Grok, h.path(), Some(&src), Lang::Pl).unwrap();
+        assert_eq!(std::fs::read(&f).unwrap(), before);
+        let other = f.with_file_name("other.json");
+        std::fs::write(&other, "{}").unwrap();
+        disable(AppId::Grok, h.path(), Lang::Pl).unwrap();
+        assert!(!f.exists() && other.exists());
+        assert!(!status(AppId::Grok, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn someone_elses_grok_agent_pets_json_is_never_touched() {
+        let h = home();
+        dirs(h.path());
+        let f = grok_hooks(h.path());
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let theirs = r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"their.sh"}]}]}}"#;
+        std::fs::write(&f, theirs).unwrap();
+        assert!(enable(AppId::Grok, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err());
+        let _ = disable(AppId::Grok, h.path(), Lang::Pl);
+        uninstall_all(h.path(), false, Lang::Pl);
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), theirs);
+        assert!(!status(AppId::Grok, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn zcode_hooks_join_its_config_and_leave_the_rest_alone() {
+        let h = home();
+        let src = hook_src(h.path());
+        assert!(enable(AppId::Zcode, h.path(), Some(&src), Lang::Pl).unwrap_err().contains("~/.zcode"));
+        let f = zcode_config(h.path(), None);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let theirs = json!({"matcher": "*", "hooks": [{"type": "process", "command": "C:\\tools\\notify.exe", "args": ["done"]}]});
+        let original = json!({"model": "glm-5", "theme": "dark", "hooks": {"Stop": [theirs.clone()]}});
+        let text = serde_json::to_string_pretty(&original).unwrap();
+        std::fs::write(&f, &text).unwrap();
+        enable(AppId::Zcode, h.path(), Some(&src), Lang::Pl).unwrap();
+        let v = rd(&f);
+        assert_eq!((&v["model"], &v["theme"]), (&original["model"], &original["theme"]));
+        assert_eq!(v["hooks"]["Stop"][0], theirs);
+        assert_eq!(v["hooks"].as_object().unwrap().len(), ZCODE_EVENTS.len());
+        let hook = installed_hook(h.path()).to_string_lossy().into_owned();
+        for ev in ZCODE_EVENTS {
+            let a = v["hooks"][ev].as_array().unwrap();
+            let e = a.last().unwrap();
+            assert_eq!(e["matcher"], json!("*"), "{ev}");
+            let inner = &e["hooks"][0];
+            assert_eq!((inner["type"].as_str(), inner["command"].as_str(), &inner["timeoutMs"]), (Some("process"), Some(hook.as_str()), &json!(5000)));
+            assert_eq!(inner["args"], json!(["--agent", "zcode", "--event", ev]));
+        }
+        assert_eq!(std::fs::read_to_string(f.with_file_name("config.json.agent-pets.bak")).unwrap(), text);
+        assert!(status(AppId::Zcode, h.path(), Lang::Pl).installed);
+        let before = std::fs::read(&f).unwrap();
+        enable(AppId::Zcode, h.path(), Some(&src), Lang::Pl).unwrap();
+        assert_eq!(std::fs::read(&f).unwrap(), before);
+        disable(AppId::Zcode, h.path(), Lang::Pl).unwrap();
+        assert_eq!(rd(&f), original);
+        assert!(!status(AppId::Zcode, h.path(), Lang::Pl).installed);
+    }
+
+    #[test]
+    fn zcode_creates_its_cli_folder_and_drops_a_hooks_key_left_empty() {
+        let h = home();
+        dirs(h.path());
+        let f = zcode_config(h.path(), None);
+        enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        assert!(f.is_file());
+        disable(AppId::Zcode, h.path(), Lang::Pl).unwrap();
+        assert_eq!(rd(&f), json!({}));
+        std::fs::write(&f, r#"{"model":"m"}"#).unwrap();
+        enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        disable(AppId::Zcode, h.path(), Lang::Pl).unwrap();
+        assert_eq!(rd(&f), json!({"model": "m"}));
+    }
+
+    #[test]
+    fn the_zcode_config_follows_its_data_folder() {
+        let h = home();
+        let base = h.path().join("zc data");
+        assert_eq!(zcode_config(h.path(), Some(base.clone())), base.join("cli").join("config.json"));
+        assert_eq!(zcode_config(h.path(), None), h.path().join(".zcode").join("cli").join("config.json"));
+        assert_eq!(zcode_dir(h.path(), None), h.path().join(".zcode"));
+    }
+
+    #[test]
+    fn a_broken_zcode_config_is_left_as_it_is() {
+        let h = home();
+        dirs(h.path());
+        let f = zcode_config(h.path(), None);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        for text in ["{nie json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"Stop":"x"}}"#] {
+            std::fs::write(&f, text).unwrap();
+            assert!(enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err(), "{text}");
+            let _ = disable(AppId::Zcode, h.path(), Lang::Pl);
+            uninstall_all(h.path(), false, Lang::Pl);
+            assert_eq!(std::fs::read_to_string(&f).unwrap(), text, "{text}");
+        }
+    }
+
+    #[test]
+    fn new_hooks_work_from_a_home_with_spaces_and_apostrophes() {
+        for name in ["Jan Kowalski", "O'Neil"] {
+            let t = home();
+            let h = t.path().join(name);
+            dirs(&h);
+            let src = hook_src(t.path());
+            for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { enable(id, &h, Some(&src), Lang::Pl).unwrap(); }
+            let hook = installed_hook(&h).to_string_lossy().into_owned();
+            let c = rd(&cursor_hooks_path(&h))["hooks"]["stop"][0]["command"].as_str().unwrap().to_string();
+            let g = rd(&grok_hooks(&h))["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
+            for cmd in [c, g] { assert!(cmd.starts_with('"') && cmd.contains(&hook.replace('\\', "/")), "{cmd}"); }
+            let z = rd(&zcode_config(&h, None))["hooks"]["Stop"][0]["hooks"][0].clone();
+            assert_eq!(z["command"].as_str(), Some(hook.as_str()));
+            assert_eq!(z["args"].as_array().unwrap().len(), 4);
+            for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { assert!(status(id, &h, Lang::Pl).installed, "{id:?}"); }
+        }
+    }
+
+    #[test]
+    fn uninstall_removes_cursor_grok_and_zcode_hooks() {
+        let h = home();
+        dirs(h.path());
+        let src = hook_src(h.path());
+        for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { enable(id, h.path(), Some(&src), Lang::Pl).unwrap(); }
+        uninstall_all(h.path(), false, Lang::Pl);
+        assert!(!cursor_hooks_path(h.path()).exists() && !grok_hooks(h.path()).exists());
+        assert_eq!(rd(&zcode_config(h.path(), None)), json!({}));
+        for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { assert!(!status(id, h.path(), Lang::Pl).installed, "{id:?}"); }
     }
 }
