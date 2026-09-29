@@ -4,9 +4,12 @@ import { opencode } from './opencode';
 import { blob } from './blob';
 import { copilot } from './copilot';
 import { antigravity } from './antigravity';
+import { cursor } from './cursor';
+import { grok } from './grok';
+import { zcode } from './zcode';
 import type { Skin, SkinId } from './types';
 export type { Skin, SkinId } from './types';
-export const SKINS: Record<SkinId, Skin> = { clawd, kodek, opencode, blob, copilot, antigravity };
+export const SKINS: Record<SkinId, Skin> = { clawd, kodek, opencode, blob, copilot, antigravity, cursor, grok, zcode };
 
 const hex = (h: number, s: number, l: number) => {
   const a = s * Math.min(l, 1 - l), f = (n: number) => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };

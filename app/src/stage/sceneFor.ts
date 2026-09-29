@@ -31,8 +31,10 @@ export function sceneFor(s: Pick<Session, 'state' | 'tool'>, music = false): Sce
   return STATE[s.state] ?? 'thinking';
 }
 
-const SKIN_OF: Record<string, SkinId> = { claude: 'clawd', codex: 'kodek', opencode: 'opencode', copilot: 'copilot', antigravity: 'antigravity' };
-/** Skórka agenta; agenci bez własnej maskotki (furtka, a do 0.12 także Cursor i Grok) dostają bloba. */
+const SKIN_OF: Record<string, SkinId> = {
+  claude: 'clawd', codex: 'kodek', opencode: 'opencode', copilot: 'copilot', antigravity: 'antigravity', cursor: 'cursor', grok: 'grok', zcode: 'zcode',
+};
+/** Skórka agenta; agenci bez własnej maskotki (furtka) dostają bloba. */
 export const skinFor = (agent: string): SkinId => SKIN_OF[agent] ?? 'blob';
 
 const blobName = (s: Pick<Session, 'agent' | 'agent_name'>) => agentLabel({ agent: s.agent, agent_name: s.agent_name?.trim() || null });

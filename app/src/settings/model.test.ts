@@ -63,6 +63,7 @@ describe('settings model', () => {
     expect(appFor({ agent: 'other', origin: 'cli' })).toBeNull();
     expect(appFor({ agent: 'copilot', origin: 'cli' })).toBe('copilot');
     expect(appFor({ agent: 'antigravity', origin: 'cli' })).toBe('antigravity');
+    for (const a of ['cursor', 'grok', 'zcode'] as const) expect(appFor({ agent: a, origin: 'cli' })).toBe(a);
   });
   it('keeps the pet limit between 1 and 8', () => {
     expect([clampMaxVisible(0), clampMaxVisible(5), clampMaxVisible(20), clampMaxVisible(Number.NaN)]).toEqual([1, 5, 8, 5]);

@@ -6,13 +6,16 @@ import { petFor, skinFor } from '../stage/sceneFor';
 import type { Agent } from '../types';
 import { blobPal, SKINS } from './index';
 import { archP, floatLift } from '../renderer/draw/float';
+import { PREVIEW_AGENTS } from '../settings/look/LookTab';
+import { accentFor } from '../stage/sceneFor';
+import { ACCENT } from '../styles';
 
 pen.font = 'x';
 
 describe('skins for agents', () => {
   it('every agent has a pet', () => {
     const want: Record<Agent, string> = { claude: 'clawd', codex: 'kodek', opencode: 'opencode', antigravity: 'antigravity', copilot: 'copilot',
-      cursor: 'blob', grok: 'blob', zcode: 'blob', other: 'blob' };
+      cursor: 'cursor', grok: 'grok', zcode: 'zcode', other: 'blob' };
     for (const [a, s] of Object.entries(want)) expect(skinFor(a), a).toBe(s);
   });
   it('pixel and sticker draw new pets like clean; clawd and kodek keep their own art', () => {
@@ -20,6 +23,10 @@ describe('skins for agents', () => {
     expect(effectiveStyle('sticker', 'blob')).toBe('clean');
     expect(effectiveStyle('pixel', 'antigravity')).toBe('clean');
     expect(effectiveStyle('sticker', 'copilot')).toBe('clean');
+    for (const s of ['cursor', 'grok', 'zcode'] as const) {
+      expect(effectiveStyle('pixel', s), s).toBe('clean');
+      expect(effectiveStyle('sticker', s), s).toBe('clean');
+    }
     expect(effectiveStyle('neon', 'opencode')).toBe('neon');
     expect(effectiveStyle('pixel', 'clawd')).toBe('pixel');
     expect(effectiveStyle('sticker', 'kodek')).toBe('sticker');
@@ -81,6 +88,45 @@ describe('skins for agents', () => {
     expect(stops('ink').some(l => l.includes('#4285F4'))).toBe(false);
     expect(stops('ink').length).toBeGreaterThan(0);
     expect(stops('pastel').some(l => l.includes('#4285F4'))).toBe(false);
+  });
+  it('Cursor, Grok and ZCode have their own pets, walk, keep their eyes above the desk and show up in the preview', () => {
+    for (const s of ['cursor', 'grok', 'zcode'] as const) {
+      expect(SKINS[s].legs.length, s).toBe(2);
+      expect(SKINS[s].eyeY!, s).toBeLessThan(.52);
+      expect(accentFor({ agent: s, agent_name: null }), s).toBe(ACCENT[s]);
+    }
+    expect([ACCENT.cursor, ACCENT.grok, ACCENT.zcode]).toEqual(['#D0D0D0', '#9A9AA6', '#2F6BFF']);
+    expect(PREVIEW_AGENTS).toEqual(expect.arrayContaining(['cursor', 'grok', 'zcode']));
+  });
+  const draw = (agent: Agent) => {
+    const rec = recorder();
+    drawPet(rec.ctx, petFor({ agent, agent_name: null }, 'idle'), 60, 40, 1, 0.5);
+    return rec.log;
+  };
+  it('Cursor is a dark faceted block with a lighter facet and a bright edge', () => {
+    const f = SKINS.cursor.facet!;
+    expect(SKINS.cursor.pal.m).toBe('#1A1A1A');
+    const log = draw('cursor');
+    for (const c of [f.light, f.edge, SKINS.cursor.eyeColor!]) expect(log.some(l => l.includes(c)), c).toBe(true);
+  });
+  it('Grok is a dark ball with a slash and slanted brows', () => {
+    const g = SKINS.grok;
+    expect(g.radius).toBe(g.width / 2);
+    expect(Math.abs(g.width - g.height)).toBeLessThanOrEqual(g.width * .1);
+    const log = draw('grok');
+    expect(log.some(l => l.includes(g.slash!))).toBe(true);
+    expect(log.filter(l => l.includes(g.brows!)).length).toBeGreaterThan(0);
+  });
+  it('ZCode is a panda: ears, patches under the eyes and a headband with a Z', () => {
+    const p = SKINS.zcode.panda!;
+    expect(p).toEqual({ ears: '#1B1B1B', patches: '#1B1B1B', band: '#2F6BFF', mark: '#FFFFFF' });
+    const log = draw('zcode');
+    expect(log.some(l => l.includes(p.band))).toBe(true);
+    expect(log.some(l => l.startsWith('fillText(Z'))).toBe(true);
+    // łaty przed oczami: oczy rysują się na nich
+    const patch = Math.max(...log.map((l, i) => (l.includes(p.patches) ? i : -1))), eye = log.findIndex(l => l.includes(SKINS.zcode.eyeColor!));
+    expect(patch).toBeGreaterThan(-1);
+    expect(patch).toBeLessThan(eye);
   });
   it('the arch has an opening at the bottom', () => {
     const p = archP(-40, -60, 80, 60, 10);

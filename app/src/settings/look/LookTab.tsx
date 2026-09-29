@@ -10,9 +10,9 @@ import { BubblePreview } from './BubblePreview';
 import { PetsCanvas } from './PetsCanvas';
 import { Toggle } from '../Toggle';
 
-const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode', 'copilot', 'antigravity'];
+const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode', 'copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
 /** Zwierzaki do wyboru w podglądzie: każda maskotka i blob agenta bez własnej. */
-const PREVIEW_AGENTS: Agent[] = ['claude', 'codex', 'opencode', 'copilot', 'antigravity', 'other'];
+export const PREVIEW_AGENTS: Agent[] = ['claude', 'codex', 'opencode', 'copilot', 'antigravity', 'cursor', 'grok', 'zcode', 'other'];
 const petName = (a: Agent) => (a === 'other' ? t().look.otherPet : t().agent[a]);
 
 export function PetPicker({ agent, onPick }: { agent: Agent; onPick: (a: Agent) => void }) {

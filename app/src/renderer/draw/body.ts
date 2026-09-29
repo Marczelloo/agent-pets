@@ -14,6 +14,7 @@ import { DEFAULT_LOOK } from "../../look";
 import type { Look } from "../../types";
 import { effectiveStyle } from "../effective";
 import { archP, drawPilot, floatLift, googleFill } from "./float";
+import { drawEars, drawMarks, hexP } from "./marks";
 export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
 const lk0=look??DEFAULT_LOOK,lk={...lk0,style:effectiveStyle(lk0.style,c.type)},st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=c.accent??ACCENT[c.type];if(st.sketch)pen.boil=Math.floor(t*st.sketch.boilHz);pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.fx;
 if(st.model==='sticker')return drawSticker(x,c,X,Y,u,t,lk);if(st.model==='pixel')return drawPixel(x,c,X,Y,u,t,lk);
@@ -51,10 +52,11 @@ worldT();arms.forEach((a: any)=>{if(a.fr<1){hose(x,a,a.L,thk,cm,u,lw);mitt(x,a,m
 bodyT();
 if(sk.antenna){const by=top+2*u,len=15*u,tx=Math.sin(c.aa)*len,ty=by-Math.cos(c.aa)*len;x.beginPath();x.moveTo(0,by);x.lineTo(tx,ty);x.stroke();shp(x,elP(tx,ty,4.5*u,4.5*u),gr>.5?'#E24B4A':'#5DCAA5',u);}
 
-const bodyP=sk.shape==='arch'?archP:rrP;
+const bodyP=sk.shape==='arch'?archP:sk.facet?hexP:rrP;
 // uszy hełmu Copilota: wystają po bokach, za ciałem
 const pilot=c.pilot??sk.pilot;
 if(pilot)for(const s of [-1,1])shp(x,elP(s*hW,top+H*.6,5.5*u,9*u),cs,u);
+drawEars(x,sk,hW,top,u);
 shp(x,bodyP(-hW,top,hW*2,H,R),cs,u,{hatch:true});
 const fwid=W*Math.abs(co),front=co>=0,fcx=(front?1:-1)*Dp/2*si;
 if(fwid>1.5){const fp=bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2));shp(x,fp,front?cm:cb,u);if(sk.shape==='arch')googleFill(x,fp);
@@ -68,6 +70,7 @@ const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFa
 let ecol=st.face?.eyes==='accent'?pen.ol:c.pilot?.eye??sk.eyeColor??'#1E1410';
 if(front&&fwid>4*u){
 if(pilot)drawPilot(x,fcx+exs*.4,top,fwid,H,u,pilot);
+drawMarks(x,sk,bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2)),{cx:fcx,top,fw:fwid,H,u,co,ey,eyes:[-1,1].map(s=>fcx+s*sk.eyeX*W*co+exs),eh:sk.eyeH*u});
 if(sk.screenFace){const m=8*u*co,sx0=fcx-fwid/2+m,sy0=top+8*u,sw=fwid-2*m,sh=H-20*u,tw=cl(P.typeW.x);shp(x,rrP(sx0,sy0,sw,sh,9*u*co),'#2C2C2A',u);ecol='#5DCAA5';
 x.save();path(x,rrP(sx0,sy0,sw,sh,9*u*co),0,0);x.clip();
 if(tw>.02){x.globalAlpha=GA*tw;x.fillStyle=ecol;const off=(t*18*u)%(6*u);for(let i=0;i<4;i++){const ly=sy0+sh*.66+i*6*u-off;const ww=sw*(.2+.5*(((i*7+Math.floor(t*3))%5)/5));x.fillRect(sx0+6*u*co,ly,ww,2.2*u);}}

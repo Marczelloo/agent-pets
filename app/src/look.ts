@@ -25,6 +25,9 @@ export function appFor(s: Pick<Session, 'agent' | 'origin'>): AppId | null {
     case 'opencode': return 'opencode';
     case 'copilot': return 'copilot';
     case 'antigravity': return 'antigravity';
+    case 'cursor': return 'cursor';
+    case 'grok': return 'grok';
+    case 'zcode': return 'zcode';
     default: return null;
   }
 }

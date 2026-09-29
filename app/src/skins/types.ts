@@ -1,4 +1,4 @@
-export type SkinId = 'clawd' | 'kodek' | 'opencode' | 'blob' | 'copilot' | 'antigravity';
+export type SkinId = 'clawd' | 'kodek' | 'opencode' | 'blob' | 'copilot' | 'antigravity' | 'cursor' | 'grok' | 'zcode';
 export interface Skin {
   id: SkinId;
   pal: { m: string; s: string; b: string; h: string; g: string; gs: string };
@@ -24,4 +24,12 @@ export interface Skin {
   float?: boolean;
   /** kształt ciała: zaokrąglony prostokąt (domyślnie) albo łuk „A” z otworem u dołu */
   shape?: 'arch';
+  /** Cursor: ścięte boki (sześciokąt), jaśniejszy trójkąt przodu od lewego górnego rogu i jasna krawędź */
+  facet?: { light: string; edge: string };
+  /** Grok: ukośna kreska przez przód, od prawego górnego do lewego dolnego skraju (0,12 szerokości) */
+  slash?: string;
+  /** dwie skośne brwi nad oczami, wewnętrzne końce niżej */
+  brows?: string;
+  /** ZCode: okrągłe uszy, łaty pod oczami (oczy na nich) i opaska z literą „Z” */
+  panda?: { ears: string; patches: string; band: string; mark: string };
 }
