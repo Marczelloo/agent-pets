@@ -74,9 +74,30 @@ pub fn from_antigravity(name: &str) -> Tool {
     }
 }
 
+/// Nazwy narzędzi Cursora (hooki `preToolUse`). MCP: `MCP:<serwer>`.
+pub fn from_cursor(name: &str) -> Tool {
+    match name {
+        "Shell" => Tool::Bash,
+        "Read" => Tool::Read,
+        "Write" | "Edit" => Tool::Edit,
+        "Grep" | "Glob" => Tool::Grep,
+        "Task" => Tool::Agent,
+        n if n.starts_with("MCP:") => Tool::Mcp,
+        _ => Tool::Other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cursor_tool_names() {
+        for (n, t) in [("Shell", Tool::Bash), ("Read", Tool::Read), ("Write", Tool::Edit), ("Edit", Tool::Edit), ("Grep", Tool::Grep),
+                       ("Glob", Tool::Grep), ("Task", Tool::Agent), ("MCP:github", Tool::Mcp), ("Delete", Tool::Other), ("", Tool::Other)] {
+            assert_eq!(from_cursor(n), t, "{n}");
+        }
+    }
 
     #[test]
     fn claude_tools_map_to_actions() {

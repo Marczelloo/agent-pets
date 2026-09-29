@@ -147,8 +147,10 @@ impl Runtime {
                     && crate::adapters::copilot::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
                 Incoming::Antigravity(env) => self.apps.antigravity
                     && crate::adapters::antigravity::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
+                Incoming::Cursor(env) => self.apps.cursor
+                    && crate::adapters::cursor::events(&env, self.lang).into_iter().fold(false, |c, e| self.apply(e) | c),
                 // adaptery w kolejnych krokach 0.12
-                Incoming::Cursor(_) | Incoming::Grok(_) | Incoming::Zcode(_) => false,
+                Incoming::Grok(_) | Incoming::Zcode(_) => false,
             };
         }
         let paths: Vec<PathBuf> = self.files.as_ref().map(|rx| rx.try_iter().collect()).unwrap_or_default();
@@ -569,6 +571,24 @@ mod tests {
         ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
             .set("Authorization", &format!("Bearer {}", ep.token)).send_string(body)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 })
+    }
+
+    #[test]
+    fn a_cursor_hook_brings_a_cursor_pet_only_when_cursor_is_on() {
+        for on in [true, false] {
+            let h = home();
+            let mut c = cfg(&h);
+            c.apps.cursor = on;
+            let mut rt = Runtime::start(c).unwrap();
+            let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+            let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "preToolUse",
+                "payload": {"conversation_id": "conv_1", "tool_name": "Shell", "tool_input": {"command": "npm test"}}}).to_string();
+            assert_eq!(post_agent(&ep, "cursor", &body), if on { 204 } else { 404 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            while rt.store().session("cursor:conv_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+            let s = rt.store().session("cursor:conv_1");
+            assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Cursor, Some(crate::model::Tool::Bash))), "cursor {on}");
+        }
     }
 
     #[test]
