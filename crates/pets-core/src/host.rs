@@ -56,6 +56,8 @@ pub fn app_of_exe(exe: &str) -> Option<App> {
         // od 2.0: aplikacja „Antigravity” i osobne „Antigravity IDE”
         "antigravity.exe" | "antigravity ide.exe" => App::Antigravity,
         "zed.exe" => App::Zed,
+        // sprawdzone na żywo: %LOCALAPPDATA%\Programs\ZCode\ZCode.exe
+        "zcode.exe" => App::Zcode,
         "idea64.exe" | "pycharm64.exe" | "webstorm64.exe" | "goland64.exe" | "rider64.exe" | "clion64.exe"
             | "rustrover64.exe" | "phpstorm64.exe" => App::Jetbrains,
         "windowsterminal.exe" => App::Terminal,
@@ -136,7 +138,7 @@ mod tests {
         for (exe, app) in [("T3 Code.exe", App::T3code), ("t3code.exe", App::T3code), ("code.exe", App::Vscode),
                            ("Code - Insiders.exe", App::Vscode), ("Cursor.exe", App::Cursor), ("Antigravity.exe", App::Antigravity), ("Antigravity IDE.exe", App::Antigravity),
                            ("zed.exe", App::Zed), ("idea64.exe", App::Jetbrains), ("RustRover64.exe", App::Jetbrains),
-                           ("windowsterminal.exe", App::Terminal)] {
+                           ("windowsterminal.exe", App::Terminal), ("ZCode.exe", App::Zcode)] {
             assert_eq!(app_of_exe(exe), Some(app), "{exe}");
         }
     }
