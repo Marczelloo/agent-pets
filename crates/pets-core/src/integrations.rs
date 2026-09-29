@@ -288,12 +288,23 @@ fn strip_hooks(v: &mut serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -
 /// a kopia (`.agent-pets.bak`) powstaje tylko z pliku bez naszych wpisów, więc zostaje plikiem sprzed naszej pierwszej zmiany.
 fn join_hooks(f: &Path, current: Option<&serde_json::Value>, mut v: serde_json::Value, events: &[&str],
               entry: impl Fn(&str) -> serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -> bool, lang: Lang) -> Result<(), String> {
-    let had_ours = strip_hooks(&mut v, is_ours);
+    let had_ours = merge_hooks(&mut v, events, entry, is_ours);
+    write_hooks(f, current, v, had_ours, lang)
+}
+
+/// Nasze wpisy na koniec list w `hooks` (dawne usunięte). Zwraca, czy jakieś dawne były.
+fn merge_hooks(v: &mut serde_json::Value, events: &[&str], entry: impl Fn(&str) -> serde_json::Value,
+               is_ours: &dyn Fn(&serde_json::Value) -> bool) -> bool {
+    let had_ours = strip_hooks(v, is_ours);
     let hooks = v.as_object_mut().expect("sprawdzone").entry("hooks").or_insert_with(|| serde_json::json!({}));
     for ev in events {
         hooks.as_object_mut().expect("sprawdzone").entry(ev.to_string()).or_insert_with(|| serde_json::json!([]))
             .as_array_mut().expect("sprawdzone").push(entry(ev));
     }
+    had_ours
+}
+
+fn write_hooks(f: &Path, current: Option<&serde_json::Value>, v: serde_json::Value, had_ours: bool, lang: Lang) -> Result<(), String> {
     if current == Some(&v) { return Ok(()); }
     crate::hooks_install::edit_file_opts(f, !had_ours, |x| *x = v)
         .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), f.display()))
@@ -386,22 +397,68 @@ fn is_zcode(e: &serde_json::Value) -> bool {
     }))
 }
 
+/// Konfiguracja ZCode: zdarzenia leżą w `hooks.events`, obok tylko `enabled`, `timeoutMs` i `maxOutputBytes`; każdy inny
+/// klucz w `hooks` ZCode odrzuca razem z całym plikiem, a hooki uruchamia tylko przy `hooks.enabled: true` (schemat
+/// z bundla ZCode, sprawdzone na żywo). Nietypowy kształt = błąd, wtedy nic nie zmieniamy.
+fn read_zcode(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
+    let unusual = || format!("{} {}, {}", tr(lang, "Nietypowy plik", "Unusual file"), f.display(),
+        tr(lang, "nic nie zmieniam.", "leaving it unchanged."));
+    let v: serde_json::Value = match std::fs::read(f) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+        Ok(b) => serde_json::from_slice(&b).map_err(|_| unusual())?,
+    };
+    let shape = v.is_object() && match v.get("hooks") {
+        None => true,
+        Some(h) => h.as_object().is_some_and(|m| {
+            m.keys().all(|k| matches!(k.as_str(), "enabled" | "timeoutMs" | "maxOutputBytes" | "events"))
+                && m.get("events").is_none_or(|e| e.as_object().is_some_and(|e| e.values().all(|l| l.is_array())))
+        }),
+    };
+    if shape { Ok(Some(v)) } else { Err(unusual()) }
+}
+
+/// `hooks.events` jako `{"hooks": …}` dla wspólnych helperów.
+fn zcode_view(v: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"hooks": v["hooks"].get("events").cloned().unwrap_or_else(|| serde_json::json!({}))})
+}
+
 fn enable_zcode(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
     if !zcode_dir(home, zcode_base()).is_dir() { return Err(detect(AppId::Zcode, home, lang).note.unwrap_or_default()); }
     let f = zcode_config(home, zcode_base());
-    let current = read_hook_map(&f, lang)?;
+    let current = read_zcode(&f, lang)?;
+    // hooki wyłączone przez użytkownika: to jego decyzja, nie włączamy ich za niego
+    if current.as_ref().is_some_and(|v| v["hooks"]["enabled"] == false) {
+        return Err(tr(lang, "Hooki w ZCode są wyłączone (hooks.enabled: false w ~/.zcode/cli/config.json), nic nie zmieniam.",
+            "Hooks are turned off in ZCode (hooks.enabled: false in ~/.zcode/cli/config.json); leaving it unchanged.").into());
+    }
     let hook = place_hook(home, hook_src, lang)?;
-    let v = current.clone().unwrap_or_else(|| serde_json::json!({}));
-    join_hooks(&f, current.as_ref(), v, &ZCODE_EVENTS, |ev| zcode_entry(&hook, ev), &is_zcode, lang)?;
+    let mut v = current.clone().unwrap_or_else(|| serde_json::json!({}));
+    let mut view = zcode_view(&v);
+    let had_ours = merge_hooks(&mut view, &ZCODE_EVENTS, |ev| zcode_entry(&hook, ev), &is_zcode);
+    v["hooks"]["enabled"] = serde_json::json!(true);
+    v["hooks"]["events"] = view["hooks"].take();
+    write_hooks(&f, current.as_ref(), v, had_ours, lang)?;
     Ok(tr(lang, "Hooki ZCode zapisane (kopia: config.json.agent-pets.bak). Uruchom ponownie ZCode.",
         "ZCode hooks written (backup: config.json.agent-pets.bak). Restart ZCode.").into())
 }
 
 fn disable_zcode(home: &Path, lang: Lang) -> Result<String, String> {
     let f = zcode_config(home, zcode_base());
-    let Some(mut v) = read_hook_map(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
-    if !strip_hooks(&mut v, &is_zcode) { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()); }
-    if v["hooks"].as_object().is_some_and(|h| h.is_empty()) { v.as_object_mut().expect("sprawdzone").remove("hooks"); }
+    let Some(mut v) = read_zcode(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
+    let mut view = zcode_view(&v);
+    if !strip_hooks(&mut view, &is_zcode) { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()); }
+    // `enabled` zostaje tylko wtedy, gdy było w pliku sprzed naszej pierwszej zmiany (kopia); bez kopii plik był nasz
+    let theirs_on = std::fs::read(f.with_file_name("config.json.agent-pets.bak")).ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .is_some_and(|b| b["hooks"]["enabled"] == true);
+    let h = v["hooks"].as_object_mut().expect("sprawdzone");
+    match view["hooks"].take() {
+        e if e.as_object().is_some_and(|e| e.is_empty()) => { h.remove("events"); }
+        e => { h.insert("events".into(), e); }
+    }
+    if !theirs_on && h.get("enabled") == Some(&serde_json::json!(true)) { h.remove("enabled"); }
+    if h.is_empty() { v.as_object_mut().expect("sprawdzone").remove("hooks"); }
     crate::hooks_install::edit_file_opts(&f, false, |x| *x = v).map_err(|e| e.to_string())?;
     Ok(tr(lang, "Hooki ZCode usunięte.", "ZCode hooks removed.").into())
 }
@@ -484,8 +541,9 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
         };
     }
     if id == AppId::Zcode {
-        return match read_hook_map(&zcode_config(home, zcode_base()), lang) {
-            Ok(v) => hooks(v.is_some_and(|v| has_hooks(&v, &ZCODE_EVENTS, |ev| zcode_entry(&installed_hook(home), ev)))),
+        return match read_zcode(&zcode_config(home, zcode_base()), lang) {
+            Ok(v) => hooks(v.is_some_and(|v| v["hooks"]["enabled"] == true
+                && has_hooks(&zcode_view(&v), &ZCODE_EVENTS, |ev| zcode_entry(&installed_hook(home), ev)))),
             Err(e) => Status { installed: false, detail: e },
         };
     }
@@ -1085,17 +1143,21 @@ mod tests {
         let f = zcode_config(h.path(), None);
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         let theirs = json!({"matcher": "*", "hooks": [{"type": "process", "command": "C:\\tools\\notify.exe", "args": ["done"]}]});
-        let original = json!({"model": "glm-5", "theme": "dark", "hooks": {"Stop": [theirs.clone()]}});
+        // schemat ZCode (sprawdzony w jego bundlu): zdarzenia w `hooks.events`, runner tylko przy `hooks.enabled: true`
+        let original = json!({"model": "glm-5", "theme": "dark",
+            "hooks": {"enabled": true, "timeoutMs": 60000, "events": {"Stop": [theirs.clone()]}}});
         let text = serde_json::to_string_pretty(&original).unwrap();
         std::fs::write(&f, &text).unwrap();
         enable(AppId::Zcode, h.path(), Some(&src), Lang::Pl).unwrap();
         let v = rd(&f);
         assert_eq!((&v["model"], &v["theme"]), (&original["model"], &original["theme"]));
-        assert_eq!(v["hooks"]["Stop"][0], theirs);
-        assert_eq!(v["hooks"].as_object().unwrap().len(), ZCODE_EVENTS.len());
+        assert_eq!((&v["hooks"]["enabled"], &v["hooks"]["timeoutMs"]), (&json!(true), &json!(60000)));
+        assert_eq!(v["hooks"].as_object().unwrap().len(), 3, "tylko enabled, timeoutMs i events");
+        assert_eq!(v["hooks"]["events"]["Stop"][0], theirs);
+        assert_eq!(v["hooks"]["events"].as_object().unwrap().len(), ZCODE_EVENTS.len());
         let hook = installed_hook(h.path()).to_string_lossy().into_owned();
         for ev in ZCODE_EVENTS {
-            let a = v["hooks"][ev].as_array().unwrap();
+            let a = v["hooks"]["events"][ev].as_array().unwrap();
             let e = a.last().unwrap();
             assert_eq!(e["matcher"], json!("*"), "{ev}");
             let inner = &e["hooks"][0];
@@ -1112,6 +1174,37 @@ mod tests {
         assert!(!status(AppId::Zcode, h.path(), Lang::Pl).installed);
     }
 
+    /// cudze hooki bez `enabled` były wyłączone i po nas mają takie zostać
+    #[test]
+    fn zcode_hooks_switched_on_by_us_are_switched_off_again() {
+        let h = home();
+        dirs(h.path());
+        let f = zcode_config(h.path(), None);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let theirs = json!({"hooks": [{"type": "command", "command": "notify"}]});
+        let original = json!({"hooks": {"events": {"Stop": [theirs]}}});
+        std::fs::write(&f, serde_json::to_string_pretty(&original).unwrap()).unwrap();
+        enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        assert_eq!(rd(&f)["hooks"]["enabled"], json!(true));
+        assert!(status(AppId::Zcode, h.path(), Lang::Pl).installed);
+        disable(AppId::Zcode, h.path(), Lang::Pl).unwrap();
+        assert_eq!(rd(&f), original);
+    }
+
+    #[test]
+    fn zcode_hooks_turned_off_by_the_user_are_left_alone() {
+        let h = home();
+        dirs(h.path());
+        let f = zcode_config(h.path(), None);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let text = r#"{"hooks":{"enabled":false}}"#;
+        std::fs::write(&f, text).unwrap();
+        let err = enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_err();
+        assert!(err.contains("enabled"), "{err}");
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), text);
+        assert!(!status(AppId::Zcode, h.path(), Lang::Pl).installed);
+    }
+
     #[test]
     fn zcode_creates_its_cli_folder_and_drops_a_hooks_key_left_empty() {
         let h = home();
@@ -1119,6 +1212,9 @@ mod tests {
         let f = zcode_config(h.path(), None);
         enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
         assert!(f.is_file());
+        let v = rd(&f);
+        assert_eq!(v["hooks"]["enabled"], json!(true));
+        assert!(ZCODE_EVENTS.iter().all(|ev| v["hooks"]["events"][ev].is_array() && v["hooks"].get(*ev).is_none()));
         disable(AppId::Zcode, h.path(), Lang::Pl).unwrap();
         assert_eq!(rd(&f), json!({}));
         std::fs::write(&f, r#"{"model":"m"}"#).unwrap();
@@ -1142,7 +1238,9 @@ mod tests {
         dirs(h.path());
         let f = zcode_config(h.path(), None);
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
-        for text in ["{nie json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"Stop":"x"}}"#] {
+        // zdarzenie wprost w `hooks` to klucz, którego ZCode nie zna i przez który odrzuca cały plik
+        for text in ["{nie json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"Stop":"x"}}"#, r#"{"hooks":{"Stop":[]}}"#,
+                     r#"{"hooks":{"events":[]}}"#, r#"{"hooks":{"events":{"Stop":"x"}}}"#] {
             std::fs::write(&f, text).unwrap();
             assert!(enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).is_err(), "{text}");
             let _ = disable(AppId::Zcode, h.path(), Lang::Pl);
@@ -1163,7 +1261,7 @@ mod tests {
             let c = rd(&cursor_hooks_path(&h))["hooks"]["stop"][0]["command"].as_str().unwrap().to_string();
             let g = rd(&grok_hooks(&h))["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
             for cmd in [c, g] { assert!(cmd.starts_with('"') && cmd.contains(&hook.replace('\\', "/")), "{cmd}"); }
-            let z = rd(&zcode_config(&h, None))["hooks"]["Stop"][0]["hooks"][0].clone();
+            let z = rd(&zcode_config(&h, None))["hooks"]["events"]["Stop"][0]["hooks"][0].clone();
             assert_eq!(z["command"].as_str(), Some(hook.as_str()));
             assert_eq!(z["args"].as_array().unwrap().len(), 4);
             for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { assert!(status(id, &h, Lang::Pl).installed, "{id:?}"); }
