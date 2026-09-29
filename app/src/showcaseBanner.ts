@@ -72,10 +72,7 @@ export function bannerDrawer(x: CanvasRenderingContext2D, W: number, H: number, 
 
   function title() {
     x.fillStyle = '#2B2622'; x.font = `800 100px ${FONT}`;
-    x.fillText('Agent Pets', 64, 262);
-    x.fillStyle = '#6E655D'; x.font = `500 29px ${FONT}`;
-    x.fillText('Pets for your coding agents,', 70, 320);
-    x.fillText('right in the Windows 11 taskbar', 70, 360);
+    x.fillText('Agent Pets', 64, 316);
   }
 
   function hiBubble(px: number, py: number) {
