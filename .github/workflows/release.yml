@@ -1,4 +1,4 @@
-# Tag v*: testy. Instalator z podpisem aktualizacji buduje lokalnie scripts/release.ps1 (klucz podpisu jest tylko lokalnie, docs/release.md).
+# Tag v*: testy. Instalator z podpisem aktualizacji buduje lokalnie scripts/release.ps1 (klucz podpisu jest tylko lokalnie, docs/building.md).
 name: release
 
 on:

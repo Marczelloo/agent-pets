@@ -149,7 +149,7 @@ export const pl = {
       diag: 'Diagnostyka',
     },
     door: 'Furtka dla innych agentów',
-    doorDesc: 'Każde narzędzie może zgłosić swój stan przez lokalny adres albo komendę hook.exe report (README, sekcja „Furtka”).',
+    doorDesc: 'Każde narzędzie może zgłosić swój stan przez lokalny adres albo komendę hook.exe report (opis w docs/door.md w repozytorium na GitHubie).',
     reinstall: 'Zainstaluj ponownie',
     maxVisible: 'Najwięcej zwierzaków w pasku',
     maxVisibleDesc: 'Reszta trafia do „+N”; czekające na Ciebie zawsze są widoczne',

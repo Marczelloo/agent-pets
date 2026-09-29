@@ -138,7 +138,7 @@ export const en: Dict = {
       diag: 'Diagnostics',
     },
     door: 'Door for other agents',
-    doorDesc: 'Any tool can report its state through a local address or the hook.exe report command (README, “Door” section).',
+    doorDesc: 'Any tool can report its state through a local address or the hook.exe report command (docs/door.md in the GitHub repository).',
     reinstall: 'Reinstall',
     maxVisible: 'Maximum pets in the taskbar',
     maxVisibleDesc: 'The rest go under “+N”; pets that need you stay visible',

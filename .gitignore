@@ -2,6 +2,7 @@
 spikes/*/node_modules
 spikes/*/src-tauri/target
 app/node_modules
+tools/showcase/node_modules
 app/dist
 app/src-tauri/gen
 app/src-tauri/resources

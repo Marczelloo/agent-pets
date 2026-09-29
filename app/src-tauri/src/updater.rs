@@ -92,7 +92,7 @@ fn verify_failed(app: &AppHandle) -> String {
 }
 
 /// Adres `latest.json`. `AGENT_PETS_UPDATE_URL` podmienia go tylko w buildzie deweloperskim albo testowym
-/// (`--features update-test`, docs/release.md); wydanie zawsze pyta GitHuba. Podpis jest sprawdzany zawsze.
+/// (`--features update-test`, docs/building.md); wydanie zawsze pyta GitHuba. Podpis jest sprawdzany zawsze.
 fn endpoint_from(env: Option<String>, allow_override: bool) -> String {
     env.filter(|_| allow_override).unwrap_or_else(|| ENDPOINT.into())
 }

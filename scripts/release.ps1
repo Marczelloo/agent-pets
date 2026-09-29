@@ -1,5 +1,5 @@
 # Wydanie Agent Pets: sprawdza wersje, buduje podpisany instalator, składa latest.json dla auto-updatera
-# i wypisuje komendę `gh release create`. Niczego nie publikuje. Instrukcja: docs/release.md.
+# i wypisuje komendę `gh release create`. Niczego nie publikuje. Instrukcja: docs/building.md.
 param(
   # plik z notatkami wydania (pierwszy niepusty wiersz trafia też do toastu „Dostępna wersja”)
   [Parameter(Mandatory = $true)][string]$Notes
@@ -14,7 +14,7 @@ if ($pkg -ne $v -or $cargo -ne $v) { throw "Wersje się różnią: tauri.conf.js
 if (-not (Test-Path $Notes)) { throw "Brak pliku notatek: $Notes" }
 
 $keyFile = Join-Path $HOME '.tauri/agent-pets.key'
-if (-not (Test-Path $keyFile)) { throw "Brak klucza podpisu: $keyFile (docs/release.md)" }
+if (-not (Test-Path $keyFile)) { throw "Brak klucza podpisu: $keyFile (docs/building.md)" }
 
 # Klucz tylko w zmiennej tego procesu, nigdy na ekranie ani w logu.
 $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $keyFile -Raw
