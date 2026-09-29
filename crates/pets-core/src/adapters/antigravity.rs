@@ -24,11 +24,14 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     let call = p.get("toolCall");
     let tool = call.and_then(|c| c.get("name")).and_then(|v| v.as_str()).unwrap_or("");
     let failed = s("terminationReason") == Some("error") || s("error").is_some_and(|e| !e.trim().is_empty());
+    let canceled = s("terminationReason").is_some_and(|r| r.to_ascii_lowercase().contains("cancel"));
     let (kind, t) = match env.event.as_str() {
         "PreInvocation" => (Kind::Prompt, None),
         "PreToolUse" => (Kind::ToolStart, Some(from_antigravity(tool))),
         "PostToolUse" => (Kind::ToolEnd, None),
         "Stop" if failed => (Kind::Error, None),
+        // przerwane przez użytkownika: koniec tury, choćby `fullyIdle` nie przyszło
+        "Stop" if canceled => (Kind::TurnEnd, None),
         "Stop" if p.get("fullyIdle").and_then(|v| v.as_bool()) == Some(true) => (Kind::TurnEnd, None),
         // `Stop` bez `fullyIdle`: pracują jeszcze podagenci
         _ => return vec![],
@@ -110,6 +113,15 @@ mod tests {
         assert_eq!(one(env("Stop", json!({"conversationId": "c", "error": "boom", "fullyIdle": false}))).kind, Kind::Error);
         assert!(events(&env("Stop", json!({"conversationId": "c", "error": "", "fullyIdle": false})), Lang::Pl).is_empty());
         assert!(events(&env("Stop", json!({"conversationId": "c"})), Lang::Pl).is_empty(), "bez fullyIdle agent jeszcze pracuje");
+    }
+
+    /// Przerwanie przez użytkownika (`TERMINATION_REASON_USER_CANCELED`) kończy turę, nawet bez `fullyIdle`.
+    #[test]
+    fn a_canceled_stop_ends_the_turn() {
+        for r in ["user_canceled", "USER_CANCELED", "TERMINATION_REASON_USER_CANCELED"] {
+            assert_eq!(one(env("Stop", json!({"conversationId": "c", "terminationReason": r, "fullyIdle": false}))).kind, Kind::TurnEnd, "{r}");
+            assert_eq!(one(env("Stop", json!({"conversationId": "c", "terminationReason": r}))).kind, Kind::TurnEnd, "{r}");
+        }
     }
 
     #[test]

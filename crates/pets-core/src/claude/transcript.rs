@@ -19,7 +19,11 @@ pub struct TranscriptParser {
     dirty: bool,
     /// ostatni wysłany model: zmiana idzie w zdarzeniu, powtórka nie
     last_model: Option<String>,
+    /// czas zgłoszonego błędu (np. końca limitu), dopóki sesja nie ruszy dalej
+    failed_at: Option<i64>,
 }
+
+const INTERRUPTED: &str = "[Request interrupted by user";
 
 fn prompt_text(msg: &serde_json::Value) -> Option<String> {
     let c = msg.get("content")?;
@@ -31,8 +35,19 @@ fn prompt_text(msg: &serde_json::Value) -> Option<String> {
             .get("text")?.as_str()?.to_string()
     };
     let t = text.trim();
-    if t.is_empty() || t.starts_with('<') { return None; }
+    if t.is_empty() || t.starts_with('<') || t.starts_with(INTERRUPTED) { return None; }
     Some(t.chars().take(80).collect())
+}
+
+fn interrupted(msg: Option<&serde_json::Value>) -> bool {
+    let Some(c) = msg.and_then(|m| m.get("content")) else { return false };
+    let texts: Vec<&str> = match c.as_str() {
+        Some(s) => vec![s],
+        None => c.as_array().into_iter().flatten()
+            .filter(|x| x.get("type").and_then(|t| t.as_str()) == Some("text"))
+            .filter_map(|x| x.get("text").and_then(|t| t.as_str())).collect(),
+    };
+    texts.iter().any(|t| t.trim_start().starts_with(INTERRUPTED))
 }
 
 impl TranscriptParser {
@@ -85,12 +100,20 @@ impl TranscriptParser {
                 self.dirty = true;
             }
         }
+        let (mut stop, mut resumed) = (None, false);
         match s("type") {
             Some("custom-title") => if let Some(t) = s("customTitle") { self.set_title(t, 3) },
             Some("ai-title") => if let Some(t) = s("aiTitle") { self.set_title(t, 2) },
-            Some("user") if d.get("isMeta").and_then(|v| v.as_bool()) != Some(true) && self.title_rank < 1 => {
-                if let Some(t) = d.get("message").and_then(prompt_text) { self.set_title(&t, 1) }
+            Some("user") if d.get("isMeta").and_then(|v| v.as_bool()) != Some(true) => {
+                // przerwanie (Esc, odmowa narzędzia) nie wywołuje hooka `Stop`
+                if interrupted(d.get("message")) { stop = Some(Kind::TurnEnd); }
+                if let Some(t) = d.get("message").and_then(prompt_text) {
+                    resumed = true;
+                    if self.title_rank < 1 { self.set_title(&t, 1) }
+                }
             }
+            // koniec limitu i inne błędy API: Claude dopisuje syntetyczną odpowiedź, a hook `Stop` nie przychodzi
+            Some("assistant") if d.get("isApiErrorMessage").and_then(|v| v.as_bool()) == Some(true) => stop = Some(Kind::Error),
             Some("assistant") => {
                 if let Some(m) = d.get("message") {
                     if let Some(u) = m.get("usage") {
@@ -102,6 +125,7 @@ impl TranscriptParser {
                         let max = context_max(model).max(if used > 200_000 { 1_000_000 } else { 0 }).max(used);
                         self.acc.context = Some(Context { used, max });
                         self.dirty = true;
+                        resumed |= model != "<synthetic>";
                     }
                     for c in m.get("content").and_then(|v| v.as_array()).into_iter().flatten() {
                         if c.get("type").and_then(|v| v.as_str()) == Some("tool_use") {
@@ -117,11 +141,24 @@ impl TranscriptParser {
             _ => {}
         }
         let (Some(ts), Some(sid)) = (s("timestamp").and_then(rfc3339_ms), self.session_id.clone()) else { return vec![] };
-        if !self.dirty { return vec![]; }
-        self.dirty = false;
-        let mut e = Event::new(Source::Claude, sid, Kind::Meta, ts);
-        e.data = std::mem::take(&mut self.acc);
-        vec![e]
+        let mut out = vec![];
+        if self.dirty {
+            self.dirty = false;
+            let mut e = Event::new(Source::Claude, sid.clone(), Kind::Meta, ts);
+            e.data = std::mem::take(&mut self.acc);
+            out.push(e);
+        }
+        // sesja ruszyła po błędzie: tura z błędem skończyła się tuż po nim (ważne przy odtwarzaniu po starcie;
+        // na żywo nowszy hook `Prompt` już zmienił stan, więc sklep pomija to starsze zdarzenie)
+        if let Some(t0) = self.failed_at.filter(|_| resumed) {
+            self.failed_at = None;
+            out.push(Event::new(Source::Claude, sid.clone(), Kind::TurnEnd, t0 + 1));
+        }
+        if let Some(k) = stop {
+            self.failed_at = (k == Kind::Error).then_some(ts);
+            out.push(Event::new(Source::Claude, sid, k, ts));
+        }
+        out
     }
 }
 
@@ -153,6 +190,41 @@ mod tests {
         let e = p.parse_line(&line(serde_json::json!({"type": "user", "sessionId": "s", "timestamp": TS,
             "message": {"role": "user", "content": "drugi prompt"}})));
         assert_eq!(e[0].data.title.as_deref(), Some("Agent Pets"));
+    }
+
+    fn kinds(p: &mut TranscriptParser, v: serde_json::Value) -> Vec<Kind> { p.parse_line(&line(v)).iter().map(|e| e.kind).collect() }
+
+    /// Przerwanie (Esc albo odmowa narzędzia) nie wywołuje hooka `Stop`; w transkrypcie zostaje linia użytkownika.
+    #[test]
+    fn an_interrupt_ends_the_turn() {
+        let mut p = TranscriptParser::new();
+        for text in ["[Request interrupted by user]", "[Request interrupted by user for tool use]"] {
+            let v = serde_json::json!({"type": "user", "sessionId": "s", "timestamp": TS, "message": {"role": "user", "content": [{"type": "text", "text": text}]}});
+            assert!(kinds(&mut p, v).contains(&Kind::TurnEnd), "{text}");
+        }
+        let plain = serde_json::json!({"type": "user", "sessionId": "s", "timestamp": TS, "message": {"role": "user", "content": "zwykły prompt"}});
+        let evs = p.parse_line(&line(plain));
+        assert!(evs.iter().all(|e| e.kind != Kind::TurnEnd));
+        assert_eq!(evs[0].data.title.as_deref(), Some("zwykły prompt"), "komunikat o przerwaniu nie jest tytułem");
+    }
+
+    /// Koniec limitu (i inne błędy API) też nie wywołuje `Stop`: Claude dopisuje syntetyczną odpowiedź z błędem.
+    #[test]
+    fn an_api_error_such_as_a_hit_limit_is_an_error() {
+        let mut p = TranscriptParser::new();
+        let v = serde_json::json!({"type": "assistant", "sessionId": "s", "timestamp": TS, "isApiErrorMessage": true, "error": "rate_limit",
+            "message": {"model": "<synthetic>", "content": [{"type": "text", "text": "You've hit your session limit"}]}});
+        assert_eq!(kinds(&mut p, v), vec![Kind::Error]);
+        let side = serde_json::json!({"type": "assistant", "sessionId": "s", "timestamp": TS, "isApiErrorMessage": true, "isSidechain": true, "message": {}});
+        assert!(kinds(&mut p, side).is_empty(), "błąd subagenta nie jest błędem sesji");
+        // sesja ruszyła dalej (po resecie limitu): przy odtwarzaniu błąd nie może zostać na zawsze, więc tura
+        // z błędem kończy się tuż po nim; na żywo hook `Prompt` jest nowszy i sklep to pomija
+        let t0 = rfc3339_ms(TS).unwrap();
+        let resumed = serde_json::json!({"type": "user", "sessionId": "s", "timestamp": "2026-09-24T12:00:00.000Z", "message": {"role": "user", "content": "dalej"}});
+        let evs = p.parse_line(&line(resumed));
+        assert!(evs.iter().any(|e| e.kind == Kind::TurnEnd && e.ts == t0 + 1), "{:?}", evs.iter().map(|e| (e.kind, e.ts)).collect::<Vec<_>>());
+        let again = serde_json::json!({"type": "user", "sessionId": "s", "timestamp": "2026-09-24T12:01:00.000Z", "message": {"role": "user", "content": "i jeszcze"}});
+        assert!(!kinds(&mut p, again).contains(&Kind::TurnEnd));
     }
 
     fn assistant(model: &str) -> String {
