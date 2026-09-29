@@ -282,7 +282,7 @@ The pet thinks, works with a short action text, waits for you on permission prom
 
 ### ZCode
 
-*Experimental.* Turn ZCode on in Settings → Apps. Agent Pets adds its entries under `hooks` in ZCode's own config, `~/.zcode/cli/config.json` (or under `ZCODE_DATA_BASE_DIR` when that is set), and keeps a copy first (`config.json.agent-pets.bak`); the rest of the file stays as it is. Turning ZCode off removes only our entries. Restart ZCode afterwards.
+*Experimental.* Turn ZCode on in Settings → Apps. Agent Pets adds its entries under `hooks.events` in ZCode's own config, `~/.zcode/cli/config.json` (or under `ZCODE_DATA_BASE_DIR` when that is set), and keeps a copy first (`config.json.agent-pets.bak`); the rest of the file stays as it is. ZCode runs hooks only with `hooks.enabled: true`, so Agent Pets sets it; if you turned hooks off yourself (`enabled: false`), it leaves the file alone and tells you so. Turning ZCode off removes only our entries, and `enabled` too unless it was already there. Restart ZCode afterwards.
 
 The pet thinks, works, waits for you on permission requests and finishes. ZCode's hooks do not report errors or the end of a session: after an error the pet goes idle after a quiet spell, and a session fades out like any other without events.
 
