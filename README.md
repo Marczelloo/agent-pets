@@ -66,14 +66,14 @@ Change anything later in **Settings** (right-click the tray icon, or ⚙ in the 
 | Claude Code | Clawd | ✅ core | 5h and weekly |
 | Codex, incl. [Agent Router](https://github.com/Marczelloo/agent-router-mcp) tasks | Kodek | ✅ core | 5h and weekly |
 | opencode | a near-black cyclops | ✅ core | tokens, cost, account bars |
-| GitHub Copilot | a pilot in a leather helmet | ✅ hooks | – |
-| Antigravity | the Android robot | ✅ hooks | Gemini 5h and weekly |
+| GitHub Copilot | a pilot in a leather helmet | 🧪 experimental | – |
+| Antigravity | the Android robot | 🧪 experimental | Gemini 5h and weekly |
 | Cursor | a dark faceted block | 🧪 experimental | – |
 | Grok Build | a white robot with a visor | 🧪 experimental | – |
 | ZCode | a panda with a “Z” headband | 🧪 experimental | – |
 | Anything else | a blob with its first letter | ✅ [the door](docs/door.md) | – |
 
-Claude Code, Codex and opencode get the most care and testing. Setup details, what each integration writes and how to undo it: [docs/agents.md](docs/agents.md).
+Claude Code, Codex and opencode get the most care and testing; the experimental ones work through their hooks and were not checked in every detail against a live session. Setup details, what each integration writes and how to undo it: [docs/agents.md](docs/agents.md).
 
 | Panel | First-run wizard | Settings |
 |---|---|---|

@@ -2,7 +2,7 @@
 
 Turn each agent on or off in **Settings → Apps** (or in the first-run wizard). Restart open sessions of that agent afterwards so it picks up the change. Every integration writes only its own entries or files, keeps a backup when it edits a file you own, and removes exactly what it added when you turn it off or uninstall.
 
-Claude Code, Codex and opencode are the core agents: they get the most care and testing, and only they have usage and statistics. The others work through their hooks on a best-effort basis. Cursor, Grok Build and ZCode are marked *experimental*: their pets follow each agent's hook documentation, but not every part was checked against a live session.
+Claude Code, Codex and opencode are the core agents: they get the most care and testing, and only they have usage and statistics. GitHub Copilot, Antigravity, Cursor, Grok Build and ZCode are *experimental*: they work through their hooks on a best-effort basis, and their pets follow each agent's hook documentation, but not every part was checked against a live session.
 
 - [Claude Code](#claude-code)
 - [Codex](#codex) and [Agent Router](#agent-router-tasks)
@@ -58,13 +58,13 @@ Only the `session`, `message` and `part` tables are read, and from them only num
 
 ## GitHub Copilot
 
-Agent Pets writes its own file, `~/.copilot/hooks/agent-pets.json`, read by Copilot CLI and by the agent in VS Code; JetBrains IDEs that run their Copilot agent on Copilot CLI read it too. Turning Copilot off deletes the file; other files in `hooks/` are never touched.
+*Experimental.* Agent Pets writes its own file, `~/.copilot/hooks/agent-pets.json`, read by Copilot CLI and by the agent in VS Code; JetBrains IDEs that run their Copilot agent on Copilot CLI read it too. Turning Copilot off deletes the file; other files in `hooks/` are never touched.
 
 The hook sends the session state, the kind of tool, a short action text, the text of a permission request and the model name. It never sends prompts, answers, tool results or file contents, prints nothing and always exits 0 within 300 ms, so it never changes what Copilot decides. Subagents show as mini pets.
 
 ## Antigravity
 
-Needs an Antigravity version with hooks (Antigravity 2.0, the CLI, or a recent IDE). Agent Pets adds one entry, `agent-pets`, to `~/.gemini/config/hooks.json` after backing the file up (`hooks.json.agent-pets.bak`); your own hooks stay as they are.
+*Experimental.* Needs an Antigravity version with hooks (Antigravity 2.0, the CLI, or a recent IDE). Agent Pets adds one entry, `agent-pets`, to `~/.gemini/config/hooks.json` after backing the file up (`hooks.json.agent-pets.bak`); your own hooks stay as they are.
 
 The pet thinks, works, finishes and shows errors, with the model name. Antigravity's hooks do not report when it waits for your approval, so this pet never shows "needs you". Agent Pets does not hook `PreToolUse`, because in Antigravity that hook is a permission gate where every answer decides something; the pet shows a tool once it has run, and your approval settings stay as they are.
 
