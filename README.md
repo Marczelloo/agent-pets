@@ -47,10 +47,10 @@ The interface is in English and Polish and follows the Windows display language;
 
 ## Focus
 
-Agent Pets is built first of all for **Claude Code**, **Codex** and **opencode**. They get the most care and testing, and only they have rate limits, usage and statistics.
+Agent Pets is built first of all for **Claude Code**, **Codex** and **opencode**. They get the most care and testing, and only they have usage and statistics; rate limits come from them and, from 0.12.2, from Antigravity.
 
 - **GitHub Copilot, Cursor, Grok Build and ZCode** work through their hooks, on a best-effort basis. Cursor, Grok Build and ZCode are marked *experimental* in Settings: their pets, states and tools follow each agent's hook documentation, but not every part was checked against a live session. They have no limits or statistics: their hooks carry no token counts, and asking their servers would need your login.
-- **Antigravity** keeps the basic support from 0.11 and gets no further work.
+- **Antigravity** keeps the basic support from 0.11; 0.12.2 adds its Android robot pet and Gemini limits, contributed by [al3ksh](https://github.com/al3ksh).
 - Anything else can use the [door for other agents](#door-for-other-agents).
 
 ## What works now
@@ -78,7 +78,7 @@ Agent Pets is built first of all for **Claude Code**, **Codex** and **opencode**
 | **Door for other agents** (HTTP and `hook.exe report`) | ✅ from 0.10 | [Door for other agents](#door-for-other-agents) |
 | **GitHub Copilot** sessions: states, tools, permission requests, subagents | ✅ from 0.11 | Settings → Apps → GitHub Copilot, see [GitHub Copilot](#github-copilot) |
 | **Antigravity** conversations: thinking, tools, done, errors, model | ✅ from 0.11 | Settings → Apps → Antigravity, see [Antigravity](#antigravity) |
-| Antigravity Gemini limits (5h and weekly) with reset times | ✅ | while Antigravity is running, see [Antigravity](#antigravity) |
+| Antigravity Gemini limits (5h and weekly) with reset times | ✅ from 0.12.2 | while Antigravity is running, see [Antigravity](#antigravity) |
 | **opencode usage**: tokens and cost on its card, account limit bars, opencode in the statistics | ✅ from 0.11 | automatic with opencode on, see [opencode usage](#opencode-usage) |
 | **Cursor**, **Grok Build** and **ZCode** sessions with their own pets (experimental) | ✅ from 0.12 | Settings → Apps, see [Cursor](#cursor), [Grok Build](#grok-build), [ZCode](#zcode) |
 
