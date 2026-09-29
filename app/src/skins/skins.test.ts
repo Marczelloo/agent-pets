@@ -6,7 +6,7 @@ import { petFor, skinFor } from '../stage/sceneFor';
 import type { Agent } from '../types';
 import { blobPal, SKINS } from './index';
 import { archP, floatLift } from '../renderer/draw/float';
-import { droidP } from '../renderer/draw/marks';
+import { DROID_SHOULDER, droidP } from '../renderer/draw/marks';
 import { PREVIEW_AGENTS } from '../settings/look/LookTab';
 import { accentFor } from '../stage/sceneFor';
 import { ACCENT } from '../styles';
@@ -137,10 +137,11 @@ describe('skins for agents', () => {
     };
     const head = at(18), neck = at(39), shoulders = at(52), waist = at(80), hips = at(98);
     expect(neck).toBeGreaterThan(0);
-    // barki nieco węższe niż całe ciało: krawędź tam, gdzie zaczynają się ramiona (.46 szerokości od środka)
-    expect(shoulders).toBeLessThanOrEqual(92.01);
-    expect(shoulders).toBeGreaterThan(88);
-    expect(head).toBeLessThan(shoulders * .6);
+    // barki wyraźnie węższe niż całe ciało (.8 szerokości); ramiona zaczepione na ich krawędzi
+    expect(DROID_SHOULDER).toBe(.4);
+    expect(shoulders).toBeLessThanOrEqual(80.01);
+    expect(shoulders).toBeGreaterThan(76);
+    expect(head).toBeLessThan(shoulders * .65);
     expect(neck).toBeLessThan(head * .6);
     expect(waist).toBeLessThan(shoulders * .6);
     expect(hips).toBeGreaterThan(waist);
