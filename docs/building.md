@@ -120,16 +120,17 @@ docs/               documentation and README images
 
 ## README media
 
-The GIFs in `docs/images` are recorded from the real renderer, frame by frame, so every recording comes out the same. It needs ffmpeg on `PATH` and Microsoft Edge.
+The GIFs and the banner in `docs/images` are recorded from the real renderer, frame by frame, so every recording comes out the same. It needs ffmpeg on `PATH` and Microsoft Edge.
 
 ```powershell
 cd app; pnpm dev                    # serves app/showcase.html
 cd tools\showcase; pnpm install
 node record.mjs                     # all four: pets, states, styles, dynamic
 node record.mjs states --zoom=2     # one board, twice as sharp
+node record.mjs banner              # docs/images/banner.png, a still at twice the size
 ```
 
-`app/showcase.html?mode=gallery|states|styles|dynamic&live=1` shows a board live in the browser.
+`app/showcase.html?mode=gallery|states|styles|dynamic|banner&live=1` shows a board live in the browser.
 
 ## Releases
 

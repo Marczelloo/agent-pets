@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/banner.png" alt="Agent Pets banner: all the pets, from Clawd and Kodek to the Android robot and the ZCode panda, working, thinking and celebrating on a Windows 11 taskbar" width="100%">
+  <img src="docs/images/banner.png" alt="Agent Pets banner: all nine pets in one group, from Clawd and Kodek to the Android robot and the ZCode panda" width="100%">
 </p>
 
 <p align="center">

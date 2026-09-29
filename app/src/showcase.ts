@@ -1,5 +1,5 @@
 // README media: the real renderer in a grid, stepped frame by frame so every recording comes out the same.
-// ?mode=gallery|states|styles|dynamic. tools/showcase/record.mjs calls window.showcase.step() and saves each frame.
+// ?mode=gallery|states|styles|dynamic|banner. tools/showcase/record.mjs calls window.showcase.step() and saves each frame.
 import { pen, setRng } from './renderer';
 import { PetPainter } from './renderer/painter';
 import { petFor, type SceneKey } from './stage/sceneFor';
@@ -40,10 +40,25 @@ const BOARDS: Record<string, Board> = {
   ] as [string, Agent, SceneKey][]).map(([label, agent, scene]) => ({ label, look: { motion: 'dynamic' }, pets: [pet(agent, scene)] })) },
 };
 
+// the README banner: the title on the left, every pet in one group photo on the right, back row first
+type Spot = Pet & { x: number; y: number; u: number };
+const BANNER: Spot[] = [
+  { ...pet('codex', 'thinking'), x: 855, y: 318, u: 1.8 },
+  { ...pet('opencode', 'idle'), x: 1012, y: 318, u: 1.8 },
+  { ...pet('grok', 'idle'), x: 1160, y: 318, u: 1.8 },
+  { ...pet('antigravity', 'done'), x: 1308, y: 318, u: 1.8 },
+  { ...pet('zcode', 'idle'), x: 1462, y: 318, u: 1.8 },
+  { ...pet('claude', 'idle'), x: 905, y: 492, u: 2.15 },
+  { ...pet('copilot', 'idle'), x: 1085, y: 492, u: 2.15 },
+  { ...pet('cursor', 'idle'), x: 1262, y: 492, u: 2.15 },
+  { ...pet('other', 'needs', 'Kilo'), x: 1432, y: 492, u: 2.15 },
+];
+
 const q = new URLSearchParams(location.search);
+const banner = q.get('mode') === 'banner';
 const board = BOARDS[q.get('mode') ?? 'gallery'] ?? BOARDS.gallery;
 const STRIP = 30, rows = Math.ceil(board.cells.length / board.cols);
-const W = board.cols * board.cw, H = rows * board.ch;
+const W = banner ? 1600 : board.cols * board.cw, H = banner ? 533 : rows * board.ch;
 // ?zoom=2 draws the same board sharper, the way a high-DPI taskbar does
 const Z = Number(q.get('zoom')) || 1;
 
@@ -55,7 +70,9 @@ const c = document.getElementById('c') as HTMLCanvasElement;
 const x = c.getContext('2d')!;
 c.width = W * Z; c.height = H * Z;
 pen.font = 'Segoe UI';
-const painters = board.cells.map(cell => cell.pets.map(p => new PetPainter(petFor({ agent: p.agent, agent_name: p.name ?? null }, p.scene))));
+const painterFor = (p: Pet) => new PetPainter(petFor({ agent: p.agent, agent_name: p.name ?? null }, p.scene));
+const painters = board.cells.map(cell => cell.pets.map(painterFor));
+const bannerPainters = BANNER.map(painterFor);
 
 const FPS = 15;
 let T = 0;
@@ -64,6 +81,7 @@ function step(): string {
   x.setTransform(Z, 0, 0, Z, 0, 0);
   // flat, so the GIF only stores what moves
   x.fillStyle = '#FBF1E8'; x.fillRect(0, 0, W, H);
+  if (banner) return drawBanner(dt);
   board.cells.forEach((cell, i) => {
     const col = i % board.cols, row = Math.floor(i / board.cols);
     // a short last row sits in the middle
@@ -79,6 +97,23 @@ function step(): string {
       dt, t0: T, X: cx + (k - (n - 1) / 2) * board.gap, Y: base, u: board.u, look, animate: true, saving: false, reduced: false, dpr: Z,
     }));
   });
+  return c.toDataURL('image/png');
+}
+
+function drawBanner(dt: number): string {
+  x.fillStyle = '#2B2622'; x.font = '800 118px "Segoe UI Variable Display", "Segoe UI"';
+  x.fillText('Agent Pets', 72, 250);
+  x.fillStyle = '#6E655D'; x.font = '500 30px "Segoe UI Variable Display", "Segoe UI"';
+  x.fillText('Pets for your coding agents,', 78, 312);
+  x.fillText('right in the Windows 11 taskbar', 78, 352);
+  // a soft warm glow holds the group together
+  const g = x.createRadialGradient(1160, 330, 40, 1160, 330, 470);
+  g.addColorStop(0, '#F7DDC9'); g.addColorStop(1, 'rgba(251,241,232,0)');
+  x.fillStyle = g; x.fillRect(640, 0, W - 640, H);
+  const look: Look = { style: 'sticker', motion: 'calm' };
+  BANNER.forEach((s, i) => bannerPainters[i].frame(x, {
+    dt, t0: T, X: s.x, Y: s.y, u: s.u, look, animate: true, saving: false, reduced: false, dpr: Z,
+  }));
   return c.toDataURL('image/png');
 }
 

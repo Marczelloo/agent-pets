@@ -1,5 +1,6 @@
 // Records the README GIFs from app/showcase.html with headless Edge and ffmpeg.
 // Start the dev server first (pnpm --dir app dev), then: node record.mjs [mode ...] [--url=http://localhost:1420] [--zoom=2] [--stills=dir]
+// `banner` is a still: one frame saved as banner.png, always at twice the size.
 import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -22,9 +23,19 @@ const browser = await chromium.launch({ channel: 'msedge' });
 try {
   for (const mode of modes.length ? modes : Object.keys(all)) {
     const page = await browser.newPage();
-    await page.goto(`${url}/showcase.html?mode=${mode}&zoom=${zoom}`);
+    await page.goto(`${url}/showcase.html?mode=${mode}&zoom=${mode === 'banner' ? 2 : zoom}`);
     await page.waitForFunction(() => 'showcase' in window);
     await page.evaluate(n => document.fonts.ready.then(() => { for (let i = 0; i < n; i++) window.showcase.step(); }), WARMUP);
+    if (mode === 'banner') {
+      const raw = join(mkdtempSync(join(tmpdir(), 'showcase-banner-')), 'raw.png'), png = join(out, 'banner.png');
+      writeFileSync(raw, Buffer.from((await page.evaluate(() => window.showcase.step())).split(',')[1], 'base64'));
+      // the canvas saves a loose PNG; this one is about half the size
+      execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw, '-pred', 'mixed', '-compression_level', '100', png]);
+      rmSync(dirname(raw), { recursive: true, force: true });
+      await page.close();
+      console.log(png);
+      continue;
+    }
     const dir = mkdtempSync(join(tmpdir(), `showcase-${mode}-`));
     for (let i = 0; i < FRAMES; i++) {
       const data = await page.evaluate(() => window.showcase.step());
