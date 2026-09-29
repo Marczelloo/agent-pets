@@ -295,7 +295,12 @@ impl Store {
                 Some((State::Thinking, None))
             }
             Kind::ToolStart => Some((State::Working, e.tool.or(Some(Tool::Other)))),
-            Kind::ToolEnd => Some((State::Thinking, None)),
+            Kind::ToolEnd => {
+                // spóźniony koniec narzędzia (Cursor po przerwanej turze) nie wznawia skończonej tury
+                let now = self.pending.get(&e.session_id).map(|p| p.0).unwrap_or(s.state);
+                if matches!(now, State::Done | State::Error | State::Idle | State::Sleep | State::Ended) { None }
+                else { Some((State::Thinking, None)) }
+            }
             Kind::NeedsInput => Some((if child { State::Thinking } else { State::NeedsYou }, None)),
             Kind::TurnEnd => Some((State::Done, None)),
             Kind::Error => Some((State::Error, None)),
@@ -586,6 +591,27 @@ mod tests {
         s.apply(&ev(Kind::TurnEnd, 8000));
         s.apply(&ev(Kind::Prompt, 20_000));
         assert_eq!(s.session("s1").unwrap().turn_started_at, Some(20_000), "nowa tura po zakończonej");
+    }
+
+    /// Cursor po przerwanej turze (`stop` z `aborted`) dosyła `postToolUseFailure` narzędzi w locie (sprawdzone na żywo).
+    #[test]
+    fn a_late_tool_end_does_not_reopen_a_finished_turn() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.apply(&tool(Tool::Read, 1000));
+        s.apply(&ev(Kind::TurnEnd, 5000));
+        s.tick(6000, &alive);
+        assert_eq!(st(&s).0, State::Done);
+        s.apply(&ev(Kind::ToolEnd, 7000));
+        s.tick(8000, &alive);
+        assert_eq!(st(&s).0, State::Done);
+        // także gdy koniec tury jeszcze czeka na swoją kolej
+        s.apply(&ev(Kind::Prompt, 10_000));
+        s.tick(11_000, &alive);
+        s.apply(&ev(Kind::TurnEnd, 12_000));
+        s.apply(&ev(Kind::ToolEnd, 12_100));
+        s.tick(13_000, &alive);
+        assert_eq!(st(&s).0, State::Done);
     }
 
     #[test]
