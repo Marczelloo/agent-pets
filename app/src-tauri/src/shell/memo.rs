@@ -1,12 +1,12 @@
-//! Wartość zapamiętana dla klucza. Szukanie elementu `TaskbarFrame` przez UI Automation przechodzi
-//! drzewo paska (także nasze osadzone WebView2), więc robimy je raz na uchwyt paska, a nie co sekundę.
+//! Cached value for a key. Finding `TaskbarFrame` through UI Automation traverses the taskbar tree
+//! (including our embedded WebView2), so do it once per taskbar handle instead of every second.
 
 pub struct KeyedCache<K, V> { key: Option<K>, val: Option<V> }
 
 impl<K: PartialEq + Copy, V: Clone> KeyedCache<K, V> {
     pub fn new() -> Self { KeyedCache { key: None, val: None } }
 
-    /// Wartość dla `key`; `find` biegnie tylko przy nowym kluczu, po `invalidate` albo po nieudanym szukaniu.
+    /// Value for `key`; `find` runs only for a new key, after `invalidate`, or after a failed search.
     pub fn get(&mut self, key: K, find: impl FnOnce() -> Option<V>) -> Option<V> {
         if self.key != Some(key) || self.val.is_none() {
             self.key = Some(key);

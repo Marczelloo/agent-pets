@@ -1,4 +1,4 @@
-//! „Przejdź”: plan kroków (czysty, testowany) i ich wykonanie (`exec`, Win32). Kolejność ze spec 8.
+//! "Jump": step plan (pure, tested) and execution (`exec`, Win32). Order from spec 8.
 pub mod exec;
 pub mod registry;
 
@@ -12,7 +12,7 @@ pub struct Target {
     pub session_id: String,
     pub cwd: String,
     pub pid: Option<u32>,
-    /// program-gospodarz (VS Code, t3code…): jego okno przed oknem procesu agenta
+    /// Host program (VS Code, t3code…): its window takes priority over the agent process window.
     pub host_pid: Option<u32>,
     pub host_session_id: Option<String>,
     pub desktop: bool,
@@ -27,7 +27,7 @@ impl Target {
             pid: s.jump.pid.or(reg.map(|r| r.pid)),
             host_pid: s.jump.host_pid,
             host_session_id: reg.and_then(|r| r.host_session_id.clone()),
-            // sesja żyje w aplikacji agenta (Claude albo Codex): tylko wtedy deep link ma dokąd prowadzić
+            // the session lives in the agent app (Claude or Codex): only then can the deep link work
             desktop: matches!(s.jump.app, Some(App::ClaudeDesktop | App::CodexApp))
                 || reg.map(|r| r.entrypoint == "claude-desktop").unwrap_or(false),
         }
@@ -46,23 +46,23 @@ pub enum Step {
 pub struct JumpResult { pub method: String, pub detail: String }
 
 impl JumpResult {
-    /// Schowek albo porażka: użytkownik musi przeczytać `detail`, więc panel zostaje otwarty z komunikatem.
+    /// Clipboard or failure: the user must read `detail`, so the panel stays open with the message.
     pub fn needs_attention(&self) -> bool { self.method == "clipboard" || self.method == "none" }
 }
 
 fn id_char(c: char) -> bool { c.is_ascii_alphanumeric() || c == '_' || c == '-' }
 
-/// `^[A-Za-z0-9_-]{1,128}$`: tylko taki id trafia do URL-a i do argumentów procesu.
+/// `^[A-Za-z0-9_-]{1,128}$`: only such IDs enter the URL and process arguments.
 fn safe_id(id: &str) -> bool { !id.is_empty() && id.len() <= 128 && id.chars().all(id_char) }
 
-/// `^local_[A-Za-z0-9-]{1,64}$`, jak w obsłudze linków aplikacji Claude.
+/// `^local_[A-Za-z0-9-]{1,64}$`, as in Claude app link handling.
 fn host_ok(h: &str) -> bool {
     h.strip_prefix("local_")
         .map(|r| !r.is_empty() && r.len() <= 64 && r.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
         .unwrap_or(false)
 }
 
-/// Id sesji w samym agencie (bez naszego prefiksu `opencode:`).
+/// Session ID within the agent itself (without our `opencode:` prefix).
 fn agent_id(t: &Target) -> &str {
     match t.agent {
         Agent::Opencode => t.session_id.strip_prefix("opencode:").unwrap_or(&t.session_id),
@@ -70,7 +70,7 @@ fn agent_id(t: &Target) -> &str {
     }
 }
 
-/// Program i argumenty wznowienia; `None` = agent bez wznowienia z linii poleceń (furtka, agenci z 0.11/0.12).
+/// Resume program and arguments; `None` = agent without CLI resume (open gate, agents from 0.11/0.12).
 fn resume(t: &Target) -> Option<(String, Vec<String>)> {
     let id = agent_id(t).to_string();
     match t.agent {
@@ -81,7 +81,7 @@ fn resume(t: &Target) -> Option<(String, Vec<String>)> {
     }
 }
 
-/// Komenda wznowienia do schowka (albo samo `cd`, gdy agent nie ma wznowienia). Id spoza bezpiecznego alfabetu jest przefiltrowane.
+/// Resume command for the clipboard (or just `cd` if the agent cannot resume). IDs outside the safe alphabet are filtered.
 pub fn resume_command(t: &Target) -> String {
     let id: String = agent_id(t).chars().filter(|c| id_char(*c)).collect();
     let cd = (!t.cwd.is_empty()).then(|| format!("cd \"{}\"", t.cwd.replace('"', "")));
@@ -107,7 +107,7 @@ pub fn plan(t: &Target) -> Vec<Step> {
                 out.push(Step::DeepLink(format!("claude://code/continue?session={h}")));
             }
         }
-        // `ShellExecute` na zarejestrowanym `codex://` zawsze „się udaje”, więc link tylko dla sesji z aplikacji Codex
+        // `ShellExecute` on registered `codex://` always "succeeds", so link only for sessions in the Codex app
         Agent::Codex if t.desktop => out.push(Step::DeepLink(format!("codex://threads/{}", t.session_id))),
         _ => {}
     }
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn codex_cli_focuses_its_terminal_instead_of_opening_the_app() {
-        // `ShellExecute` na zarejestrowanym `codex://` zawsze „się udaje”, więc sesja z terminala nigdy by do niego nie wróciła.
+        // `ShellExecute` on registered `codex://` always "succeeds", so a terminal session would never return there.
         let p = plan(&t(Agent::Codex, false));
         assert_eq!(p[0], Step::FocusProcess(42));
         assert!(p.iter().all(|s| !matches!(s, Step::DeepLink(_))));
@@ -200,10 +200,10 @@ mod tests {
         let p = plan(&x);
         assert_eq!(&p[..2], &[Step::FocusProcess(7), Step::FocusProcess(42)]);
         x.host_pid = Some(42);
-        assert_eq!(plan(&x).iter().filter(|s| matches!(s, Step::FocusProcess(_))).count(), 1, "ten sam proces raz");
+        assert_eq!(plan(&x).iter().filter(|s| matches!(s, Step::FocusProcess(_))).count(), 1, "same process once");
         let mut d = t(Agent::Claude, true);
         d.host_pid = Some(7);
-        assert!(matches!(plan(&d)[0], Step::DeepLink(_)), "deep link zostaje pierwszy");
+        assert!(matches!(plan(&d)[0], Step::DeepLink(_)), "deep link remains first");
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn nonexistent_cwd_skips_the_terminal() {
         let mut x = t(Agent::Codex, false);
-        x.cwd = r"C:\nie\ma\takiego\katalogu".into();
+        x.cwd = r"C:\this\path\does\not\exist".into();
         assert!(plan(&x).iter().all(|s| !matches!(s, Step::OpenTerminal { .. })));
     }
 }

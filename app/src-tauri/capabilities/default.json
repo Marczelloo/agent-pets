@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Scena, tooltip, dymki, panel, ustawienia i statystyki",
+  "description": "Stage, tooltip, bubbles, panel, settings, and statistics",
   "windows": ["stage*", "tooltip", "bubbles", "panel", "settings", "stats"],
   "permissions": ["core:default"]
 }

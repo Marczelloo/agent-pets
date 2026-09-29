@@ -1,5 +1,5 @@
-//! Menu pod prawym klikiem na scenie: na zwierzaku „Przejdź”, „Pokaż w panelu”, „Usuń z paska”,
-//! gdzie indziej „Usuń nieaktywne”; zawsze „Przesuń” (tylko w pasku) i „Ustawienia paska…”.
+//! Stage context menu: on a pet, "Jump", "Show in panel", "Remove from taskbar";
+//! elsewhere, "Remove inactive"; always "Move" (taskbar only) and "Taskbar settings…".
 use pets_core::i18n::{tr, Lang};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -8,7 +8,7 @@ use tauri::{AppHandle, LogicalPosition, Manager, Position};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Target { Pet(String), Other }
 
-/// Pozycje menu (`-` to separator) w kolejności wyświetlania.
+/// Menu items (`-` is a separator) in display order.
 pub fn items(t: &Target, floating: bool, lang: Lang) -> Vec<(&'static str, String)> {
     let mut v: Vec<(&'static str, String)> = match t {
         Target::Pet(_) => vec![
@@ -24,13 +24,13 @@ pub fn items(t: &Target, floating: bool, lang: Lang) -> Vec<(&'static str, Strin
     v
 }
 
-/// Zwierzak, na którym otwarto menu (zdarzenie menu przychodzi później, osobno).
+/// Pet whose menu was opened (the menu event arrives separately, later).
 #[derive(Default)]
 pub struct MenuTarget(pub Mutex<Option<Target>>);
 
 const PREFIX: &str = "stage:";
 
-/// Pokazuje menu przy kursorze (`x`, `y`: piksele CSS względem okna sceny).
+/// Show the menu at the cursor (`x`, `y`: CSS pixels relative to the stage window).
 pub fn show(app: &AppHandle, target: Target, x: f64, y: f64) -> tauri::Result<()> {
     let shell = app.state::<super::Shell>();
     let lang = app.state::<crate::settings::SettingsState>().lang();
@@ -47,7 +47,7 @@ pub fn show(app: &AppHandle, target: Target, x: f64, y: f64) -> tauri::Result<()
     win.as_ref().window().popup_menu_at(&menu, Position::Logical(LogicalPosition::new(x, y)))
 }
 
-/// Obsługa wybranej pozycji; zdarzenia innych menu (tray) są pomijane.
+/// Handle the selected item; ignore events from other menus (tray).
 pub fn on_event(app: &AppHandle, id: &str) {
     let Some(action) = id.strip_prefix(PREFIX) else { return };
     let target = app.state::<MenuTarget>().0.lock().unwrap().take();
@@ -58,7 +58,7 @@ pub fn on_event(app: &AppHandle, id: &str) {
             if r.needs_attention() { crate::panel::open_with_status(app, Some(s), r.detail); }
         }
         ("panel", s) => crate::panel::open(app, s),
-        // czeka na obrót rdzenia: poza wątkiem głównym, na którym przychodzą zdarzenia menu
+        // wait for a core cycle outside the main thread, which receives menu events
         ("dismiss", Some(s)) => { let a = app.clone(); std::thread::spawn(move || crate::dismiss(&a, vec![s])); }
         ("dismiss_inactive", _) => { let a = app.clone(); std::thread::spawn(move || crate::dismiss_inactive(&a)); }
         ("move", _) => app.state::<super::Shell>().start_move(),

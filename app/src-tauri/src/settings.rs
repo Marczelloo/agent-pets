@@ -1,5 +1,5 @@
-//! Ustawienia w aplikacji: stan wczytany z `~/.agent-pets/settings.json`, komendy dla okna ustawień
-//! i kreatora, okno ustawień (jedno) oraz wybór `hook.exe` do instalacji hooków Claude Code.
+//! App settings: state loaded from `~/.agent-pets/settings.json`, commands for the settings window
+//! and wizard, a single settings window, and `hook.exe` selection for Claude Code hook installation.
 use pets_core::i18n::{self, Lang};
 use pets_core::integrations::{self, AppId, Detected, Status};
 use pets_core::settings::{self as core_settings, Settings};
@@ -24,9 +24,9 @@ impl SettingsState {
         SettingsState { home, path, current: RwLock::new(l.settings), first_run: Mutex::new(l.first_run), load_error: Mutex::new(l.error) }
     }
     pub fn get(&self) -> Settings { self.current.read().unwrap().clone() }
-    /// Język tekstów z Rusta: ustawienie albo język Windows.
+    /// Language of Rust-provided text: the setting or Windows language.
     pub fn lang(&self) -> Lang { i18n::current(self.get().language) }
-    /// Widok dla UI; `system` to język Windows (UI rozstrzyga nim `auto` po późniejszej zmianie ustawienia).
+    /// View for the UI; `system` is the Windows language (UI uses it to resolve `auto` after later changes).
     pub fn view(&self, system: Lang) -> SettingsView {
         let settings = self.get();
         let lang = i18n::resolve(settings.language, system == Lang::Pl);
@@ -42,7 +42,7 @@ pub struct SettingsView { pub settings: Settings, pub first_run: bool, pub load_
 #[derive(Serialize, Clone, Debug)]
 pub struct AppRow { pub id: AppId, pub detected: Detected, pub status: Status, pub enabled: bool }
 
-/// Raport dla zakładki Diagnostyka. Bez tokenów, treści i tytułów sesji.
+/// Report for the Diagnostics tab. No tokens, content, or session titles.
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct Diagnostics {
     pub version: String,
@@ -50,17 +50,17 @@ pub struct Diagnostics {
     pub settings_path: String,
     pub settings_error: Option<String>,
     pub hook_exe: Option<String>,
-    /// czy wpis autostartu naprawdę jest w rejestrze
+    /// Whether the startup entry is actually in the registry.
     pub autostart_registered: bool,
     pub last_seen: BTreeMap<String, i64>,
     pub apps: Vec<(AppId, bool, String)>,
-    /// stan skanu statystyk (bez nazw projektów i ścieżek)
+    /// Statistics scan state (without project names or paths).
     pub stats_files: usize,
     pub stats_scanned_bytes: u64,
     pub stats_total_bytes: u64,
 }
 
-/// Czas ostatniego zdarzenia z każdego źródła, uzupełniany przez rdzeń (`core::live`).
+/// Time of the latest event from each source, updated by the core (`core::live`).
 #[derive(Default)]
 pub struct LastSeen(pub Mutex<BTreeMap<String, i64>>);
 
@@ -92,7 +92,7 @@ fn set_app(s: &mut Settings, id: AppId, on: bool) {
     }
 }
 
-/// Pierwszy istniejący kandydat na `hook.exe`: zasoby instalacji, katalog programu, build release obok debug.
+/// First existing `hook.exe` candidate: installed resources, program directory, release build next to debug.
 pub fn pick_hook(candidates: &[PathBuf]) -> Option<PathBuf> { candidates.iter().find(|p| p.is_file()).cloned() }
 
 pub fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
@@ -100,13 +100,13 @@ pub fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
     if let Ok(r) = app.path().resource_dir() { out.push(r.join("resources").join("hook.exe")); out.push(r.join("hook.exe")); }
     if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
         out.push(dir.join("hook.exe"));
-        // `target/debug/agent-pets.exe` w buildzie deweloperskim; hook budowany w release
+        // `target/debug/agent-pets.exe` in development builds; hook built in release mode
         if let Some(target) = dir.parent() { out.push(target.join("release").join("hook.exe")); }
     }
     out
 }
 
-/// Zapisuje i rozsyła ustawienia; skutki (rdzeń, powiadomienia, autostart) podłącza `apply_effects`.
+/// Save and broadcast settings; `apply_effects` attaches effects (core, notifications, startup).
 fn store(app: &AppHandle, new: Settings) -> Result<(), String> {
     let st = app.state::<SettingsState>();
     core_settings::save(&st.path, &new).map_err(|e| format!("{} {}: {e}", i18n::tr(st.lang(), "Nie udało się zapisać", "Could not save"), st.path.display()))?;
@@ -117,15 +117,15 @@ fn store(app: &AppHandle, new: Settings) -> Result<(), String> {
     Ok(())
 }
 
-/// Zmiana ustawień z Rusta (np. pozycja po przesunięciu sceny): zapis, rozesłanie i skutki jak z okna.
+/// Settings change from Rust (e.g. position after moving the stage): save, broadcast, and apply effects as from the window.
 pub fn update(app: &AppHandle, f: impl FnOnce(&mut Settings)) -> Result<(), String> {
     let mut s = app.state::<SettingsState>().get();
     f(&mut s);
     store(app, s)
 }
 
-/// Ustawienia z okna, bez listy aplikacji (tę zmieniają tylko integracje, żeby nie cofnąć instalacji hooków).
-/// Wyjątek: furtka nie ma instalacji, więc jej przełącznik przychodzi z okna.
+/// Settings from the window, excluding the app list (only integrations change it, to preserve installed hooks).
+/// Exception: the open gate has no installation, so its toggle comes from the window.
 pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings {
     let apps = core_settings::Apps { generic: incoming.apps.generic, ..current.apps };
     Settings { apps, ..incoming }
@@ -166,7 +166,7 @@ pub fn integration_set(app: AppHandle, id: AppId, on: bool) -> Result<String, St
     Ok(msg)
 }
 
-/// Koniec kreatora: zapis ustawień i włączenie albo wyłączenie integracji. Zwraca komunikaty dla ekranu wyniku.
+/// Finish the wizard: save settings and enable or disable integrations. Return messages for the result screen.
 #[tauri::command]
 pub fn wizard_finish(app: AppHandle, settings: Settings) -> Vec<String> {
     let mut s = settings;
@@ -208,10 +208,10 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
     }
 }
 
-/// Tytuł okna ustawień (pasek tytułu, przycisk w pasku zadań, Alt+Tab).
+/// Settings window title (title bar, taskbar button, Alt+Tab).
 pub fn window_title(lang: Lang) -> &'static str { i18n::tr(lang, "Agent Pets: ustawienia", "Agent Pets: settings") }
 
-/// Rozmiar okna: naturalny (cała treść bez przewijania), ale nie większy niż obszar roboczy ekranu minus margines.
+/// Window size: natural (all content without scrolling), but no larger than the screen work area minus a margin.
 pub fn fit_size(desired: (f64, f64), work: Option<(f64, f64)>) -> (f64, f64) {
     const MARGIN: f64 = 32.0;
     match work {
@@ -220,20 +220,20 @@ pub fn fit_size(desired: (f64, f64), work: Option<(f64, f64)>) -> (f64, f64) {
     }
 }
 
-/// Obszar roboczy głównego monitora w pikselach logicznych (bez paska zadań).
+/// Primary monitor work area in logical pixels (excluding the taskbar).
 pub fn work_area(app: &AppHandle) -> Option<(f64, f64)> {
     let m = app.primary_monitor().ok().flatten()?;
     let (s, a) = (m.scale_factor(), m.work_area());
     Some((a.size.width as f64 / s, a.size.height as f64 / s))
 }
 
-/// Okno ustawień: 1100×920 mieści „Wygląd” (7 stylów w rzędzie, przełącznik muzyki) i większość kart bez przewijania.
+/// Settings window: 1100×920 fits "Appearance" (7 styles in a row, music toggle) and most tabs without scrolling.
 pub const WINDOW: (f64, f64) = (1100.0, 920.0);
 
-/// Otwiera okno ustawień (albo kreator przy pierwszym uruchomieniu); drugie wywołanie tylko je pokazuje.
+/// Open the settings window (or wizard on first launch); subsequent calls only show it.
 pub fn open(app: &AppHandle) { open_at(app, None) }
 
-/// Okno ustawień na wskazanej karcie (np. „stage” z menu sceny).
+/// Settings window on a specified tab (e.g. "stage" from the stage menu).
 pub fn open_tab(app: &AppHandle, tab: &str) { open_at(app, Some(tab)) }
 
 fn open_at(app: &AppHandle, tab: Option<&str>) {
@@ -244,8 +244,8 @@ fn open_at(app: &AppHandle, tab: Option<&str>) {
         let _ = w.set_focus();
         return;
     }
-    // Budowanie okna w synchronicznej komendzie albo w obsłudze zdarzenia (tray, druga instancja) zakleszcza się
-    // na Windows (dokumentacja WebviewWindowBuilder), więc budujemy je w osobnym wątku.
+    // Building the window in a synchronous command or event handler (tray, second instance) deadlocks
+    // on Windows (WebviewWindowBuilder documentation), so build it on a separate thread.
     let app = app.clone();
     let tab = tab.map(str::to_string);
     std::thread::spawn(move || {
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn settings_from_the_window_never_change_the_apps() {
-        // aplikacje zmienia tylko integration_set / wizard_finish; UI mogło mieć nieaktualną listę
+        // only integration_set / wizard_finish change apps; the UI may have a stale list
         let mut current = Settings::default();
         current.apps.claude_code = false;
         let mut incoming = Settings::default();
@@ -294,14 +294,14 @@ mod tests {
 
     #[test]
     fn the_door_switch_from_the_window_is_kept() {
-        // furtka nie ma instalacji: jej przełącznik w oknie jest jedynym sposobem, żeby ją zamknąć
+        // the open gate has no installation: its window toggle is the only way to close it
         let mut current = Settings::default();
         current.apps.claude_code = false;
         let mut incoming = Settings::default();
         incoming.apps.generic = false;
         let merged = merge_user_settings(&current, incoming);
-        assert!(!merged.apps.generic, "furtka zamknięta");
-        assert!(!merged.apps.claude_code, "reszta aplikacji bez zmian");
+        assert!(!merged.apps.generic, "gate closed");
+        assert!(!merged.apps.claude_code, "other apps unchanged");
     }
 
     #[test]
@@ -327,7 +327,7 @@ mod tests {
         let v = serde_json::to_value(Diagnostics::default()).unwrap();
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert!(keys.iter().all(|k| !k.contains("token") && !k.contains("title")), "{keys:?}");
-        assert!(keys.iter().all(|k| !k.contains("action") && !k.contains("question") && !k.contains("session")), "0.8: bez tekstów akcji {keys:?}");
-        for k in ["stats_files", "stats_scanned_bytes", "stats_total_bytes"] { assert!(keys.contains(&k), "0.9: stan skanu statystyk {keys:?}"); }
+        assert!(keys.iter().all(|k| !k.contains("action") && !k.contains("question") && !k.contains("session")), "0.8: no action text {keys:?}");
+        for k in ["stats_files", "stats_scanned_bytes", "stats_total_bytes"] { assert!(keys.contains(&k), "0.9: statistics scan state {keys:?}"); }
     }
 }

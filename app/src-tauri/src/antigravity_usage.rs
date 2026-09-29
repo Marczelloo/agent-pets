@@ -1,5 +1,5 @@
-//! Limity Antigravity z jego lokalnego serwera (tylko 127.0.0.1). Token CSRF bierzemy z argumentów procesu
-//! serwera przy każdym wykryciu; wysyłamy go wyłącznie do tego serwera i nigdzie go nie zapisujemy ani nie logujemy.
+//! Antigravity limits from its local server (127.0.0.1 only). We read the CSRF token from the server process
+//! arguments on each discovery; we send it only to that server and never store or log it.
 use pets_core::adapters::antigravity_usage::{self as au, Failure, Poller, Server, Usage};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -17,8 +17,8 @@ pub fn post(s: &Server, method: &str) -> Result<serde_json::Value, Failure> {
     }
 }
 
-/// Wątek: co sekundę sprawdza zgodę (`allowed`, włączone Antigravity w ustawieniach), a pytanie o limity
-/// wysyła co minutę (`POLL_MS`). Po wyłączeniu zapomina serwer, więc po włączeniu pyta od razu.
+/// Thread: checks consent (`allowed`, Antigravity enabled in settings) every second and polls limits
+/// every minute (`POLL_MS`). On disable it forgets the server, so it polls immediately when enabled again.
 pub fn spawn(tx: Sender<Usage>, allowed: impl Fn() -> bool + Send + 'static) {
     std::thread::spawn(move || {
         let mut poller = Poller::new();
@@ -40,10 +40,10 @@ mod tests {
     use super::*;
     use std::sync::mpsc::channel;
 
-    /// ścieżka i nagłówki odebranego zapytania
+    /// Path and headers of the received request.
     type Seen = (String, Vec<(String, String)>);
 
-    /// Serwer na 127.0.0.1, który odpowiada raz i oddaje ścieżkę oraz nagłówki zapytania.
+    /// Server on 127.0.0.1 that responds once and returns the request path and headers.
     fn serve(status: u16, body: &'static str) -> (u16, std::sync::mpsc::Receiver<Seen>) {
         let srv = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let port = srv.server_addr().to_ip().unwrap().port();

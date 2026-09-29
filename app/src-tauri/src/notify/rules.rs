@@ -1,4 +1,4 @@
-//! Kiedy wysłać powiadomienie (spec 2.4). Czysta logika; dostarczanie jest w `notify/mod.rs`.
+//! When to send a notification (spec 2.4). Pure logic; delivery is in `notify/mod.rs`.
 use crate::core::Snapshot;
 use pets_core::i18n::{tr, Lang};
 use pets_core::model::{Agent, Limit, Session, State, Window};
@@ -19,18 +19,18 @@ pub struct Rules {
     settings: Settings,
     lang: Lang,
     primed: bool,
-    /// zgłoszone epizody `needs_you` i tury `done`
+    /// Reported `needs_you` episodes and `done` turns.
     sent: HashSet<String>,
-    /// okna limitów już zgłoszone: klucz (agent, okno) → `resets_at` zgłoszonego okna
+    /// Already reported limit windows: key (agent, window) → reported window's `resets_at`.
     limits: HashMap<String, Option<i64>>,
 }
 
 const NEEDS_AFTER_MS: i64 = 15_000;
 const LONG_TURN_MS: i64 = 120_000;
 const LIMIT_PCT: f32 = 90.0;
-/// Poniżej tego zużycia okno limitu uznajemy za nowe (dla limitów bez czasu resetu i przeciw wahaniom wokół 90%).
+/// Below this usage, treat the limit window as new (for limits without reset times and fluctuations around 90%).
 const LIMIT_REARM_PCT: f32 = 80.0;
-/// Czas resetu tego samego okna drga między odczytami; nowe okno to reset przesunięty o więcej niż to.
+/// The same window's reset time fluctuates between readings; a larger shift indicates a new window.
 const RESET_JITTER_MS: i64 = 60_000;
 
 fn name(s: &Session, lang: Lang) -> String {
@@ -66,12 +66,12 @@ impl Rules {
         Rules { settings, lang: Lang::Pl, primed: false, sent: HashSet::new(), limits: HashMap::new() }
     }
 
-    /// Pierwsze wywołanie tylko zapamiętuje stan: nic zastanego przy starcie aplikacji nie jest zgłaszane.
+    /// First call only remembers state: nothing already present at app startup is reported.
     pub fn observe(&mut self, snap: &Snapshot, now: i64, focused: &dyn Fn(&Session) -> bool) -> Vec<Toast> {
         let mut out = Vec::new();
         let priming = !self.primed;
         self.primed = true;
-        // dzieci (subagenci, zadania routera) nie wysyłają powiadomień: zgody i tak czekają u rodzica
+        // children (subagents, router tasks) send no notifications: approvals still wait with the parent
         for s in snap.sessions.iter().filter(|s| s.parent.is_none()) {
             match s.state {
                 State::NeedsYou => {
@@ -102,7 +102,7 @@ impl Rules {
             let new_window = match (self.limits.get(&key), l.resets_at) {
                 (None, _) => true,
                 (Some(Some(known)), Some(r)) => (r - known).abs() > RESET_JITTER_MS,
-                // pierwszy odczyt z czasem resetu po odczycie bez niego (aplikacja Claude → statusline): to samo okno
+                // first reading with a reset time after one without it (Claude app → statusline): same window
                 (Some(None), Some(r)) => { self.limits.insert(key.clone(), Some(r)); false }
                 (Some(_), None) => false,
             };
@@ -134,7 +134,7 @@ mod tests {
         let s = snap(vec![sess("a", State::NeedsYou, 0, None), sess("b", State::Done, 200_000, Some(0))],
             vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 95.0, resets_at: Some(9) }]);
         assert!(r.observe(&s, 300_000, &|_| false).is_empty());
-        assert!(r.observe(&s, 301_000, &|_| false).is_empty(), "zastane epizody nie wyskakują później");
+        assert!(r.observe(&s, 301_000, &|_| false).is_empty(), "preexisting episodes do not appear later");
     }
 
     #[test]
@@ -143,13 +143,13 @@ mod tests {
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         let s = snap(vec![sess("a", State::NeedsYou, 1_000, None)], vec![]);
         assert!(r.observe(&s, 10_000, &|_| false).is_empty());
-        assert!(r.observe(&s, 20_000, &|_| true).is_empty(), "okno sesji ma fokus");
+        assert!(r.observe(&s, 20_000, &|_| true).is_empty(), "session window has focus");
         let t = r.observe(&s, 20_000, &|_| false);
         assert_eq!(t.len(), 1);
         assert_eq!((t[0].kind, t[0].session_id.as_deref()), (ToastKind::NeedsYou, Some("a")));
         assert!(r.observe(&s, 30_000, &|_| false).is_empty());
         let again = snap(vec![sess("a", State::NeedsYou, 50_000, None)], vec![]);
-        assert_eq!(r.observe(&again, 70_000, &|_| false).len(), 1, "nowy epizod");
+        assert_eq!(r.observe(&again, 70_000, &|_| false).len(), 1, "new episode");
     }
 
     #[test]
@@ -183,32 +183,32 @@ mod tests {
         assert!(r.observe(&snap(vec![], vec![l(80.0, R1)]), 1, &|_| false).is_empty());
         assert_eq!(r.observe(&snap(vec![], vec![l(91.0, R1)]), 2, &|_| false).len(), 1);
         assert!(r.observe(&snap(vec![], vec![l(95.0, R1)]), 3, &|_| false).is_empty());
-        assert_eq!(r.observe(&snap(vec![], vec![l(92.0, R2)]), 4, &|_| false).len(), 1, "nowe okno po resecie");
+        assert_eq!(r.observe(&snap(vec![], vec![l(92.0, R2)]), 4, &|_| false).len(), 1, "new window after reset");
     }
 
     #[test]
     fn limit_without_reset_time_rearms_after_usage_drops() {
-        // Limity z aplikacji Claude nie mają czasu resetu: nowe okno poznajemy po spadku zużycia.
+        // Claude app limits have no reset time: detect a new window when usage drops.
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         let l = |pct: f32| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: None };
         assert_eq!(r.observe(&snap(vec![], vec![l(91.0)]), 1, &|_| false).len(), 1);
         assert!(r.observe(&snap(vec![], vec![l(89.0)]), 2, &|_| false).is_empty());
-        assert!(r.observe(&snap(vec![], vec![l(92.0)]), 3, &|_| false).is_empty(), "wahanie wokół 90% to wciąż to samo okno");
+        assert!(r.observe(&snap(vec![], vec![l(92.0)]), 3, &|_| false).is_empty(), "fluctuation around 90% is still the same window");
         assert!(r.observe(&snap(vec![], vec![l(3.0)]), 4, &|_| false).is_empty());
-        assert_eq!(r.observe(&snap(vec![], vec![l(93.0)]), 5, &|_| false).len(), 1, "po resecie znowu");
+        assert_eq!(r.observe(&snap(vec![], vec![l(93.0)]), 5, &|_| false).len(), 1, "again after reset");
     }
 
     #[test]
     fn learning_the_reset_time_of_the_same_window_does_not_toast_again() {
-        // aplikacja Claude zgłasza 91% bez resetu, chwilę później statusline 92% z resetem: to wciąż to samo okno
+        // claude app reports 91% without reset, then statusline reports 92% with reset: still the same window
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         let l = |pct: f32, reset: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: reset };
         assert_eq!(r.observe(&snap(vec![], vec![l(91.0, None)]), 1, &|_| false).len(), 1);
         assert!(r.observe(&snap(vec![], vec![l(92.0, Some(18_000_000))]), 2, &|_| false).is_empty());
-        assert!(r.observe(&snap(vec![], vec![l(93.0, Some(18_030_000))]), 3, &|_| false).is_empty(), "reset drga o sekundy");
-        assert_eq!(r.observe(&snap(vec![], vec![l(95.0, Some(36_000_000))]), 4, &|_| false).len(), 1, "następne okno");
+        assert!(r.observe(&snap(vec![], vec![l(93.0, Some(18_030_000))]), 3, &|_| false).is_empty(), "reset time fluctuates by seconds");
+        assert_eq!(r.observe(&snap(vec![], vec![l(95.0, Some(36_000_000))]), 4, &|_| false).len(), 1, "next window");
     }
 
     #[test]

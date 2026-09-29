@@ -1,5 +1,5 @@
-//! Dane sesji z rejestru Claude Code (`~/.claude/sessions/<pid>.json`), czytane w chwili „Przejdź”:
-//! sesje utworzone po starcie widżetu też mają tam `hostSessionId`.
+//! Session data from the Claude Code registry (`~/.claude/sessions/<pid>.json`), read when jumping:
+//! sessions created after the widget started also have `hostSessionId` there.
 use std::path::Path;
 
 #[derive(Clone, Debug, PartialEq)]

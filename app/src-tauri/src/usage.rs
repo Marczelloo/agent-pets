@@ -1,6 +1,6 @@
-//! Limity konta Claude z serwera Anthropic, co kilka minut, tym samym logowaniem co Claude Code.
-//! Token czytamy z `~/.claude/.credentials.json` przy każdym zapytaniu (Claude Code go odświeża), wysyłamy go
-//! wyłącznie do `api.anthropic.com` i nigdzie go nie zapisujemy ani nie logujemy.
+//! Claude account limits from the Anthropic server every few minutes, using the same login as Claude Code.
+//! Read the token from `~/.claude/.credentials.json` on each request (Claude Code refreshes it), send it
+//! only to `api.anthropic.com`, and never store or log it.
 use pets_core::claude::account_usage;
 use pets_core::model::Event;
 use std::path::PathBuf;
@@ -39,14 +39,14 @@ fn current_token(now: i64) -> Option<String> {
     credentials().and_then(|p| std::fs::read(p).ok()).and_then(|b| account_usage::token(&b, now))
 }
 
-/// Wątek: od razu, potem co 5 min (po odmowie z powodu limitu zapytań co 15 min). Bez tokenu nic nie wysyła,
-/// a bez zgody użytkownika (`allowed`, ustawienie `claude_plan_usage`) nawet nie czyta tokenu.
-/// Zwraca, czy w chwili startu jest zgoda i ważny token (czy warto czekać na pierwszą odpowiedź).
+/// Thread: immediately, then every 5 min (every 15 min after rate limiting). Sends nothing without a token,
+/// and does not even read the token without user consent (`allowed`, `claude_plan_usage` setting).
+/// Returns whether consent and a valid token exist at startup (whether to wait for the first response).
 pub fn spawn(tx: Sender<Event>, allowed: impl Fn() -> bool + Send + 'static) -> bool {
     let has_token = allowed() && current_token(pets_core::time::now_ms()).is_some();
     std::thread::spawn(move || loop {
         if !allowed() {
-            // zgoda może przyjść w każdej chwili z ustawień
+            // consent may arrive from settings at any time
             std::thread::sleep(Duration::from_secs(5));
             continue;
         }
@@ -68,7 +68,7 @@ mod tests {
     use pets_core::model::Window;
     use std::sync::mpsc::channel;
 
-    /// Serwer na 127.0.0.1, który odpowiada raz i oddaje nagłówki zapytania.
+    /// Server on 127.0.0.1 that responds once and returns the request headers.
     fn serve(status: u16, body: &'static str) -> (String, std::sync::mpsc::Receiver<Vec<(String, String)>>) {
         let srv = tiny_http::Server::http("127.0.0.1:0").unwrap();
         let url = format!("http://127.0.0.1:{}/api/oauth/usage", srv.server_addr().to_ip().unwrap().port());

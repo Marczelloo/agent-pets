@@ -1,6 +1,6 @@
-//! Natywna mysz: WebView2 osadzony w oknie innego procesu nie dostaje zdarzeń DOM (spike S1),
-//! więc co 30 ms czytamy kursor i przyciski i wysyłamy `pets://pointer` w pikselach CSS sceny.
-//! W trybie „Przesuń” i w oknie pływającym ten sam wątek rozpoznaje przeciąganie (`Dragger`).
+//! Native pointer: WebView2 embedded in another process's window receives no DOM events (spike S1),
+//! so read cursor and buttons every 30 ms and send `pets://pointer` in stage CSS pixels.
+//! In "Move" mode and the floating window, the same thread detects dragging (`Dragger`).
 use serde::Serialize;
 use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
 use std::sync::mpsc::Sender;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
-/// `x`, `y`: piksele CSS względem okna sceny; `sx`, `sy`: piksele fizyczne ekranu (do przeciągania).
+/// `x`, `y`: CSS pixels relative to stage window; `sx`, `sy`: physical screen pixels (for dragging).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Sample { pub inside: bool, pub x: f64, pub y: f64, pub sx: i32, pub sy: i32, pub left: bool, pub right: bool }
 
@@ -28,8 +28,8 @@ pub fn diff(prev: &Sample, cur: &Sample) -> Vec<PointerEvent> {
     out
 }
 
-/// Przeciąganie od wciśnięcia w oknie: `dx`, `dy` w pikselach ekranu od punktu wciśnięcia.
-/// `Click`: puszczenie bez ruchu ponad próg (okno pływające klika dopiero po puszczeniu).
+/// Drag from a press in the window: `dx`, `dy` in screen pixels from the press point.
+/// `Click`: release without exceeding movement threshold (floating window clicks only on release).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Drag { Start, Move { dx: i32, dy: i32 }, End, Click { x: f64, y: f64 } }
 
@@ -59,18 +59,18 @@ impl Dragger {
     }
 }
 
-/// Okno pływające przepuszcza teraz kliknięcia (kursor nad pustym miejscem): wciśnięcia nie są nasze.
+/// Floating window currently passes clicks through (cursor over empty space): presses are not ours.
 pub static PASSTHROUGH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Kursor „w scenie”: okno widoczne i naprawdę pod kursorem (nie zasłonięte menu ani innym oknem).
-/// Gdy okno pływające przepuszcza kliknięcia, `WindowFromPoint` wskazuje okno pod spodem, więc liczy się
-/// prostokąt; wciśnięcia są wtedy i tak pomijane.
+/// Cursor "in the stage": window visible and actually under the cursor (not covered by a menu or another window).
+/// When the floating window passes clicks through, `WindowFromPoint` points to the window beneath it, so use
+/// the rectangle; presses are ignored anyway in that case.
 pub fn inside_at(in_rect: bool, visible: bool, hit_ours: bool, by_rect: bool, passthrough: bool) -> bool {
     in_rect && visible && (hit_ours || (by_rect && passthrough))
 }
 
-/// Krawędzie Enter/Esc w trybie „Przesuń”, liczone od wejścia w tryb: klawisz wciśnięty już wtedy
-/// (Enter na przycisku „Przesuń”) się nie liczy.
+/// Enter/Esc edges in "Move" mode, counted from mode entry: a key already pressed at that point
+/// (Enter on the "Move" button) does not count.
 #[derive(Default)]
 pub struct Keys { prev: Option<(bool, bool)> }
 
@@ -83,11 +83,11 @@ impl Keys {
     }
 }
 
-/// Tryb wskaźnika ustawiany przez pętlę sceny.
+/// Pointer mode set by the stage loop.
 pub const NORMAL: u8 = 0;
-/// „Przesuń” w pasku: przeciąganie bez progu, Enter/klik obok zatwierdza, Esc cofa, bez kliknięć do UI.
+/// "Move" in taskbar: drag without a threshold, Enter/click outside confirms, Esc cancels, no UI clicks.
 pub const MOVING: u8 = 1;
-/// Okno pływające: przeciąganie po 4 px, krótki klik po puszczeniu.
+/// Floating window: drag after 4 px, short click on release.
 pub const FLOATING: u8 = 2;
 
 pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: Sender<super::Cmd>) {
@@ -109,7 +109,7 @@ pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: S
                 }
                 FLOATING => {
                     keys.step(false, (false, false));
-                    // kliknięcie w puste miejsce trafia do okna pod spodem, nie do sceny
+                    // clicking empty space goes to the window beneath, not the stage
                     let cur = if PASSTHROUGH.load(Ordering::Relaxed) { Sample { left: false, right: false, ..cur } } else { cur };
                     for e in diff(&prev, &cur) {
                         if !matches!(e, PointerEvent::Click { .. }) { let _ = app.emit("pets://pointer", e); }
@@ -136,8 +136,8 @@ fn key_down(vk: i32) -> bool {
     (unsafe { GetAsyncKeyState(vk) } as u16 & 0x8000) != 0
 }
 
-/// `by_rect`: okno pływające może przepuszczać kursor (wtedy `WindowFromPoint` wskazuje okno pod spodem),
-/// więc „w środku” liczymy z samego prostokąta.
+/// `by_rect`: the floating window may pass pointer events through (`WindowFromPoint` then points beneath it),
+/// so determine "inside" from the rectangle alone.
 fn sample(raw: isize, by_rect: bool) -> Option<Sample> {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
@@ -189,7 +189,7 @@ mod tests {
         let down = Sample { left: true, ..at(5.0, 5.0) };
         assert_eq!(diff(&at(5.0, 5.0), &down), vec![PointerEvent::Click { x: 5.0, y: 5.0 }]);
         assert!(diff(&down, &down).is_empty());
-        // wciśnięty poza sceną i przeciągnięty do środka: to nie jest kliknięcie
+        // pressed outside the stage and dragged inside: this is not a click
         let outside_down = Sample { inside: false, left: true, ..Sample::default() };
         assert_eq!(diff(&outside_down, &down), vec![PointerEvent::Move { x: 5.0, y: 5.0 }]);
     }

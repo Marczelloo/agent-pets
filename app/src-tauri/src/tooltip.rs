@@ -1,5 +1,5 @@
-//! Okno tooltipa nad paskiem (scena ma wysokość paska, więc tooltip to osobne okno).
-//! Przepływ: scena → `tooltip_show` → treść do okna → okno mierzy się → `tooltip_size` → pozycja i pokazanie.
+//! Tooltip window above the taskbar (the stage has taskbar height, so the tooltip needs a separate window).
+//! Flow: stage → `tooltip_show` → window content → window measures itself → `tooltip_size` → position and show.
 use crate::shell::{self, placement::Rect, Shell};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -12,8 +12,8 @@ pub struct Tooltip { inner: Mutex<Anchor> }
 struct Anchor { seq: u64, x: i32, stage: Rect, monitor: Rect, scale: f64, open: bool }
 
 impl Tooltip {
-    /// Nowa treść zakotwiczona w `x` (px ekranu) przy scenie `stage` na monitorze `monitor`;
-    /// zwraca numer, na który musi odpowiedzieć okno.
+    /// New content anchored at screen position `x` near `stage` on `monitor`;
+    /// returns the sequence number the window must answer.
     fn open(&self, x: i32, stage: Rect, monitor: Rect, scale: f64) -> u64 {
         let mut a = self.inner.lock().unwrap();
         let seq = a.seq + 1;
@@ -21,7 +21,7 @@ impl Tooltip {
         seq
     }
 
-    /// Kotwica dla rozmiaru zmierzonego przez okno; `None` dla starej treści albo schowanego tooltipa.
+    /// Anchor for the window's measured size; `None` for stale content or a hidden tooltip.
     fn accept_size(&self, seq: u64) -> Option<Anchor> {
         let a = *self.inner.lock().unwrap();
         (a.open && a.seq == seq).then_some(a)
@@ -29,8 +29,8 @@ impl Tooltip {
 
     fn close(&self) { self.inner.lock().unwrap().open = false; }
 
-    /// Chowa tooltip, np. gdy strona sceny została załadowana od nowa (restart Explorera):
-    /// nowa strona nie wie o tooltipie starej i sama by go nie schowała.
+    /// Hide the tooltip, e.g. when the stage page reloads (Explorer restart):
+    /// the new page knows nothing about the old page's tooltip and would not hide it.
     pub fn hide(&self, app: &AppHandle) {
         self.close();
         if let Some(win) = app.get_webview_window("tooltip") { shell::hide(&win); }
@@ -49,7 +49,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// `pet`: zwierzak pod kursorem. Gdy nad nim stoi dymek, najechanie rozwija dymek do pełnego tekstu zamiast pokazywać tooltip.
+/// `pet`: pet under the cursor. If it has a bubble, hovering expands the bubble to full text instead of showing a tooltip.
 #[tauri::command]
 pub fn tooltip_show(app: AppHandle, tip: State<Tooltip>, shell: State<Shell>, bubbles: State<crate::bubbles::Bubbles>,
     anchor_x: f64, content: serde_json::Value, pet: Option<String>) {
@@ -66,7 +66,7 @@ pub fn tooltip_show(app: AppHandle, tip: State<Tooltip>, shell: State<Shell>, bu
 
 #[tauri::command]
 pub fn tooltip_size(app: AppHandle, tip: State<Tooltip>, seq: u64, w: f64, h: f64) {
-    let Some(a) = tip.accept_size(seq) else { return }; // spóźniona odpowiedź na starą treść albo tooltip już schowany
+    let Some(a) = tip.accept_size(seq) else { return }; // late response to stale content or an already hidden tooltip
     let Some(win) = app.get_webview_window("tooltip") else { return };
     let (pw, ph) = ((w * a.scale).round() as i32, (h * a.scale).round() as i32);
     let (x, y) = shell::placement::tooltip_pos(a.x, a.stage, a.monitor, pw, ph, a.scale);

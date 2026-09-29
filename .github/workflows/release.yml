@@ -1,4 +1,4 @@
-# Tag v*: testy. Instalator z podpisem aktualizacji buduje lokalnie scripts/release.ps1 (klucz podpisu jest tylko lokalnie, docs/building.md).
+# Tag v*: tests. Build the installer with an update signature locally using scripts/release.ps1 (the signing key stays local; docs/building.md).
 name: release
 
 on:
@@ -26,7 +26,7 @@ jobs:
           cache-dependency-path: app/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: app
-      # zasób paczki resources/hook.exe musi istnieć, zanim cokolwiek skompiluje aplikację
+      # the packaged resources/hook.exe must exist before anything compiles the app
       - run: pnpm build:hook
         working-directory: app
       - run: cargo test --workspace

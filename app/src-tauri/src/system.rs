@@ -1,4 +1,4 @@
-//! Integracja z Windows: autostart (`HKCU\...\Run`) i sprzątanie rejestracji powiadomień przy odinstalowaniu.
+//! Windows integration: startup (`HKCU\...\Run`) and notification registration cleanup on uninstall.
 use windows::core::HSTRING;
 use windows::Win32::System::Registry::*;
 
@@ -7,7 +7,7 @@ pub const RUN_VALUE: &str = "Agent Pets";
 
 fn wide(s: &str) -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() }
 
-/// Włącza albo wyłącza uruchamianie z Windows dla `exe` pod kluczem `key` (w HKCU).
+/// Enable or disable Windows startup for `exe` under `key` (in HKCU).
 pub fn set_autostart_at(key: &str, exe: &str, on: bool) -> std::io::Result<()> {
     unsafe {
         let mut h = HKEY::default();
@@ -27,10 +27,10 @@ pub fn set_autostart_at(key: &str, exe: &str, on: bool) -> std::io::Result<()> {
     }
 }
 
-/// Czy pod `key` jest wpis autostartu.
+/// Whether a startup entry exists under `key`.
 pub fn autostart_at(key: &str) -> bool { autostart_value(key).is_some() }
 
-/// Polecenie z wpisu autostartu pod `key`, jeśli jest.
+/// Command from the startup entry under `key`, if present.
 pub fn autostart_value(key: &str) -> Option<String> {
     let mut size: u32 = 0;
     unsafe {
@@ -43,13 +43,13 @@ pub fn autostart_value(key: &str) -> Option<String> {
     }
 }
 
-/// Wpis autostartu: ścieżka w cudzysłowie i `--autostart`, żeby druga instancja uruchomiona przez Windows
-/// (gdy aplikacja już działa) niczego nie otwierała.
+/// Startup entry: quoted path and `--autostart` so a second instance launched by Windows
+/// (when the app is already running) opens nothing.
 pub fn autostart_command(exe: &str) -> String { format!("\"{exe}\" {AUTOSTART_ARG}") }
 
 pub const AUTOSTART_ARG: &str = "--autostart";
 
-/// Jasny pasek zadań (Ustawienia → Personalizacja → Kolory → tryb Windows). Brak wartości = ciemny.
+/// Light taskbar (Settings → Personalization → Colors → Windows mode). Missing value = dark.
 pub fn light_taskbar() -> bool {
     let mut v: u32 = 0;
     let mut size = std::mem::size_of::<u32>() as u32;
@@ -60,9 +60,9 @@ pub fn light_taskbar() -> bool {
     }
 }
 
-/// Co zrobić z wpisem autostartu: porównujemy z rejestrem, nie z poprzednimi ustawieniami
-/// (kreator zapisuje domyślne `true`, a wpisu jeszcze nie ma). Wpis inny niż `cmd` (0.8.0 bez flagi,
-/// stara ścieżka) jest przepisywany.
+/// Decide what to do with the startup entry: compare with the registry, not previous settings
+/// (the wizard saves default `true` before the entry exists). An entry differing from `cmd` (0.8.0 without flag,
+/// old path) is rewritten.
 pub fn autostart_action(desired: bool, registered: Option<&str>, cmd: &str) -> Option<bool> {
     match (desired, registered) {
         (true, Some(r)) if r == cmd => None,
@@ -77,24 +77,24 @@ pub fn set_autostart(on: bool) -> std::io::Result<()> {
     set_autostart_at(RUN_KEY, &exe.to_string_lossy(), on)
 }
 
-/// Polecenie autostartu dla bieżącego pliku aplikacji.
+/// Startup command for the current app executable.
 pub fn current_autostart_command() -> Option<String> {
     std::env::current_exe().ok().map(|e| autostart_command(&e.to_string_lossy()))
 }
 
-/// Usuwa klucz rejestracji powiadomień (AUMID) aplikacji.
+/// Remove the app's notification registration key (AUMID).
 pub fn remove_aumid() {
     let key = format!(r"Software\Classes\AppUserModelId\{}", crate::notify::AUMID);
     unsafe { let _ = RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(key)); }
 }
 
-/// Czy włączyć tryb oszczędny: `auto` na baterii albo przy oszczędzaniu energii Windows.
+/// Whether to enable power-saving mode: `auto` on battery or with Windows battery saver.
 pub fn decide_power_saving(mode: pets_core::settings::PowerSaving, on_battery: bool, saver_on: bool) -> bool {
     use pets_core::settings::PowerSaving::*;
     match mode { Always => true, Never => false, Auto => on_battery || saver_on }
 }
 
-/// (na baterii, oszczędzanie energii Windows włączone).
+/// (on battery, Windows battery saver enabled).
 pub fn power_status() -> (bool, bool) {
     use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
     let mut s = SYSTEM_POWER_STATUS::default();
@@ -105,7 +105,7 @@ pub fn power_status() -> (bool, bool) {
 #[derive(Default)]
 pub struct Power(pub std::sync::atomic::AtomicBool);
 
-/// Liczy tryb oszczędny i rozsyła `pets://power { saving }`, gdy się zmienia.
+/// Compute power-saving mode and emit `pets://power { saving }` when it changes.
 pub fn refresh_power(app: &tauri::AppHandle) {
     use tauri::{Emitter, Manager};
     let mode = app.state::<crate::settings::SettingsState>().get().power_saving;
@@ -115,7 +115,7 @@ pub fn refresh_power(app: &tauri::AppHandle) {
     if prev != saving { let _ = app.emit("pets://power", saving); }
 }
 
-/// Stan zasilania co 30 s.
+/// Power state every 30 s.
 pub fn watch_power(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         refresh_power(&app);
@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(autostart_action(false, Some(&cmd), &cmd), Some(false));
         assert_eq!(autostart_action(true, Some(&cmd), &cmd), None);
         assert_eq!(autostart_action(false, None, &cmd), None);
-        // wpis z 0.8.0 (bez flagi) albo ze starej ścieżki jest przepisywany
+        // rewrite an entry from 0.8.0 (without flag) or an old path
         assert_eq!(autostart_action(true, Some("\"C:/x/agent-pets.exe\""), &cmd), Some(true));
         assert_eq!(autostart_action(true, Some("\"C:/old/agent-pets.exe\" --autostart"), &cmd), Some(true));
     }

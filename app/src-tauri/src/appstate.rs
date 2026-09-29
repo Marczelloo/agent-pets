@@ -1,5 +1,5 @@
-//! Stan aplikacji między uruchomieniami (`~/.agent-pets/state.json`), osobno od ustawień użytkownika:
-//! o której wersji już powiadomiliśmy i którą wersję widzieliśmy przy ostatnim starcie.
+//! App state across launches (`~/.agent-pets/state.json`), separate from user settings:
+//! which version we already announced and which version we saw at the last launch.
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -12,12 +12,12 @@ pub struct AppState {
 
 pub fn path(home: &Path) -> PathBuf { home.join(".agent-pets").join("state.json") }
 
-/// Brak albo uszkodzony plik: stan domyślny (nic nie zgłoszone, nic nie widziane).
+/// Missing or corrupt file: default state (nothing announced or seen).
 pub fn load(home: &Path) -> AppState {
     std::fs::read(path(home)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
 }
 
-/// Zapis atomowy (plik tymczasowy, potem `rename`).
+/// Atomic write (temporary file, then `rename`).
 pub fn save(home: &Path, s: &AppState) -> std::io::Result<()> {
     let p = path(home);
     if let Some(dir) = p.parent() { std::fs::create_dir_all(dir)?; }

@@ -1,5 +1,5 @@
-# Średnie CPU (% całej maszyny) procesu i jego potomków (WebView2) przez N sekund.
-# Użycie: tools\cpu.ps1 [-Name agent-pets] [-Seconds 30]
+# Average CPU use (% of the whole machine) by a process and its children (WebView2) over N seconds.
+# Usage: tools\cpu.ps1 [-Name agent-pets] [-Seconds 30]
 param([string]$Name = "agent-pets", [int]$Seconds = 30)
 $root = Get-Process $Name -ErrorAction Stop | Select-Object -First 1
 $all = Get-CimInstance Win32_Process

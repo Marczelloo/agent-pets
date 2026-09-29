@@ -32,23 +32,23 @@ fn stage_hello(app: tauri::AppHandle, shell: tauri::State<shell::Shell>, tip: ta
 #[tauri::command]
 fn stage_set_width(width: f64, shell: tauri::State<shell::Shell>) { shell.set_width(width); }
 
-/// Ostatni układ sceny (tryb, notka o ikonach po lewej) dla okna ustawień otwartego później.
+/// Latest stage layout (mode, note about left-side icons) for a settings window opened later.
 #[tauri::command]
 fn stage_layout(shell: tauri::State<shell::Shell>) -> Option<shell::Layout> { shell.layout() }
 
-/// Monitory do wyboru w karcie „Pasek”.
+/// Monitors available in the "Taskbar" tab.
 #[tauri::command]
 fn monitors_list() -> Vec<shell::placement::MonitorInfo> { shell::monitors() }
 
-/// Okno pływające: kursor nad pustym miejscem przepuszcza kliknięcia do okien pod spodem.
+/// Floating window: clicks over empty space pass through to windows beneath it.
 #[tauri::command]
 fn stage_passthrough(on: bool, shell: tauri::State<shell::Shell>) { shell.passthrough(on); }
 
-/// „Przesuń” (menu sceny, karta „Pasek”): scena w pasku da się przeciągnąć; Enter albo klik obok zapisuje, Esc cofa.
+/// "Move" (stage menu, "Taskbar" tab): drag the stage in the taskbar; Enter or clicking outside saves, Esc cancels.
 #[tauri::command]
 fn stage_move(shell: tauri::State<shell::Shell>) { shell.start_move(); }
 
-/// „Przejdź” do sesji. Rejestr Claude'a czytamy teraz, bo `hostSessionId` sesji desktopowej nie ma w migawce.
+/// "Jump" to a session. Read the Claude registry now because desktop session `hostSessionId` is absent from the snapshot.
 #[tauri::command]
 fn jump(app: tauri::AppHandle, session_id: String) -> jump::JumpResult {
     let r = jump_to(&app, &session_id);
@@ -56,7 +56,7 @@ fn jump(app: tauri::AppHandle, session_id: String) -> jump::JumpResult {
     r
 }
 
-/// Wspólne dla komendy panelu i przycisku „Przejdź” w toaście.
+/// Shared by the panel command and the "Jump" button in a toast.
 pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
     let snap = app.state::<core::Shared>().lock().unwrap().clone();
     let lang = app.state::<settings::SettingsState>().lang();
@@ -67,7 +67,7 @@ pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
     jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())), lang)
 }
 
-/// Wysyła polecenie ukrywania do wątku rdzenia i czeka (do 2 s) na listę ukrytych id.
+/// Send a hide command to the core thread and wait (up to 2 s) for hidden IDs.
 fn ask_core(app: &tauri::AppHandle, make: impl FnOnce(std::sync::mpsc::Sender<Vec<String>>) -> core::CoreMsg) -> Vec<String> {
     let tx = app.state::<core::Control>().0.lock().unwrap().clone();
     core::ask(&tx, make)
@@ -76,32 +76,32 @@ fn ask_core(app: &tauri::AppHandle, make: impl FnOnce(std::sync::mpsc::Sender<Ve
 pub fn dismiss(app: &tauri::AppHandle, ids: Vec<String>) -> Vec<String> { ask_core(app, |tx| core::CoreMsg::Dismiss(ids, tx)) }
 pub fn dismiss_inactive(app: &tauri::AppHandle) -> Vec<String> { ask_core(app, core::CoreMsg::DismissInactive) }
 
-/// Ukrywa sesje (✕ w panelu, „Usuń z paska”); wracają przy nowej aktywności.
-/// `async`: czeka na obrót rdzenia (do 250 ms), więc nie na wątku głównym.
+/// Hide sessions (✕ in panel, "Remove from taskbar"); they return on new activity.
+/// `async`: waits for the core cycle (up to 250 ms), so it does not block the main thread.
 #[tauri::command(async)]
 fn session_dismiss(app: tauri::AppHandle, ids: Vec<String>) -> Vec<String> { dismiss(&app, ids) }
 
-/// „Usuń nieaktywne”: ukrywa sesje bezczynne, gotowe, uśpione i zakończone.
+/// "Remove inactive": hide idle, ready, sleeping, and finished sessions.
 #[tauri::command(async)]
 fn sessions_dismiss_inactive(app: tauri::AppHandle) -> Vec<String> { dismiss_inactive(&app) }
 
-/// Prawy klik na scenie: `target` to id zwierzaka albo nic (plakietka, limity, puste tło).
+/// Right click on the stage: `target` is a pet ID or nothing (badge, limits, empty background).
 #[tauri::command]
 fn stage_menu(app: tauri::AppHandle, target: Option<String>, x: f64, y: f64) {
     let t = target.map(shell::menu::Target::Pet).unwrap_or(shell::menu::Target::Other);
     if let Err(e) = shell::menu::show(&app, t, x, y) { eprintln!("agent-pets: menu sceny: {e}"); }
 }
 
-/// „Cofnij” po ukryciu.
+/// "Undo" after hiding.
 #[tauri::command]
 fn session_undismiss(app: tauri::AppHandle, ids: Vec<String>) {
     let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Undismiss(ids));
 }
 
-/// Skutki zmiany ustawień. Powiadomienia i zgoda na limity Anthropic są czytane na bieżąco w swoich wątkach.
+/// Effects of changing settings. Notifications and Anthropic-limit consent are read continuously in their threads.
 pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings, new: &pets_core::settings::Settings) {
     if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Apps(new.apps)); }
-    // otwarta furtka: `hook.exe report` pod stałą ścieżką `~/.agent-pets/hook.exe` (spec 8)
+    // open gate: `hook.exe report` at the fixed path `~/.agent-pets/hook.exe` (spec 8)
     if new.apps.generic && !old.apps.generic {
         let st = app.state::<settings::SettingsState>();
         let _ = pets_core::integrations::place_hook(&st.home, settings::pick_hook(&settings::hook_candidates(app)).as_deref(), st.lang());
@@ -118,20 +118,20 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     }
 }
 
-/// Ponowne uruchomienie z menu Start otwiera ustawienia; uruchomienie przez autostart Windows (aplikacja już działa,
-/// bo użytkownik włączył ją wcześniej ręcznie) nie otwiera niczego.
+/// Launching again from Start opens settings; Windows autostart (if the app is already running because the user
+/// launched it manually) opens nothing.
 fn second_launch_opens_settings(args: &[String]) -> bool { !args.iter().any(|a| a == system::AUTOSTART_ARG) }
 
-/// Wpis autostartu zgodny z ustawieniem (porównanie z rejestrem, nie z poprzednimi ustawieniami).
-/// Build deweloperski nie rejestruje się (wskazywałby `target\debug`).
+/// Match the startup entry to the setting (compare with the registry, not previous settings).
+/// Development builds do not register themselves (the entry would point to `target\debug`).
 pub fn sync_autostart(on: bool) {
     if cfg!(debug_assertions) { return; }
     let Some(cmd) = system::current_autostart_command() else { return };
     if let Some(v) = system::autostart_action(on, system::autostart_value(system::RUN_KEY).as_deref(), &cmd) { let _ = system::set_autostart(v); }
 }
 
-/// Przy starcie: włączony Claude Code bez hooków albo ze starym `hook.exe` (aktualizacja) dostaje je ponownie;
-/// włączony opencode dostaje plugin z tej wersji; otwarta furtka ma `hook.exe report` w stałym miejscu.
+/// At startup: enabled Claude Code without hooks or with an old `hook.exe` (after an update) gets them again;
+/// enabled opencode gets this version's plugin; the open gate keeps `hook.exe report` at a fixed location.
 fn repair_integrations(app: &tauri::AppHandle) {
     use pets_core::integrations::{self, AppId};
     let st = app.state::<settings::SettingsState>();
@@ -140,9 +140,9 @@ fn repair_integrations(app: &tauri::AppHandle) {
     if apps.claude_code && integrations::claude_needs_repair(&st.home, src.as_deref()) {
         let _ = integrations::enable(AppId::ClaudeCode, &st.home, src.as_deref(), st.lang());
     }
-    // tylko nasz plik: cudzy `agent-pets.js` zostaje, a enable zwraca błąd bez zmian
+    // only our file: another `agent-pets.js` stays, and enable returns an error without changes
     if apps.opencode { let _ = integrations::enable(AppId::Opencode, &st.home, None, st.lang()); }
-    // odświeża komendy i `hook.exe` po aktualizacji; cudzy plik albo klucz zostaje (enable zwraca błąd bez zmian)
+    // refresh commands and `hook.exe` after an update; another file or key stays (enable returns an error without changes)
     if apps.copilot { let _ = integrations::enable(AppId::Copilot, &st.home, src.as_deref(), st.lang()); }
     if apps.antigravity { let _ = integrations::enable(AppId::Antigravity, &st.home, src.as_deref(), st.lang()); }
     if apps.cursor { let _ = integrations::enable(AppId::Cursor, &st.home, src.as_deref(), st.lang()); }
@@ -151,7 +151,7 @@ fn repair_integrations(app: &tauri::AppHandle) {
     if apps.generic { let _ = integrations::place_hook(&st.home, src.as_deref(), st.lang()); }
 }
 
-/// `agent-pets.exe --uninstall-integrations [--remove-data]` (deinstalator NSIS): sprząta i kończy bez okien.
+/// `agent-pets.exe --uninstall-integrations [--remove-data]` (NSIS uninstaller): clean up and exit without windows.
 pub fn uninstall_cli(args: &[String]) -> Option<i32> {
     if !args.iter().any(|a| a == "--uninstall-integrations") { return None; }
     let remove_data = args.iter().any(|a| a == "--remove-data");
@@ -165,7 +165,7 @@ pub fn uninstall_cli(args: &[String]) -> Option<i32> {
 
 pub fn run() {
     tauri::Builder::default()
-        // musi być pierwszą wtyczką: drugie uruchomienie nie startuje drugiego rdzenia, tylko otwiera ustawienia
+        // must be the first plugin: a second launch opens settings instead of starting another core
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| if second_launch_opens_settings(&args) { settings::open(app) }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
@@ -215,10 +215,10 @@ pub fn run() {
             stats::stats_open, stats::stats_view, stats::stats_progress
         ])
         .build(tauri::generate_context!())
-        .expect("nie udało się zbudować aplikacji Tauri")
+        .expect("failed to build Tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event { stats::save_now(app); }
-            // Okno sceny ginie razem z paskiem przy restarcie Explorera; aplikacja ma wtedy żyć dalej.
+            // The stage window dies with the taskbar when Explorer restarts; the app should keep running.
             if let RunEvent::ExitRequested { api, code, .. } = event {
                 if code.is_none() { api.prevent_exit(); }
             }

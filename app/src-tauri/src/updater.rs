@@ -1,5 +1,5 @@
-//! Aktualizacje z wydań na GitHubie (`tauri-plugin-updater`): sprawdzanie 15 s po starcie i co 6 h,
-//! powiadomienie albo instalacja w spokojnym momencie (`pets_core::update_gate`). Podpis sprawdza wtyczka.
+//! Updates from GitHub releases (`tauri-plugin-updater`): check 15 s after launch and every 6 h,
+//! notification or installation at a quiet moment (`pets_core::update_gate`). The plugin verifies the signature.
 use pets_core::i18n::{tr, Lang};
 use pets_core::settings::Updates;
 use pets_core::update_gate::{busy, Calm};
@@ -23,24 +23,24 @@ pub enum UpdateStatus {
     Latest,
     Available { version: String, notes: Option<String> },
     Downloading { version: String, pct: Option<u8> },
-    /// pobrana i zweryfikowana, czeka na spokojny moment (tryb automatyczny)
+    /// Downloaded and verified, waiting for a quiet moment (automatic mode).
     Ready { version: String },
-    /// `verify`: problem z samą aktualizacją (podpis, instalacja), widoczny też w panelu;
-    /// inaczej błąd ręcznego sprawdzenia, widoczny tylko w ustawieniach.
+    /// `verify`: update problem (signature, installation), also visible in the panel;
+    /// otherwise a manual-check error, visible only in settings.
     Error { message: String, verify: bool },
 }
 
-/// Tryb „powiadamiaj” zgłasza każdą wersję jeden raz (także po restarcie aplikacji).
+/// "Notify" mode reports each version once (even across app restarts).
 pub fn should_notify(mode: Updates, notified: Option<&str>, version: &str) -> bool {
     mode == Updates::Notify && notified != Some(version)
 }
 
-/// Wersja do toastu „Zaktualizowano do …” po starcie; pierwsze uruchomienie w ogóle nie ma toastu.
+/// Version for the "Updated to …" toast after launch; first launch has no toast at all.
 pub fn updated_toast(seen: Option<&str>, current: &str) -> Option<String> {
     seen.filter(|s| *s != current).map(|_| current.to_string())
 }
 
-/// Kłopot z siecią (brak połączenia, przerwane pobieranie): tylko log i kolejna próba według harmonogramu.
+/// Network issue (offline, interrupted download): only log it and retry on schedule.
 pub fn is_network(e: &tauri_plugin_updater::Error) -> bool {
     matches!(e, tauri_plugin_updater::Error::Network(_) | tauri_plugin_updater::Error::Reqwest(_))
 }
@@ -49,25 +49,25 @@ pub fn percent(done: u64, total: Option<u64>) -> Option<u8> {
     total.filter(|t| *t > 0).map(|t| ((done.min(t) * 100) / t) as u8)
 }
 
-/// Znaleziona aktualizacja i, po pobraniu, jej zweryfikowany instalator.
+/// Found update and, after download, its verified installer.
 type Found = Option<(Update, Option<Vec<u8>>)>;
 
 #[derive(Default)]
 pub struct Updater {
     status: Mutex<Option<UpdateStatus>>,
     found: Mutex<Found>,
-    /// jedno sprawdzanie albo pobieranie naraz
+    /// One check or download at a time.
     working: AtomicBool,
 }
 
-/// Zwalnia `working` przy wyjściu z zakresu.
+/// Release `working` on scope exit.
 struct Busy<'a>(&'a AtomicBool);
 impl Drop for Busy<'_> { fn drop(&mut self) { self.0.store(false, Ordering::Release); } }
 
 impl Updater {
     pub fn status(&self) -> UpdateStatus { self.status.lock().unwrap().clone().unwrap_or(UpdateStatus::Idle) }
     fn take(&self) -> Option<Busy<'_>> { (!self.working.swap(true, Ordering::AcqRel)).then_some(Busy(&self.working)) }
-    /// Czeka (do 10 min), aż skończy się trwające sprawdzanie albo pobieranie: drugie „Zainstaluj” nie zgłasza błędu.
+    /// Wait (up to 10 min) for a check or download to finish: a second "Install" does not report an error.
     async fn acquire(&self) -> Option<Busy<'_>> {
         for _ in 0..3000 {
             if let Some(b) = self.take() { return Some(b); }
@@ -91,8 +91,8 @@ fn verify_failed(app: &AppHandle) -> String {
     tr(lang(app), "Nie udało się zweryfikować aktualizacji", "Could not verify the update").into()
 }
 
-/// Adres `latest.json`. `AGENT_PETS_UPDATE_URL` podmienia go tylko w buildzie deweloperskim albo testowym
-/// (`--features update-test`, docs/building.md); wydanie zawsze pyta GitHuba. Podpis jest sprawdzany zawsze.
+/// `latest.json` URL. `AGENT_PETS_UPDATE_URL` overrides it only in development or test builds
+/// (`--features update-test`, docs/building.md); release builds always query GitHub. The signature is always verified.
 fn endpoint_from(env: Option<String>, allow_override: bool) -> String {
     env.filter(|_| allow_override).unwrap_or_else(|| ENDPOINT.into())
 }
@@ -107,7 +107,7 @@ async fn find(app: &AppHandle) -> Result<Option<Update>, String> {
     up.check().await.map_err(|e| e.to_string())
 }
 
-/// Sprawdza wersję. `manual`: przycisk „Sprawdź teraz” (wynik zawsze widoczny, działa też przy `off`).
+/// Check the version. `manual`: "Check now" button (result always visible, works even when `off`).
 pub async fn check(app: &AppHandle, manual: bool) -> UpdateStatus {
     let u = app.state::<Updater>();
     {
@@ -141,7 +141,7 @@ pub async fn check(app: &AppHandle, manual: bool) -> UpdateStatus {
     u.status()
 }
 
-/// Pobiera i weryfikuje instalator znalezionej wersji; zostaje w pamięci jako `Ready`.
+/// Download and verify the found version's installer; keep it in memory as `Ready`.
 async fn download(app: &AppHandle) -> bool {
     let u = app.state::<Updater>();
     let Some(_busy) = u.acquire().await else { return u.downloaded() };
@@ -162,8 +162,8 @@ async fn download(app: &AppHandle) -> bool {
             true
         }
         Err(e) if is_network(&e) => {
-            // przerwane pobieranie to nie zły podpis: wersja dalej czeka, następna próba według harmonogramu
-            eprintln!("agent-pets: pobieranie aktualizacji (sieć): {e}");
+            // interrupted download is not a bad signature: the version remains pending; retry on schedule
+            eprintln!("agent-pets: update download (network): {e}");
             set(app, UpdateStatus::Available { version: up.version.clone(), notes: up.body.clone() });
             false
         }
@@ -176,7 +176,7 @@ async fn download(app: &AppHandle) -> bool {
     }
 }
 
-/// Instaluje znalezioną wersję (najpierw ją pobiera, jeśli trzeba). Aplikacja kończy się, a instalator ją uruchamia.
+/// Install the found version (download first if needed). The app exits and the installer restarts it.
 pub async fn install(app: &AppHandle) -> Result<(), String> {
     let u = app.state::<Updater>();
     if u.found().is_none() { check(app, true).await; }
@@ -184,7 +184,7 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
     let Some((up, Some(bytes))) = u.found() else { return Err(verify_failed(app)) };
     up.install(bytes).map_err(|e| {
         eprintln!("agent-pets: instalacja aktualizacji: {e}");
-        // nie „gotowa” już: brama spokoju nie ponawia co 2 min, następna próba po kolejnym sprawdzeniu
+        // no longer "ready": the quiet gate will not retry every 2 min; retry after the next check
         *u.found.lock().unwrap() = None;
         let msg = tr(lang(app), "Nie udało się zainstalować aktualizacji", "Could not install the update").to_string();
         set(app, UpdateStatus::Error { message: msg.clone(), verify: true });
@@ -207,21 +207,21 @@ fn announce(app: &AppHandle, version: &str, notes: Option<&str>) {
     });
 }
 
-/// Zmiana trybu w ustawieniach: po przejściu na „automatycznie” czekająca wersja pobiera się od razu,
-/// a nie dopiero przy kolejnym sprawdzeniu za kilka godzin.
+/// Mode change in settings: switching to "automatic" downloads a pending version immediately,
+/// rather than waiting for the next check several hours later.
 pub fn mode_changed(app: &AppHandle, mode: Updates) {
     if mode != Updates::Auto || !matches!(app.state::<Updater>().status(), UpdateStatus::Available { .. }) { return; }
     let a = app.clone();
     tauri::async_runtime::spawn(async move { download(&a).await; });
 }
 
-/// Czy użytkownik ma otwarty panel albo ustawienia (wtedy nie przerywamy mu instalacją).
+/// Whether the user has the panel or settings open (do not interrupt with installation).
 fn ui_open(app: &AppHandle) -> bool {
     ["panel", "settings"].iter().any(|l| app.get_webview_window(l).and_then(|w| w.is_visible().ok()).unwrap_or(false))
 }
 
-/// Wątek harmonogramu: toast po aktualizacji, pierwsze sprawdzenie po 15 s, potem co 6 h; w trybie
-/// automatycznym co 5 s brama spokojnego momentu dla pobranej wersji.
+/// Scheduler thread: post-update toast, first check after 15 s, then every 6 h; in mode
+/// automatic mode, check the quiet-moment gate for a downloaded version every 5 s.
 pub fn start(app: AppHandle) {
     std::thread::spawn(move || {
         greet_after_update(&app);

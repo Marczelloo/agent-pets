@@ -1,4 +1,4 @@
-//! Okno sceny w pasku zadań: osadzenie, pętla układu, odtwarzanie po restarcie Explorera, widoczność.
+//! Stage window in the taskbar: embedding, layout loop, recovery after Explorer restart, visibility.
 pub mod memo;
 pub mod menu;
 pub mod placement;
@@ -19,16 +19,16 @@ use tauri::{AppHandle, Emitter, WebviewUrl, WebviewWindow, WebviewWindowBuilder}
 pub enum Cmd {
     Width(f64),
     Hello,
-    /// zmieniły się ustawienia sceny: przelicz od razu
+    /// Stage settings changed: recalculate immediately.
     Settings,
-    /// „Przesuń”: wejście w tryb przesuwania albo wyjście (`MoveDone`: zatwierdź albo cofnij)
+    /// "Move": enter or leave move mode (`MoveDone`: confirm or cancel).
     Move(bool),
     MoveDone(bool),
     Drag(Drag),
 }
 
-/// Układ dla sceny: wolne miejsce, wysokość, skala; od 0.7 też tryb okna, jasność paska
-/// i to, czy tryb „lewa” musiał wrócić do zasobnika (notka w karcie „Pasek”).
+/// Stage layout: free space, height, scale; since 0.7 also window mode, taskbar brightness,
+/// and whether "left" mode had to fall back to the tray (note in the "Taskbar" tab).
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
 pub struct Layout {
     pub max_css: f64,
@@ -39,14 +39,14 @@ pub struct Layout {
     pub left_fallback: bool,
 }
 
-/// `layout`: ostatnio wysłany układ (okno ustawień otwarte później też zna notkę o ikonach po lewej).
+/// `layout`: most recently sent layout (a later settings window also sees the note about left-side icons).
 pub struct Shell { tx: Sender<Cmd>, pub stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, layout: Arc<std::sync::Mutex<Option<Layout>>> }
 
-/// Kotwica okna według wyrównania z ustawień.
+/// Window anchor according to alignment in settings.
 pub fn anchor_of(a: Align) -> Anchor { match a { Align::Left => Anchor::Left, Align::Center => Anchor::Center, Align::Right => Anchor::Right } }
 fn align_of(a: Anchor) -> Align { match a { Anchor::Left => Align::Left, Anchor::Center => Align::Center, Anchor::Right => Align::Right } }
 
-/// Tryb pozycji w pasku z ustawień (pływające obsługuje osobna gałąź pętli).
+/// Taskbar position mode from settings (a separate loop branch handles floating mode).
 pub fn mode_of(st: &Stage) -> Mode {
     match (st.position, st.custom_at) {
         (Position::Left, _) => Mode::Left,
@@ -55,8 +55,8 @@ pub fn mode_of(st: &Stage) -> Mode {
     }
 }
 
-/// Co zrobić z rodzicem okna sceny. `parent`: `None` przed pierwszym obrotem (stan okna nieznany),
-/// `Some(0)` okno najwyższego poziomu, `Some(pasek)` osadzone.
+/// What to do with the stage window's parent. `parent`: `None` before the first cycle (unknown window state),
+/// `Some(0)` top-level window, `Some(taskbar)` embedded.
 #[derive(Debug, PartialEq)]
 pub enum Attach { Embed(isize), Detach, Keep }
 
@@ -69,10 +69,10 @@ pub fn attach(parent: Option<isize>, bar: Option<isize>) -> Attach {
     }
 }
 
-/// Co ile ponawiamy osadzenie w pasku, gdy `SetParent` zawiódł (np. tuż po zalogowaniu, gdy Explorer jeszcze startuje).
+/// Interval for retrying taskbar embedding after `SetParent` fails (e.g. just after login while Explorer starts).
 pub const EMBED_RETRY_MS: u64 = 2_000;
 
-/// `attach`, a po nieudanym osadzeniu (okno awaryjne nad paskiem) ponowna próba na tym samym pasku co `EMBED_RETRY_MS`.
+/// `attach`, and after failed embedding (fallback window above the taskbar), retry on that taskbar after `EMBED_RETRY_MS`.
 pub fn attach_or_retry(parent: Option<isize>, bar: Option<isize>, failed: bool, since_ms: u64) -> Attach {
     match (attach(parent, bar), bar) {
         (Attach::Keep, Some(b)) if failed && since_ms >= EMBED_RETRY_MS => Attach::Embed(b),
@@ -80,14 +80,14 @@ pub fn attach_or_retry(parent: Option<isize>, bar: Option<isize>, failed: bool, 
     }
 }
 
-/// Okno pływające trzeba ustawić, gdy zmienił się cel albo Windows sam zmienił okno (np. `WM_DPICHANGED`
-/// po przejściu na monitor o innej skali przeskalował je od starego rozmiaru).
+/// Reposition the floating window when the target changes or Windows changes it (e.g. `WM_DPICHANGED`
+/// scaled it from its old size after moving to a monitor with a different scale).
 pub fn needs_apply(target: Option<placement::Rect>, last: Option<placement::Rect>, actual: Option<placement::Rect>) -> bool {
     target != last || (target.is_some() && actual != target)
 }
 
-/// Szerokość i „witaj” obsługujemy zawsze od razu (nie mogą zginąć przy chwilowym braku paska);
-/// reszta czeka w kolejce. Zwraca, czy strona prosi o ponowne wysłanie układu.
+/// Always handle width and "welcome" immediately (they must survive a temporary missing taskbar);
+/// queue the rest. Return whether the page requests another layout send.
 pub fn take_basic(pending: &mut Vec<Cmd>, want: &mut f64) -> bool {
     let mut hello = false;
     pending.retain(|c| match c {
@@ -98,14 +98,14 @@ pub fn take_basic(pending: &mut Vec<Cmd>, want: &mut f64) -> bool {
     hello
 }
 
-/// Czy mierzyć pasek i monitory od nowa. Samo przeciąganie (do ~33 razy na sekundę) korzysta z pomiaru
-/// sprzed najwyżej sekundy: wyliczanie monitorów i przejście UI Automation kosztują.
+/// Whether to remeasure taskbar and monitors. Dragging alone (up to ~33 times per second) uses measurements
+/// at most one second old: enumerating monitors and traversing UI Automation are costly.
 pub fn remeasure(pending: &[Cmd], age: Option<Duration>) -> bool {
     let only_drags = !pending.is_empty() && pending.iter().all(|c| matches!(c, Cmd::Drag(_)));
     !only_drags || age.map_or(true, |a| a >= Duration::from_secs(1))
 }
 
-/// Trwające „Przesuń”: kotwica w chwili chwycenia (px ekranu) i bieżąca pozycja.
+/// Active "Move": anchor at grab time (screen pixels) and current position.
 struct Moving { anchor: Anchor, at: f64, grab: Option<i32> }
 
 pub fn build_stage(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
@@ -132,7 +132,7 @@ impl Shell {
     }
 
     pub fn set_width(&self, css: f64) { let _ = self.tx.send(Cmd::Width(css)); }
-    /// Nowo załadowana strona prosi o ponowne wysłanie układu i widoczności.
+    /// Newly loaded page requests another layout and visibility send.
     pub fn hello(&self) { let _ = self.tx.send(Cmd::Hello); }
     pub fn settings_changed(&self) { let _ = self.tx.send(Cmd::Settings); }
     pub fn start_move(&self) { let _ = self.tx.send(Cmd::Move(true)); }
@@ -140,24 +140,24 @@ impl Shell {
     pub fn floating(&self) -> bool { self.mode.load(Ordering::Relaxed) == pointer::FLOATING }
     pub fn layout(&self) -> Option<Layout> { *self.layout.lock().unwrap() }
 
-    /// Przepuszczanie kliknięć przez przezroczyste miejsca okna pływającego (w pasku nic nie robi).
+    /// Pass clicks through transparent parts of the floating window (does nothing in taskbar mode).
     pub fn passthrough(&self, on: bool) {
         let on = on && self.floating();
         pointer::PASSTHROUGH.store(on, Ordering::Relaxed);
         taskbar::passthrough(self.hwnd(), on);
     }
 
-    /// Okno sceny jest pokazane (nie schowane przy ukrytym pasku, pełnym ekranie albo braku miejsca).
+    /// Stage window is shown (not hidden due to a hidden taskbar, fullscreen app, or lack of space).
     pub fn stage_shown(&self) -> bool { taskbar::is_visible(self.hwnd()) }
 
-    /// Scena, jej monitor i skala: do ustawienia tooltipa.
+    /// Stage, its monitor and scale: for positioning the tooltip.
     pub fn stage_geom(&self) -> Option<(placement::Rect, placement::Rect, f64)> {
         let h = self.hwnd();
         let (monitor, _) = taskbar::monitor_of(h)?;
         Some((taskbar::rect_of(h)?, monitor, taskbar::scale_of(h)))
     }
 
-    /// Gdzie otworzyć panel: przy pasku monitora sceny albo obok sceny pływającej.
+    /// Where to open the panel: at the stage monitor's taskbar or beside the floating stage.
     pub fn panel_at(&self) -> Option<PanelAt> {
         let h = self.hwnd();
         let (monitor, work) = taskbar::monitor_of(h)?;
@@ -172,15 +172,15 @@ pub enum PanelAt {
     Near { stage: placement::Rect, work: placement::Rect, scale: f64 },
 }
 
-/// Monitory dla karty „Pasek”.
+/// Monitors for the "Taskbar" tab.
 pub fn monitors() -> Vec<placement::MonitorInfo> { taskbar::monitors().into_iter().map(|m| m.info).collect() }
 
-/// Gra, film albo prezentacja na pełnym ekranie.
+/// Fullscreen game, movie, or presentation.
 pub fn fullscreen_app() -> bool { taskbar::fullscreen_app() }
 
 pub fn screen_size() -> (i32, i32) { let r = taskbar::screen_rect(); (r.right, r.bottom) }
 
-/// Prostokąt paska zadań, ekran i skala DPI paska (do ustawienia panelu nad paskiem).
+/// Taskbar rectangle, screen, and taskbar DPI scale (for placing the panel above it).
 pub fn taskbar_geometry() -> Option<(placement::Rect, placement::Rect, f64)> {
     let t = taskbar::tray()?;
     Some((taskbar::rect_of(t)?, taskbar::screen_rect(), taskbar::scale_of(t)))
@@ -188,17 +188,17 @@ pub fn taskbar_geometry() -> Option<(placement::Rect, placement::Rect, f64)> {
 
 pub fn show_no_activate(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::show_no_activate(h); } }
 
-/// Chowa okno pokazane przez `show_no_activate`. Musi iść przez Win32: Tauri nie wie o pokazaniu
-/// przez `ShowWindow`, uważa okno za ukryte i jego `hide()` nic nie robi.
+/// Hide a window shown by `show_no_activate`. Must use Win32: Tauri does not know it was shown
+/// by `ShowWindow`, considers it hidden, and its `hide()` does nothing.
 pub fn hide(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::hide(h); } }
 
-/// Okno bez aktywacji: klik w nie nie zabiera fokusu aktywnemu oknu (okno dymków).
+/// Show without activation: clicking it does not take focus from the active window (bubble window).
 pub fn no_activate(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::no_activate(h); } }
 
-/// Przepuszczanie myszy przez całe okno (dymki: poza dymkami tak, nad dymkiem nie).
+/// Pass pointer events through the entire window (bubbles: yes outside bubbles, no over a bubble).
 pub fn set_passthrough(w: &WebviewWindow, on: bool) { if let Ok(h) = w.hwnd() { taskbar::passthrough(h, on); } }
 
-/// Kursor względem okna w px CSS i stan lewego przycisku.
+/// Cursor relative to the window in CSS pixels and left-button state.
 pub struct Cursor { pub x: f64, pub y: f64, pub left: bool }
 
 pub fn cursor_in(w: &WebviewWindow) -> Option<Cursor> {
@@ -207,7 +207,7 @@ pub fn cursor_in(w: &WebviewWindow) -> Option<Cursor> {
     Some(Cursor { x, y, left })
 }
 
-/// Tworzy nowe okno sceny na wątku głównym (stare zginęło razem z paskiem).
+/// Create a new stage window on the main thread (the old one died with the taskbar).
 fn recreate(app: &AppHandle, n: u32) -> Option<isize> {
     let (tx, rx) = channel();
     let h = app.clone();
@@ -215,19 +215,19 @@ fn recreate(app: &AppHandle, n: u32) -> Option<isize> {
     rx.recv_timeout(Duration::from_secs(10)).ok()?.ok()
 }
 
-/// Przeciąganie okna pływającego: prostokąt w chwili chwycenia i bieżąca kotwica.
+/// Dragging a floating window: rectangle at grab time and current anchor.
 struct FloatDrag { from: placement::Rect, at: (f64, f64) }
 
 fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<AtomicU8>, shared: Arc<std::sync::Mutex<Option<Layout>>>) {
     use tauri::Manager;
     let uia = taskbar::Uia::new().ok();
-    if uia.is_none() { eprintln!("agent-pets: UI Automation niedostępne, scena zostanie mała przy zasobniku"); }
+    if uia.is_none() { eprintln!("agent-pets: UI Automation unavailable; stage will stay small near the tray"); }
     let (mut want, mut n) = (0.0f64, 1u32);
-    // rodzic okna sceny: uchwyt paska (0 = okno najwyższego poziomu, None = jeszcze nieustalony)
+    // stage window parent: taskbar handle (0 = top-level window, None = not yet determined)
     let (mut parent, mut embed_failed): (Option<isize>, bool) = (None, false);
     let mut embed_failed_at: Option<std::time::Instant> = None;
     let mut pending: Vec<Cmd> = Vec::new();
-    // ostatni pomiar monitorów i paska (przeciąganie korzysta z niego do sekundy)
+    // latest monitor and taskbar measurement (dragging uses it for up to one second)
     let mut measured: Option<(std::time::Instant, Vec<taskbar::Mon>)> = None;
     let mut bar_metrics: Option<(isize, placement::Metrics)> = None;
     let mut last_layout: Option<Layout> = None;
@@ -257,7 +257,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         if !float && bar.is_none() { continue; }
         let mut h = stage.load(Ordering::Relaxed);
         if !taskbar::is_window(h) {
-            // okno zginęło razem z paskiem przy restarcie Explorera
+            // window died with the taskbar when Explorer restarted
             let Some(nh) = recreate(&app, n) else { continue };
             n += 1;
             h = nh;
@@ -271,12 +271,12 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         let since = embed_failed_at.map(|t| t.elapsed().as_millis() as u64).unwrap_or(0);
         match attach_or_retry(parent, bar.map(|b| b.0 as isize), embed_failed, since) {
             Attach::Embed(b) => {
-                // z okna pływającego: w pasku kliknięcia zawsze są nasze
+                // from the floating window: in the taskbar, clicks are always ours
                 pointer::PASSTHROUGH.store(false, Ordering::Relaxed);
                 taskbar::passthrough(hw, false);
                 embed_failed = taskbar::embed(hw, taskbar::hwnd(b)).is_err();
                 embed_failed_at = embed_failed.then(std::time::Instant::now);
-                if embed_failed { eprintln!("agent-pets: osadzenie w pasku nie powiodło się, okno nad paskiem do kolejnej próby"); }
+                if embed_failed { eprintln!("agent-pets: taskbar embedding failed; window remains above taskbar until retry"); }
                 parent = Some(b);
                 last_layout = None;
             }
@@ -365,7 +365,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 },
             }
         }
-        // w trakcie przesuwania pozycja z przesuwania, inaczej z ustawień
+        // during a move, use the dragged position; otherwise use settings
         let mode = match &moving { Some(mv) => Mode::Custom { at: mv.at, anchor: mv.anchor }, None => mode_of(&st) };
         let p = placement::place_mode(&m, want, mode);
         if let Some(p) = p {
@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn a_failed_embed_is_retried_on_the_same_taskbar() {
-        // tuż po zalogowaniu `SetParent` do paska potrafi zawieść; okno nie może zostać nad paskiem na zawsze
+        // `SetParent` to the taskbar can fail just after login; the window must not stay above the taskbar forever
         assert_eq!(attach_or_retry(Some(7), Some(7), false, 60_000), Attach::Keep);
         assert_eq!(attach_or_retry(Some(7), Some(7), true, EMBED_RETRY_MS - 1), Attach::Keep);
         assert_eq!(attach_or_retry(Some(7), Some(7), true, EMBED_RETRY_MS), Attach::Embed(7));
