@@ -10,17 +10,17 @@
 
 # Agent Pets
 
-Animated pets that live in the Windows 11 taskbar and show what your coding agents are doing: **Claude Code**, **OpenAI Codex**, **opencode**, **GitHub Copilot**, **Antigravity** and **Agent Router** tasks, plus any other tool through a small local API. Each session gets its own pet. The pet codes at a desk, types commands into a terminal, reads files, catches web pages with a butterfly net, waves when it needs you, dances when it's done, and naps when idle. Progress, context usage and rate limits show up next to it.
+Animated pets that live in the Windows 11 taskbar and show what your coding agents are doing: **Claude Code**, **OpenAI Codex**, **opencode**, **GitHub Copilot**, **Cursor**, **Grok Build**, **ZCode**, **Antigravity** and **Agent Router** tasks, plus any other tool through a small local API. Each session gets its own pet. The pet codes at a desk, types commands into a terminal, reads files, catches web pages with a butterfly net, waves when it needs you, dances when it's done, and naps when idle. Progress, context usage and rate limits show up next to it.
 
 <p align="center">
   <img src="docs/images/taskbar.png" alt="Five pets in the taskbar: a knocked-out Codex robot after an error, a Codex robot presenting a web page, Clawd waving because it needs you, a Codex robot with the Agent Router badge, Clawd typing at a desk; a +2 badge and rate-limit bars" width="900">
 </p>
 
-> **Status: public beta (0.10).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
+> **Status: public beta (0.12).** [Download the installer](https://github.com/Marczelloo/agent-pets/releases/latest), pick your agents in the first-run wizard, done. What works is listed in [What works now](#what-works-now).
 
 ## Highlights
 
-- **One pet per session.** Clawd for Claude Code, Kodek for Codex, a square near-black cyclops whose eye is the "o" from the opencode logo, a pilot in a brown leather helmet with blue goggles for Copilot, a floating arch in the Google colours for Antigravity, and a round blob in its own colour with the first letter of its name for any other agent. Their pose follows the session: thinking, editing, running commands, reading, searching, browsing, delegating to subagents, waiting for you, done, error, idle, asleep.
+- **One pet per session.** Clawd for Claude Code, Kodek for Codex, a square near-black cyclops whose eye is the "o" from the opencode logo, a pilot in a brown leather helmet with blue goggles for Copilot, a floating arch in the Google colours for Antigravity, a dark faceted block for Cursor, a dark ball with a slash and cheeky brows for Grok Build, a panda with a blue “Z” headband for ZCode, and a round blob in its own colour with the first letter of its name for any other agent. Their pose follows the session: thinking, editing, running commands, reading, searching, browsing, delegating to subagents, waiting for you, done, error, idle, asleep.
 - **Agent, model and program.** The pet belongs to the agent that runs the loop (Claude Code, Codex, opencode…); the tooltip and panel name the model it talks to and the program you drive it from: "Claude Code · Opus 5.5 · t3code", "opencode · GPT-6 Sol · VS Code". Programs such as t3code, VS Code, Cursor, Zed or JetBrains IDEs are found by walking up the agent's process tree, and "Przejdź" (Go) brings their window forward.
 - **A door for other agents.** Any tool can report its state with one HTTP call or `hook.exe report` and gets a pet of its own. See [Door for other agents](#door-for-other-agents).
 - **Everything at a glance.** Task progress under each pet, 5-hour and weekly limits for Claude and Codex next to them, a "+N" badge when the taskbar runs out of room. Pets that wait for you never get hidden.
@@ -44,6 +44,14 @@ Animated pets that live in the Windows 11 taskbar and show what your coding agen
 | <img src="docs/images/panel.png" alt="Panel with limits and sessions" width="260"> | <img src="docs/images/wizard.png" alt="Wizard step: choose the pets' look, with a live preview" width="340"> | <img src="docs/images/settings.png" alt="Settings window, Apps tab" width="340"> |
 
 The interface is in English and Polish and follows the Windows display language; change it in Settings → General. Design documents (spec, plans, spike reports) are in Polish.
+
+## Focus
+
+Agent Pets is built first of all for **Claude Code**, **Codex** and **opencode**. They get the most care and testing, and only they have rate limits, usage and statistics.
+
+- **GitHub Copilot, Cursor, Grok Build and ZCode** work through their hooks, on a best-effort basis. Cursor, Grok Build and ZCode are marked *experimental* in Settings: their pets, states and tools follow each agent's hook documentation, but not every part was checked against a live session. They have no limits or statistics: their hooks carry no token counts, and asking their servers would need your login.
+- **Antigravity** keeps the basic support from 0.11 and gets no further work.
+- Anything else can use the [door for other agents](#door-for-other-agents).
 
 ## What works now
 
@@ -71,7 +79,7 @@ The interface is in English and Polish and follows the Windows display language;
 | **GitHub Copilot** sessions: states, tools, permission requests, subagents | ✅ from 0.11 | Settings → Apps → GitHub Copilot, see [GitHub Copilot](#github-copilot) |
 | **Antigravity** conversations: thinking, tools, done, errors, model | ✅ from 0.11 | Settings → Apps → Antigravity, see [Antigravity](#antigravity) |
 | **opencode usage**: tokens and cost on its card, account limit bars, opencode in the statistics | ✅ from 0.11 | automatic with opencode on, see [opencode usage](#opencode-usage) |
-| Cursor and Grok Build (0.12) with their own pets | ⏳ Next | see [Roadmap](#roadmap) |
+| **Cursor**, **Grok Build** and **ZCode** sessions with their own pets (experimental) | ✅ from 0.12 | Settings → Apps, see [Cursor](#cursor), [Grok Build](#grok-build), [ZCode](#zcode) |
 
 ## Install
 
@@ -260,6 +268,28 @@ Turn Antigravity on in Settings → Apps (or in the wizard). It needs an Antigra
 
 Antigravity's hooks report thinking, tool calls, the end of a turn and errors, with the model name, so its pet thinks, works, finishes and shows errors. They do not report when Antigravity waits for your approval, so this pet never shows "needs you". The hook answers Antigravity with an empty decision, so your approval settings stay as they are.
 
+### Cursor
+
+*Experimental.* Turn Cursor on in Settings → Apps. It is off until you turn it on, also when the wizard finds Cursor. Agent Pets adds its entries to `~/.cursor/hooks.json`, used by the agent in the Cursor editor and by `cursor-agent` in a terminal, and keeps a copy of the file first (`hooks.json.agent-pets.bak`); your own hooks in that file stay as they are. Turning Cursor off removes only our entries. Restart Cursor afterwards.
+
+The pet follows the session: prompts, tool calls with a short action text, subagents as mini pets, compacting, the end of a turn and errors, with the model name. Cursor's hooks do not report permission prompts, so this pet never shows "needs you". The hook answers Cursor with an empty decision and never changes what it does. It never sends your prompt, attachments, e-mail address, tool results or file contents. Cursor's cloud agents do not run hooks on your computer, so they get no pet.
+
+### Grok Build
+
+*Experimental.* Turn Grok Build on in Settings → Apps. Agent Pets writes its own file, `~/.grok/hooks/agent-pets.json`; turning Grok Build off deletes it, and other files in `hooks/` are never touched. Restart open Grok sessions afterwards.
+
+The pet thinks, works with a short action text, waits for you on permission prompts, finishes, shows errors and compacts. Tool names come from Grok's hooks and are matched by keyword, so an unknown tool shows as plain work. Grok Build runs in a terminal, so "Przejdź" (Go) brings that terminal forward.
+
+### ZCode
+
+*Experimental.* Turn ZCode on in Settings → Apps. Agent Pets adds its entries under `hooks` in ZCode's own config, `~/.zcode/cli/config.json` (or under `ZCODE_DATA_BASE_DIR` when that is set), and keeps a copy first (`config.json.agent-pets.bak`); the rest of the file stays as it is. Turning ZCode off removes only our entries. Restart ZCode afterwards.
+
+The pet thinks, works, waits for you on permission requests and finishes. ZCode's hooks do not report errors or the end of a session: after an error the pet goes idle after a quiet spell, and a session fades out like any other without events.
+
+### Why there is no Claude ghost
+
+Cursor, Grok Build and ZCode also run the Claude Code hooks from `~/.claude/settings.json`, and Grok also runs Cursor's hook file. Without care, every Cursor session would show up as a second, fake Claude pet. `hook.exe` checks who really called it (Grok by its environment variable, Cursor by a field only Cursor sends, ZCode by its session variable together with its own field names) and sends nothing when the caller is not the agent the hook was written for. So with a new integration off you see no pet for that agent at all, and with it on you see exactly one.
+
 ### Door for other agents
 
 Agents without their own integration can still get a pet. Send their state to the widget:
@@ -311,6 +341,7 @@ Open `prototype/index.html` in a browser. Buttons switch states and tools, and t
 Claude Code ──hook.exe──HTTP (127.0.0.1 + token)──┐
 opencode ──plugin──HTTP (127.0.0.1 + token)───────┤
 Copilot, Antigravity ──hook.exe──HTTP (127.0.0.1)──┤
+Cursor, Grok, ZCode ──hook.exe──HTTP (127.0.0.1)───┤
 any tool ──hook.exe report / HTTP (door)──────────┤
 Codex  ──~/.codex/sessions/**/rollout-*.jsonl──────┼─► adapters ─► state machine ─► taskbar stage
 Claude transcripts + ~/.claude/sessions registry ──┤
@@ -322,13 +353,13 @@ Agent Router ──~/.agent-router/status.json─────────┘
   - the state machine: `thinking`, `working:<tool>`, `needs_you`, `done`, `error`, `idle`, `sleep`, `compacting` and `ended`, with a minimum time per state and inactivity timeouts;
   - the Claude hook, transcript and registry adapters;
   - the Codex rollout parser;
-  - the opencode, Copilot, Antigravity and door adapters, and the process-tree walk that finds the program hosting an agent;
+  - the opencode, Copilot, Antigravity, Cursor, Grok Build, ZCode and door adapters, and the process-tree walk that finds the program hosting an agent;
   - a read-only reader of opencode's database for its usage;
   - an incremental file tailer, a file watcher, the local ingest server and the hooks installer.
 - **`hook.exe`** is the Claude Code hook client, with `--agent-pets-statusline` the statusline pass-through, and with `report` the command-line side of the door.
 - **`pets-cli`** runs everything as a terminal app, with record and replay.
 - **`app/`** is the Tauri app. Rust embeds the stage window in the taskbar (`SetParent` into `Shell_TrayWnd`), measures the free space with UI Automation, follows DPI and Explorer restarts, reads the mouse natively and shows the tooltip window. The TypeScript side draws the pets on a Canvas at 30 fps and pauses while the taskbar is hidden or a fullscreen app runs. The renderer is a 1:1 port of the prototype, checked call-by-call against it in tests.
-- **Privacy:** session data stays on your machine. Outgoing connections: the update check (`latest.json` and the installer from this repository's GitHub releases, nothing is sent; off in Settings → General) and the opt-in plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. The opencode plugin, the Copilot and Antigravity hooks and the door send only states, tool kinds, short action texts, questions and model names over that local connection; opencode's database is read read-only, numbers and names only, never messages or login data; text from the door is treated as untrusted, cut to size and shown as plain text. From transcripts only titles, task progress and token counters are kept, never message content. Bubbles, tooltips and the panel show the file names, commands and search patterns an agent is working on and the question it asks; this text lives only in memory and is never written to disk, logs, the diagnostics report or a `pets-cli --record` file. Statistics are kept in `~/.agent-pets/stats.json`: numbers only (tokens, work time, questions, tool calls per hour and model), the project folder names, model names and the paths of the transcripts already read; never message content, commands, file names or session titles.
+- **Privacy:** session data stays on your machine. Outgoing connections: the update check (`latest.json` and the installer from this repository's GitHub releases, nothing is sent; off in Settings → General) and the opt-in plan-usage request to `api.anthropic.com` described in [Claude rate limits](#claude-rate-limits). The ingest server listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. The opencode plugin, the Copilot, Cursor, Grok Build, ZCode and Antigravity hooks and the door send only states, tool kinds, short action texts, questions and model names over that local connection; opencode's database is read read-only, numbers and names only, never messages or login data; text from the door is treated as untrusted, cut to size and shown as plain text. From transcripts only titles, task progress and token counters are kept, never message content. Bubbles, tooltips and the panel show the file names, commands and search patterns an agent is working on and the question it asks; this text lives only in memory and is never written to disk, logs, the diagnostics report or a `pets-cli --record` file. Statistics are kept in `~/.agent-pets/stats.json`: numbers only (tokens, work time, questions, tool calls per hour and model), the project folder names, model names and the paths of the transcripts already read; never message content, commands, file names or session titles.
 
 ## Project layout
 
@@ -358,8 +389,8 @@ tools/              fixture anonymizer and its test, CPU measurement
 10. ~~0.9: statistics with a podium, counters, a race, an activity calendar and badges~~
 11. ~~0.10: opencode, programs (t3code, editors) in the subtitle and jump, the model in text, a door for any agent, the blob pet~~
 12. ~~0.11: GitHub Copilot and Antigravity with their own pets, opencode tokens, account bars and statistics~~
-13. **Next:** 0.12 Cursor and Grok Build, each with its own pet
-14. Later, in this order: ZCode, Kilo CLI, Qwen Code, Goose, Junie, Kiro, Cline (the door works for them today)
+13. ~~0.12: Cursor, Grok Build and ZCode with their own pets (experimental), no Claude ghosts from other agents' hooks~~
+14. Later, in this order: Kilo CLI, Qwen Code, Goose, Junie, Kiro, Cline (the door works for them today)
 
 ## License
 
