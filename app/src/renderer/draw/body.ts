@@ -13,7 +13,8 @@ import { drawPixel } from "../models/pixel";
 import { DEFAULT_LOOK } from "../../look";
 import type { Look } from "../../types";
 import { effectiveStyle } from "../effective";
-import { archP, drawPilot, floatLift, googleFill } from "./float";
+import { luma } from "../color";
+import { androidP, drawAndroidAntennas, drawPilot, floatLift } from "./float";
 import { DROID_SHOULDER, droidP, drawEars, drawMarks, hexP } from "./marks";
 export function drawPet(x: CanvasRenderingContext2D,c: Pet,X: number,Y: number,u: number,t: number,look?: Look){pen.sid=0;
 const lk0=look??DEFAULT_LOOK,lk={...lk0,style:effectiveStyle(lk0.style,c.type)},st=STYLES[lk.style]??STYLES.clean;pen.st=st;pen.accent=c.accent??ACCENT[c.type];if(st.sketch)pen.boil=Math.floor(t*st.sketch.boilHz);pen.ol=st.ink(pen.accent);const mo=MOTIONS[lk.motion]??MOTIONS.calm;pen.squash=mo.squash;pen.fx=mo.fx;
@@ -28,7 +29,7 @@ const wb=Math.abs(Math.sin(t*10))*walk,br=Math.sin(t*(2.3-loaf))*.02*(1+cl(P.sle
 const pil=c.prop==='pillow'?cl(P.propA.x)*loaf:0;
 const lift=floatLift(sk,t,(c.nb??1)*2)*u,hopY=(h*24+wb*2.5+pil*4)*u+lift,fl=sk.float?1-lift/(30*u):1;
 const W=(sk.width)*u,Dp=(sk.depth)*u,H=(sk.height)*u*(1-.1*loaf),legH=(sk.legLen??17)*u,bot=(sk.legs.length?-((sk.legLen??17)-5)*u:0)*(1-down),top=bot-H,R=(sk.radius)*u,lw=Math.max(st.line.minPx,2.4*u*st.line.scale);
-const hW=(W*Math.abs(co)+Dp*Math.abs(si))/2,XX=X+P.lx.x*u;
+const hW=sk.shape==='android'?W/2:(W*Math.abs(co)+Dp*Math.abs(si))/2,XX=X+P.lx.x*u;
 const sc=1+.1*lean,rot=Math.sin(t*4)*.1*wob+Math.sin(t*1.4)*.035*cl(P.think.x)+loaf*.06+pil*.08+P.tilt.x,scx=sc*(1-(sq+br)*.6),scy=sc*(1+sq+br+tb),oy=-hopY+lean*4*u,cr=Math.cos(rot),sr=Math.sin(rot);
 const toW=(lx: any,ly: any)=>{const a=lx*scx,b=ly*scy;return [a*cr-b*sr,a*sr+b*cr+oy];};
 const GA=(1-.22*cl(P.dim.x))*(c.alpha??1);
@@ -54,14 +55,17 @@ worldT();arms.forEach((a: any)=>{if(a.fr<1){hose(x,a,a.L,thk,cm,u,lw);mitt(x,a,m
 bodyT();
 if(sk.antenna){const by=top+2*u,len=15*u,tx=Math.sin(c.aa)*len,ty=by-Math.cos(c.aa)*len;x.beginPath();x.moveTo(0,by);x.lineTo(tx,ty);x.stroke();shp(x,elP(tx,ty,4.5*u,4.5*u),gr>.5?'#E24B4A':'#5DCAA5',u);}
 
-const bodyP=sk.shape==='arch'?archP:sk.facet?hexP:sk.droid?droidP:rrP;
+const bodyP=sk.facet?hexP:sk.droid?droidP:rrP,android=sk.shape==='android';
+if(android)drawAndroidAntennas(x,0,top,hW*2,H,u,cm,lw,Math.sin(c.aa));
 // uszy hełmu Copilota: wystają po bokach, za ciałem
 const pilot=c.pilot??sk.pilot;
 if(pilot)for(const s of [-1,1])shp(x,elP(s*hW,top+H*.6,5.5*u,9*u),cs,u);
 drawEars(x,sk,hW,top,u);
-shp(x,bodyP(-hW,top,hW*2,H,R),cs,u,{hatch:true});
 const fwid=W*Math.abs(co),front=co>=0,fcx=(front?1:-1)*Dp/2*si;
-if(fwid>1.5){const fp=bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2));shp(x,fp,front?cm:cb,u);if(sk.shape==='arch')googleFill(x,fp);
+// ludzik Androida jest okrągły (walec): jedna bryła bez osobnej ściany bocznej, po której przesuwa się twarz
+if(android)for(const p of androidP(-hW,top,hW*2,H,R))shp(x,p,front?cm:cb,u);
+else shp(x,bodyP(-hW,top,hW*2,H,R),cs,u,{hatch:true});
+if(fwid>1.5&&!android){const fp=bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2));shp(x,fp,front?cm:cb,u);
 x.save();x.globalAlpha=GA*.55;shp(x,rrP(fcx-fwid/2+R*.7+3*u*Math.abs(co),top+4*u,Math.max(.1,fwid-R*1.4-6*u*Math.abs(co)),4.5*u,2.2*u),pal.h,u,{noStroke:1});x.restore();
 if(!front&&sk.backVents&&fwid>6*u){x.save();x.lineWidth=lw*.7;x.beginPath();for(let i=0;i<3;i++){const yy=top+H*(.35+.13*i);x.moveTo(fcx-fwid*.25,yy);x.lineTo(fcx+fwid*.25,yy);}x.stroke();x.restore();}}
 
@@ -70,6 +74,8 @@ const ey=top+H*(sk.eyeY??.42)+P.look.x*4.5*u,exs=P.ex.x*4*u*co;
 const bl=c.blink>0?Math.sin(PI*(c.blink/.16)):0,sl=cl(P.sleep.x),hp=cl(P.happy.x),dz=cl(P.dizzy.x),sqn=cl(P.squint.x);
 const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFace&&loaf>.5;
 let ecol=st.face?.eyes==='accent'?pen.ol:c.pilot?.eye??sk.eyeColor??'#1E1410';
+// białe oczy ludzika giną na ciele rozjaśnionym przez styl (Tusz, Pastel): wtedy ciemne
+if(android&&st.fillFor&&luma(st.fillFor(cm))>.78)ecol='#1E1410';
 if(front&&fwid>4*u){
 if(pilot)drawPilot(x,fcx+exs*.4,top,fwid,H,u,pilot);
 drawMarks(x,sk,bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2)),{cx:fcx,top,fw:fwid,H,u,co,ey,eyes:[-1,1].map(s=>fcx+s*sk.eyeX*W*co+exs),eh:sk.eyeH*u});
@@ -90,7 +96,10 @@ else if(dz>.3){const k=ew*.3;x.moveTo(ex-k,ec-k);x.lineTo(ex+k,ec+k);x.moveTo(ex
 x.stroke();}
 if(pen.fx&&hp>.3){x.fillStyle='#FFFFFF';x.font=`${Math.max(6,10*u)}px ${pen.font}`;x.textAlign='center';x.textBaseline='middle';x.fillText('✦',ex+ew*.6,ec-eh*.4);}
 x.restore();}
-else [-1,1].forEach((s: any)=>{const ex=fcx+s*(sk.eyeX)*W*co+exs,ew=(sk.eyeW)*u*Math.sqrt(Math.max(0,co)),eh=(sk.eyeH)*u;
+else [-1,1].forEach((s: any)=>{
+// na walcu ludzika oko leży na obwodzie kopułki (na wysokości oczu ma ona ~0,88 szerokości): kąt obrotu plus własne
+// przesunięcie, więc przy obrocie oko nie wychodzi poza bryłę
+const ph=android?th+s*Math.asin(Math.min(.95,2*sk.eyeX/.88)):0,ex=android?W*.44*Math.sin(ph)+exs:fcx+s*(sk.eyeX)*W*co+exs,ew=(sk.eyeW)*u*Math.sqrt(Math.max(0,android?Math.cos(ph):co)),eh=(sk.eyeH)*u;
 x.save();x.fillStyle=ecol;x.strokeStyle=ecol;x.lineWidth=Math.max(1,2.6*u);
 
 if(open>.02&&!saver){x.globalAlpha=GA*ea;shp(x,rrP(ex-ew/2,ey-eh*open/2,ew,Math.max(.5,eh*open),ew/2),ecol,u,{noStroke:1,j:.5,raw:1});if(sk.eyeGlint){x.fillStyle='#FFFFFF';x.beginPath();x.arc(ex+ew*.18,ey-eh*open*.22,2.4*u*open,0,TAU);x.fill();}}

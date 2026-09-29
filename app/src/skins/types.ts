@@ -22,8 +22,8 @@ export interface Skin {
   pilot?: { frame: string; lens: string; visor: string };
   /** bez nóg, unosi się nad ziemią i płynie zamiast chodzić (Antigravity) */
   float?: boolean;
-  /** kształt ciała: zaokrąglony prostokąt (domyślnie) albo łuk „A” z otworem u dołu */
-  shape?: 'arch';
+  /** kształt ciała: zaokrąglony prostokąt (domyślnie) albo ludzik Androida (kopułka i tułów, dwie antenki) */
+  shape?: 'android';
   /** Cursor: ścięte boki (sześciokąt), jaśniejszy trójkąt przodu od lewego górnego rogu i jasna krawędź */
   facet?: { light: string; edge: string };
   /** Grok: mały humanoid; czarny wizor na górze przodu (oczy na nim), logo Groka na klatce, czarne dłonie */

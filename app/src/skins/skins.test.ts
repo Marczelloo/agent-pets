@@ -5,7 +5,7 @@ import { recorder } from '../renderer/testing';
 import { petFor, skinFor } from '../stage/sceneFor';
 import type { Agent } from '../types';
 import { blobPal, SKINS } from './index';
-import { archP, floatLift } from '../renderer/draw/float';
+import { androidP, floatLift } from '../renderer/draw/float';
 import { DROID_SHOULDER, droidP } from '../renderer/draw/marks';
 import { PREVIEW_AGENTS } from '../settings/look/LookTab';
 import { accentFor } from '../stage/sceneFor';
@@ -68,8 +68,8 @@ describe('skins for agents', () => {
     // oczy nad linią ramion (H·0,52): przy biurku ręce i blat nie zasłaniają twarzy
     expect(SKINS.copilot.eyeY!).toBeLessThan(.52);
   });
-  it('Antigravity floats without legs over its shadow and wears the Google colours', () => {
-    expect([SKINS.antigravity.legs.length, SKINS.antigravity.float, SKINS.antigravity.shape]).toEqual([0, true, 'arch']);
+  it('Antigravity is the green Android robot floating over its shadow, legs hanging', () => {
+    expect([SKINS.antigravity.legs.length, SKINS.antigravity.float, SKINS.antigravity.shape]).toEqual([2, true, 'android']);
     const lift = (t: number) => floatLift(SKINS.antigravity, t, 0);
     const ys = [0, .3, .6, .9, 1.2].map(lift);
     expect(Math.min(...ys)).toBeGreaterThan(3);
@@ -77,18 +77,26 @@ describe('skins for agents', () => {
     expect(floatLift(SKINS.clawd, .5, 0)).toBe(0);
     const rec = recorder();
     drawPet(rec.ctx, petFor({ agent: 'antigravity', agent_name: null }, 'idle'), 60, 40, 1, 0.5);
-    for (const c of ['#4285F4', '#34A853', '#FBBC05', '#EA4335']) expect(rec.log.some(l => l.includes(`addColorStop`) && l.includes(c)), c).toBe(true);
+    expect(rec.log).toContain('fillStyle=rgb(61,220,132)'); // #3DDC84, zieleń Androida
+    expect(rec.log).toContain('fillStyle=#FFFFFF'); // białe oczy
   });
-  it('the Google colours follow the style like every other fill', () => {
-    const stops = (style: 'clean' | 'ink' | 'pastel') => {
+  it('the Android robot is a smooth dome over a torso, split by a gap', () => {
+    const [head, torso] = androidP(-40, -60, 80, 60, 10);
+    const ys = (p: number[][]) => p.map(q => q[1]);
+    expect(Math.max(...ys(head))).toBeLessThan(Math.min(...ys(torso)));
+    expect(Math.min(...ys(head))).toBeCloseTo(-60);
+    expect(Math.max(...ys(torso))).toBeCloseTo(0);
+    // kopułka gładka: kolejne punkty łuku blisko siebie
+    for (let i = 1; i < head.length; i++) expect(Math.hypot(head[i][0] - head[i - 1][0], head[i][1] - head[i - 1][1])).toBeLessThan(5);
+  });
+  it('the Android robot keeps visible eyes when the style bleaches its body', () => {
+    const eyes = (style: 'clean' | 'ink' | 'pastel') => {
       const rec = recorder();
       drawPet(rec.ctx, petFor({ agent: 'antigravity', agent_name: null }, 'idle'), 60, 40, 1, 0.5, { style, motion: 'calm' });
-      return rec.log.filter(l => l.includes('addColorStop'));
+      return rec.log.some(l => l.includes('#1E1410'));
     };
-    expect(stops('clean').some(l => l.includes('#4285F4'))).toBe(true);
-    expect(stops('ink').some(l => l.includes('#4285F4'))).toBe(false);
-    expect(stops('ink').length).toBeGreaterThan(0);
-    expect(stops('pastel').some(l => l.includes('#4285F4'))).toBe(false);
+    expect(eyes('ink')).toBe(true);
+    expect(eyes('pastel')).toBe(true);
   });
   it('Cursor, Grok and ZCode have their own pets, walk, keep their eyes above the desk and show up in the preview', () => {
     for (const s of ['cursor', 'grok', 'zcode'] as const) {
@@ -173,14 +181,5 @@ describe('skins for agents', () => {
     const patch = Math.max(...log.map((l, i) => (l.includes(p.patches) ? i : -1))), eye = log.findIndex(l => l.includes(SKINS.zcode.eyeColor!));
     expect(patch).toBeGreaterThan(-1);
     expect(patch).toBeLessThan(eye);
-  });
-  it('the arch has an opening at the bottom', () => {
-    const p = archP(-40, -60, 80, 60, 10);
-    const inside = (x: number, y: number) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
-      const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
-    expect(inside(0, -50)).toBe(true);
-    expect(inside(0, -3)).toBe(false);
-    expect(inside(-32, -3)).toBe(true);
-    expect(inside(32, -3)).toBe(true);
   });
 });
