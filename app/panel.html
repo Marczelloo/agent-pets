@@ -7,7 +7,7 @@
 :root{
   --bg:#F3F3F3;--card:#FBFBFB;--line:rgba(0,0,0,.08);--edge:rgba(0,0,0,.14);--txt:#1F1F1F;--mut:#5F5E5A;
   --track:rgba(0,0,0,.08);--btn:#FFFFFF;--btnh:#F6F6F6;--btnb:rgba(0,0,0,.12);--focus:rgba(217,119,87,.14);
-  --claude:#D97757;--codex:#5DCAA5;--hot:#E24B4A;--needs:#EF9F27;--router:#3D6FD6;--warn:#A15C00;
+  --claude:#D97757;--codex:#5DCAA5;--antigravity:#3DDC84;--hot:#E24B4A;--needs:#EF9F27;--router:#3D6FD6;--warn:#A15C00;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;
@@ -38,6 +38,7 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .bar i{display:block;height:100%;border-radius:3px}
 .bar.claude i{background:var(--claude)}
 .bar.codex i{background:var(--codex)}
+.bar.antigravity i{background:var(--antigravity)}
 .bar i.hot{background:var(--hot)}
 .pct{text-align:right;font-variant-numeric:tabular-nums}
 .reset{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

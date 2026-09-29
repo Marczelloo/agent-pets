@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPct, drawMiniMore, drawRouterBadge, eqHeights, limitBars, progressFraction } from './hud';
+import { AGENT_COLOR, clampPct, drawMiniMore, drawRouterBadge, eqHeights, limitBars, progressFraction } from './hud';
 import { recorder } from '../renderer/testing';
 
 describe('hud', () => {
@@ -24,6 +24,15 @@ describe('hud', () => {
       { agent: 'codex', window: 'weekly', pct: 91 },
     ]);
     expect(limitBars([])).toEqual([]);
+  });
+  it('Antigravity limit bars come last, in its green', () => {
+    const bars = limitBars([
+      { agent: 'antigravity', window: 'weekly', used_pct: 1, resets_at: null },
+      { agent: 'antigravity', window: 'five_hour', used_pct: 2, resets_at: null },
+      { agent: 'claude', window: 'weekly', used_pct: 3, resets_at: null },
+    ]);
+    expect(bars.map(b => `${b.agent}/${b.window}`)).toEqual(['claude/weekly', 'antigravity/five_hour', 'antigravity/weekly']);
+    expect(AGENT_COLOR.antigravity).toBe('#3DDC84');
   });
   it('EQ bars stay in 1..5 px under the pet; dozing ones barely move', () => {
     for (let t = 0; t < 5; t += 0.07) {

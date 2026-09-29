@@ -2,7 +2,7 @@ import type { Limit, Session } from '../types';
 import { BADGE_W } from './layout';
 import { BEAT } from '../renderer/scenes';
 
-export const AGENT_COLOR: Record<string, string> = { claude: '#D97757', codex: '#5DCAA5' };
+export const AGENT_COLOR: Record<string, string> = { claude: '#D97757', codex: '#5DCAA5', antigravity: '#3DDC84' };
 const TRACK = 'rgba(128,128,128,0.30)';
 const HOT = '#E24B4A';
 const ACTIVE = new Set(['thinking', 'working', 'compacting', 'needs_you']);
@@ -77,11 +77,14 @@ export function drawRouterBadge(x: CanvasRenderingContext2D, cx: number, y: numb
   x.restore();
 }
 
-export interface LimitBar { agent: 'claude' | 'codex'; window: 'five_hour' | 'weekly'; pct: number }
+export type LimitAgent = 'claude' | 'codex' | 'antigravity';
+export const LIMIT_AGENTS: readonly LimitAgent[] = ['claude', 'codex', 'antigravity'];
+
+export interface LimitBar { agent: LimitAgent; window: 'five_hour' | 'weekly'; pct: number }
 
 export function limitBars(limits: Limit[]): LimitBar[] {
   const out: LimitBar[] = [];
-  for (const agent of ['claude', 'codex'] as const) for (const window of ['five_hour', 'weekly'] as const) {
+  for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly'] as const) {
     const l = limits.find(v => v.agent === agent && v.window === window);
     if (l && Number.isFinite(l.used_pct)) out.push({ agent, window, pct: clampPct(l.used_pct) });
   }

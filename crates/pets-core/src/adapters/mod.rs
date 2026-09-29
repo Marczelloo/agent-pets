@@ -1,6 +1,7 @@
 //! Adaptery agentów bez własnych logów w rdzeniu: zdarzenia z pluginu (opencode) i z furtki (dowolny agent).
 //! Tekst z zewnątrz jest niezaufany: bez znaków sterujących, przycięty.
 pub mod antigravity;
+pub mod antigravity_usage;
 pub mod copilot;
 pub mod cursor;
 pub mod generic;

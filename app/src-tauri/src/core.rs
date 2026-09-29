@@ -133,6 +133,10 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     let (usage_tx, usage) = std::sync::mpsc::channel();
     let a = app.clone();
     let has_token = crate::usage::spawn(usage_tx, move || a.state::<crate::settings::SettingsState>().get().claude_plan_usage);
+    // limity Antigravity z jego lokalnego serwera, gdy Antigravity jest włączone w ustawieniach
+    let (ag_tx, ag_usage) = std::sync::mpsc::channel();
+    let a = app.clone();
+    crate::antigravity_usage::spawn(ag_tx, move || a.state::<crate::settings::SettingsState>().get().apps.antigravity);
     // Pierwsza migawka czeka chwilę na limity z serwera: reguły powiadomień uznają wtedy zastany limit
     // powyżej 90% za stan sprzed startu, a nie za nowy.
     if has_token {
@@ -153,6 +157,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         }
         changed |= rt.step(now);
         for e in usage.try_iter() { changed |= rt.apply_external(e); }
+        for u in ag_usage.try_iter() { changed |= rt.antigravity_usage(u); }
         if changed {
             publish(rt.store(), now, &mut hidden);
             if let Err(e) = hidden.save_if_dirty(&hidden_path) { eprintln!("agent-pets: {}: {e}", hidden_path.display()); }

@@ -1,7 +1,7 @@
 import type { Limit, Media, Session, TooltipContent } from '../types';
 import { mediaAppName } from '../stage/media';
 import { listens } from '../stage/sceneFor';
-import { clampPct, progressFraction } from '../stage/hud';
+import { LIMIT_AGENTS, clampPct, progressFraction, type LimitAgent } from '../stage/hud';
 import { routerLine } from '../stage/router';
 import { t, lang } from '../i18n';
 import { agentLabel, hostLabel, modelLabel } from '../model-label';
@@ -56,13 +56,15 @@ export function petTooltip(s: Session, nowMs: number, media?: Media | null): Too
   };
 }
 
+export const limitName = (a: LimitAgent) => a === 'claude' ? t().agent.limitClaude : t().agent[a];
+
 export function limitsTooltip(limits: Limit[], nowMs: number): TooltipContent {
   const lines: string[] = [];
-  for (const agent of ['claude', 'codex']) for (const window of ['five_hour', 'weekly']) {
+  for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly']) {
     const l = limits.find(v => v.agent === agent && v.window === window);
     if (!l || !Number.isFinite(l.used_pct)) continue;
     const reset = formatReset(l.resets_at, nowMs);
-    lines.push(`${agent === 'claude' ? t().agent.limitClaude : t().agent.codex} · ${t().window[window as 'five_hour' | 'weekly']}: ${Math.round(clampPct(l.used_pct))}%${reset ? ` · ${reset}` : ''}`);
+    lines.push(`${limitName(agent)} · ${t().window[window as 'five_hour' | 'weekly']}: ${Math.round(clampPct(l.used_pct))}%${reset ? ` · ${reset}` : ''}`);
   }
   return { title: t().limits.title, subtitle: '', lines };
 }

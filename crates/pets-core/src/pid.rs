@@ -77,6 +77,48 @@ pub fn process_created(pid: u32) -> Option<u64> {
     }
 }
 
+/// Wiersz poleceń procesu tego samego użytkownika; `None` bez dostępu albo po zakończeniu.
+#[cfg(windows)]
+pub fn command_line(pid: u32) -> Option<String> {
+    use windows_sys::Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation};
+    use windows_sys::Win32::Foundation::{CloseHandle, UNICODE_STRING};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() { return None; }
+        // odpowiedź: UNICODE_STRING, a za nim jego tekst; bufor z u64 dla wyrównania wskaźnika
+        let mut buf = vec![0u64; 8 * 1024];
+        let mut len = 0u32;
+        let st = NtQueryInformationProcess(h, ProcessCommandLineInformation, buf.as_mut_ptr().cast(), (buf.len() * 8) as u32, &mut len);
+        CloseHandle(h);
+        if st < 0 { return None; }
+        let us = &*(buf.as_ptr() as *const UNICODE_STRING);
+        if us.Buffer.is_null() { return None; }
+        Some(String::from_utf16_lossy(std::slice::from_raw_parts(us.Buffer, us.Length as usize / 2)))
+    }
+}
+
+/// Porty TCP (IPv4), na których proces nasłuchuje.
+#[cfg(windows)]
+pub fn listening_ports(pid: u32) -> Vec<u16> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{GetExtendedTcpTable, MIB_TCPROW_OWNER_PID, TCP_TABLE_OWNER_PID_LISTENER};
+    const AF_INET: u32 = 2;
+    let mut size = 0u32;
+    unsafe {
+        GetExtendedTcpTable(std::ptr::null_mut(), &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0);
+        // tabela mogła urosnąć między zapytaniami: zapas
+        let mut buf = vec![0u32; size as usize / 4 + 64];
+        size = (buf.len() * 4) as u32;
+        if GetExtendedTcpTable(buf.as_mut_ptr().cast(), &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) != 0 { return Vec::new(); }
+        let n = buf[0] as usize;
+        let rows = std::slice::from_raw_parts(buf.as_ptr().add(1) as *const MIB_TCPROW_OWNER_PID, n);
+        let mut out: Vec<u16> = rows.iter().filter(|r| r.dwOwningPid == pid).map(|r| u16::from_be(r.dwLocalPort as u16)).collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+}
+
 const SHELLS: [&str; 6] = ["cmd.exe", "bash.exe", "sh.exe", "pwsh.exe", "powershell.exe", "conhost.exe"];
 
 /// PID agenta: pierwszy przodek bieżącego procesu, który nie jest powłoką.
@@ -99,6 +141,13 @@ mod tests {
         assert!(is_alive(std::process::id()));
         let (_, name) = process_entry(std::process::id()).unwrap();
         assert!(name.to_lowercase().ends_with(".exe"));
+    }
+
+    #[test]
+    fn own_command_line_and_listening_port() {
+        assert!(command_line(std::process::id()).unwrap().to_lowercase().contains(".exe"));
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        assert!(listening_ports(std::process::id()).contains(&l.local_addr().unwrap().port()));
     }
 
     #[test]

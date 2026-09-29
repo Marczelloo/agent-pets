@@ -1,5 +1,5 @@
-import { clampPct, progressFraction } from '../stage/hud';
-import { actionLabel, formatReset } from '../tooltip/text';
+import { LIMIT_AGENTS, clampPct, progressFraction, type LimitAgent } from '../stage/hud';
+import { actionLabel, formatReset, limitName } from '../tooltip/text';
 import { isLive, routerHealth } from '../stage/router';
 import type { AgentUsage, Limit, Session, UpdateStatus } from '../types';
 import { formatTokens } from '../stats/model';
@@ -59,16 +59,17 @@ export function accountRows(s: Session, limits: Limit[], nowMs: number): LimitRo
   return limitRows(limits, nowMs).filter(r => r.agent === acct && r.pct != null);
 }
 
-export interface LimitRow { agent: 'claude' | 'codex'; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string }
+export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string }
 
-/** Zawsze cztery wiersze; brak danych to `pct: null`, nigdy 0%. */
+/** Zawsze cztery wiersze Claude'a i Codeksa; brak danych to `pct: null`, nigdy 0%. Antigravity tylko z danymi. */
 export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
   const rows: LimitRow[] = [];
-  for (const agent of ['claude', 'codex'] as const) for (const window of ['five_hour', 'weekly'] as const) {
+  for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly'] as const) {
     const l = limits.find(v => v.agent === agent && v.window === window);
     const ok = l != null && Number.isFinite(l.used_pct);
+    if (!ok && agent === 'antigravity') continue;
     rows.push({
-      agent, window, label: `${agent === 'claude' ? t().agent.limitClaude : t().agent.codex} · ${t().window[window]}`,
+      agent, window, label: `${limitName(agent)} · ${t().window[window]}`,
       pct: ok ? clampPct(l!.used_pct) : null, reset: ok ? formatReset(l!.resets_at, nowMs) : '',
     });
   }

@@ -43,6 +43,13 @@ describe('panel model', () => {
     expect(rows[0].pct).toBeNull();
     expect(rows[3].pct).toBe(91);
   });
+  it('adds Antigravity rows only for windows it reported', () => {
+    const now = new Date(2026, 8, 24, 12, 0).getTime();
+    const rows = limitRows([{ agent: 'antigravity', window: 'five_hour', used_pct: 20, resets_at: null }], now);
+    expect(rows.map(r => `${r.agent}/${r.window}`)).toEqual(['claude/five_hour', 'claude/weekly', 'codex/five_hour', 'codex/weekly', 'antigravity/five_hour']);
+    expect(rows[4].label).toMatch(/^Antigravity · /);
+    expect(rows[4].pct).toBe(20);
+  });
   it('shows the reset time when it is known', () => {
     const now = new Date(2026, 8, 24, 12, 0).getTime();
     const rows = limitRows([{ agent: 'claude', window: 'five_hour', used_pct: 40, resets_at: now + 2 * 3_600_000 }], now);

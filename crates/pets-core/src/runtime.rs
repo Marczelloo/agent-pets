@@ -115,6 +115,16 @@ impl Runtime {
     /// Zdarzenie z zewnątrz rdzenia (np. limity konta Claude pobrane przez aplikację). Zwraca, czy stan się zmienił.
     pub fn apply_external(&mut self, e: Event) -> bool { self.apply(e) }
 
+    /// Limity Antigravity odczytane przez aplikację z jego lokalnego serwera; `Stale` (Antigravity zamknięte)
+    /// zdejmuje je od razu, bo czekanie do resetu pokazywałoby stare liczby przez godziny.
+    pub fn antigravity_usage(&mut self, u: crate::adapters::antigravity_usage::Usage) -> bool {
+        use crate::adapters::antigravity_usage::Usage;
+        match u {
+            Usage::Limits(e) => self.apply(e),
+            Usage::Stale => self.store.retain_limits(|l| l.agent != crate::model::Agent::Antigravity),
+        }
+    }
+
     /// Włącza i wyłącza aplikacje w locie: sesje i limity wyłączonych znikają od razu. Zwraca, czy stan się zmienił.
     pub fn set_apps(&mut self, apps: crate::settings::Apps) -> bool {
         if apps == self.apps { return false; }
@@ -363,6 +373,7 @@ fn source_key(e: &Event) -> &'static str {
     if e.session_id == claude::desktop_usage::SESSION_ID || e.session_id == claude::account_usage::SESSION_ID {
         return "claude_usage";
     }
+    if e.session_id == crate::adapters::antigravity_usage::SESSION_ID { return "antigravity_usage"; }
     match e.source {
         Source::Claude => "claude_code",
         Source::Codex => "codex",
@@ -410,6 +421,34 @@ mod tests {
         let rt = Runtime::start(cfg(&h)).unwrap();
         let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
         assert_eq!(five.map(|l| l.used_pct), Some(42.0));
+    }
+
+    #[test]
+    fn antigravity_limits_arrive_and_go_away_when_the_app_closes() {
+        use crate::adapters::antigravity_usage::{from_summary, Usage};
+        let h = home();
+        let mut c = cfg(&h);
+        c.apps.antigravity = true;
+        let mut rt = Runtime::start(c).unwrap();
+        let body = serde_json::json!({"groups": [{"buckets": [
+            {"bucketId": "gemini-5h", "remainingFraction": 0.75, "resetTime": crate::time::rfc3339(crate::time::now_ms() + 3_600_000)}]}]});
+        assert!(rt.antigravity_usage(Usage::Limits(from_summary(&body, crate::time::now_ms()).unwrap())));
+        assert_eq!(rt.store().limits().iter().filter(|l| l.agent == Agent::Antigravity).map(|l| l.used_pct).collect::<Vec<_>>(), vec![25.0]);
+        assert!(rt.antigravity_usage(Usage::Stale));
+        assert!(rt.store().limits().iter().all(|l| l.agent != Agent::Antigravity));
+        assert!(!rt.store().sessions().iter().any(|s| s.agent == Agent::Antigravity), "limity nie tworzą zwierzaka");
+    }
+
+    #[test]
+    fn antigravity_limits_are_ignored_while_antigravity_is_off() {
+        use crate::adapters::antigravity_usage::{from_summary, Usage};
+        let h = home();
+        let mut c = cfg(&h);
+        c.apps.antigravity = false;
+        let mut rt = Runtime::start(c).unwrap();
+        let body = serde_json::json!({"groups": [{"buckets": [{"bucketId": "gemini-5h", "remainingFraction": 0.5}]}]});
+        rt.antigravity_usage(Usage::Limits(from_summary(&body, crate::time::now_ms()).unwrap()));
+        assert!(rt.store().limits().iter().all(|l| l.agent != Agent::Antigravity));
     }
 
     /// Nagranie z czasami przesuniętymi tak, że ostatnie zdarzenie było przed chwilą.
