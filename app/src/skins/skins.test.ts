@@ -109,24 +109,26 @@ describe('skins for agents', () => {
     const log = draw('cursor');
     for (const c of [f.light, f.edge, SKINS.cursor.eyeColor!]) expect(log.some(l => l.includes(c)), c).toBe(true);
   });
-  it('Grok is a black ball with two slanted white eyes up and to the right, like its mascot', () => {
-    const g = SKINS.grok;
-    expect(g.radius).toBe(g.width / 2);
-    expect(Math.abs(g.width - g.height)).toBeLessThanOrEqual(g.width * .1);
-    expect(g.pal.m).toBe('#0A0A0A');
+  it('Grok is a mini humanoid: white body, black visor with slanted eyes, the Grok logo on the chest, black hands', () => {
+    const g = SKINS.grok, d = g.droid!;
+    expect(d).toEqual({ visor: '#0E0E10', logo: '#1A1A1A', hands: '#222222' });
+    expect(g.pal.m).toBe('#ECECEA');
+    expect(g.height).toBeGreaterThan(g.width);
     expect(g.eyeColor).toBe('#FFFFFF');
-    expect(g.eyeShift!).toBeGreaterThan(.1);
     expect(g.eyeTilt!).toBeLessThan(0);
     expect(g.eyeY!).toBeLessThan(.36);
-    for (const k of ['slash', 'ring', 'brows']) expect(k in g, k).toBe(false);
     const log = draw('grok');
+    for (const c of [d.visor, d.logo, d.hands]) expect(log.some(l => l.includes(c)), c).toBe(true);
     // obie pigułki pochylone: górą w lewo
     expect(log.filter(l => l === `rotate(${Math.round(g.eyeTilt! * 1000) / 1000})`).length).toBe(2);
+    // logo: pierścień z przerwą w prawym górnym rogu (łuk krótszy niż pełne koło)
+    const arcs = log.filter(l => l.startsWith('ellipse(')).map(l => l.slice(8, -1).split(',').map(Number));
+    expect(arcs.some(a => a[6] - a[5] > Math.PI && a[6] - a[5] < 2 * Math.PI - .3)).toBe(true);
   });
-  it('eyes stay where they were for skins without a shift or a tilt', () => {
+  it('eyes stay upright for skins without a tilt, and other pets keep their own hands', () => {
     for (const s of ['clawd', 'kodek', 'copilot', 'cursor', 'zcode'] as const) {
-      expect(SKINS[s].eyeShift, s).toBeUndefined();
       expect(SKINS[s].eyeTilt, s).toBeUndefined();
+      expect(SKINS[s].droid, s).toBeUndefined();
     }
   });
   it('ZCode is a panda: ears, patches under the eyes and a headband with a Z', () => {

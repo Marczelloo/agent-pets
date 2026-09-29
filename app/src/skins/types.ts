@@ -26,10 +26,10 @@ export interface Skin {
   shape?: 'arch';
   /** Cursor: ścięte boki (sześciokąt), jaśniejszy trójkąt przodu od lewego górnego rogu i jasna krawędź */
   facet?: { light: string; edge: string };
-  /** przesunięcie obu oczu w bok jako ułamek szerokości ciała (Grok: w prawo) */
-  eyeShift?: number;
   /** pochylenie pigułek oczu w radianach; ujemne = górą w lewo (Grok) */
   eyeTilt?: number;
+  /** Grok: mały humanoid; czarny wizor na górze przodu (oczy na nim), logo Groka na klatce, czarne dłonie */
+  droid?: { visor: string; logo: string; hands: string };
   /** ZCode: okrągłe uszy, łaty pod oczami (oczy na nich) i opaska z literą „Z” */
   panda?: { ears: string; patches: string; band: string; mark: string };
 }

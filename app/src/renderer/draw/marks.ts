@@ -26,7 +26,7 @@ function inside(x: CanvasRenderingContext2D, fp: number[][], draw: () => void) {
 export interface Face { cx: number; top: number; fw: number; H: number; u: number; co: number; ey: number; eyes: number[]; eh: number }
 
 /**
- * Znaki na przodzie ciała, po ciele i przed oczami: fasetka Cursora, łaty i opaska pandy ZCode.
+ * Znaki na przodzie ciała, po ciele i przed oczami: fasetka Cursora, wizor i logo Groka, łaty i opaska pandy ZCode.
  * `fp` = obrys przodu.
  */
 export function drawMarks(x: CanvasRenderingContext2D, sk: Skin, fp: number[][], f: Face) {
@@ -37,6 +37,19 @@ export function drawMarks(x: CanvasRenderingContext2D, sk: Skin, fp: number[][],
       x.fillStyle = tone(fc.light); x.beginPath(); x.moveTo(X + c, top); x.lineTo(X + fw - c, top); x.lineTo(X, top + H / 2); x.closePath(); x.fill();
       x.strokeStyle = tone(fc.edge); x.lineWidth = Math.max(.8, 1.8 * u); x.beginPath(); x.moveTo(X + fw - c, top); x.lineTo(X, top + H / 2); x.stroke();
     });
+  }
+  if (sk.droid) {
+    const d = sk.droid, vw = fw * .8, vy = top + H * .1, vh = H * .4;
+    shp(x, rrP(cx - vw / 2, vy, vw, vh, Math.min(vh / 2.2, vw / 2)), d.visor, u);
+    // odblask na szybie wizora
+    x.save(); x.globalAlpha *= .5; shp(x, rrP(cx - vw * .32, vy + vh * .12, vw * .22, vh * .1, vh * .05), '#5A5A5E', u, { noStroke: 1 }); x.restore();
+    // logo Groka: pierścień z przerwą w prawym górnym rogu, kreska wychodzi przez przerwę
+    const r = Math.min(fw * .16, H * .11);
+    x.save(); x.translate(cx, top + H * .72); x.scale(Math.max(.05, co), 1);
+    x.strokeStyle = tone(d.logo); x.lineWidth = Math.max(1, r * .28); x.lineCap = 'butt';
+    x.beginPath(); x.ellipse(0, 0, r, r, 0, -Math.PI * .15, Math.PI * 1.6); x.stroke();
+    x.beginPath(); x.moveTo(-r * .55, r * .55); x.lineTo(r * 1.35, -r * 1.35); x.stroke();
+    x.restore();
   }
   if (sk.panda) {
     const p = sk.panda, k = Math.sqrt(Math.max(0, co));

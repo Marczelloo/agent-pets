@@ -38,7 +38,7 @@ const pj=(lx: any,lz: any)=>[lx*co+lz*si,-lx*si+lz*co];
 if(st.sketch){x.save();x.strokeStyle='rgba(59,58,56,0.35)';x.lineWidth=Math.max(.8,1.2*u);x.beginPath();for(let i=-2;i<=2;i++){const w=hW*1.1*(1-Math.abs(i)*.18)*(1-h*.3);x.moveTo(XX-w,Y+i*2*u);x.lineTo(XX+w,Y+i*2*u);}x.stroke();x.restore();}else{
 x.save();if(st.softShadow)x.filter=`blur(${Math.max(1,3*u)}px)`;x.fillStyle='rgba(0,0,0,0.16)';x.beginPath();x.ellipse(XX,Y,hW*1.1*(1-h*.3)*fl,Math.max(2,7*u)*(1-h*.3)*fl,0,0,TAU);x.fill();x.restore();}
 worldT();drawPillow(x,c,u,lw);x.restore();
-const shY=top+H*.52,AL=(sk.armLen)*u,thk=9*u,mr=(sk.mitt)*u;
+const shY=top+H*.52,AL=(sk.armLen)*u,thk=9*u,mr=(sk.mitt)*u,hc=sk.droid?.hands??cm;
 const arms=[-1,1].map((s: any)=>{const k=s<0?'L':'R',q=pj(s*.46*W,0),sw0=toW(q[0],shY);const a=P['arm'+k].x+P['osc'+k].x*Math.sin(t*c.f+(s<0?1.7:0)),fw=walk*Math.sin(t*10+(s<0?0:PI))*.6;const ox=s*Math.sin(a),oy=Math.cos(a),up=Math.max(0,-oy),oz=.22+.2*up+fw,n=Math.hypot(ox,oy,oz)||1,hq=pj(ox/n,oz/n),pl=Math.hypot(hq[0],oy/n),AE=AL*(1+.75*up);const ah=[sw0[0]+hq[0]*AE*.92,sw0[1]+oy/n*AE*.92];const ik=cl(P['ik'+k].x);const dE=(q[1]+hq[1]*AL*.5)*(1-ik)+ik*10*u,fr=cl((dE+3*u)/(6*u));let sw=sw0;if(q[1]<0){const m=cl(-q[1]/(8*u))*fr,e=toW(Math.sign(q[0]||s)*(hW-3*u),shY);sw=[sw0[0]+(e[0]-sw0[0])*m,sw0[1]+(e[1]-sw0[1])*m];}return {s,k,sw,ah,ik,fr,L:AL*ik+(1-ik)*AE*cl(pl*.97,.3,1),hx:ah[0]*(1-ik)+P['hx'+k].x*u*ik,hy:ah[1]*(1-ik)+P['hy'+k].x*u*ik};});
 
 c.hand=arms.map((a: any)=>[a.hx/u,a.hy/u]);c.aHand=arms.map((a: any)=>[a.ah[0]/u,a.ah[1]/u]);
@@ -48,7 +48,7 @@ const legs=LG.map(([a,b],i)=>{const q=pj(a*W,b*Dp);return {x:q[0],z:q[1],i};}).s
 const lLen=legH*(1-down);
 if(lLen>1)legs.forEach((g: any)=>{const lift=Math.max(0,Math.sin(t*10+g.i*PI))*5*u*walk;shp(x,rrP(g.x-lwid/2,bot-5*u-lift,lwid,lLen+5*u,3.5*u),g.z<-.5*u?cs:cm,u);});
 x.restore();
-worldT();arms.forEach((a: any)=>{if(a.fr<1){hose(x,a,a.L,thk,cm,u,lw);mitt(x,a,mr,cm,u);}});const netBack=c.hold==='net'&&P.pole.x<-.3;if(netBack)drawItems(x,c,arms,u,t,lw);x.restore();
+worldT();arms.forEach((a: any)=>{if(a.fr<1){hose(x,a,a.L,thk,cm,u,lw);mitt(x,a,mr,hc,u);}});const netBack=c.hold==='net'&&P.pole.x<-.3;if(netBack)drawItems(x,c,arms,u,t,lw);x.restore();
 bodyT();
 if(sk.antenna){const by=top+2*u,len=15*u,tx=Math.sin(c.aa)*len,ty=by-Math.cos(c.aa)*len;x.beginPath();x.moveTo(0,by);x.lineTo(tx,ty);x.stroke();shp(x,elP(tx,ty,4.5*u,4.5*u),gr>.5?'#E24B4A':'#5DCAA5',u);}
 
@@ -63,7 +63,7 @@ if(fwid>1.5){const fp=bodyP(fcx-fwid/2,top,fwid,H,Math.min(R,fwid/2));shp(x,fp,f
 x.save();x.globalAlpha=GA*.55;shp(x,rrP(fcx-fwid/2+R*.7+3*u*Math.abs(co),top+4*u,Math.max(.1,fwid-R*1.4-6*u*Math.abs(co)),4.5*u,2.2*u),pal.h,u,{noStroke:1});x.restore();
 if(!front&&sk.backVents&&fwid>6*u){x.save();x.lineWidth=lw*.7;x.beginPath();for(let i=0;i<3;i++){const yy=top+H*(.35+.13*i);x.moveTo(fcx-fwid*.25,yy);x.lineTo(fcx+fwid*.25,yy);}x.stroke();x.restore();}}
 
-const ey=top+H*(sk.eyeY??.42)+P.look.x*4.5*u,exs=P.ex.x*4*u*co+(sk.eyeShift??0)*W*co;
+const ey=top+H*(sk.eyeY??.42)+P.look.x*4.5*u,exs=P.ex.x*4*u*co;
 {const q=toW(fcx+exs,ey);c.face=[q[0]/u,q[1]/u,Math.max(4,sk.eyeX*W*Math.abs(co)/u)];}
 const bl=c.blink>0?Math.sin(PI*(c.blink/.16)):0,sl=cl(P.sleep.x),hp=cl(P.happy.x),dz=cl(P.dizzy.x),sqn=cl(P.squint.x);
 const open=Math.max(0,1-Math.max(bl,sl,hp,dz,sqn)),ea=cl(co*3),saver=sk.screenFace&&loaf>.5;
@@ -108,7 +108,7 @@ x.restore();
 worldT();drawProp(x,c,u,t,lw);
 arms.forEach((a: any)=>{if(a.fr>0){x.globalAlpha=GA*a.fr;hose(x,a,a.L,thk,cm,u,lw);x.globalAlpha=GA;}});
 if(!netBack)drawItems(x,c,arms,u,t,lw);if(tg._mug){const R_=arms[1];drawMug(x,R_.hx-11*u*Math.cos(tg._mugRot||0),R_.hy+6*u-11*u*Math.sin(tg._mugRot||0),u,tg._mugRot||0,t,0);}
-arms.forEach((a: any)=>{if(a.fr>0){x.globalAlpha=GA*a.fr;mitt(x,a,mr*(a.s>0&&tg._big?1.3+.2*lean:1),cm,u);x.globalAlpha=GA;}});
+arms.forEach((a: any)=>{if(a.fr>0){x.globalAlpha=GA*a.fr;mitt(x,a,mr*(a.s>0&&tg._big?1.3+.2*lean:1),hc,u);x.globalAlpha=GA;}});
 x.restore();
 bodyT();
 if(c.wear)drawWear(x,c.wear,{x:0,top,w:hW*2,h:H,rot:0},u,lw);
