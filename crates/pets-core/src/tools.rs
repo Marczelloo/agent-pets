@@ -74,6 +74,21 @@ pub fn from_antigravity(name: &str) -> Tool {
     }
 }
 
+/// Rodzaj narzędzia ze słów w nazwie (Grok Build, ZCode); pierwszy pasujący wiersz wygrywa. Sieć przed szukaniem
+/// (`web_search`), zapis przed odczytem (`create_file`, `edit_file`).
+pub fn from_keywords(name: &str) -> Tool {
+    let n = name.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| n.contains(w));
+    if n.starts_with("mcp") || n.contains('/') { Tool::Mcp }
+    else if has(&["web", "fetch", "url"]) { Tool::Web }
+    else if has(&["bash", "shell", "exec", "command", "terminal"]) { Tool::Bash }
+    else if has(&["write", "edit", "patch", "replace", "create"]) { Tool::Edit }
+    else if has(&["grep", "search", "glob", "find"]) { Tool::Grep }
+    else if has(&["read", "view", "cat", "list"]) { Tool::Read }
+    else if has(&["task", "agent"]) { Tool::Agent }
+    else { Tool::Other }
+}
+
 /// Nazwy narzędzi Cursora (hooki `preToolUse`). MCP: `MCP:<serwer>`.
 pub fn from_cursor(name: &str) -> Tool {
     match name {
@@ -90,6 +105,16 @@ pub fn from_cursor(name: &str) -> Tool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_kinds_from_words_in_the_name() {
+        for (n, t) in [("bash", Tool::Bash), ("run_shell_command", Tool::Bash), ("read_file", Tool::Read), ("write_file", Tool::Edit),
+                       ("apply_patch", Tool::Edit), ("grep", Tool::Grep), ("web_search", Tool::Web), ("web_fetch", Tool::Web),
+                       ("mcp__x__y", Tool::Mcp), ("github/list_issues", Tool::Mcp), ("task", Tool::Agent), ("todo", Tool::Other),
+                       ("Edit_File", Tool::Edit), ("list_dir", Tool::Read), ("", Tool::Other)] {
+            assert_eq!(from_keywords(n), t, "{n}");
+        }
+    }
 
     #[test]
     fn cursor_tool_names() {

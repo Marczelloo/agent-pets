@@ -1,0 +1,11 @@
+{"ts":1790000000000,"ppid":4242,"event":"SessionStart","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"SessionStart"},"host":{"app":"terminal","name":null,"pid":900}}
+{"ts":1790000000100,"ppid":4242,"event":"UserPromptSubmit","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"UserPromptSubmit"},"host":{"app":"terminal","name":null,"pid":900}}
+{"ts":1790000000200,"ppid":4242,"event":"PreToolUse","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"PreToolUse","toolName":"read_file","toolInput":{"path":"C:/work/app/src/main.ts"}}}
+{"ts":1790000000300,"ppid":4242,"event":"PostToolUse","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"PostToolUse","toolName":"read_file"}}
+{"ts":1790000000400,"ppid":4242,"event":"Notification","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"Notification","notificationType":"permission_prompt","message":"Allow bash: npm test?"}}
+{"ts":1790000000500,"ppid":4242,"event":"PreToolUse","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"PreToolUse","toolName":"bash","toolInput":{"command":"npm test"}}}
+{"ts":1790000000600,"ppid":4242,"event":"PostToolUseFailure","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"PostToolUseFailure","toolName":"bash","isInterrupt":true}}
+{"ts":1790000000700,"ppid":4242,"event":"PreCompact","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"PreCompact"}}
+{"ts":1790000000800,"ppid":4242,"event":"Stop","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"Stop"}}
+{"ts":1790000000900,"ppid":4242,"event":"StopFailure","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"StopFailure"}}
+{"ts":1790000001000,"ppid":4242,"event":"SessionEnd","payload":{"sessionId":"grok_1","cwd":"C:/work/app","model":"grok-code-fast-1","hookEventName":"SessionEnd"}}
