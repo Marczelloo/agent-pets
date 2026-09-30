@@ -281,3 +281,14 @@ export function drawDizzy(x: CanvasRenderingContext2D, T: number, sx: number, sy
     drawSpark(x, sx + Math.cos(a) * r, sy + Math.sin(a) * r * 0.32, r * 0.28, '#EF9F27', a);
   }
 }
+
+/* ---------- swipe transition: a slanted band sweeps across, the cut happens at its middle ---------- */
+
+export function drawSwipe(x: CanvasRenderingContext2D, fmt: Format, T: number, cut: number, len: number, fill: string, edge: string): void {
+  const p = (T - (cut - len / 2)) / len;
+  if (p < 0 || p > 1) return;
+  const W = fmt.W, H = fmt.H, e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+  const cx = W / 2 + (e - 0.5) * 2.9 * W, hw = 0.85 * W, sk = 0.16 * H;
+  const band = (o: number, col: string) => { x.fillStyle = col; x.beginPath(); x.moveTo(cx - hw + o + sk, 0); x.lineTo(cx + hw + o + sk, 0); x.lineTo(cx + hw + o - sk, H); x.lineTo(cx - hw + o - sk, H); x.closePath(); x.fill(); };
+  x.save(); band(0.05 * W, edge); band(0, fill); x.restore();
+}

@@ -1,7 +1,7 @@
 // Every sound in the video, as data. The times come from the same constants that drive the animation, so picture and
 // sound cannot drift apart. tools/video/audio/make_audio.py turns this list (plus its own score) into the soundtrack.
 import { at, BEAT } from './beat';
-import { KNOCKS, PULL_BACK } from './act1';
+import { CUTS, KNOCKS, PULL_BACK } from './act1';
 import { CALL } from './act2';
 import { CATCH, CLICK, HI, HOP1, HOP2, HOP_TIME, PLANE_HIT, PLANE_THROW, SWING1 } from './act3';
 import { FLIP, LOOKS, PARTY, WAKE } from './act4';
@@ -19,6 +19,7 @@ export function buildCues(): Cue[] {
   add(PULL_BACK - 0.02, 'whoosh', 1);
   add(PULL_BACK + 0.35, 'pop', 0.8, 0); add(PULL_BACK + 0.5, 'pop', 0.9, 1); add(PULL_BACK + 0.62, 'pop', 0.8, 2);
   add(PULL_BACK + 1.15, 'cricket', 0.5); add(PULL_BACK + 1.6, 'cricket', 0.4);
+  CUTS.forEach(k => add(k - 0.2, 'whoosh', 0.8));
   add(at(2, 3) + 0.3, 'sigh', 0.8);
 
   // the call and the rain

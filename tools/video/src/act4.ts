@@ -48,7 +48,7 @@ export function act4(c: Ctx): void {
     c.reset('copilot'); c.pose('copilot', { ...phones, ikL: 1, hxL: -34, hyL: -46, ikR: 1, hxR: 12, hyR: -30 + 6 * h, tilt: -0.05 + 0.05 * h, th: 0.25, lean: 0.2 * h, squint: 0.6, happy: 0 });
     c.reset('cursor'); c.pose('cursor', { ...phones, ikL: 1, hxL: -44, hyL: -62, ikR: 1, hxR: 30 + 9 * Math.sin(T * TAU * 1.8), hyR: -26, th: 0.3, look: 0.4, tilt: 0.04 * Math.sin(T * Math.PI * 1.8) });
     const sg = k % 2 ? -1 : 1;
-    c.reset('grok'); c.pose('grok', { ...phones, ikL: 1, ikR: 1, hxR: sg > 0 ? 42 : 47, hyR: sg > 0 ? -96 : -25, hxL: sg < 0 ? -42 : -47, hyL: sg < 0 ? -96 : -25, lx: 4 * sg, tilt: -0.08 * sg, th: 0.2 * sg, look: -0.6, ex: 0.8 * sg });
+    c.reset('grok'); c.pose('grok', { ...phones, ikL: 1, ikR: 1, hxR: sg > 0 ? 42 : 38, hyR: sg > 0 ? -96 : -30, hxL: sg < 0 ? -42 : -38, hyL: sg < 0 ? -96 : -30, lx: 4 * sg, tilt: -0.08 * sg, th: 0.2 * sg, look: -0.6, ex: 0.8 * sg });
     c.reset('kodek'); c.pose('kodek', { ...phones, ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: 34 + 8 * s, hyR: -70, _hold: 'net', pole: 0.32 + 0.55 * s, _poleDirect: 1 });
     c.reset('kilo'); c.pose('kilo', { ...phones, armL: 2.8, armR: 2.8, oscL: 0.4, oscR: 0.4, _f: 11, hopW: 0.5, _hf: 1 / BEAT });
     c.reset('android'); c.pose('android', { ...phones, armL: 2.3 + 0.5 * s, armR: 2.3 - 0.5 * s, tilt: 0.05 * s });

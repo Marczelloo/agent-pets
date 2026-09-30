@@ -11,6 +11,9 @@ import { PAL } from './world';
 /** Times of Clawd's knocks (global seconds). Three in the close-up, then three more once we have pulled back. */
 export const KNOCKS = [0, BEAT, 2 * BEAT, at(2, 1), at(2, 2), at(2, 3)];
 export const PULL_BACK = at(2, 0);
+/** Hard cuts of the first section, each hidden under a swipe: in to the cursor, back out, and in on Clawd as he calls the crew. */
+export const CUTS = [at(2, 2), at(2, 3), at(3, 0)];
+export const SWIPE_LEN = 0.34;
 /** The bubble leaves when Clawd calls the crew (act 2). */
 const CALL_AT = at(3, 0);
 

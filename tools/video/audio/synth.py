@@ -324,11 +324,11 @@ def lhat(vel=1.0, open_=False):
 
 def vinyl(dur):
     n = int(SR * dur); y = np.zeros(n)
-    idx = np.nonzero(rng.random(n) < 16 / SR)[0]
+    idx = np.nonzero(rng.random(n) < 5 / SR)[0]
     for i in idx:
         a = rng.uniform(0.25, 1.0) * rng.choice([-1, 1]); L = int(SR * rng.uniform(0.0008, 0.004)); m = min(L, n - i)
         y[i:i + m] += a * np.exp(-tt(m) / (L / SR / 3))
-    return lp(y, 6000) * 0.16 + lp(noise(n), 3500) * 0.007
+    return lp(y, 4500) * 0.05
 
 
 def uiblip(freq=880, vel=1.0):
@@ -411,4 +411,4 @@ def lofi(y, sr=SR):
     idx = np.arange(n) - delay
     out = np.stack([np.interp(idx, np.arange(n), c) for c in y])
     out = np.stack([signal.sosfilt(signal.butter(2, 5600, 'low', fs=sr, output='sos'), c) for c in out])
-    return np.tanh(1.25 * out) / 1.1
+    return np.tanh(1.1 * out) / 1.05

@@ -1,6 +1,7 @@
 // The whole video as one function of time. Each act owns a stretch of it; see ctx.ts for how they cooperate.
 import { blank, makeCrew, CREW, type Who } from './actors';
-import { act1, hookCams, PULL_BACK } from './act1';
+import { act1, CUTS, hookCams, PULL_BACK, SWIPE_LEN } from './act1';
+import { wander } from './cursor';
 import { act2, CALL, rainCam } from './act2';
 import { camPath, still, worldToScreen, type Cam, type CamFn } from './camera';
 import type { Ctx } from './ctx';
@@ -9,7 +10,7 @@ import type { Format } from './format';
 import type { Limit } from '@app/types';
 import { clamp, easeInOut, easeOutBack, ring } from './util';
 import { DARK } from './themes';
-import { setInk } from './overlays';
+import { drawSwipe, setInk } from './overlays';
 import { drawBackdrop, drawCursor, drawTaskbar } from './world';
 import { act4 } from './act4';
 import { act5, camKeys as endKeys, END } from './act5';
@@ -29,9 +30,12 @@ export class Story {
   constructor(readonly fmt: Format) {
     const { close, wide } = hookCams(fmt);
     const creep: Cam = { ...close, z: close.z * 1.045 };
+    const insert: CamFn = t => { const w = wander(t); return { x: w.x + 20, y: w.y + 30, z: wide.z * 3.1 }; };
     this.cam = camPath([
       [0, still(close)], [PULL_BACK - 0.05, still(creep), easeInOut], [PULL_BACK + 0.95, still(wide), t => easeOutBack(t, 1.15)],
-      [CALL + 0.05, still(wide)], [CALL + 1.5, rainCam(fmt), easeInOut],
+      // cut in on the cursor (it has no idea) and back out on the knock beats, then in on Clawd for the call, then out to the rain
+      [CUTS[0] - 0.01, still(wide)], [CUTS[0] + 0.01, insert], [CUTS[1] - 0.01, insert], [CUTS[1] + 0.01, still(wide)],
+      [CUTS[2] - 0.01, still(wide)], [CUTS[2] + 0.01, still(close)], [CALL + 0.85, still(close)], [CALL + 1.6, rainCam(fmt), easeInOut],
       ...act3Cam(fmt), ...endKeys(fmt),
     ]);
   }
@@ -75,5 +79,6 @@ export class Story {
     const cur = c.cursor, late = cur.late?.(cam), [cx, cy] = late?.screen ?? worldToScreen(cam, fmt, cur.x, cur.y);
     drawCursor(x, cx, cy, (late?.size ?? cur.size) * cam.z, late?.rot ?? cur.rot, cur.alpha * clamp(1), late?.press ?? cur.press);
     for (const o of c.top) o(x, cam);
+    for (const cut of CUTS) drawSwipe(x, fmt, T, cut, SWIPE_LEN, c.theme.bg === DARK.bg ? '#0A0E18' : c.theme.bg, '#D97757');
   }
 }

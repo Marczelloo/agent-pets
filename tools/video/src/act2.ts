@@ -73,7 +73,7 @@ export function act2(c: Ctx): void {
       case 'copilot': { const li = Math.floor(a / 1.1) % 4, pp = (a / 1.1) % 1; c.pose(s.who, { ...SHEET(a), _hold: 'sheet', look: 0.75, ex: -0.8 + 1.6 * pp, _line: li, _prog: pp }); break; }
       case 'cursor': c.pose(s.who, { ...HIP, ikR: 1, hxR: 42, hyR: -76, _hold: 'lens', look: -1, ex: 0.1, squint: 0.1 }); break;
       case 'grok': { const m = clamp((a - 0.2) / 1.6), hw = foldHW(m), jig = (m * 3) % 1 < 0.25 && m < 1 ? 1.5 * Math.sin(a * 30) : 0;
-        c.pose(s.who, m < 0.66 ? { ikR: 1, hxR: hw + 3, hyR: -21 - jig, ikL: 1, hxL: -hw - 3, hyL: -21 + jig, look: 0.85, _hold: 'paper', _fold: m } : { ...HIP, ikR: 1, hxR: hw + 3, hyR: -21, look: 0.5, _hold: 'paper', _fold: m }); break; }
+        c.pose(s.who, m < 0.66 ? { ikR: 1, hxR: hw + 3, hyR: -21 - jig, ikL: 1, hxL: -hw - 3, hyL: -21 + jig, look: 0.85, _hold: 'paper', _fold: m } : { ikL: 1, hxL: -38, hyL: -30, ikR: 1, hxR: hw + 3, hyR: -21, look: 0.5, _hold: 'paper', _fold: m }); break; }
       case 'kodek': c.pose(s.who, { ...HIP, ikR: 1, hxR: 34, hyR: -58, _hold: 'net', pole: 0.32, _poleDirect: 1, look: -0.9, ex: -0.5 }); break;
       case 'android': c.pose(s.who, { armL: 0.4, armR: a < 1.6 ? 2.3 : 0.4, oscR: 0.5, _f: 7, happy: 0.3, look: -0.3, ex: 0 }); break;
       case 'kilo': c.pose(s.who, { armL: 2.6, armR: 2.6, oscL: 0.32, oscR: 0.32, _f: 9, happy: 0.9, look: -0.5, hopW: 0.25, _hf: 0.9 }); break;
@@ -124,7 +124,7 @@ export function act2(c: Ctx): void {
     tag('android', ANDROID_LAND, ax, ay2, 'c', -0.03);
     // the call itself
     const [hx, hy] = at1('clawd').pt(-4, -heightOf('clawd') - 30);
-    drawWord(x, T, CALL + 0.02, hx + 20, hy - 46, 'HEY!', clamp(cam.z * 30, 72, 140), PAL.clay, 0.95, -0.1);
+    drawWord(x, T, CALL + 0.02, hx + 20, hy - 46, 'HEY!', clamp(cam.z * 30, 72, 140), PAL.clay, 0.6, -0.1);
   });
 
   // a small heading over the rain

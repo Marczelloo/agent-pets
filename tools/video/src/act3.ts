@@ -149,8 +149,8 @@ export function act3(c: Ctx): void {
   const gt = T - PLANE_THROW;
   if (gt > -0.5) {
     const wind = clamp((gt + 0.5) / 0.4), thr = clamp(gt / 0.1);
-    if (gt < 0) c.pose('grok', { ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: lerp(25, 36, wind), hyR: lerp(-21, -92, easeOut(wind)), th: -0.05, look: -0.4, _hold: 'paper', _fold: 1 });
-    else c.pose('grok', { ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: lerp(36, 62, thr), hyR: lerp(-92, -52, thr), th: 0.05, look: -0.5, _hold: gt < 0.05 ? 'paper' : null, _fold: 1, tilt: 0.06 });
+    if (gt < 0) c.pose('grok', { ikL: 1, hxL: -38, hyL: -30, ikR: 1, hxR: lerp(25, 36, wind), hyR: lerp(-21, -92, easeOut(wind)), th: -0.05, look: -0.4, _hold: 'paper', _fold: 1 });
+    else c.pose('grok', { ikL: 1, hxL: -38, hyL: -30, ikR: 1, hxR: lerp(36, 62, thr), hyR: lerp(-92, -52, thr), th: 0.05, look: -0.5, _hold: gt < 0.05 ? 'paper' : null, _fold: 1, tilt: 0.06 });
   }
   c.front.push((x, cam) => {
     if (gt < 0 || gt > 0.6) return;
