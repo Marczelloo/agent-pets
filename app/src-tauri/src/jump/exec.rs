@@ -12,7 +12,8 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 
 const CF_UNICODETEXT: u32 = 13;
 
-fn deep_link(url: &str) -> bool {
+/// Open `url` with its registered handler (browser, `codex://`); false when Windows refused.
+pub fn open_url(url: &str) -> bool {
     let r = unsafe { ShellExecuteW(None, &HSTRING::from("open"), &HSTRING::from(url), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
     r.0 as isize > 32
 }
@@ -125,7 +126,7 @@ fn clipboard(text: &str) -> bool {
 pub fn run(steps: &[Step], lang: Lang) -> JumpResult {
     for s in steps {
         let r = match s {
-            Step::DeepLink(u) if deep_link(u) => Some(("deeplink", tr(lang, "Otworzono sesję w aplikacji", "Opened the session in the app").to_string())),
+            Step::DeepLink(u) if open_url(u) => Some(("deeplink", tr(lang, "Otworzono sesję w aplikacji", "Opened the session in the app").to_string())),
             Step::FocusProcess(p) if focus(*p) => Some(("focus", tr(lang, "Przełączono na okno sesji", "Switched to the session window").to_string())),
             Step::OpenTerminal { cwd, program, args } if terminal(cwd, program, args) => Some(("terminal", tr(lang, "Otworzono nowy terminal", "Opened a new terminal").to_string())),
             Step::Clipboard(t) => Some(("clipboard", if clipboard(t) { format!("{} {t}", tr(lang, "Skopiowano komendę:", "Copied the command:")) } else { format!("{} {t}", tr(lang, "Wznów ręcznie:", "Resume manually:")) })),

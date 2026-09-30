@@ -152,6 +152,13 @@ describe('SettingsView', () => {
     expect(html).toContain('class="preview-stage"');
     for (const name of ['Wszystkie po kolei', 'Praca', 'Stany', 'Komendy', 'Subagent', 'Kompaktuje', 'Pożegnanie', 'Śpi']) expect(html).toContain(name);
   });
+  it('the diagnostics tab offers to report a problem on GitHub, only when it can open it', () => {
+    const view = (onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag"
+      onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} onReport={onReport} />);
+    expect(view(() => {})).toContain('Zgłoś problem</button>');
+    expect(view(() => {})).toContain('wklej go do formularza');
+    expect(view()).not.toContain('Zgłoś problem');
+  });
   it('lists the apps with their integration state', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);

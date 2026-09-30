@@ -168,6 +168,8 @@ export const en: Dict = {
     loading: 'Loading…',
     copied: 'Copied',
     copyReport: 'Copy report',
+    reportProblem: 'Report a problem',
+    reportProblemDesc: 'Opens a new issue on GitHub. The report is copied first: paste it into the form.',
     langAuto: 'Automatic (like Windows)',
     broken: e => `The settings file is damaged (${e}); using default settings.`,
     antigravityNote: 'Needs a version with hooks (Antigravity 2.0 or a newer IDE). Antigravity does not say when it waits for your approval, so this pet never shows “needs you”.',

@@ -1,4 +1,4 @@
-//! Tray icon: left click toggles the panel; right click shows the menu ("Statistics", "Settings", "Quit").
+//! Tray icon: left click toggles the panel; right click shows the menu ("Statistics", "Settings", "Report a problem", "Quit").
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use pets_core::i18n::{tr, Lang};
@@ -9,11 +9,12 @@ pub struct TrayItems { items: Vec<MenuItem<Wry>> }
 
 const STATS: (&str, &str) = ("Statystyki", "Statistics");
 const SETTINGS: (&str, &str) = ("Ustawienia", "Settings");
+const REPORT: (&str, &str) = ("Zgłoś problem", "Report a problem");
 const QUIT: (&str, &str) = ("Zakończ Agent Pets", "Quit Agent Pets");
 
 /// Menu items in order: ID and text in `lang`.
 pub fn tray_items(lang: Lang) -> Vec<(&'static str, &'static str)> {
-    [("stats", STATS), ("settings", SETTINGS), ("quit", QUIT)].iter().map(|(id, t)| (*id, tr(lang, t.0, t.1))).collect()
+    [("stats", STATS), ("settings", SETTINGS), ("report", REPORT), ("quit", QUIT)].iter().map(|(id, t)| (*id, tr(lang, t.0, t.1))).collect()
 }
 
 pub fn build(app: &AppHandle, lang: Lang) -> tauri::Result<()> {
@@ -27,6 +28,7 @@ pub fn build(app: &AppHandle, lang: Lang) -> tauri::Result<()> {
             "quit" => app.exit(0),
             "settings" => crate::settings::open(app),
             "stats" => crate::stats::open(app),
+            "report" => crate::settings::report_problem(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, e| {
@@ -59,7 +61,8 @@ mod tests {
     #[test]
     fn statistics_come_before_settings_in_both_languages() {
         let ids = |l| tray_items(l).iter().map(|x| x.0).collect::<Vec<_>>();
-        assert_eq!(ids(Lang::Pl), ["stats", "settings", "quit"]);
+        assert_eq!(ids(Lang::Pl), ["stats", "settings", "report", "quit"]);
+        assert_eq!(tray_items(Lang::En)[2].1, "Report a problem");
         assert_eq!(tray_items(Lang::Pl)[0].1, "Statystyki");
         assert_eq!(tray_items(Lang::En)[0].1, "Statistics");
     }

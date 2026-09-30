@@ -213,6 +213,24 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
     }
 }
 
+/// New bug report on GitHub, the form's version field filled in (`.github/ISSUE_TEMPLATE/bug_report.yml`).
+pub fn issue_url(version: &str) -> String {
+    let v: String = version.bytes().map(|b| match b {
+        b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' | b'.' | b'-' | b'_' => (b as char).to_string(),
+        _ => format!("%{b:02X}"),
+    }).collect();
+    format!("https://github.com/Marczelloo/agent-pets/issues/new?template=bug_report.yml&version={v}")
+}
+
+/// Open the bug form in the default browser (settings → Diagnostics, tray menu).
+pub fn report_problem(app: &AppHandle) {
+    let url = issue_url(&app.package_info().version.to_string());
+    if !crate::jump::exec::open_url(&url) { pets_core::app_log!("report a problem: cannot open the browser"); }
+}
+
+#[tauri::command]
+pub fn report_problem_open(app: AppHandle) { report_problem(&app); }
+
 /// Settings window title (title bar, taskbar button, Alt+Tab).
 pub fn window_title(lang: Lang) -> &'static str { i18n::tr(lang, "Agent Pets: ustawienia", "Agent Pets: settings") }
 
@@ -325,6 +343,13 @@ mod tests {
         assert_eq!(fit_size((1100.0, 860.0), Some((1366.0, 728.0))), (1100.0, 696.0));
         assert_eq!(fit_size((1100.0, 860.0), Some((1024.0, 600.0))), (992.0, 568.0));
         assert_eq!(fit_size((800.0, 720.0), None), (800.0, 720.0));
+    }
+
+    #[test]
+    fn a_problem_report_opens_the_bug_form_with_the_version_filled_in() {
+        assert_eq!(issue_url("0.13.0"), "https://github.com/Marczelloo/agent-pets/issues/new?template=bug_report.yml&version=0.13.0");
+        assert_eq!(issue_url("1.0.0-beta.1+b7"), "https://github.com/Marczelloo/agent-pets/issues/new?template=bug_report.yml&version=1.0.0-beta.1%2Bb7");
+        assert!(issue_url("0.1&x=<y>").ends_with("&version=0.1%26x%3D%3Cy%3E"));
     }
 
     #[test]

@@ -179,6 +179,8 @@ export const pl = {
     loading: 'Wczytuję…',
     copied: 'Skopiowano',
     copyReport: 'Skopiuj raport',
+    reportProblem: 'Zgłoś problem',
+    reportProblemDesc: 'Otwiera nowe zgłoszenie na GitHubie. Raport najpierw się kopiuje: wklej go do formularza.',
     langAuto: 'Automatycznie (jak Windows)',
     broken: (e: string) => `Plik ustawień jest uszkodzony (${e}); używam ustawień domyślnych.`,
     antigravityNote: 'Potrzebna wersja z hookami (Antigravity 2.0 albo nowsze IDE). Antigravity nie mówi, kiedy czeka na Twoją zgodę, więc ten zwierzak nie pokazuje „czeka na Ciebie”.',

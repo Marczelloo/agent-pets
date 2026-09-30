@@ -117,6 +117,7 @@ function Root() {
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
     onIntegration={onIntegration} message={message} update={update} monitors={monitors} leftFallback={leftFallback}
     onMove={() => { if (inTauri) void invoke('stage_move'); }}
+    onReport={inTauri ? () => void invoke('report_problem_open') : undefined}
     onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;
 }
 
