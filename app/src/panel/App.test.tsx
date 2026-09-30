@@ -29,6 +29,13 @@ describe('PanelView', () => {
     expect(html).toMatch(/class="account"[\s\S]*64%/);
     expect(html.match(/class="account"/g)?.length).toBe(1);
   });
+  it('marks cards of experimental agents, not the others', () => {
+    const cp: Session = { ...sess, id: 'copilot:p', agent: 'copilot', title: 'cp' };
+    const html = renderToString(<PanelView snap={{ sessions: [cp, { ...sess, id: 'c', title: 'cl' }], limits: [], now: 0 }} nowMs={0}
+      status={null} focusId={null} onJump={() => {}} animate={false} />);
+    expect(html.match(/class="exp"/g)?.length).toBe(1);
+    expect(html).toMatch(/class="exp"[^>]*>eksperymentalne</);
+  });
   it('has an empty state and says when limits are unknown', () => {
     const html = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
     expect(html).toContain('Brak aktywnych sesji');

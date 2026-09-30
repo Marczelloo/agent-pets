@@ -598,9 +598,7 @@ mod tests {
         let st = load(&p).settings.stage;
         assert_eq!((st.size, st.gap, st.padding, st.background.radius, st.background.opacity), (300, 30, 24, 24, Some(100)));
         assert_eq!((st.background.color, st.custom_at, st.monitor.as_str()), (None, Some(1.0), "primary"));
-        let mut low = Stage::default();
-        low.size = 10;
-        low.custom_at = Some(-0.5);
+        let mut low = Stage { size: 10, custom_at: Some(-0.5), ..Stage::default() };
         low.background.color = Some("#A1b2C3".into());
         let c = low.clamped();
         assert_eq!((c.size, c.custom_at, c.background.color), (70, Some(0.0), Some("#A1b2C3".into())));

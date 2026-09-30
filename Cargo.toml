@@ -5,9 +5,9 @@ exclude = ["spikes"]
 
 [workspace.package]
 edition = "2021"
-version = "0.12.2"
+version = "0.13.0"
 authors = ["Marczelloo"]
-license = "PolyForm-Noncommercial-1.0.0"
+license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -54,7 +54,7 @@ mod tests {
         write!(f, "one\r\ntwo\nthr").unwrap();
         let mut t = TailReader::new(&p);
         assert_eq!(t.read_lines().unwrap(), vec!["one", "two"]);
-        write!(f, "ee\n").unwrap();
+        writeln!(f, "ee").unwrap();
         assert_eq!(t.read_lines().unwrap(), vec!["three"]);
         assert!(t.read_lines().unwrap().is_empty());
     }

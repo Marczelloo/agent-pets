@@ -26,11 +26,20 @@ fn json_of(buf: &[u8]) -> Option<serde_json::Value> {
     serde_json::from_slice(buf.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(buf)).ok()
 }
 
+/// Input up to `max` bytes. An agent that never closes stdin gets no reply after [`STDIN_WAIT`]: the input counts as
+/// missing, and the reading thread dies with the process.
 fn read_stdin_max(max: u64) -> Vec<u8> {
-    let mut buf = Vec::new();
-    let _ = std::io::stdin().take(max).read_to_end(&mut buf);
-    buf
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::stdin().take(max).read_to_end(&mut buf);
+        let _ = tx.send(buf);
+    });
+    rx.recv_timeout(STDIN_WAIT).unwrap_or_default()
 }
+
+/// How long an agent may take to write the hook input; agents write it at once and close the pipe.
+const STDIN_WAIT: Duration = Duration::from_secs(3);
 
 /// Environment variable; empty means absent.
 fn env_var(k: &str) -> Option<String> { std::env::var(k).ok().filter(|v| !v.is_empty()) }

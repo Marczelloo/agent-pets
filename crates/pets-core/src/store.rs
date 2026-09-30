@@ -394,8 +394,7 @@ impl Store {
 
     /// `SubagentStop` without `agent_id`: end this session's newest live Claude subagent.
     fn end_newest_child(&mut self, parent: &str, now: i64, out: &mut Vec<Change>) {
-        let newest = self.children_of(parent).into_iter()
-            .filter(|c| c.state != State::Ended && sub_kind(c) == Some(SubKind::Claude)).last().map(|c| c.id.clone());
+        let newest = self.children_of(parent).into_iter().rfind(|c| c.state != State::Ended && sub_kind(c) == Some(SubKind::Claude)).map(|c| c.id.clone());
         if let Some(id) = newest {
             self.end(&id, now);
             if let Some(s) = self.sessions.get(&id) { out.push(Change::Upsert(s.clone())); }

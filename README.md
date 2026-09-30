@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Marczelloo/agent-pets/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Marczelloo/agent-pets?include_prereleases&color=D97757"></a>
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-5DCAA5">
-  <a href="LICENSE"><img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-8C887E"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0-8C887E"></a>
 </p>
 
 # Agent Pets
@@ -94,7 +94,7 @@ Session data never leaves your computer: states come from local hooks and files,
 
 ## License
 
-Agent Pets © 2026 [Marczelloo](https://github.com/Marczelloo), licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE): free to use, change and share for any noncommercial purpose, with credit. Commercial use needs permission. Versions up to 0.12.2 were released under the MIT License; see [NOTICE](NOTICE) for earlier terms, contributors, trademarks and third-party artwork.
+Agent Pets © 2026 [Marczelloo](https://github.com/Marczelloo), licensed under the [GNU General Public License v3.0 or later](LICENSE). You may use, study, change and share it, also commercially; if you share a changed version, it must stay open source under the same license. Versions up to 0.12.2 were released under the MIT License; see [NOTICE](NOTICE) for earlier terms, contributors, trademarks and third-party artwork.
 
 The Antigravity pet is based on the Android robot, which is reproduced or modified from work created and shared by Google and used according to terms described in the [Creative Commons 3.0 Attribution License](https://creativecommons.org/licenses/by/3.0/).
 

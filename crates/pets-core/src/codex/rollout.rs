@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn a_subagent_thread_is_a_child_of_its_parent_and_the_parent_delegates() {
-        let mut p = RolloutParser::new();
+        let mut p = RolloutParser::with_lang(Lang::Pl);
         let e = child(&mut p);
         let start = e.iter().find(|e| e.session_id == "t1").unwrap();
         assert_eq!(start.kind, Kind::SessionStart);
@@ -533,7 +533,7 @@ mod tests {
 
     #[test]
     fn patches_name_their_files() {
-        let mut p = RolloutParser::new();
+        let mut p = RolloutParser::with_lang(Lang::Pl);
         started(&mut p);
         let patch = "*** Begin Patch\n*** Update File: C:\\p\\a.ts\n@@\n*** Add File: b.ts\n+x\n*** End Patch";
         let e = p.parse_line(&l("response_item", json!({"type": "custom_tool_call", "name": "apply_patch", "input": patch})));
@@ -547,7 +547,7 @@ mod tests {
 
     #[test]
     fn questions_from_codex() {
-        let mut p = RolloutParser::new();
+        let mut p = RolloutParser::with_lang(Lang::Pl);
         started(&mut p);
         let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "request_user_input",
             "arguments": "{\"questions\":[{\"title\":\"Który wariant?\"}]}"})));

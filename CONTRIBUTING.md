@@ -13,11 +13,11 @@ See [docs/building.md](docs/building.md) for the setup.
 
 ## License of contributions
 
-Agent Pets is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Agent Pets is licensed under the [GNU General Public License v3.0 or later](LICENSE).
 By opening a pull request you agree that:
 
 1. your contribution is your own work, or you have the right to submit it;
 2. it is licensed under the same terms as the project;
-3. the maintainer (Marczelloo) may also release it under other terms in the future, including the MIT License or a commercial license.
+3. the maintainer (Marczelloo) may also release it under another license approved by the [Open Source Initiative](https://opensource.org/licenses) in the future.
 
 You keep the copyright to your contribution, and you are credited in the commit history and in the release notes.

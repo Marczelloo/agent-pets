@@ -30,7 +30,7 @@ fn entry(c: &rusqlite::Connection, s: &db::DbSession) -> Option<FileEntry> {
     }
     for (at, name) in tools {
         // `question` is the agent's question to the user, like Claude's `AskUserQuestion`
-        let model = msgs.iter().filter(|m| m.created <= at && m.model.is_some()).last().and_then(|m| m.model.clone());
+        let model = msgs.iter().rfind(|m| m.created <= at && m.model.is_some()).and_then(|m| m.model.clone());
         let cell = e.cell(at, model.as_deref().unwrap_or("unknown"));
         if name == "question" { cell.questions += 1 } else { cell.tools.add(from_opencode(&name)) }
         moments.push((at, None));

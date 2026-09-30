@@ -1,5 +1,6 @@
 pub mod action;
 pub mod adapters;
+pub mod applog;
 pub mod claude;
 pub mod codex;
 pub mod dismiss;

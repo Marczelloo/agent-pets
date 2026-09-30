@@ -23,6 +23,8 @@ interface Props {
   /** update state (result of "Check now") */
   update?: UpdateStatus;
   onCheck?: () => void;
+  /** Diagnostics tab: open the bug form on GitHub */
+  onReport?: () => void;
   /** Taskbar tab */
   monitors?: MonitorInfo[];
   leftFallback?: boolean;
@@ -48,7 +50,7 @@ const NOTE: Partial<Record<AppId, () => string>> = {
   antigravity: () => t().settings.antigravityNote, cursor: () => t().settings.cursorNote, zcode: () => t().settings.zcodeNote,
 };
 
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, monitors = [], leftFallback = false, onMove = () => {} }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, onReport, monitors = [], leftFallback = false, onMove = () => {} }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
 
@@ -147,6 +149,14 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
             if (!diag) return;
             void navigator.clipboard.writeText(reportText(diag, Date.now())).then(() => setCopied(true));
           }}>{copied ? t().settings.copied : t().settings.copyReport}</button>
+          {onReport && <div className="row">
+            <span className="desc">{t().settings.reportProblemDesc}</span>
+            <button type="button" onClick={() => {
+              // the form opens even when the clipboard refuses
+              const copy = diag ? navigator.clipboard.writeText(reportText(diag, Date.now())).then(() => setCopied(true)) : Promise.resolve();
+              void copy.catch(() => {}).finally(onReport);
+            }}>{t().settings.reportProblem}</button>
+          </div>}
         </section>}
       </main>
     </div>

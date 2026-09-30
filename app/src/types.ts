@@ -142,6 +142,8 @@ export interface Diagnostics {
   stats_files: number;
   stats_scanned_bytes: number;
   stats_total_bytes: number;
+  log_path: string;
+  log_tail: string[];
 }
 
 // Statystyki (0.9): lustro `pets_core::stats::summary::StatsView` i `scan::Progress`.

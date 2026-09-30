@@ -1,15 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { AppRow, Diagnostics } from '../types';
 import { appFor } from '../look';
-import { APP_LABEL, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, EXPERIMENTAL, reportText, withApp, withDoor } from './model';
+import { APP_LABEL, appBadge, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, EXPERIMENTAL, OPT_IN, reportText, withApp, withDoor } from './model';
 
 const row = (id: AppRow['id'], found: boolean): AppRow =>
   ({ id, detected: { found, path: found ? `C:/home/.${id}` : null, note: found ? null : 'nie znaleziono' },
      status: { installed: false, detail: '' }, enabled: true });
 
 describe('settings model', () => {
-  it('experimental apps are never turned on just because they were found', () => {
-    expect(EXPERIMENTAL).toEqual(['cursor', 'grok', 'zcode']);
+  it('Copilot and Antigravity wear the experimental badge but are still turned on when found', () => {
+    expect(EXPERIMENTAL).toEqual(['copilot', 'antigravity', 'cursor', 'grok', 'zcode']);
+    expect(appBadge('copilot')).toBe('eksperymentalne');
+    expect(appBadge('antigravity')).toBe('eksperymentalne');
+    expect(appBadge('claude_code')).toBeUndefined();
+    const s = defaultAppChoice([row('copilot', true), row('antigravity', true)], defaultSettings());
+    expect([s.apps.copilot, s.apps.antigravity]).toEqual([true, true]);
+  });
+  it('opt-in apps are never turned on just because they were found', () => {
+    expect(OPT_IN).toEqual(['cursor', 'grok', 'zcode']);
     const s = defaultAppChoice([row('claude_code', true), row('copilot', true), row('cursor', true), row('grok', true), row('zcode', true)],
       defaultSettings());
     expect([s.apps.claude_code, s.apps.copilot, s.apps.cursor, s.apps.grok, s.apps.zcode]).toEqual([true, true, false, false, false]);
@@ -78,12 +86,20 @@ describe('settings model', () => {
     const d: Diagnostics = { version: '0.5.0', endpoint_port: 61000, settings_path: 'C:/h/.agent-pets/settings.json', settings_error: null,
       hook_exe: 'C:/h/.agent-pets/hook.exe', autostart_registered: true, last_seen: { codex: 1_000 },
       apps: [['claude_code', true, 'Hooki: zainstalowane'], ['codex', false, 'Nic do instalowania']],
-      stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
+      stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0, log_path: 'C:/h/.agent-pets/agent-pets.log', log_tail: [] };
     const text = reportText(d, 61_000);
     expect(text).toContain('Agent Pets 0.5.0');
     expect(text).toContain('Serwer hooków: port 61000');
     expect(text).toContain('Codex: ostatnie zdarzenie 1 min temu');
     expect(text).toContain('Claude Code: włączone, Hooki: zainstalowane');
     expect(text.toLowerCase()).not.toContain('token');
+    expect(text).toContain('Log (C:/h/.agent-pets/agent-pets.log): pusty');
+  });
+  it('ends the report with the last lines of the log', () => {
+    const d: Diagnostics = { version: '0.13.0', endpoint_port: null, settings_path: 's', settings_error: null, hook_exe: null,
+      autostart_registered: false, last_seen: {}, apps: [], stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0,
+      log_path: 'L', log_tail: ['2026-09-30T10:00:00.000Z Agent Pets 0.13.0 started', '2026-09-30T10:00:01.000Z update check: offline'] };
+    const lines = reportText(d, 0).split('\n');
+    expect(lines.slice(-3)).toEqual(['Log (L), ostatnie wpisy:', d.log_tail[0], d.log_tail[1]]);
   });
 });

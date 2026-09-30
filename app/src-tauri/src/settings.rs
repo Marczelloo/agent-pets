@@ -58,6 +58,9 @@ pub struct Diagnostics {
     pub stats_files: usize,
     pub stats_scanned_bytes: u64,
     pub stats_total_bytes: u64,
+    /// App log file and its last lines (errors and lifecycle only, home folder as `~`).
+    pub log_path: String,
+    pub log_tail: Vec<String>,
 }
 
 /// Time of the latest event from each source, updated by the core (`core::live`).
@@ -205,8 +208,28 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
         stats_files: app.try_state::<crate::stats::StatsState>().and_then(|x| x.scanner.try_lock().ok().map(|s| s.book.files.len())).unwrap_or(0),
         stats_scanned_bytes: app.try_state::<crate::stats::StatsState>().map(|x| x.progress.lock().unwrap().scanned).unwrap_or(0),
         stats_total_bytes: app.try_state::<crate::stats::StatsState>().map(|x| x.progress.lock().unwrap().total).unwrap_or(0),
+        log_path: pets_core::applog::path(&st.home).to_string_lossy().into_owned(),
+        log_tail: pets_core::applog::tail(pets_core::applog::REPORT_LINES),
     }
 }
+
+/// New bug report on GitHub, the form's version field filled in (`.github/ISSUE_TEMPLATE/bug_report.yml`).
+pub fn issue_url(version: &str) -> String {
+    let v: String = version.bytes().map(|b| match b {
+        b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' | b'.' | b'-' | b'_' => (b as char).to_string(),
+        _ => format!("%{b:02X}"),
+    }).collect();
+    format!("https://github.com/Marczelloo/agent-pets/issues/new?template=bug_report.yml&version={v}")
+}
+
+/// Open the bug form in the default browser (settings → Diagnostics, tray menu).
+pub fn report_problem(app: &AppHandle) {
+    let url = issue_url(&app.package_info().version.to_string());
+    if !crate::jump::exec::open_url(&url) { pets_core::app_log!("report a problem: cannot open the browser"); }
+}
+
+#[tauri::command]
+pub fn report_problem_open(app: AppHandle) { report_problem(&app); }
 
 /// Settings window title (title bar, taskbar button, Alt+Tab).
 pub fn window_title(lang: Lang) -> &'static str { i18n::tr(lang, "Agent Pets: ustawienia", "Agent Pets: settings") }
@@ -267,8 +290,7 @@ mod tests {
     fn the_view_reports_the_windows_language_not_the_resolved_one() {
         let d = tempfile::tempdir().unwrap();
         let p = core_settings::path(d.path());
-        let mut s = Settings::default();
-        s.language = pets_core::settings::Language::En;
+        let s = Settings { language: pets_core::settings::Language::En, ..Settings::default() };
         core_settings::save(&p, &s).unwrap();
         let v = SettingsState::load(d.path().to_path_buf()).view(Lang::Pl);
         assert_eq!((v.lang, v.system_lang), (Lang::En, Lang::Pl));
@@ -285,8 +307,7 @@ mod tests {
         // only integration_set / wizard_finish change apps; the UI may have a stale list
         let mut current = Settings::default();
         current.apps.claude_code = false;
-        let mut incoming = Settings::default();
-        incoming.autostart = false;
+        let incoming = Settings { autostart: false, ..Settings::default() };
         let merged = merge_user_settings(&current, incoming);
         assert!(!merged.apps.claude_code);
         assert!(!merged.autostart);
@@ -320,6 +341,13 @@ mod tests {
         assert_eq!(fit_size((1100.0, 860.0), Some((1366.0, 728.0))), (1100.0, 696.0));
         assert_eq!(fit_size((1100.0, 860.0), Some((1024.0, 600.0))), (992.0, 568.0));
         assert_eq!(fit_size((800.0, 720.0), None), (800.0, 720.0));
+    }
+
+    #[test]
+    fn a_problem_report_opens_the_bug_form_with_the_version_filled_in() {
+        assert_eq!(issue_url("0.13.0"), "https://github.com/Marczelloo/agent-pets/issues/new?template=bug_report.yml&version=0.13.0");
+        assert_eq!(issue_url("1.0.0-beta.1+b7"), "https://github.com/Marczelloo/agent-pets/issues/new?template=bug_report.yml&version=1.0.0-beta.1%2Bb7");
+        assert!(issue_url("0.1&x=<y>").ends_with("&version=0.1%26x%3D%3Cy%3E"));
     }
 
     #[test]
