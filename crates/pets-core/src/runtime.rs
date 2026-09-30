@@ -704,7 +704,7 @@ mod tests {
     #[cfg(feature = "opencode-db")]
     fn opencode_db_in(h: &tempfile::TempDir, now: i64) {
         use crate::opencode_db::fixture::*;
-        let p = db(&crate::opencode_db::db_path(h.path()).parent().unwrap().to_path_buf());
+        let p = db(crate::opencode_db::db_path(h.path()).parent().unwrap());
         let w = rusqlite::Connection::open(&p).unwrap();
         session(&w, "ses_1", None, now, 0.0, [100, 20, 5, 1000, 50]);
         message(&w, "m1", "ses_1", now - 1000, reply("openai", now - 1000, [10, 20, 3, 400, 5], 0.0));
@@ -812,9 +812,9 @@ mod tests {
         use crate::model::{Kind, Source};
         let h = home();
         let mut rt = Runtime::start(cfg(&h)).unwrap();
-        assert!(rt.last_seen().get("codex").is_none());
+        assert!(!rt.last_seen().contains_key("codex"));
         rt.apply_external(event(Source::Codex, "x1", Kind::Prompt));
-        assert!(rt.last_seen().get("codex").is_some());
+        assert!(rt.last_seen().contains_key("codex"));
     }
 
     #[test]

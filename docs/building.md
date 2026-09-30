@@ -134,7 +134,7 @@ node record.mjs banner              # docs/images/banner.png, a still at twice t
 
 ## Releases
 
-Maintainer only. Since 0.7 the app reads `latest.json` from the latest GitHub release and installs only an installer with a valid signature. Releases are built and signed locally, because the key exists only on the maintainer's computer; the `release` workflow only runs the tests.
+Maintainer only. Since 0.7 the app reads `latest.json` from the latest GitHub release and installs only an installer with a valid signature. Releases are built and signed locally, because the key exists only on the maintainer's computer; the `ci` workflow only runs the tests.
 
 ### Signing key
 

@@ -111,8 +111,7 @@ pub fn messages(c: &Connection, session: &str) -> Option<Vec<DbMessage>> {
             cost: num(r, 10), cwd: text(r, 11),
         })
     }).ok()?;
-    let all = rows.collect::<Result<Vec<_>, _>>().ok();
-    all
+    rows.collect::<Result<Vec<_>, _>>().ok()
 }
 
 /// Session tool calls: (time, tool name); `None` on read error.

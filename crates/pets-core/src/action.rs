@@ -37,7 +37,7 @@ fn command(v: &Value) -> Option<String> {
 fn patch_files(patch: &str) -> Vec<&str> {
     patch.lines().filter_map(|l| {
         ["*** Update File:", "*** Add File:", "*** Delete File:"].iter()
-            .find_map(|h| l.strip_prefix(h)).map(|p| file_name(p))
+            .find_map(|h| l.strip_prefix(h)).map(file_name)
     }).filter(|f| !f.is_empty()).collect()
 }
 

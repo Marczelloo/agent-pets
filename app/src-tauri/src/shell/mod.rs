@@ -102,7 +102,7 @@ pub fn take_basic(pending: &mut Vec<Cmd>, want: &mut f64) -> bool {
 /// at most one second old: enumerating monitors and traversing UI Automation are costly.
 pub fn remeasure(pending: &[Cmd], age: Option<Duration>) -> bool {
     let only_drags = !pending.is_empty() && pending.iter().all(|c| matches!(c, Cmd::Drag(_)));
-    !only_drags || age.map_or(true, |a| a >= Duration::from_secs(1))
+    !only_drags || age.is_none_or(|a| a >= Duration::from_secs(1))
 }
 
 /// Active "Move": anchor at grab time (screen pixels) and current position.
@@ -221,7 +221,7 @@ struct FloatDrag { from: placement::Rect, at: (f64, f64) }
 fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<AtomicU8>, shared: Arc<std::sync::Mutex<Option<Layout>>>) {
     use tauri::Manager;
     let uia = taskbar::Uia::new().ok();
-    if uia.is_none() { eprintln!("agent-pets: UI Automation unavailable; stage will stay small near the tray"); }
+    if uia.is_none() { pets_core::app_log!("UI Automation unavailable; stage will stay small near the tray"); }
     let (mut want, mut n) = (0.0f64, 1u32);
     // stage window parent: taskbar handle (0 = top-level window, None = not yet determined)
     let (mut parent, mut embed_failed): (Option<isize>, bool) = (None, false);
@@ -276,7 +276,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 taskbar::passthrough(hw, false);
                 embed_failed = taskbar::embed(hw, taskbar::hwnd(b)).is_err();
                 embed_failed_at = embed_failed.then(std::time::Instant::now);
-                if embed_failed { eprintln!("agent-pets: taskbar embedding failed; window remains above taskbar until retry"); }
+                if embed_failed { pets_core::app_log!("taskbar embedding failed; window remains above taskbar until retry"); }
                 parent = Some(b);
                 last_layout = None;
             }
@@ -310,7 +310,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                         let r = placement::float_rect(mon.work, Some(d.at), anchor, want, h_css, mon.scale);
                         let (x, y) = placement::float_anchor(mon.work, r, anchor, mon.scale);
                         if let Err(e) = crate::settings::update(&app, |s| s.stage.floating_at = Some(pets_core::settings::Point { x, y })) {
-                            eprintln!("agent-pets: {e}");
+                            pets_core::app_log!("{e}");
                         }
                     },
                     Cmd::Width(_) | Cmd::Hello | Cmd::Settings | Cmd::Move(_) | Cmd::MoveDone(_) | Cmd::Drag(_) => {}
@@ -359,7 +359,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                     if commit {
                         let (at, align) = (mv.at, align_of(mv.anchor));
                         if let Err(e) = crate::settings::update(&app, |s| { s.stage.position = Position::Custom; s.stage.custom_at = Some(at); s.stage.align = align; }) {
-                            eprintln!("agent-pets: {e}");
+                            pets_core::app_log!("{e}");
                         }
                     }
                 },

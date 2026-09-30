@@ -1,0 +1,68 @@
+name: Bug report
+description: A pet, the panel, the settings or an integration does something wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please check the [open issues](https://github.com/Marczelloo/agent-pets/issues) first.
+        Found a security problem? Do not post it here; see [SECURITY.md](https://github.com/Marczelloo/agent-pets/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Agent Pets version
+      description: Settings → Diagnostics shows it at the top of the report.
+      placeholder: "0.13.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Run `winver` and copy the version and build.
+      placeholder: "Windows 11 24H2, build 26100.4061"
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      description: Which integration is involved? Pick every one that shows the problem.
+      multiple: true
+      options:
+        - Claude Code
+        - Codex
+        - Agent Router
+        - opencode
+        - GitHub Copilot
+        - Antigravity
+        - Cursor
+        - Grok Build
+        - ZCode
+        - Other program (hook.exe report)
+        - None, the app itself
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you see instead? Screenshots or a short video help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a Claude Code session in Windows Terminal
+        2. Ask it to run a command
+        3. The pet keeps typing after the command ends
+  - type: textarea
+    id: report
+    attributes:
+      label: Diagnostics report
+      description: |
+        Settings → Diagnostics → Copy report, then paste it here. It has no tokens, prompts or session titles,
+        and your home folder is written as ~, but please read it before posting.
+      render: text
