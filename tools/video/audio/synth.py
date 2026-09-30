@@ -412,3 +412,73 @@ def lofi(y, sr=SR):
     out = np.stack([np.interp(idx, np.arange(n), c) for c in y])
     out = np.stack([signal.sosfilt(signal.butter(2, 5600, 'low', fs=sr, output='sos'), c) for c in out])
     return np.tanh(1.1 * out) / 1.05
+
+
+# ------------------------------------------------------------------ v3: plucky indie-game / light electronic
+
+def psyn(freq, dur=0.32, vel=1.0):
+    """Short synth pluck: two slightly detuned band-limited saws, the filter snaps shut as the note decays."""
+    n = int(SR * dur); t = tt(n)
+    y = saw_bl(freq, t, 7000) + saw_bl(freq * 1.006, t, 7000)
+    bright = lp(y, 5200, 2) * np.exp(-t / 0.035)
+    body = lp(y, 1500, 2) * np.exp(-t / 0.16)
+    return (bright * 0.7 + body) * np.minimum(1, t / 0.002) * np.minimum(1, (dur - t) / 0.03) * vel * 0.09
+
+
+def xylo(freq, dur=0.5, vel=1.0):
+    """Bright wooden mallet: a hard strike, a clear fundamental and a short 3x partial."""
+    n = int(SR * dur); t = tt(n)
+    y = np.sin(TWO_PI * freq * t) * np.exp(-t / 0.14) + 0.35 * np.sin(TWO_PI * freq * 3.0 * t) * np.exp(-t / 0.04) + 0.12 * np.sin(TWO_PI * freq * 6.1 * t) * np.exp(-t / 0.02)
+    return (y * np.minimum(1, t / 0.001) + lp(hp(noise(n), 2500), 8000) * np.exp(-t / 0.003) * 0.12) * vel * 0.7
+
+
+def pluck_bass(freq, dur=0.3, vel=1.0):
+    n = int(SR * dur); t = tt(n)
+    y = np.sin(TWO_PI * freq * t) + 0.5 * np.sin(TWO_PI * 2 * freq * t) * np.exp(-t / 0.09) + 0.2 * np.sin(TWO_PI * 3 * freq * t) * np.exp(-t / 0.05)
+    return lp(y, 900) * np.exp(-t / 0.16) * np.minimum(1, t / 0.004) * np.minimum(1, (dur - t) / 0.03) * vel * 0.75
+
+
+def clock_tick(vel=1.0, tock=False):
+    """A wall clock: dry wooden click with a tiny resonance."""
+    n = int(SR * 0.06); t = tt(n); f = 1500 if tock else 2300
+    y = (np.sin(TWO_PI * f * t) * np.exp(-t / 0.006) + 0.6 * bp(noise(n), 1800, 6000) * np.exp(-t / 0.003)) * np.minimum(1, t / 0.0005)
+    return y * vel * 0.5
+
+
+def pop(freq=520, vel=1.0):
+    """A small round pop: quick pitch drop plus a soft click. Vary the pitch for a family of them."""
+    n = int(SR * 0.14); t = tt(n)
+    f = freq * (1 + 1.4 * np.exp(-t / 0.014))
+    y = np.sin(TWO_PI * np.cumsum(f) / SR) * np.exp(-t / 0.035) + 0.25 * lp(hp(noise(n), 1500), 5000) * np.exp(-t / 0.004)
+    return y * np.minimum(1, t / 0.0008) * vel * 0.8
+
+
+def impact(vel=1.0):
+    """HEY!: a punchy hit with a short pitched body and a bright pop on top."""
+    n = int(SR * 0.5); t = tt(n)
+    f = 70 + 200 * np.exp(-t / 0.03)
+    body = np.sin(TWO_PI * np.cumsum(f) / SR) * np.exp(-t / 0.16)
+    top = (np.sin(TWO_PI * 880 * t * (1 + 0.6 * np.exp(-t / 0.03))) * np.exp(-t / 0.05)) * 0.5 + lp(hp(noise(n), 1200), 7000) * np.exp(-t / 0.05) * 0.5
+    return np.tanh(1.2 * (body + top)) * vel * 0.85
+
+
+def snap(vel=1.0):
+    """A finger-snap-ish tick for changing looks."""
+    n = int(SR * 0.09); t = tt(n)
+    return (bp(noise(n), 1400, 5200) * np.exp(-t / 0.012) + 0.5 * np.sin(TWO_PI * 1900 * t) * np.exp(-t / 0.006)) * np.minimum(1, t / 0.0005) * vel * 0.7
+
+
+def softburst(vel=1.0):
+    n = int(SR * 0.25); t = tt(n)
+    return lp(bp(noise(n), 600, 5200), 5200) * np.exp(-t / 0.05) * np.minimum(1, t / 0.004) * vel * 0.55
+
+
+def opening_filter(x, t0, t1, f0=180, f1=7000):
+    """Low-pass whose cutoff sweeps exponentially from f0 to f1 between t0 and t1 seconds (the muffled beat 'opens')."""
+    n = len(x); out = np.zeros(n); blocks = 24; edges = np.linspace(0, n, blocks + 1).astype(int)
+    for b in range(blocks):
+        tc = (edges[b] + edges[b + 1]) / 2 / SR; k = min(1, max(0, (tc - t0) / (t1 - t0)))
+        c = f0 * (f1 / f0) ** k
+        seg = signal.sosfilt(signal.butter(2, c, 'low', fs=SR, output='sos'), x)
+        out[edges[b]:edges[b + 1]] = seg[edges[b]:edges[b + 1]]
+    return out

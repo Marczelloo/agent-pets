@@ -1,14 +1,13 @@
 // The whole video as one function of time. Each act owns a stretch of it; see ctx.ts for how they cooperate.
 import { blank, makeCrew, CREW, type Who } from './actors';
-import { act1, CUTS, hookCams, PULL_BACK } from './act1';
-import { wander } from './cursor';
+import { act1, dolly, hookCams } from './act1';
 import { act2, CALL, rainCam } from './act2';
 import { camPath, still, worldToScreen, type Cam, type CamFn } from './camera';
 import type { Ctx } from './ctx';
 import { act3 } from './act3';
 import type { Format } from './format';
 import type { Limit } from '@app/types';
-import { clamp, easeInOut, easeOutBack, ring } from './util';
+import { clamp, easeInOut, ring } from './util';
 import { DARK } from './themes';
 import { setInk } from './overlays';
 import { drawBackdrop, drawCursor, drawTaskbar } from './world';
@@ -29,12 +28,9 @@ export class Story {
 
   constructor(readonly fmt: Format) {
     const { close, wide } = hookCams(fmt);
-    const creep: Cam = { ...close, z: close.z * 1.045 };
-    const insert: CamFn = t => { const w = wander(t); return { x: w.x + 20, y: w.y + 30, z: wide.z * 2.1 }; };
     this.cam = camPath([
-      [0, still(close)], [PULL_BACK - 0.05, still(creep), easeInOut], [PULL_BACK + 0.95, still(wide), t => easeOutBack(t, 1.15)],
-      // a slow drift in on the cursor (it has no idea), then across to Clawd as he gives up and calls the crew, then out to the rain
-      [CUTS[0] - 0.3, still(wide)], [CUTS[1] + 0.05, insert, easeInOut], [CALL - 0.05, still(close), easeInOut], [CALL + 0.85, still(close)], [CALL + 1.6, rainCam(fmt), easeInOut],
+      // one continuous move: wide on the desktop, easing toward Clawd faster and faster, arriving on HEY!
+      [0, still(wide)], [CALL, still(close), dolly], [CALL + 0.85, still(close)], [CALL + 1.6, rainCam(fmt), easeInOut],
       ...act3Cam(fmt), ...endKeys(fmt),
     ]);
   }

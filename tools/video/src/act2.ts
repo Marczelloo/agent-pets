@@ -47,7 +47,7 @@ const FALLING = { armL: 2.7, armR: 2.7, oscL: 0.5, oscR: 0.5, _f: 14, look: -0.2
 
 export function act2(c: Ctx): void {
   const { T, fmt } = c, p = fmt.portrait;
-  if (T < at(2, 3) + 0.25) return;
+  if (T < CALL - 0.01) return;
   const landed = SLOTS.filter(s => s.land > 0 && T >= s.land).length;
   const sw = sway(T), nerv = Math.abs(sw) * 10;
 

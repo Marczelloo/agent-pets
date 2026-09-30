@@ -1,7 +1,7 @@
 // Every sound in the video, as data. The times come from the same constants that drive the animation, so picture and
 // sound cannot drift apart. tools/video/audio/make_audio.py turns this list (plus its own score) into the soundtrack.
-import { at, BEAT } from './beat';
-import { CUTS, KNOCKS, PULL_BACK } from './act1';
+import { BEAT } from './beat';
+import { KNOCKS, KNOCK_V } from './act1';
 import { CALL } from './act2';
 import { CATCH, CLICK, HI, HOP1, HOP2, HOP_TIME, PLANE_HIT, PLANE_THROW, SWING1 } from './act3';
 import { FLIP, LOOKS, PARTY, WAKE } from './act4';
@@ -14,17 +14,11 @@ export function buildCues(): Cue[] {
   const c: Cue[] = [];
   const add = (t: number, name: string, v = 1, p?: number) => c.push({ t: +t.toFixed(4), name, v, p });
 
-  // hook: three knocks up close, three from far away
-  KNOCKS.forEach((k, i) => add(k, 'knock', i < 3 ? 1 : 0.55, i));
-  add(PULL_BACK - 0.02, 'whoosh', 1);
-  add(PULL_BACK + 0.35, 'pop', 0.8, 0); add(PULL_BACK + 0.5, 'pop', 0.9, 1); add(PULL_BACK + 0.62, 'pop', 0.8, 2);
-  add(PULL_BACK + 1.15, 'cricket', 0.5); add(PULL_BACK + 1.6, 'cricket', 0.4);
-  add(CUTS[2] - 0.35, 'whoosh', 0.7);
-  add(at(2, 3) + 0.3, 'sigh', 0.8);
+  // hook: knocks from the first frame, quiet and rare, then harder and closer together, then HEY! on the beat
+  KNOCKS.forEach((k, i) => add(k, 'knock', KNOCK_V[i], i));
 
   // the call and the rain
-  add(CALL, 'whistle', 1);
-  add(CALL + 0.35, 'pop', 0.7, 0);
+  add(CALL, 'hey', 1);
   SLOTS.filter(s => s.land > 0).forEach((s, i) => { add(s.land - FALL_TIME, 'fall', 0.8, i); add(s.land, 'land', 1, i); });
   add(ZCODE.land - FALL_TIME, 'fall', 0.7, 7); add(ZCODE.land, 'land', 0.9, 7); add(ZCODE.land + 0.5, 'snore', 0.6);
 
