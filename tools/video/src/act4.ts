@@ -5,18 +5,19 @@ import type { Who } from './actors';
 import { at, BEAT } from './beat';
 import type { Ctx } from './ctx';
 import { CLICK } from './act3';
-import { SKINS } from '@app/skins';
 import { TAGS } from './act2';
 import { drawBurst, drawCaption, drawTag, type Burst } from './overlays';
-import { SLOTS, ZCODE, heightOf } from './tower';
+import { SLOTS, ZCODE, heightOf, landing } from './tower';
 import { THEME, STYLE_NAMES } from './themes';
-import { clamp, easeInOut, easeOut, hash, lerp, TAU } from './util';
+import { clamp, easeInOut, easeOut, easeOutBack, hash, lerp, TAU } from './util';
 import { worldToScreen } from './camera';
 
 export const PARTY = at(7, 1);
 export const FLIP = at(9, 0);
 export const LOOKS: StyleId[] = ['sticker', 'sketch', 'clean', 'pixel', 'neon', 'ink', 'pastel', 'clean'];
 export const WAKE = PARTY + 0.45;
+/** Who stars in each look (Sticker and Pixel only exist for Clawd and Kodek); null = the whole crew is back. */
+const SOLO: (Who | null)[] = ['clawd', 'opencode', 'copilot', 'kodek', 'cursor', 'grok', 'zcode', null];
 
 /** 1 on the beat, easing back to 0: the pulse everything dances to. */
 export const hit = (T: number, from = PARTY) => { const ph = (((T - from) / BEAT) % 1 + 1) % 1; return ph < 0.18 ? easeOut(ph / 0.18) : 1 - easeInOut((ph - 0.18) / 0.82); };
@@ -91,23 +92,26 @@ export function act4(c: Ctx): void {
   if (T >= FLIP - 0.02) {
     const i = clamp(Math.floor((T - FLIP) / BEAT + 1e-6), 0, LOOKS.length - 1), style = LOOKS[i], th = THEME[style], prev = THEME[LOOKS[Math.max(0, i - 1)]];
     c.theme = th;
-    const since = (T - FLIP) - i * BEAT;
+    const since = (T - FLIP) - i * BEAT, dir = i % 2 ? -1 : 1;
     const pyC = worldToScreen({ x: 0, y: 0, z: 1 }, fmt, 0, 0); void pyC;
-    c.wipe = i > 0 || LOOKS[0] !== 'clean' ? { prev: i === 0 ? THEME.clean : prev, k: clamp(since / 0.22), cx: fmt.W * 0.5, cy: fmt.H * 0.62 } : undefined;
-    for (const w of ['clawd', 'opencode', 'copilot', 'cursor', 'grok', 'kodek', 'kilo', 'android', 'zcode'] as Who[]) c.set(w, { look: { style, motion: 'calm' } });
+    c.wipe = i > 0 || LOOKS[0] !== 'clean' ? { prev: i === 0 ? THEME.clean : prev, k: clamp(since / 0.2), cx: fmt.W * (dir > 0 ? 0.85 : 0.15), cy: fmt.H * 0.62 } : undefined;
+    const ALL: Who[] = ['clawd', 'opencode', 'copilot', 'cursor', 'grok', 'kodek', 'kilo', 'android', 'zcode'];
+    for (const w of ALL) c.set(w, { look: { style, motion: 'calm' } });
+    // one pet per look, cut in from alternating sides with a squash; Sticker and Pixel exist for Clawd and Kodek only. The last beat brings the crew back.
+    const solo = SOLO[i], enter = clamp(since / 0.3), lz = landing(since - 0.22);
+    if (solo) {
+      for (const w of ALL) if (w !== solo) c.set(w, { hidden: true });
+      c.set(solo, { x: 98 + dir * (1 - easeOutBack(enter, 1.3)) * 560, y: -7 * hit(T), s: 1.9, z: 60, sx: lz.sx, sy: lz.sy, rot: dir * (1 - easeOut(enter)) * 0.4 });
+      c.front.push(x => { const [tx, ty] = c.crew[solo].pt(0, -heightOf(solo) - 44); drawTag(x, T, tx, ty, { ...TAGS[solo], t: FLIP + i * BEAT + 0.12, out: FLIP + (i + 1) * BEAT - 0.04, h: p ? 68 : 62, tilt: -0.03 * dir, anchor: 'c' }); });
+    }
     // a pulse on every change
-    for (let j = 0; j < LOOKS.length; j++) c.punches.push([FLIP + j * BEAT, 0.9]);
+    for (let j = 0; j < LOOKS.length; j++) c.punches.push([FLIP + j * BEAT, 1.6]);
     c.front.push(x => {
       const name = STYLE_NAMES[style], t0 = FLIP + i * BEAT, outAt = t0 + BEAT;
       const ink = th.text, sub = th.sub;
       drawCaption(x, T, [[{ text: 'Seven', t: FLIP - 0.02, color: sub, k: 0.5, out: at(11, 0) }, { text: 'looks.', t: FLIP + 0.02, color: sub, k: 0.5, out: at(11, 0) }]], { size: size * 0.8, cx: fmt.W / 2, cy: cy - (p ? 60 : 42), lineGap: 1.1 });
       drawCaption(x, T, [[{ text: name, t: t0, out: outAt - 0.05, color: ink }]], { size: size * 1.1, cx: fmt.W / 2, cy: cy + (p ? 70 : 30), lineGap: 1.1, weight: 700 });
-      // Sticker and Pixel are drawn for Clawd and Kodek only (the rest of the crew keeps its Clean look for those two beats): tag the two
-      if (style === 'sticker' || style === 'pixel') {
-        const h = p ? 68 : 62, [cx0, cy0] = c.crew.clawd.pt(-6, -heightOf('clawd') - 60), [kx, ky] = c.crew.kodek.pt(SKINS.kodek.width / 2 + 14, -heightOf('kodek') * 0.6);
-        drawTag(x, T, cx0, cy0, { ...TAGS.clawd, t: t0 + 0.04, out: outAt - 0.05, h, tilt: -0.03, anchor: 'c' });
-        drawTag(x, T, kx, ky, { ...TAGS.kodek, t: t0 + 0.09, out: outAt - 0.05, h, tilt: 0.03, anchor: 'l' });
-      }
+
     });
   }
 }

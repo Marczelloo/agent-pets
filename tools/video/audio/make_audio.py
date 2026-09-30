@@ -13,7 +13,7 @@ from synth import note
 BPM = 108
 BEAT = 60 / BPM
 BAR = 4 * BEAT
-SWING = 0.07   # off-beats land a little late, like a drummer who is not in a hurry
+SWING = 0.13   # off-beats land a little late, like a drummer who is not in a hurry
 
 
 def T(bar, beat=0.0): return (bar - 1) * BAR + beat * BEAT
@@ -75,7 +75,7 @@ def bass_line(mix, bar, chord, party, gain=0.8):
     for b, d, v in pat: mix.add(S.sub(r * (2 if (b == 3.5 and party) else 1), d * BEAT, v), T(bar, b), gain, 0.0, 0.02)
 
 
-def duck_curve(n, kicks, depth=0.55, tau=0.11):
+def duck_curve(n, kicks, depth=0.3, tau=0.14):
     """Sidechain: pull the pads and keys down on every kick, then let them swell back."""
     t = np.arange(n) / S.SR; g = np.ones(n)
     for k in kicks:
@@ -170,7 +170,7 @@ def build(cues_path, out_path):
     climb = ['A2', 'C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'E4']
     for c in by('look'):
         i = c['p']
-        mix.add(S.stab([note(climb[i]), note(climb[i]) * 1.5], 0.5, 1.0), c['t'], 0.5, 0.0, 0.25)
+        keys.add(S.ep(note(climb[i]) * 2, 0.7, 0.9, 0.5), c['t'], 0.3, 0.0, 0.4)
 
     # ============================================================ bars 11-14: the group photo, a calmer beat, the last knock ============================================================
     for bar in (11, 12, 13):
@@ -247,7 +247,7 @@ def build(cues_path, out_path):
         elif n == 'tick': mix.add(S.woodtick(tick_pitch[(p or 0) % 6], 1.0), t, 0.3 * v, 0.0, 0.15)
 
     mix.reverb(0.7, 1.0)
-    y = mix.master()
+    y = S.lofi(mix.master())
     keep = int(S.SR * (dur + 0.05))
     y = y[:, :keep]
     n = int(S.SR * 0.25); y[:, -n:] *= np.linspace(1, 0, n)
