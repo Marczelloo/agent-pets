@@ -282,3 +282,20 @@ export function drawDizzy(x: CanvasRenderingContext2D, T: number, sx: number, sy
   }
 }
 
+
+/** Typed-in caption: characters appear one by one (like a prompt being entered) with a caret that blinks, then fades at `out`. */
+export function drawTyped(x: CanvasRenderingContext2D, T: number, segs: { text: string; color?: string }[], o: { t0: number; cps: number; out?: number; size: number; cx: number; cy: number; weight?: number }): void {
+  const age = T - o.t0, fade = o.out != null ? 1 - clamp((T - o.out) / 0.25) : 1;
+  if (age < 0 || fade <= 0) return;
+  const total = segs.reduce((a, g) => a + g.text.length, 0), shown = Math.min(total, Math.floor(age * o.cps));
+  x.save(); x.globalAlpha = fade; x.textBaseline = 'alphabetic'; x.textAlign = 'left'; x.font = `${o.weight ?? 700} ${o.size}px ${FONT}`;
+  const full = segs.reduce((a, g) => a + x.measureText(g.text).width, 0);
+  let px = o.cx - full / 2, left = shown;
+  for (const g of segs) {
+    const part = g.text.slice(0, Math.max(0, left)); left -= g.text.length;
+    x.fillStyle = g.color ?? INK; x.fillText(part, px, o.cy + o.size * 0.36); px += x.measureText(part).width;
+    if (left <= 0) break;
+  }
+  if (shown < total || Math.floor(age * 2.4) % 2 === 0) { x.fillStyle = INK; x.fillRect(px + o.size * 0.05, o.cy - o.size * 0.42, o.size * 0.07, o.size * 0.86); }
+  x.restore();
+}

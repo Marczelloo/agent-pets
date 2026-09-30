@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Builds the Agent Pets soundtrack: an original 120 BPM score in the spirit of indie-game UI music (plucky synths, mallets, clicky
-percussion, a light bass, no vocals, no big build-up) plus sound effects placed from out/cues.json, which the animation itself produces.
-The cold open is just a ticking clock and a muffled beat that slowly opens; everything comes in on HEY!. Usage: make_audio.py cues.json out.wav"""
+"""Builds the Agent Pets soundtrack: an original 120 BPM score in F major (pizzicato, marimba, glockenspiel, a warm plucked bass, shaker and
+claps; no vocals) plus sound effects placed from out/cues.json, which the animation itself produces.
+Structure: a ticking clock and a muffled motif that opens up until HEY!, a second of near silence, then the groove enters with Clawd's landing
+and gains a layer for every pet that lands; it thins out for "Got your attention?", comes back with the Allow click, and rings out on the end card.
+Usage: make_audio.py cues.json out.wav"""
 import json
 import sys
 
@@ -14,193 +16,237 @@ from synth import note
 BPM = 120
 BEAT = 60 / BPM
 BAR = 4 * BEAT
-INTRO_EXTRA = BEAT   # same extra beat as src/beat.ts: bar 3 starts at 4.5 s
+INTRO_EXTRA = 4 * BEAT   # same as src/beat.ts: bar 3 starts at 6.0 s
 
 
 def T(bar, beat=0.0): return (bar - 1) * BAR + beat * BEAT + (INTRO_EXTRA if bar >= 3 else 0.0)
 
 
-# C minor: Cm7 | Abmaj7 | Fm7 | G7sus4, one chord per bar, looping from bar 3.
+# F major, I - vi - IV - V: F | Dm | Bb | C, one chord per bar, looping from bar 3.
 CH = {
-    'Cm7':   dict(bass='C2', arp=['C4', 'Eb4', 'G4', 'Bb4']),
-    'Abmaj7': dict(bass='Ab1', arp=['Ab3', 'C4', 'Eb4', 'G4']),
-    'Fm7':   dict(bass='F2', arp=['F3', 'Ab3', 'C4', 'Eb4']),
-    'G7sus': dict(bass='G1', arp=['G3', 'C4', 'D4', 'F4']),
+    'F':  dict(bass='F2',  pz=['A3', 'C4', 'F4'],  arp=['F4', 'A4', 'C5', 'A4']),
+    'Dm': dict(bass='D3',  pz=['A3', 'D4', 'F4'],  arp=['D4', 'F4', 'A4', 'F4']),
+    'Bb': dict(bass='Bb2', pz=['Bb3', 'D4', 'F4'], arp=['Bb3', 'D4', 'F4', 'D4']),
+    'C':  dict(bass='C3',  pz=['G3', 'C4', 'E4'],  arp=['C4', 'E4', 'G4', 'E4']),
 }
-LOOP = ['Cm7', 'Abmaj7', 'Fm7', 'G7sus']
+LOOP = ['F', 'Dm', 'Bb', 'C']
 chord_of = lambda bar: LOOP[(bar - 3) % 4]
-ARP = [0, 2, 1, 3, 2, 1, 3, 2]                     # eighth-note pluck pattern over the chord tones
-MOTIF = {                                          # xylophone tune, C minor pentatonic; '-' = rest, eighth-note steps
-    'Cm7':   ['G5', '-', 'Bb5', '-', 'C6', 'Bb5', 'G5', '-'],
-    'Abmaj7': ['Eb5', '-', 'G5', '-', 'Ab5', 'G5', 'Eb5', '-'],
-    'Fm7':   ['F5', '-', 'Ab5', '-', 'C6', '-', 'Ab5', 'F5'],
-    'G7sus': ['D5', 'F5', 'G5', '-', 'D6', '-', 'C6', 'Bb5'],
+MELODY = {   # a simple hummable tune, eighth-note steps ('-' = rest)
+    'F':  ['C5', '-', 'A4', 'C5', 'F5', '-', 'E5', 'C5'],
+    'Dm': ['D5', '-', 'A4', 'D5', 'F5', '-', 'D5', 'A4'],
+    'Bb': ['Bb4', '-', 'D5', 'F5', 'Bb5', '-', 'A5', 'F5'],
+    'C':  ['G5', '-', 'E5', 'C5', 'D5', 'E5', 'G5', '-'],
 }
-LAND_TUNE = ['C5', 'Eb5', 'F5', 'G5', 'Bb5', 'C6', 'Eb6', 'G6']
+LAND_TUNE = ['F5', 'G5', 'A5', 'C6', 'D6', 'F6', 'G6', 'A6', 'C7']
 
-MUSIC, SFX = 0.8, 0.95
-rng = np.random.default_rng(5)
+MUSIC, SFX = 0.85, 0.95
+rng = np.random.default_rng(3)
 human = lambda v: v * rng.uniform(0.9, 1.0)
 
 
-def groove(mix, bar, level, start=0.0):
-    """level 1: kick + bass feel; 2: + hats and clap; 3: + clicky percussion."""
-    for b, v in ((0, 1.0), (1.5, 0.55), (2.5, 0.8)):
-        if b >= start: mix.add(S.kick(human(0.85 * v)), T(bar, b), 0.55, 0.0, 0.02)
-    if level >= 2:
+class Score:
+    """Places events on the music stem; `on(t)` tells which layers are in at time t (they come in with the landings)."""
+    def __init__(self, mix, lands): self.m, self.lands = mix, lands
+    def layer(self, t, n): return len(self.lands) >= n and t >= self.lands[n - 1] - 1e-6
+
+    def bass(self, bar, chord, t0=0.0, gain=0.8, busy=True):
+        r = note(CH[chord]['bass'])
+        pat = [(0, 1, 1.0), (1.5, 0.5, 0.7), (2, 0.75, 0.85), (3.5, 0.5, 0.65)] if busy else [(0, 1.5, 0.9), (2, 1, 0.6)]
+        for b, d, v in pat:
+            t = T(bar, b)
+            if t >= t0: self.m.add(S.warm_bass(r, d * BEAT, v), t, gain, 0.0, 0.03)
+
+    def kick(self, bar, t0=0.0, four=False, gain=0.5):
+        for b, v in ((0, 1.0), (1, 0.85 if four else 0), (1.5, 0.45), (2, 0.9), (3, 0.85 if four else 0), (3.5, 0.0 if four else 0.45)):
+            t = T(bar, b)
+            if v and t >= t0: self.m.add(S.kick_soft(human(v)), t, gain, 0.0, 0.02)
+
+    def claps(self, bar, t0=0.0, gain=0.38):
         for b in (1, 3):
-            if b >= start: mix.add(S.clap(human(0.7)), T(bar, b), 0.4, 0.05, 0.16)
+            t = T(bar, b)
+            if t >= t0: self.m.add(S.snapclap(human(0.8)), t, gain, 0.05, 0.16)
+
+    def shaker(self, bar, t0=0.0, sixteenth=False, gain=0.3):
+        for i in range(16 if sixteenth else 8):
+            b = i * (0.25 if sixteenth else 0.5); t = T(bar, b)
+            if t >= t0: self.m.add(S.shaker(human(0.5 if i % 2 else 0.75)), t, gain, -0.3, 0.05)
+
+    def hats(self, bar, t0=0.0, gain=0.22):
         for i in range(8):
-            b = i * 0.5 + 0.5 * 0
-            if b >= start: mix.add(S.hat(human(0.55 if i % 2 else 0.4)), T(bar, b), 0.32, 0.25, 0.04)
-    if level >= 3:
+            t = T(bar, i * 0.5 + 0.25 * 0)
+            if i % 2 == 1 and t >= t0: self.m.add(S.hat(human(0.6)), t, gain, 0.25, 0.04)
+
+    def ticks(self, bar, t0=0.0, gain=0.34):
         for b, f, v in ((0.75, 1700, 0.5), (1.75, 2100, 0.55), (2.25, 1900, 0.45), (3.25, 2300, 0.55), (3.75, 1500, 0.5)):
-            if b >= start: mix.add(S.woodtick(f, human(v)), T(bar, b), 0.4, -0.3, 0.06)
+            t = T(bar, b)
+            if t >= t0: self.m.add(S.woodtick(f, human(v)), t, gain, -0.3, 0.06)
 
+    def pizz(self, bar, chord, t0=0.0, gain=0.32):
+        tones = [note(n) for n in CH[chord]['pz']]
+        for b, v in ((0.5, 0.8), (1.5, 0.65), (2.5, 0.8), (3.5, 0.65)):
+            t = T(bar, b)
+            if t < t0: continue
+            for i, f in enumerate(tones): self.m.add(S.pizz(f, 0.3, human(v) * (0.9 + 0.1 * (i % 2))), t + i * 0.012, gain, -0.25 + 0.2 * i, 0.22)
 
-def bass(mix, bar, chord, gain=0.8, start=0.0, busy=True):
-    r = note(CH[chord]['bass'])
-    pat = [(0, 1, 1.0, 1), (1.5, 0.5, 0.7, 1), (2, 0.5, 0.8, 1), (2.75, 0.5, 0.7, 2), (3.5, 0.5, 0.65, 1)] if busy else [(0, 1.5, 1.0, 1), (2.5, 1, 0.7, 1)]
-    for b, d, v, o in pat:
-        if b >= start: mix.add(S.pluck_bass(r * o, d * BEAT, v), T(bar, b), gain, 0.0, 0.03)
+    def arp(self, bar, chord, t0=0.0, gain=0.22):
+        tones = [note(n) for n in CH[chord]['arp']]
+        for i in range(8):
+            t = T(bar, i * 0.5 + 0.25)
+            if t >= t0: self.m.add(S.pizz(tones[i % 4] * 2, 0.22, human(0.55)), t, gain, 0.3, 0.25)
 
+    def melody(self, bar, chord, t0=0.0, gain=0.5):
+        for i, n in enumerate(MELODY[chord]):
+            t = T(bar, i * 0.5)
+            if n != '-' and t >= t0: self.m.add(S.marimba(note(n), 0.5, human(0.9 if i % 2 == 0 else 0.65)), t, gain, 0.2, 0.3)
 
-def arp(mix, bar, chord, gain=0.3, start=0.0, bright=1.0):
-    tones = [note(n) for n in CH[chord]['arp']]
-    for i, k in enumerate(ARP):
-        b = i * 0.5
-        if b >= start: mix.add(S.psyn(tones[k], 0.28, human((0.9 if i % 2 == 0 else 0.6) * bright)), T(bar, b), gain, -0.2 + 0.08 * (i % 3), 0.28)
-
-
-def motif(mix, bar, chord, gain=0.5, start=0.0):
-    for i, n in enumerate(MOTIF[chord]):
-        b = i * 0.5
-        if n == '-' or b < start: continue
-        mix.add(S.xylo(note(n), 0.5, human(0.9 if i % 2 == 0 else 0.65)), T(bar, b), gain, 0.3, 0.3)
+    def glock(self, bar, chord, t0=0.0, gain=0.3, beats=(0,)):
+        top = {'F': 'C6', 'Dm': 'D6', 'Bb': 'F6', 'C': 'G6'}[chord]
+        for b in beats:
+            t = T(bar, b)
+            if t >= t0: self.m.add(S.bell(note(top), 1.2, 0.9), t, gain, 0.35, 0.4)
 
 
 def build(cues_path, out_path):
     data = json.load(open(cues_path))
     cues, dur = data['cues'], data['duration']
-    mix = S.Mix(dur)
     by = lambda name: [c for c in cues if c['name'] == name]
-    hey = by('hey')[0]['t']; catch = by('catch')[0]['t']; click = by('click')[0]['t']; drop = by('drop')[0]['t']; title = by('ta-da')[0]['t']
-    end_bar = T(14, 0)
+    hey = by('hey')[0]['t']; catch = by('catch')[0]['t']; click = by('click')[0]['t']; title = by('ta-da')[0]['t']
+    hi = by('ping')[0]['t']; lands = sorted(c['t'] for c in by('land'))[:9]
+    party = by('drop')[0]['t']
+    music, sfx, pre = S.Mix(dur), S.Mix(dur), S.Mix(dur)
+    sc = Score(music, lands)
 
-    # ============================================================ cold open: a clock and a muffled beat that slowly opens ============================================================
-    pre = S.Mix(dur)
+    # ============================================================ 0 - 4.5 s: a clock and a muffled motif that opens up ============================================================
     n_beats = int(hey / BEAT + 1e-6)
     for k in range(n_beats):
-        pre.add(S.clock_tick(0.45 + 0.25 * k / n_beats, tock=(k % 2 == 1)), k * BEAT, 1.0, 0.0, 0.0)
+        pre.add(S.clock_tick(0.4 + 0.3 * k / n_beats, tock=(k % 2 == 1)), k * BEAT, 1.0, 0.0, 0.0)
+    motif = ['F4', 'A4', 'C5', 'A4', 'D5', 'C5', 'A4', 'F4']
     for k in range(n_beats):
-        v = 0.35 + 0.65 * k / n_beats
-        if k % 2 == 0: pre.add(S.kick(v * 0.9), k * BEAT, 0.7, 0.0, 0.0)
-        pre.add(S.hat(v * 0.7), k * BEAT + BEAT / 2, 0.55, 0.15, 0.0)
-        if k % 4 == 3: pre.add(S.clap(v * 0.7), k * BEAT, 0.4, 0.0, 0.0)
-    pre.add(S.sub(note('C2'), hey - 0.4, 0.6), 0.3, 0.35, 0.0, 0.0)
-    ticks_only = int(0.35 * S.SR)
+        if k % 2 == 0: pre.add(S.marimba(note(motif[(k // 2) % len(motif)]), 0.55, 0.6 + 0.4 * k / n_beats), k * BEAT, 0.7, 0.0, 0.0)
+        if k % 2 == 1: pre.add(S.pizz(note('F3'), 0.3, 0.4 + 0.5 * k / n_beats), k * BEAT, 0.6, 0.0, 0.0)
     pre.L = S.opening_filter(pre.L, 0.0, hey, 220, 9000); pre.R = S.opening_filter(pre.R, 0.0, hey, 220, 9000)
-    fade = np.ones(pre.n); m = int(0.04 * S.SR); k0 = int(hey * S.SR)
-    fade[k0:k0 + m] = np.linspace(1, 0, m); fade[k0 + m:] = 0
-    mix.absorb(pre, fade * MUSIC * 1.1)
+    gate = np.ones(pre.n); m = int(0.03 * S.SR); k0 = int(hey * S.SR)
+    gate[k0:k0 + m] = np.linspace(1, 0, m); gate[k0 + m:] = 0
+    music.absorb(pre, gate * 0.9)
 
-    # ============================================================ bars 3-5: the crew arrives, one layer per bar ============================================================
-    mix.bus = MUSIC
+    # ============================================================ from Clawd's landing: one layer per pet ============================================================
+    music.bus = MUSIC
     for bar in (3, 4, 5):
-        ch = chord_of(bar)
-        groove(mix, bar, level=bar - 2)
-        bass(mix, bar, ch, 0.85, busy=(bar > 3))
-        arp(mix, bar, ch, 0.3 + 0.03 * (bar - 3), bright=0.8 + 0.1 * (bar - 3))
-    for i, c in enumerate(by('land')):
-        mix.add(S.xylo(note(LAND_TUNE[min(i, len(LAND_TUNE) - 1)]), 0.6, 1.0), c['t'] + 0.005, 0.5, -0.15 + 0.06 * i, 0.3)
+        ch = chord_of(bar); stop = hi   # thins out at Kilo's hello, well before "Got your attention?"
+        for fn, n_layer, kw in ((sc.kick, 1, {}), (sc.shaker, 2, {}), (sc.pizz, 3, {'chord': ch}), (sc.claps, 4, {}), (sc.melody, 5, {'chord': ch}), (sc.hats, 7, {}), (sc.arp, 8, {'chord': ch})):
+            t0 = lands[n_layer - 1] if len(lands) >= n_layer else 1e9
+            fn(bar, t0=t0, **kw) if bar < 5 else None
+        if bar < 5:
+            sc.bass(bar, ch, t0=lands[0], gain=0.85, busy=(bar > 3))
+            sc.glock(bar, ch, t0=lands[5], beats=(0, 2))
+            sc.ticks(bar, t0=lands[6])
+    # bar 5 up to the hello: everything still there; then the breakdown
+    ch = chord_of(5)
+    for fn, kw in ((sc.kick, {}), (sc.shaker, {}), (sc.pizz, {'chord': ch}), (sc.claps, {}), (sc.melody, {'chord': ch}), (sc.bass, {'chord': ch, 'gain': 0.85})):
+        pass
+    # build bar 5 events only before the hello
+    sc.kick(5, t0=lands[0]); sc.shaker(5, t0=lands[1]); sc.pizz(5, ch, t0=lands[2]); sc.claps(5, t0=lands[3]); sc.melody(5, ch, t0=lands[4]); sc.bass(5, ch, t0=lands[0], gain=0.85)
+    sc.glock(5, ch, beats=(0,)); sc.hats(5, t0=lands[6]); sc.arp(5, ch, t0=lands[7])
+    # cut everything in bar 5 that falls after the hello (the breakdown): rebuild by masking the stem
+    cut = np.ones(music.n); k1 = int(hi * S.SR)
+    cut[k1:] = 0
+    music.L *= cut; music.R *= cut; music.rL *= cut; music.rR *= cut
+    for i, c in enumerate(lands):
+        music.add(S.marimba(note(LAND_TUNE[min(i, len(LAND_TUNE) - 1)]), 0.6, 1.0), c + 0.004, 0.45, -0.25 + 0.06 * i, 0.3)
 
-    # ============================================================ bar 6 up to the catch: no drums, a nervous tick and a held note ============================================================
-    t0 = T(5, 3)
-    steps = int((catch - t0) / (BEAT / 4))
-    for i in range(steps):
-        t = t0 + i * BEAT / 4
-        mix.add(S.woodtick(1300 + 55 * i, human(0.5 + 0.03 * i)), t, 0.36, 0.2, 0.05)
-    for j, nn in enumerate(['G4', 'Bb4', 'D5']):
-        mix.add(S.psyn(note(nn), 0.5, 0.8), T(5, 3) + j * 0.25, 0.3, 0.2, 0.3)
-    # after the catch: nearly nothing (SFX only) until the click
-    for i, nn in enumerate(['G5', 'F5', 'Eb5']):
-        t = catch + 0.3 * (i + 1)
-        if t < click - 0.1: mix.add(S.xylo(note(nn), 0.5, 0.8), t, 0.4, 0.0, 0.3)
+    # ============================================================ breakdown: "Got your attention?" - a few soft plucks and nothing else ============================================================
+    music.bus = MUSIC * 0.7
+    for bar, ch in ((5, 'Bb'), (6, 'C')):
+        for b in (2, 3) if bar == 5 else (0, 1):
+            t = T(bar, b)
+            if hi <= t < click - 0.2:
+                for i, f in enumerate([note(n) for n in CH[ch]['pz']]): music.add(S.pizz(f, 0.35, 0.5), t + i * 0.015, 0.3, -0.2 + 0.2 * i, 0.4)
+    for i, nn in enumerate(['G5', 'E5', 'C5']):
+        t = catch + 0.45 * (i + 1)
+        if t < click - 0.15: music.add(S.bell(note(nn), 1.0, 0.7), t, 0.25, 0.0, 0.4)
+    # the click: a bright chord accent (glockenspiel + marimba), then the groove is back with the party
+    music.bus = MUSIC
+    for j, nn in enumerate(['C6', 'E6', 'G6', 'C7']): music.add(S.bell(note(nn), 1.6, 1.0), click + 0.01 * j, 0.3, -0.3 + 0.2 * j, 0.45)
+    music.add(S.marimba(note('C5'), 0.6, 1.0), click, 0.4, 0.0, 0.3)
 
-    # ============================================================ bars 7-10: the party, the full groove with the tune on top ============================================================
-    mix.bus = MUSIC * 1.05
+    # ============================================================ the party and the looks (bars 7-10) ============================================================
+    music.bus = MUSIC * 1.05
     for bar in (7, 8, 9, 10):
-        ch = chord_of(bar); start = 1.0 if bar == 7 else 0.0
-        groove(mix, bar, level=3, start=start)
-        bass(mix, bar, ch, 0.9, start=start)
-        arp(mix, bar, ch, 0.34, start=start, bright=1.0)
-        motif(mix, bar, ch, 0.5, start=start)
-    climb = ['C6', 'D6', 'Eb6', 'F6', 'G6', 'Bb6', 'C7', 'D7']
-    for c in by('look'):
-        mix.add(S.xylo(note(climb[c['p']]), 0.4, 0.8), c['t'] + 0.004, 0.32, -0.3 + 0.085 * c['p'], 0.3)
+        ch = chord_of(bar); t0 = party if bar == 7 else 0.0
+        sc.kick(bar, t0=t0, four=(bar >= 9), gain=0.55)
+        sc.claps(bar, t0=t0); sc.shaker(bar, t0=t0, sixteenth=True); sc.ticks(bar, t0=t0); sc.hats(bar, t0=t0)
+        sc.bass(bar, ch, t0=t0, gain=0.9); sc.pizz(bar, ch, t0=t0, gain=0.3); sc.arp(bar, ch, t0=t0)
+        sc.melody(bar, ch, t0=t0, gain=0.52); sc.glock(bar, ch, t0=t0, beats=(0, 1.5, 2.5))
+    climb = ['C6', 'D6', 'E6', 'F6', 'G6', 'A6', 'C7', 'D7']
+    for c in by('look'): music.add(S.bell(note(climb[c['p']]), 0.5, 0.8), c['t'] + 0.004, 0.3, -0.3 + 0.085 * c['p'], 0.3)
 
-    # ============================================================ bars 11-13: the group photo, the same tune with more air ============================================================
-    mix.bus = MUSIC * 0.95
+    # ============================================================ group photo and the card (bars 11-13), then a chord that rings out ============================================================
+    music.bus = MUSIC * 0.95
+    chime = T(13, 1)
     for bar in (11, 12, 13):
         ch = chord_of(bar)
-        groove(mix, bar, level=2)
-        bass(mix, bar, ch, 0.8, busy=False)
-        arp(mix, bar, ch, 0.26, bright=0.8)
-        if bar > 11: motif(mix, bar, ch, 0.36)
-    for nn in ('C6', 'G6', 'C7'): mix.add(S.xylo(note(nn), 1.0, 0.9), title, 0.3, 0.0, 0.4)
-    mix.add(S.pluck_bass(note('C2'), 1.0, 1.0), title, 0.9, 0.0, 0.05)
-    # the resolution: a last Cm chord and the knock that follows
-    mix.bus = MUSIC
-    for j, nn in enumerate(['C4', 'Eb4', 'G4', 'C5']):
-        mix.add(S.psyn(note(nn), 1.4, 0.9), end_bar + 0.02 * j, 0.32, -0.2 + 0.13 * j, 0.45)
-    mix.add(S.pluck_bass(note('C2'), 1.6, 1.0), end_bar, 0.9, 0.0, 0.05)
-    mix.add(S.kick(0.8), end_bar, 0.55, 0.0, 0.03)
+        if bar == 13:
+            sc.kick(bar, t0=T(13, 0), gain=0.45) if False else None
+            music.add(S.kick_soft(0.9), T(13, 0), 0.5, 0.0, 0.02)
+            music.add(S.marimba(note('A5'), 0.5, 0.9), T(13, 0), 0.4, 0.2, 0.3)
+            continue
+        sc.kick(bar, gain=0.45); sc.claps(bar, gain=0.3); sc.shaker(bar, gain=0.26); sc.bass(bar, ch, gain=0.8, busy=False); sc.pizz(bar, ch, gain=0.28); sc.melody(bar, ch, gain=0.44); sc.glock(bar, ch, beats=(0,))
+    for nn in ('F5', 'A5', 'C6'): music.add(S.bell(note(nn), 1.0, 0.9), title, 0.26, 0.0, 0.4)
+    # the last chord: F major, plucked and bowed-soft, ringing for 1.5 s and fading with the tail
+    for j, nn in enumerate(['F3', 'A3', 'C4', 'F4', 'A4']): music.add(S.pizz(note(nn), 1.4, 0.9), chime + 0.012 * j, 0.3, -0.3 + 0.15 * j, 0.5)
+    music.add(S.warm_bass(note('F2'), 1.4, 0.9), chime, 0.7, 0.0, 0.05)
+    for nn in ('F6', 'A6', 'C7'): music.add(S.bell(note(nn), 1.9, 0.8), chime + 0.02, 0.22, 0.2, 0.6)
+    fade = np.ones(music.n); a, b = int((chime + 0.35) * S.SR), int(dur * S.SR)
+    fade[a:b] = np.linspace(1, 0, b - a) ** 1.3; fade[b:] = 0
 
     # ============================================================ sound effects: dry and present, they carry the picture ============================================================
-    mix.bus = SFX
+    sfx.bus = SFX
+    # the knock's own echo after HEY!, the only thing in the room
+    for d, v in ((0.32, 0.4), (0.78, 0.25), (1.25, 0.14)): sfx.add(S.knock(1.0, True), hey + d, v, 0.0, 0.8)
     tick_pitch = [1100, 1250, 1400, 1600, 1800, 2000]
     for c in cues:
         n, t, v, p = c['name'], c['t'], c.get('v', 1.0), c.get('p')
         if n == 'knock':
             far = v < 0.35
-            mix.add(S.knock(1.0, far), t, (0.35 + 0.65 * v) * 0.95, 0.0, 0.3 if far else 0.14)
-        elif n == 'hey':
-            mix.add(S.impact(1.0), t, 1.0 * v, 0.0, 0.2); mix.add(S.pop(700, 1.0), t + 0.01, 0.5 * v, 0.0, 0.2)
-        elif n == 'pop': mix.add(S.pop(520 * (1.09 ** (p or 0)), 1.0), t, 0.55 * v, 0.1, 0.2)
-        elif n == 'whoosh': mix.add(S.swipe(0.4, 1.0, True), t - 0.05, 0.5 * v, 0.0, 0.2)
-        elif n == 'fall': mix.add(S.swipe(0.5, 1.0, False), t, 0.18 * v, -0.3 + 0.1 * (p or 0), 0.2)
+            sfx.add(S.knock(1.0, far), t, (0.35 + 0.65 * v) * 0.95, 0.0, 0.3 if far else 0.14)
+        elif n == 'hey': sfx.add(S.impact(1.0), t, 1.0 * v, 0.0, 0.2); sfx.add(S.pop(700, 1.0), t + 0.01, 0.5 * v, 0.0, 0.2)
+        elif n == 'pop': sfx.add(S.pop(520 * (1.09 ** (p or 0)), 1.0), t, 0.55 * v, 0.1, 0.2)
+        elif n == 'whoosh': sfx.add(S.swipe(0.4, 1.0, True), t - 0.05, 0.5 * v, 0.0, 0.2)
+        elif n == 'fall': sfx.add(S.swipe(0.5, 1.0, False), t, 0.18 * v, -0.3 + 0.1 * (p or 0), 0.2)
         elif n == 'land':
-            mix.add(S.thump(60 + 3 * (p or 0), 1.0, 0.2), t, 0.5 * v, 0.0, 0.08); mix.add(S.pop(380 * (1.08 ** (p or 0)), 1.0), t, 0.55 * v, -0.2 + 0.07 * (p or 0), 0.2)
-        elif n == 'snore': mix.add(S.snore(1.0, 1.7), t, 0.4 * v, 0.4, 0.2)
-        elif n == 'ping': mix.add(S.pop(880, 1.0), t, 0.5 * v, -0.3, 0.3)
-        elif n == 'miss': mix.add(S.whoosh(0.16, 1.0, False), t, 0.35 * v, 0.0, 0.15)
+            sfx.add(S.thump(90 + 4 * (p or 0), 1.0, 0.14), t, 0.45 * v, 0.0, 0.08); sfx.add(S.pop(380 * (1.08 ** (p or 0)), 1.0), t, 0.6 * v, -0.2 + 0.07 * (p or 0), 0.2)
+        elif n == 'snore': sfx.add(S.snore(1.0, 1.7), t, 0.35 * v, 0.4, 0.2)
+        elif n == 'ping': sfx.add(S.pop(880, 1.0), t, 0.5 * v, -0.3, 0.3)
+        elif n == 'miss': sfx.add(S.whoosh(0.16, 1.0, False), t, 0.35 * v, 0.0, 0.15)
         elif n == 'plane':
             m = int(S.SR * 0.42); tt_ = S.tt(m)
-            mix.add(S.bp(S.noise(m), 1800, 6500) * np.sin(np.pi * tt_ / tt_[-1]) ** 1.5, t, 0.28 * v, 0.2, 0.2)
-        elif n == 'bonk': mix.add(S.tock(1.0), t, 0.8 * v, 0.0, 0.25); mix.add(S.thump(90, 1.0, 0.2), t, 0.5, 0.0, 0.15)
-        elif n == 'catch':
-            mix.add(S.impact(1.0), t, 0.9 * v, 0.0, 0.25); mix.add(S.click(1.0), t, 0.5, 0.0, 0.1)
-        elif n == 'ding': mix.add(S.pop(1100, 1.0), t, 0.35 * v, 0.0, 0.3)
-        elif n == 'hop': mix.add(S.pop(300, 1.0), t, 0.55 * v, 0.0, 0.2)
-        elif n == 'thud': mix.add(S.thump(95, 1.0, 0.14), t, 0.5 * v, 0.0, 0.1)
-        elif n == 'press': mix.add(S.click(0.5), t, 0.5 * v, 0.0, 0.08)
-        elif n == 'click': mix.add(S.click(1.0), t, 1.0 * v, 0.0, 0.1)
-        elif n == 'burst': mix.add(S.softburst(1.0), t, 0.5 * v, 0.0, 0.3)
-        elif n == 'drop': mix.add(S.thump(46, 1.0, 0.7), t, 0.9 * v, 0.0, 0.1)
+            sfx.add(S.bp(S.noise(m), 1800, 6500) * np.sin(np.pi * tt_ / tt_[-1]) ** 1.5, t, 0.28 * v, 0.2, 0.2)
+        elif n == 'bonk': sfx.add(S.tock(1.0), t, 0.8 * v, 0.0, 0.25); sfx.add(S.thump(110, 1.0, 0.14), t, 0.4, 0.0, 0.15)
+        elif n == 'catch': sfx.add(S.impact(1.0), t, 0.9 * v, 0.0, 0.25); sfx.add(S.click(1.0), t, 0.5, 0.0, 0.1)
+        elif n == 'ding': sfx.add(S.pop(1100, 1.0), t, 0.35 * v, 0.0, 0.3)
+        elif n == 'hop': sfx.add(S.pop(300, 1.0), t, 0.55 * v, 0.0, 0.2)
+        elif n == 'thud': sfx.add(S.thump(110, 1.0, 0.12), t, 0.4 * v, 0.0, 0.1)
+        elif n == 'press': sfx.add(S.click(0.5), t, 0.5 * v, 0.0, 0.08)
+        elif n == 'click': sfx.add(S.click(1.0), t, 1.0 * v, 0.0, 0.1)
+        elif n == 'burst': sfx.add(S.softburst(1.0), t, 0.5 * v, 0.0, 0.3)
+        elif n == 'drop': sfx.add(S.thump(100, 1.0, 0.2), t, 0.6 * v, 0.0, 0.1)
         elif n == 'confetti':
-            for side in (-1, 1): mix.add(S.softburst(1.0), t + (0.012 if side > 0 else 0), 0.45 * v, 0.8 * side, 0.3)
-        elif n == 'phones': mix.add(S.slide(420, 1500, 0.2, 1.0, 5, 0.005), t, 0.12 * v, 0.0, 0.2)
-        elif n == 'wake': mix.add(S.slide(300, 430, 0.26, 1.0, 5, 0.03), t, 0.3 * v, 0.4, 0.3); mix.add(S.slide(430, 290, 0.32, 1.0, 5, 0.03), t + 0.26, 0.3 * v, 0.4, 0.3)
-        elif n == 'look': mix.add(S.snap(1.0), t, 0.7 * v, 0.0, 0.15); mix.add(S.woodtick(2600, 1.0), t + 0.012, 0.3, 0.0, 0.1)
-        elif n == 'shutter': mix.add(S.shutter(1.0), t, 0.6 * v, 0.0, 0.15)
-        elif n == 'ta-da': mix.add(S.pop(900, 1.0), t + 0.02, 0.4, 0.0, 0.3)
-        elif n == 'tick': mix.add(S.woodtick(tick_pitch[(p or 0) % 6], 1.0), t, 0.3 * v, 0.0, 0.15)
+            for side in (-1, 1): sfx.add(S.softburst(1.0), t + (0.012 if side > 0 else 0), 0.45 * v, 0.8 * side, 0.3)
+        elif n == 'phones': sfx.add(S.slide(420, 1500, 0.2, 1.0, 5, 0.005), t, 0.12 * v, 0.0, 0.2)
+        elif n == 'wake': sfx.add(S.slide(300, 430, 0.26, 1.0, 5, 0.03), t, 0.3 * v, 0.4, 0.3); sfx.add(S.slide(430, 290, 0.32, 1.0, 5, 0.03), t + 0.26, 0.3 * v, 0.4, 0.3)
+        elif n == 'look': sfx.add(S.snap(1.0), t, 0.7 * v, 0.0, 0.15); sfx.add(S.woodtick(2600, 1.0), t + 0.012, 0.3, 0.0, 0.1)
+        elif n == 'shutter': sfx.add(S.shutter(1.0), t, 0.6 * v, 0.0, 0.15)
+        elif n == 'ta-da': sfx.add(S.pop(900, 1.0), t + 0.02, 0.4, 0.0, 0.3)
+        elif n == 'tick': sfx.add(S.woodtick(tick_pitch[(p or 0) % 6], 1.0), t, 0.3 * v, 0.0, 0.15)
 
-    mix.reverb(0.55, 0.8)
-    y = mix.master()
+    final = S.Mix(dur)
+    final.absorb(music, fade); final.absorb(sfx)
+    final.reverb(0.55, 0.8)
+    y = final.master()
+    y = np.stack([S.hp(c, 75) for c in y])
     keep = int(S.SR * (dur + 0.05))
     y = y[:, :keep]
-    n = int(S.SR * 0.25); y[:, -n:] *= np.linspace(1, 0, n)
+    n = int(S.SR * 0.15); y[:, -n:] *= np.linspace(1, 0, n)
     wavfile.write(out_path, S.SR, (np.clip(y.T, -1, 1) * 32767).astype(np.int16))
     print('wrote', out_path, f'{y.shape[1] / S.SR:.2f} s', 'peak', float(np.max(np.abs(y))))
 

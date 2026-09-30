@@ -7,10 +7,9 @@ import { fit, type CamFn } from './camera';
 import type { Ctx } from './ctx';
 import { wander } from './cursor';
 import type { Format } from './format';
-import { drawCaption, drawTag, drawWord } from './overlays';
+import { drawTag } from './overlays';
 import { ANDROID_LAND, drop, heightOf, slotPose, SLOTS, sway, ZCODE } from './tower';
 import { clamp, ring } from './util';
-import { PAL } from './world';
 
 export const CALL = at(3, 0);
 const HIP = { ikL: 1, hxL: -47, hyL: -25 };
@@ -52,12 +51,9 @@ export function act2(c: Ctx): void {
   const sw = sway(T), nerv = Math.abs(sw) * 10;
 
   // --- Clawd: a sigh, then the call for help; then he holds the base of the pyramid, sweating ---
-  const called = T >= CALL, age = T - CALL;
   const cp = slotPose(T, SLOTS[0]);
   c.set('clawd', { x: cp.x, y: cp.y, sx: cp.sx, sy: cp.sy, z: 1 });
-  if (!called) c.pose('clawd', { th: 0, look: 0.9, ex: 0, bubble: 1, lean: -0.1, squint: 0.15, armR: 0.5 });
-  else if (age < 0.6) c.pose('clawd', { th: 0, bubble: 1, look: -0.7, ex: 0.2, lean: 0.3, ikL: 1, hxL: -34, hyL: -62, ikR: 0, squint: 0 });
-  else c.pose('clawd', { th: 0, bubble: 1, look: -0.9, ex: 0.4, armL: 2.6, armR: 2.6, oscL: 0.12, oscR: 0.12, _f: 8, squint: clamp(0.1 + landed * 0.08 + nerv, 0, 0.7) });
+  c.pose('clawd', { th: 0, bubble: 1, look: -0.9, ex: 0.4, armL: 2.6, armR: 2.6, oscL: 0.12, oscR: 0.12, _f: 8, squint: clamp(0.1 + landed * 0.08 + nerv, 0, 0.7) });
   // a bead of sweat for every level he is carrying
   for (const s of SLOTS) if (s.land > 0 && T >= s.land + 0.35 && T < s.land + 0.35 + 1 / 60 + 1e-6 && s.row > 0) c.emit('clawd', { k: 'drop', x: -30, y: -62, vx: -25, vy: -20, g: 160, life: 0, max: 0.8 });
 
@@ -97,17 +93,17 @@ export function act2(c: Ctx): void {
   c.punches.push([ZCODE.land, 0.6]);
 
   // --- overlays ---
-  c.front.push((x, cam) => {
+  c.front.push(x => {
     // name tags pop on the beat: on the taskbar for the base row, at the sides higher up
     const h = p ? 68 : 62, at1 = (who: Who) => c.crew[who];
     const tag = (who: Who, t: number, sx: number, sy: number, anchor: 'c' | 'l' | 'r', tilt: number, life = 1.2) =>
       drawTag(x, T, sx, sy, { ...TAGS[who], t, out: t + life, h, tilt, anchor });
     // base row: Clawd and opencode above their heads (nothing stands there yet), Copilot down on the taskbar
     const cl = at1('clawd'), [cx0, cy0] = cl.pt(34, -heightOf('clawd') - 34);
-    tag('clawd', CALL + 0.8, cx0, cy0, 'r', -0.03, 0.9);
+    tag('clawd', CALL + 0.12, cx0, cy0, 'r', -0.03, 0.9);
     const oc = at1('opencode'), [ox, oy] = oc.pt(-14, -heightOf('opencode') - 34);
     tag('opencode', SLOTS[1].land, ox, oy, 'l', 0.03, 0.95);
-    const cp = at1('copilot'), [px0, py0] = cp.pt(0, 30);
+    const cp = at1('copilot'), [px0, py0] = cp.pt(0, -heightOf('copilot') - 30);
     tag('copilot', SLOTS[2].land, px0, py0, 'c', -0.03, 1.0);
     const cur = at1('cursor'), [cx, cy] = cur.pt(-46, -heightOf('cursor') - 26);
     tag('cursor', SLOTS[3].land, cx, cy, 'r', -0.03);
@@ -122,16 +118,7 @@ export function act2(c: Ctx): void {
     // beside the floater; above it in portrait, where it hovers near the right edge and a tag on that side would be cut off
     const an = at1('android'), [ax, ay2] = an.pt(0, -heightOf('android') - 34);
     tag('android', ANDROID_LAND, ax, ay2, 'c', -0.03);
-    // the call itself
-    const [hx, hy] = at1('clawd').pt(-4, -heightOf('clawd') - 30);
-    drawWord(x, T, CALL + 0.02, hx + 20, hy - 46, 'HEY!', clamp(cam.z * 30, 72, 140), PAL.clay, 0.6, -0.1);
   });
 
-  // a small heading over the rain
-  c.front.push(x => {
-    const o = at(5, 3), t0 = CALL + 0.35;
-    drawCaption(x, T, [[{ text: 'So', t: t0, out: o }, { text: 'it', t: t0 + 0.1, out: o }, { text: 'cc’d', t: t0 + 0.2, out: o }, { text: 'the', t: t0 + 0.3, out: o }, { text: 'team.', t: t0 + 0.4, color: PAL.clay, out: o }]],
-      { size: p ? 88 : 68, cx: fmt.W / 2, cy: p ? 190 : 72, lineGap: 1.1 });
-  });
   void BEAT;
 }

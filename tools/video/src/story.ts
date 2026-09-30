@@ -1,13 +1,15 @@
 // The whole video as one function of time. Each act owns a stretch of it; see ctx.ts for how they cooperate.
 import { blank, makeCrew, CREW, type Who } from './actors';
 import { act1, dolly, hookCams } from './act1';
-import { act2, CALL, rainCam } from './act2';
+import { act2, CALL } from './act2';
+import { CREW_DONE, crewCam } from './crewcam';
+import { HEY } from './beat';
 import { camPath, still, worldToScreen, type Cam, type CamFn } from './camera';
 import type { Ctx } from './ctx';
 import { act3 } from './act3';
 import type { Format } from './format';
 import type { Limit } from '@app/types';
-import { clamp, easeInOut, ring } from './util';
+import { clamp, ring } from './util';
 import { DARK } from './themes';
 import { setInk } from './overlays';
 import { drawBackdrop, drawCursor, drawTaskbar } from './world';
@@ -30,7 +32,7 @@ export class Story {
     const { close, wide } = hookCams(fmt);
     this.cam = camPath([
       // one continuous move: wide on the desktop, easing toward Clawd faster and faster, arriving on HEY!
-      [0, still(wide)], [CALL, still(close), dolly], [CALL + 0.85, still(close)], [CALL + 1.6, rainCam(fmt), easeInOut],
+      [0, still(wide)], [HEY, still(close), dolly], [CALL, crewCam(fmt)], [CREW_DONE, crewCam(fmt)],
       ...act3Cam(fmt), ...endKeys(fmt),
     ]);
   }

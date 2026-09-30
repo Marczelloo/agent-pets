@@ -5,8 +5,10 @@ export const BPM = 120;
 export const BEAT = 60 / BPM;
 export const BAR = 4 * BEAT;
 
-/** The cold open runs two bars and one extra beat, so HEY! (bar 3) lands at 4.5 s with the beat that enters there. */
-export const INTRO_EXTRA = BEAT;
+/** The cold open runs two bars plus one more: knocks, HEY! at 4.5 s, a held breath, and Clawd landing on the downbeat of bar 3 at 6.0 s. */
+export const INTRO_EXTRA = 4 * BEAT;
+/** HEY! */
+export const HEY = 4.5;
 
 /** Time in seconds of `beat` (0-based, may be fractional) inside `bar` (1-based). */
 export const at = (bar: number, beat = 0): number => (bar - 1) * BAR + beat * BEAT + (bar >= 3 ? INTRO_EXTRA : 0);

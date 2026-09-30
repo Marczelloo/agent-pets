@@ -15,7 +15,7 @@ import { hit } from './act4';
 export const TITLE = at(11, 0);
 export const OFFER = at(12, 0);
 export const FINE = at(12, 2);
-export const END = at(14, 3);
+export const END = at(14, 0);
 export const LAST_KNOCK = END - 0.62;
 
 /** Camera for the card: the crew slides to the right (landscape) or lower (portrait) to make room for the title. */

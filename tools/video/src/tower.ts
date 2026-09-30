@@ -23,22 +23,22 @@ export const FALL_TIME = Math.sqrt((2 * -DROP_FROM) / GRAV);
 
 export interface Slot { who: Who; x: number; row: number; land: number; on?: Who }
 
-/** Everyone who is part of the pyramid. Clawd is already there (land < 0); the rest drop in one per beat. */
+/** Everyone who is part of the pyramid. Clawd lands first, in close-up, on the downbeat of bar 3; the rest drop in one per beat after him. */
 export const SLOTS: Slot[] = [
-  { who: 'clawd', x: 0, row: 0, land: -1 },
-  { who: 'opencode', x: 98, row: 0, land: at(3, 2) },
-  { who: 'copilot', x: 196, row: 0, land: at(3, 3) },
-  { who: 'cursor', x: 49, row: 1, land: at(4, 0) },
-  { who: 'grok', x: 147, row: 1, land: at(4, 1) },
-  { who: 'kodek', x: 98, row: 2, land: at(4, 2) },
-  { who: 'kilo', x: -24, row: 1, land: at(4, 3), on: 'clawd' },
-  { who: 'android', x: 245, row: 1, land: at(5, 1) },
+  { who: 'clawd', x: 0, row: 0, land: at(3, 0) },
+  { who: 'opencode', x: 98, row: 0, land: at(3, 1) },
+  { who: 'copilot', x: 196, row: 0, land: at(3, 2) },
+  { who: 'cursor', x: 49, row: 1, land: at(3, 3) },
+  { who: 'grok', x: 147, row: 1, land: at(4, 0) },
+  { who: 'kodek', x: 98, row: 2, land: at(4, 1) },
+  { who: 'kilo', x: -24, row: 1, land: at(4, 2), on: 'clawd' },
+  { who: 'android', x: 245, row: 1, land: at(5, 0) },
 ];
 export const slotOf = (w: Who): Slot | undefined => SLOTS.find(s => s.who === w);
 
 /** The others come later: the sleeper on its pillow, and the floater. */
-export const ZCODE = { land: at(5, 0), x: 276 };
-export const ANDROID_LAND = at(5, 1);
+export const ZCODE = { land: at(4, 3), x: 276 };
+export const ANDROID_LAND = at(5, 0);
 
 export interface Pose { x: number; y: number; sx: number; sy: number; rot: number; hidden: boolean; airborne: boolean; age: number }
 
@@ -103,8 +103,8 @@ export function drop(T: number, land: number, x: number, targetY: number, spin =
 export function slotPose(T: number, s: Slot): Pose {
   const sw = sway(T);
   if (s.who === 'clawd') {
-    const q = rowLoad(T, 0);
-    return { x: s.x, y: 0, sx: 1 + q * 0.4, sy: 1 - q, rot: 0, hidden: false, airborne: false, age: 9 };
+    const q = rowLoad(T, 0), l = landing(T - s.land);
+    return { x: s.x, y: 0, sx: (1 + q * 0.4) * l.sx, sy: (1 - q) * l.sy, rot: 0, hidden: false, airborne: false, age: T - s.land };
   }
   const baseY = s.on ? clawdTop(T) : rowY(T, s.row), lift = -baseY;
   const p = drop(T, s.land, s.x, baseY, 0.28);

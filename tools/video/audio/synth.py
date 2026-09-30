@@ -482,3 +482,36 @@ def opening_filter(x, t0, t1, f0=180, f1=7000):
         seg = signal.sosfilt(signal.butter(2, c, 'low', fs=SR, output='sos'), x)
         out[edges[b]:edges[b + 1]] = seg[edges[b]:edges[b + 1]]
     return out
+
+
+# ------------------------------------------------------------------ v4: bright, cosy, major key (pizzicato, marimba, glockenspiel)
+
+def pizz(freq, dur=0.35, vel=1.0):
+    """Pizzicato string: a quick, woody pluck with a little body."""
+    n = int(SR * dur); t = tt(n)
+    y = np.sin(TWO_PI * freq * t) + 0.5 * np.sin(TWO_PI * 2 * freq * t) * np.exp(-t / 0.06) + 0.25 * np.sin(TWO_PI * 3 * freq * t) * np.exp(-t / 0.035) + 0.1 * np.sin(TWO_PI * 4.02 * freq * t) * np.exp(-t / 0.02)
+    y *= np.exp(-t / 0.16) * np.minimum(1, t / 0.002) * np.minimum(1, (dur - t) / 0.03)
+    return lp(y, 3800) * vel * 0.55
+
+
+def warm_bass(freq, dur=0.4, vel=1.0):
+    """Round, friendly bass with no sub: a soft pluck whose upper harmonics carry it on small speakers."""
+    n = int(SR * dur); t = tt(n)
+    y = np.sin(TWO_PI * freq * t) + 0.55 * np.sin(TWO_PI * 2 * freq * t) * np.exp(-t / 0.12) + 0.3 * np.sin(TWO_PI * 3 * freq * t) * np.exp(-t / 0.07)
+    y *= np.exp(-t / 0.22) * np.minimum(1, t / 0.004) * np.minimum(1, (dur - t) / 0.04)
+    return hp(lp(y, 1100), 70) * vel * 0.8
+
+
+def kick_soft(vel=1.0):
+    """A soft, short kick: a thud around 90 Hz, not a boom."""
+    n = int(SR * 0.16); t = tt(n)
+    f = 80 + 90 * np.exp(-t / 0.02)
+    y = np.sin(TWO_PI * np.cumsum(f) / SR) * np.exp(-t / 0.05) + 0.25 * lp(noise(n), 1500) * np.exp(-t / 0.004)
+    return hp(y, 65) * vel * 0.9
+
+
+def snapclap(vel=1.0):
+    """A friendly finger-snap / hand-clap hybrid."""
+    n = int(SR * 0.14); t = tt(n)
+    y = bp(noise(n), 1200, 5200) * np.exp(-t / 0.03) + 0.4 * np.sin(TWO_PI * 1800 * t) * np.exp(-t / 0.008)
+    return y * np.minimum(1, t / 0.001) * vel * 0.7

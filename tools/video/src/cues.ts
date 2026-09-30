@@ -2,7 +2,7 @@
 // sound cannot drift apart. tools/video/audio/make_audio.py turns this list (plus its own score) into the soundtrack.
 import { BEAT } from './beat';
 import { KNOCKS, KNOCK_V } from './act1';
-import { CALL } from './act2';
+import { HEY } from './beat';
 import { CATCH, CLICK, HI, HOP1, HOP2, HOP_TIME, PLANE_HIT, PLANE_THROW, SWING1 } from './act3';
 import { FLIP, LOOKS, PARTY, WAKE } from './act4';
 import { END, FINE, LAST_KNOCK, OFFER, TITLE } from './act5';
@@ -18,9 +18,9 @@ export function buildCues(): Cue[] {
   KNOCKS.forEach((k, i) => add(k, 'knock', KNOCK_V[i], i));
 
   // the call and the rain
-  add(CALL, 'hey', 1);
-  SLOTS.filter(s => s.land > 0).forEach((s, i) => { add(s.land - FALL_TIME, 'fall', 0.8, i); add(s.land, 'land', 1, i); });
-  add(ZCODE.land - FALL_TIME, 'fall', 0.7, 7); add(ZCODE.land, 'land', 0.9, 7); add(ZCODE.land + 0.5, 'snore', 0.6);
+  add(HEY, 'hey', 1);
+  SLOTS.filter(s => s.land > 0).forEach((s, i) => { if (s.who === 'clawd') add(5.68, 'hop', 0.8); else add(s.land - FALL_TIME, 'fall', 0.8, i); add(s.land, 'land', 1, i); });
+  add(ZCODE.land - FALL_TIME, 'fall', 0.7, 8); add(ZCODE.land, 'land', 0.9, 8); add(ZCODE.land + 0.5, 'snore', 0.6);
 
   // getting the user's attention
   add(HI, 'ping', 0.9);
