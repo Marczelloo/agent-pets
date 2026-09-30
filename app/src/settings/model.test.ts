@@ -1,15 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { AppRow, Diagnostics } from '../types';
 import { appFor } from '../look';
-import { APP_LABEL, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, EXPERIMENTAL, reportText, withApp, withDoor } from './model';
+import { APP_LABEL, appBadge, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, EXPERIMENTAL, OPT_IN, reportText, withApp, withDoor } from './model';
 
 const row = (id: AppRow['id'], found: boolean): AppRow =>
   ({ id, detected: { found, path: found ? `C:/home/.${id}` : null, note: found ? null : 'nie znaleziono' },
      status: { installed: false, detail: '' }, enabled: true });
 
 describe('settings model', () => {
-  it('experimental apps are never turned on just because they were found', () => {
-    expect(EXPERIMENTAL).toEqual(['cursor', 'grok', 'zcode']);
+  it('Copilot and Antigravity wear the experimental badge but are still turned on when found', () => {
+    expect(EXPERIMENTAL).toEqual(['copilot', 'antigravity', 'cursor', 'grok', 'zcode']);
+    expect(appBadge('copilot')).toBe('eksperymentalne');
+    expect(appBadge('antigravity')).toBe('eksperymentalne');
+    expect(appBadge('claude_code')).toBeUndefined();
+    const s = defaultAppChoice([row('copilot', true), row('antigravity', true)], defaultSettings());
+    expect([s.apps.copilot, s.apps.antigravity]).toEqual([true, true]);
+  });
+  it('opt-in apps are never turned on just because they were found', () => {
+    expect(OPT_IN).toEqual(['cursor', 'grok', 'zcode']);
     const s = defaultAppChoice([row('claude_code', true), row('copilot', true), row('cursor', true), row('grok', true), row('zcode', true)],
       defaultSettings());
     expect([s.apps.claude_code, s.apps.copilot, s.apps.cursor, s.apps.grok, s.apps.zcode]).toEqual([true, true, false, false, false]);

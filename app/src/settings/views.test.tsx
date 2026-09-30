@@ -25,11 +25,11 @@ const noop = async () => [] as string[];
 afterEach(() => setLang('pl'));
 
 describe('Wizard', () => {
-  it('a found Cursor, Grok or ZCode stays off until the person turns it on, and wears the experimental badge', () => {
+  it('a found Cursor, Grok or ZCode stays off until the person turns it on; they, Copilot and Antigravity wear the experimental badge', () => {
     const html = renderToString(<Wizard rows={newRows} initial={defaultSettings()} onFinish={noop} />);
     for (const label of ['Cursor', 'Grok Build', 'ZCode']) expect(html).toMatch(new RegExp(`aria-label="${label}"(?![^>]*checked="")`));
     expect(html).toMatch(/aria-label="Claude Code"[^>]*checked=""/);
-    expect(html.match(/class="badge">eksperymentalne</g)?.length).toBe(3);
+    expect(html.match(/class="badge">eksperymentalne</g)?.length).toBe(3 + 2);
     expect(html).toContain('~/.cursor/hooks.json');
   });
   it('the look step offers the style gallery and the motion switch', () => {
@@ -159,11 +159,11 @@ describe('SettingsView', () => {
     expect(html).toContain('opencode');
     expect(html).toContain('Plugin: brak');
   });
-  it('Cursor, Grok and ZCode are experimental, say what they write and what they cannot show', () => {
+  it('Copilot, Antigravity, Cursor, Grok and ZCode are experimental; the new three say what they write and what they cannot show', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={newRows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
-    expect(html.match(/class="badge">eksperymentalne</g)?.length).toBe(3);
-    expect(html).not.toMatch(/>GitHub Copilot<span class="badge"/);
+    expect(html.match(/class="badge">eksperymentalne</g)?.length).toBe(3 + 2);
+    expect(html).toMatch(/>GitHub Copilot<span class="badge">/);
     expect(html).toMatch(/>Cursor<span class="badge">/);
     for (const path of ['~/.cursor/hooks.json', '~/.grok/hooks/agent-pets.json', '~/.zcode/cli/config.json']) expect(html).toContain(path);
     const only = renderToString(<SettingsView settings={defaultSettings()} rows={[found('cursor'), found('zcode')]} diag={diag} tab="apps"
@@ -173,7 +173,7 @@ describe('SettingsView', () => {
     setLang('en');
     const en = renderToString(<SettingsView settings={defaultSettings()} rows={newRows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
-    expect(en.match(/class="badge">experimental</g)?.length).toBe(3);
+    expect(en.match(/class="badge">experimental</g)?.length).toBe(3 + 2);
   });
   it('Copilot and Antigravity say what they write and where; Antigravity says what it cannot show', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
