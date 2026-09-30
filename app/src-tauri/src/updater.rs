@@ -132,7 +132,7 @@ pub async fn check(app: &AppHandle, manual: bool) -> UpdateStatus {
                 }
             }
             Err(e) => {
-                eprintln!("agent-pets: sprawdzanie aktualizacji: {e}");
+                pets_core::app_log!("update check: {e}");
                 if manual { set(app, UpdateStatus::Error { message: tr(lang(app), "Błąd sprawdzania aktualizacji", "Could not check for updates").into(), verify: false }); }
             }
         }
@@ -163,12 +163,12 @@ async fn download(app: &AppHandle) -> bool {
         }
         Err(e) if is_network(&e) => {
             // interrupted download is not a bad signature: the version remains pending; retry on schedule
-            eprintln!("agent-pets: update download (network): {e}");
+            pets_core::app_log!("update download (network): {e}");
             set(app, UpdateStatus::Available { version: up.version.clone(), notes: up.body.clone() });
             false
         }
         Err(e) => {
-            eprintln!("agent-pets: pobieranie aktualizacji: {e}");
+            pets_core::app_log!("update download: {e}");
             *u.found.lock().unwrap() = None;
             set(app, UpdateStatus::Error { message: verify_failed(app), verify: true });
             false
@@ -183,7 +183,7 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
     if !u.downloaded() && !download(app).await { return Err(verify_failed(app)); }
     let Some((up, Some(bytes))) = u.found() else { return Err(verify_failed(app)) };
     up.install(bytes).map_err(|e| {
-        eprintln!("agent-pets: instalacja aktualizacji: {e}");
+        pets_core::app_log!("update install: {e}");
         // no longer "ready": the quiet gate will not retry every 2 min; retry after the next check
         *u.found.lock().unwrap() = None;
         let msg = tr(lang(app), "Nie udało się zainstalować aktualizacji", "Could not install the update").to_string();
@@ -238,7 +238,7 @@ pub fn start(app: AppHandle) {
                 let states: Vec<_> = app.state::<crate::core::Shared>().lock().unwrap().sessions.iter().map(|s| s.state).collect();
                 let b = busy(&states, crate::shell::fullscreen_app(), ui_open(&app));
                 if calm.observe(b, pets_core::time::now_ms()) {
-                    if let Err(e) = tauri::async_runtime::block_on(install(&app)) { eprintln!("agent-pets: {e}"); }
+                    if let Err(e) = tauri::async_runtime::block_on(install(&app)) { pets_core::app_log!("{e}"); }
                     calm = Calm::default();
                 }
             } else {

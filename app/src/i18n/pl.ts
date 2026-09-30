@@ -210,6 +210,8 @@ export const pl = {
       enabled: 'włączone',
       disabled: 'wyłączone',
       lastSeen: (name: string, ago: string) => `${name}: ostatnie zdarzenie ${ago}`,
+      log: (path: string) => `Log (${path}), ostatnie wpisy:`,
+      logEmpty: (path: string) => `Log (${path}): pusty`,
     },
   },
   wizard: {

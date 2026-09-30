@@ -86,12 +86,20 @@ describe('settings model', () => {
     const d: Diagnostics = { version: '0.5.0', endpoint_port: 61000, settings_path: 'C:/h/.agent-pets/settings.json', settings_error: null,
       hook_exe: 'C:/h/.agent-pets/hook.exe', autostart_registered: true, last_seen: { codex: 1_000 },
       apps: [['claude_code', true, 'Hooki: zainstalowane'], ['codex', false, 'Nic do instalowania']],
-      stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
+      stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0, log_path: 'C:/h/.agent-pets/agent-pets.log', log_tail: [] };
     const text = reportText(d, 61_000);
     expect(text).toContain('Agent Pets 0.5.0');
     expect(text).toContain('Serwer hooków: port 61000');
     expect(text).toContain('Codex: ostatnie zdarzenie 1 min temu');
     expect(text).toContain('Claude Code: włączone, Hooki: zainstalowane');
     expect(text.toLowerCase()).not.toContain('token');
+    expect(text).toContain('Log (C:/h/.agent-pets/agent-pets.log): pusty');
+  });
+  it('ends the report with the last lines of the log', () => {
+    const d: Diagnostics = { version: '0.13.0', endpoint_port: null, settings_path: 's', settings_error: null, hook_exe: null,
+      autostart_registered: false, last_seen: {}, apps: [], stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0,
+      log_path: 'L', log_tail: ['2026-09-30T10:00:00.000Z Agent Pets 0.13.0 started', '2026-09-30T10:00:01.000Z update check: offline'] };
+    const lines = reportText(d, 0).split('\n');
+    expect(lines.slice(-3)).toEqual(['Log (L), ostatnie wpisy:', d.log_tail[0], d.log_tail[1]]);
   });
 });

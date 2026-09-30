@@ -65,7 +65,7 @@ pub fn open_book(path: &std::path::Path, tries: u32, sleep: &dyn Fn(u64)) -> Opt
         match Book::load_checked(path) {
             Ok(b) => return Some(b),
             Err(e) if i + 1 < tries => { let _ = e; sleep(1_000) }
-            Err(e) => eprintln!("agent-pets: statistics: cannot read ledger ({e}); writes disabled for this session"),
+            Err(e) => pets_core::app_log!("statistics: cannot read ledger ({e}); writes disabled for this session"),
         }
     }
     None
@@ -105,7 +105,7 @@ pub fn spawn(app: AppHandle) {
         loop {
             run_until_done(&st.scanner, STEP_BYTES, &crate::shell::fullscreen_app,
                 &mut |b: &Book| if st.writable.load(std::sync::atomic::Ordering::Relaxed) {
-                    if let Err(e) = b.save(&path) { eprintln!("agent-pets: statystyki: {e}") }
+                    if let Err(e) = b.save(&path) { pets_core::app_log!("statistics: {e}") }
                 },
                 &pets_core::time::now_ms,
                 &mut |p| {
@@ -118,7 +118,7 @@ pub fn spawn(app: AppHandle) {
             let db = pets_core::opencode_db::db_path(&settings.home);
             if sync_opencode(&st.scanner, &db, settings.get().apps.opencode, &crate::shell::fullscreen_app) > 0
                 && st.writable.load(std::sync::atomic::Ordering::Relaxed) {
-                if let Err(e) = st.scanner.lock().unwrap().book.save(&path) { eprintln!("agent-pets: statystyki: {e}") }
+                if let Err(e) = st.scanner.lock().unwrap().book.save(&path) { pets_core::app_log!("statistics: {e}") }
             }
             std::thread::sleep(RESCAN);
         }

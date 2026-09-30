@@ -199,6 +199,8 @@ export const en: Dict = {
       enabled: 'enabled',
       disabled: 'disabled',
       lastSeen: (name, ago) => `${name}: last event ${ago}`,
+      log: path => `Log (${path}), last entries:`,
+      logEmpty: path => `Log (${path}): empty`,
     },
   },
   wizard: {

@@ -52,6 +52,8 @@ export function reportText(d: Diagnostics, nowMs: number): string {
     t().settings.report.autostart(d.autostart_registered ? t().settings.report.yes : t().settings.report.no),
     ...d.apps.map(([id, on, detail]) => `${appLabel(id)}: ${on ? t().settings.report.enabled : t().settings.report.disabled}, ${detail}`),
     ...Object.entries(d.last_seen).map(([k, ts]) => t().settings.report.lastSeen(sourceLabel(k), formatAgo(nowMs - ts))),
+    d.log_tail.length ? t().settings.report.log(d.log_path) : t().settings.report.logEmpty(d.log_path),
+    ...d.log_tail,
   ];
   return lines.join('\n');
 }

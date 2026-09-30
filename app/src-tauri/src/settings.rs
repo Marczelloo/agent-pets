@@ -58,6 +58,9 @@ pub struct Diagnostics {
     pub stats_files: usize,
     pub stats_scanned_bytes: u64,
     pub stats_total_bytes: u64,
+    /// App log file and its last lines (errors and lifecycle only, home folder as `~`).
+    pub log_path: String,
+    pub log_tail: Vec<String>,
 }
 
 /// Time of the latest event from each source, updated by the core (`core::live`).
@@ -205,6 +208,8 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
         stats_files: app.try_state::<crate::stats::StatsState>().and_then(|x| x.scanner.try_lock().ok().map(|s| s.book.files.len())).unwrap_or(0),
         stats_scanned_bytes: app.try_state::<crate::stats::StatsState>().map(|x| x.progress.lock().unwrap().scanned).unwrap_or(0),
         stats_total_bytes: app.try_state::<crate::stats::StatsState>().map(|x| x.progress.lock().unwrap().total).unwrap_or(0),
+        log_path: pets_core::applog::path(&st.home).to_string_lossy().into_owned(),
+        log_tail: pets_core::applog::tail(pets_core::applog::REPORT_LINES),
     }
 }
 

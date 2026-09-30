@@ -20,7 +20,8 @@ const found = (id: AppRow['id']): AppRow =>
   ({ id, detected: { found: true, path: `C:/h/.${id}`, note: null }, status: { installed: false, detail: 'Hooki: brak' }, enabled: false });
 const newRows: AppRow[] = [...rows, found('cursor'), found('grok'), found('zcode')];
 const diag: Diagnostics = { version: '0.5.0', endpoint_port: 1, settings_path: 's', settings_error: null, hook_exe: null,
-  autostart_registered: false, last_seen: {}, apps: [], stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0 };
+  autostart_registered: false, last_seen: {}, apps: [], stats_files: 0, stats_scanned_bytes: 0, stats_total_bytes: 0,
+  log_path: '', log_tail: [] };
 const noop = async () => [] as string[];
 afterEach(() => setLang('pl'));
 

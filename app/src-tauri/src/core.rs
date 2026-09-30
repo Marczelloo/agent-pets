@@ -99,7 +99,7 @@ pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Sn
             Mode::Replay { path, speed } => { drop(msgs); replay(&path, speed, &publish) }
         };
         if let Err(e) = result {
-            eprintln!("agent-pets: data core stopped: {e:#}");
+            pets_core::app_log!("data core stopped: {e:#}");
             // release builds have no console: otherwise the user would see only an empty taskbar area
             {
                 use tauri::Manager;
@@ -160,7 +160,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         for u in ag_usage.try_iter() { changed |= rt.antigravity_usage(u); }
         if changed {
             publish(rt.store(), now, &mut hidden);
-            if let Err(e) = hidden.save_if_dirty(&hidden_path) { eprintln!("agent-pets: {}: {e}", hidden_path.display()); }
+            if let Err(e) = hidden.save_if_dirty(&hidden_path) { pets_core::app_log!("{}: {e}", hidden_path.display()); }
             *app.state::<crate::settings::LastSeen>().0.lock().unwrap() =
                 rt.last_seen().into_iter().map(|(k, v)| (k.to_string(), v)).collect();
         }

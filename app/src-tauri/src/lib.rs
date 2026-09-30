@@ -89,7 +89,7 @@ fn sessions_dismiss_inactive(app: tauri::AppHandle) -> Vec<String> { dismiss_ina
 #[tauri::command]
 fn stage_menu(app: tauri::AppHandle, target: Option<String>, x: f64, y: f64) {
     let t = target.map(shell::menu::Target::Pet).unwrap_or(shell::menu::Target::Other);
-    if let Err(e) = shell::menu::show(&app, t, x, y) { eprintln!("agent-pets: menu sceny: {e}"); }
+    if let Err(e) = shell::menu::show(&app, t, x, y) { pets_core::app_log!("stage menu: {e}"); }
 }
 
 /// "Undo" after hiding.
@@ -163,7 +163,22 @@ pub fn uninstall_cli(args: &[String]) -> Option<i32> {
     Some(0)
 }
 
+/// Release builds have no console: errors and panics also go to `~/.agent-pets/agent-pets.log`.
+fn start_log() {
+    pets_core::applog::init(&settings::home());
+    pets_core::app_log!("Agent Pets {} started", env!("CARGO_PKG_VERSION"));
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let at = info.location().map(|l| format!(" at {}:{}", l.file(), l.line())).unwrap_or_default();
+        let msg = info.payload().downcast_ref::<&str>().map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned()).unwrap_or_default();
+        pets_core::app_log!("panic{at}: {msg}");
+        default(info);
+    }));
+}
+
 pub fn run() {
+    start_log();
     tauri::Builder::default()
         // must be the first plugin: a second launch opens settings instead of starting another core
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| if second_launch_opens_settings(&args) { settings::open(app) }))
