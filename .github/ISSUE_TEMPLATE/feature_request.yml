@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea for a pet, an animation, an agent to support or anything else.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What would you like, and what would it help you with?
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent
+      description: If this is about an agent, which one? For a new agent, a link to its hooks or plugin docs helps.
