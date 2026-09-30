@@ -1,10 +1,17 @@
-# Tag v*: tests. Build the installer with an update signature locally using scripts/release.ps1 (the signing key stays local; docs/building.md).
-name: release
+# Tests on every push to main, every pull request and every v* tag. The installer with its update
+# signature is built locally with scripts/release.ps1 (the signing key stays local; docs/building.md).
+name: ci
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+  pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -12,6 +19,8 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    # a hung test fails the run instead of holding a runner for six hours
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,5 +39,7 @@ jobs:
       - run: pnpm build:hook
         working-directory: app
       - run: cargo test --workspace
+      - run: pnpm exec tsc --noEmit
+        working-directory: app
       - run: pnpm test
         working-directory: app
