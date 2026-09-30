@@ -9,7 +9,7 @@ import { wander } from './cursor';
 import type { Format } from './format';
 import { drawCaption, drawTag, drawWord } from './overlays';
 import { ANDROID_LAND, drop, heightOf, slotPose, SLOTS, sway, ZCODE } from './tower';
-import { clamp, easeOut, lerp, ring } from './util';
+import { clamp, easeInOut, easeOut, lerp, ring } from './util';
 import { PAL } from './world';
 
 export const CALL = at(3, 0);
@@ -85,8 +85,10 @@ export function act2(c: Ctx): void {
   // asleep on its pillow (the same parameters as the app's own sleep scene, driven by the timeline so the panda can wake up later)
   c.pose('zcode', { loaf: 1, sleep: 1, dim: 1, th: 0.3, _prop: 'pillow', armL: 0.15, armR: 0.15 });
   const hover = -(heightOf('opencode') + heightOf('grok') + heightOf('kodek')) + 6, aStart = ANDROID_LAND - 1.7;
-  const ay = T < ANDROID_LAND ? lerp(-760, hover, easeOut(clamp((T - aStart) / 1.7))) : hover + 6 * Math.sin((T - ANDROID_LAND) * 2.4);
-  c.set('android', { x: 246, y: ay, hidden: T < aStart, z: 3 });
+  const au = clamp((T - aStart) / 1.7);
+  const ay = T < ANDROID_LAND ? lerp(-760, hover, easeOut(au)) : hover + 6 * Math.sin((T - ANDROID_LAND) * 2.4);
+  // it comes down out of frame on the right and only then glides over, so it never crosses the heading
+  c.set('android', { x: 246 + 380 * (1 - easeInOut(clamp((au - 0.35) / 0.6))), y: ay, hidden: T < aStart, z: 3 });
   c.pose('android', { armL: 2.1, armR: 2.1, oscL: 0.3, oscR: 0.3, _f: 6, happy: 0.7, look: -0.4, tilt: 0.06 * Math.sin(T * 2) });
 
   // --- the user: notices the noise a little more with every landing ---
@@ -122,8 +124,9 @@ export function act2(c: Ctx): void {
     tag('kilo', SLOTS[6].land, lx, ly, 'c', 0.03);
     const z = at1('zcode'), [zx, zy] = z.pt(0, -70);
     tag('zcode', ZCODE.land, zx, zy, 'c', 0.03);
-    const an = at1('android'), [ax, ay2] = an.pt(46, -30);
-    tag('android', ANDROID_LAND, ax, ay2, 'l', -0.03);
+    // beside the floater; above it in portrait, where it hovers near the right edge and a tag on that side would be cut off
+    const an = at1('android'), [ax, ay2] = p ? an.pt(0, -heightOf('android') - 26) : an.pt(46, -30);
+    tag('android', ANDROID_LAND, ax, ay2, p ? 'c' : 'l', -0.03);
     // the call itself
     const [hx, hy] = at1('clawd').pt(-4, -heightOf('clawd') - 30);
     drawWord(x, T, CALL + 0.02, hx + 20, hy - 46, 'HEY!', clamp(cam.z * 30, 72, 140), PAL.clay, 0.95, -0.1);

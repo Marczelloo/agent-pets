@@ -12,7 +12,7 @@ Outputs (in `docs/video/`):
 
 All text is on screen, so the silent cuts tell the whole story.
 
-## The story (108 BPM, 14¾ bars)
+## The story (108 BPM, 13¾ bars)
 
 1. **Cold open.** Clawd knocks on the glass of your screen: *Your coding agent has been waiting… for 20 minutes.* The camera pulls back: you are right there, browsing, not looking.
 2. **The crew steps in.** Clawd calls for help and the crew drops out of the sky, one pet per beat, onto a pyramid. Every landing pops a name tag: Clawd, opencode, Copilot, Cursor, Grok, Kodek, Kilo, ZCode (asleep) and Antigravity (floating).
