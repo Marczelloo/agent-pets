@@ -1,4 +1,5 @@
-// Act 4 (bars 7-10): the click, a beat of silence, then the party (headphones on, the whole pyramid bopping) and the seven looks.
+// Act 4 (bars 7-10): everyone freezes and watches the cursor reach Allow; the click sets off a wave of joy and relief; "Back to work." sends the crew
+// home along the taskbar (Clawd stays and starts working); then the seven looks, one pet each.
 import { STYLES } from '@app/styles';
 import type { StyleId } from '@app/types';
 import type { Who } from './actors';
@@ -7,15 +8,18 @@ import type { Ctx } from './ctx';
 import { CLICK } from './act3';
 import { TAGS } from './act2';
 import { drawBurst, drawCaption, drawTag, type Burst } from './overlays';
-import { SLOTS, ZCODE, heightOf, landing } from './tower';
+import { DISPERSE, HOME, LEAVE_GAP, LEAVE_ORDER, LEAVE_TIME, SLOTS, ZCODE, heightOf, landing, leaveAt, slotOf, slotPose } from './tower';
 import { THEME, STYLE_NAMES } from './themes';
-import { clamp, easeInOut, easeOut, easeOutBack, hash, lerp, TAU } from './util';
+import { clamp, easeIn, easeInOut, easeOut, easeOutBack, hash, lerp, TAU } from './util';
 import { worldToScreen } from './camera';
 
-export const PARTY = at(7, 1);
+/** The click: the reaction, the confetti and the groove all start here. */
+export const PARTY = CLICK;
+/** Clawd turns to his terminal once everyone has left. */
+export const WORK = DISPERSE + 1.25;
 export const FLIP = at(9, 0);
 export const LOOKS: StyleId[] = ['sticker', 'sketch', 'clean', 'pixel', 'neon', 'ink', 'pastel', 'clean'];
-export const WAKE = PARTY + 0.45;
+export const WAKE = CLICK + 0.3;
 /** Who stars in each look (Sticker and Pixel only exist for Clawd and Kodek); null = the whole crew is back. */
 const SOLO: (Who | null)[] = ['clawd', 'opencode', 'copilot', 'kodek', 'cursor', 'grok', 'zcode', null];
 
@@ -28,16 +32,78 @@ export function act4(c: Ctx): void {
   const { T, fmt } = c, p = fmt.portrait;
   if (T < CLICK - 0.4) return;
 
-  // ---------- a beat of held breath after the click ----------
-  if (T >= CLICK && T < PARTY) {
-    for (const s of SLOTS) { if (s.who === 'kodek') continue; }
-    for (const w of ['kilo', 'kodek', 'grok', 'cursor', 'opencode', 'copilot', 'android'] as Who[]) { c.reset(w); c.pose(w, { look: -0.1, ex: -0.7, armL: 0.35, armR: 0.35 }); }
-    c.reset('clawd'); c.pose('clawd', { look: 0, ex: -1, bubble: 0, armL: 0.35, armR: 0.35, lean: 0.3 });
+  const ALL: Who[] = ['clawd', 'opencode', 'copilot', 'cursor', 'grok', 'kodek', 'kilo', 'android', 'zcode'];
+  const start0 = leaveAt;
+  const joy = { happy: 1, armL: 2.7, armR: 2.7, oscL: 0.5, oscR: 0.5, _f: 14, look: -0.2, ex: 0 };
+
+  // ---------- everyone freezes and watches the cursor reach Allow, holding their breath ----------
+  if (T < CLICK) {
+    for (const w of ALL) { if (w === 'zcode') continue; c.reset(w); c.pose(w, { look: -0.1, ex: -0.7, armL: 0.35, armR: 0.35, happy: 0 }); }
+    c.pose('clawd', { bubble: 1, lean: 0.3, ex: -1 });
     c.pose('kodek', { ikR: 1, hxR: 34, hyR: -58, _hold: 'net', pole: 0.32, _poleDirect: 1 });
   }
 
+  // ---------- the click: a wave of joy up the pile, relief for Clawd; then the crew goes home ----------
+  if (T >= CLICK && T < FLIP - 0.02) {
+    const a = T - CLICK;
+    // the wave runs left to right, a frame or two apart
+    const order = ALL.filter(w => w !== 'clawd').sort((m, n) => (slotOf(m)?.x ?? ZCODE.x) - (slotOf(n)?.x ?? ZCODE.x));
+    for (const w of ALL) {
+      if (w === 'clawd') continue;
+      const start = leaveAt(w), delay = order.indexOf(w) * 0.027;
+      if (T < start) {   // still on the pile: jump with arms up
+        c.reset(w); c.pose(w, joy);
+        const u = clamp((a - delay) / 0.42);
+        if (u > 0 && u < 1) c.set(w, { y: c.crew[w].spec.y - 20 * 4 * u * (1 - u) });
+        if (w === 'kodek') c.pose(w, { ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: 34 + 6 * Math.sin(a * 9), hyR: -70, _hold: 'net', pole: 0.32 + 0.4 * Math.sin(a * 9), _poleDirect: 1 });
+        continue;
+      }
+      // climbing down and walking home along the taskbar
+      const home = HOME[w] ?? 0, from = w === 'zcode' ? { x: ZCODE.x, y: 0 } : slotPose(DISPERSE, slotOf(w)!), u = (T - start) / LEAVE_TIME, dir = home < from.x ? -1 : 1;
+      if (u < 1) {
+        const e = easeInOut(clamp(u));
+        c.set(w, { x: lerp(from.x, home, e), y: lerp(from.y, 0, easeIn(clamp(u))) - 34 * 4 * u * (1 - u), rot: dir * 0.22 * Math.sin(Math.PI * u), sx: 1, sy: 1 });
+        c.reset(w); c.pose(w, joy);
+      } else {
+        const l = landing(T - start - LEAVE_TIME), wave = ['android', 'kilo', 'cursor', 'zcode'].includes(w) && T - start - LEAVE_TIME < 1.0;
+        c.set(w, { x: home, y: 0, sx: l.sx, sy: l.sy, rot: 0 });
+        c.reset(w); c.pose(w, wave ? { happy: 0.8, armL: 0.3, armR: 2.4, oscR: 0.6, _f: 9, look: -0.2, ex: 0 } : { happy: 0.3, armL: 0.3, armR: 0.3, look: 0, ex: 0 });
+      }
+    }
+    // Clawd: a long breath out, the marker turns into a check, he waves the others off and then turns to his terminal
+    if (T < WORK) {
+      const exhale = 0.05 * Math.exp(-a / 0.35) + 0.015 * Math.sin(a * 2.6);
+      c.set('clawd', { sy: 1 - exhale, sx: 1 + exhale * 0.5 });
+      c.reset('clawd');
+      c.pose('clawd', T >= DISPERSE + 0.1 ? { bubble: 0, happy: 0.5, armL: 0.3, armR: 2.4, oscR: 0.5, _f: 9, look: -0.1, lean: 0 } : { bubble: 0, happy: 0.5, squint: 0.5, armL: 0.3, armR: 0.3, look: -0.1, lean: -0.15 });
+    } else c.set('clawd', { scene: 'bash' });
+    c.punches.push([CLICK, 2.6]);
+    LEAVE_ORDER.forEach(w => c.punches.push([leaveAt(w) + LEAVE_TIME, 0.4]));
+    // the "!" becomes a check mark
+    c.front.push(x => {
+      const k = clamp((T - (CLICK + 0.08)) / 0.3), fade = 1 - clamp((T - (WORK - 0.2)) / 0.2);
+      if (k <= 0 || fade <= 0) return;
+      const u = c.crew.clawd.u, [mx, my] = c.crew.clawd.pt(-66, -heightOf('clawd') * 0.55), sc = easeOutBack(k, 1.6) * fade;
+      x.save(); x.translate(mx, my); x.scale(sc, sc); x.globalAlpha = fade; x.lineJoin = 'round'; x.lineWidth = Math.max(2, 2.3 * u); x.strokeStyle = '#2B1D16'; x.fillStyle = '#D97757';
+      x.beginPath(); x.moveTo(5 * u, 8 * u); x.lineTo(10 * u, 18 * u); x.lineTo(-2 * u, 9 * u); x.closePath(); x.fill(); x.stroke();
+      x.beginPath(); x.roundRect(-12 * u, -13 * u, 24 * u, 24 * u, 7 * u); x.fill(); x.stroke();
+      x.strokeStyle = '#FFFFFF'; x.lineWidth = 3.2 * u; x.lineCap = 'round'; x.beginPath(); x.moveTo(-5.5 * u, -1 * u); x.lineTo(-1.5 * u, 3.5 * u); x.lineTo(6 * u, -6.5 * u); x.stroke();
+      x.restore();
+    });
+    // the panda wakes from the commotion
+    const wk = clamp((T - WAKE) / 0.6);
+    if (T < start0('zcode')) {
+      c.reset('zcode');
+      const zsleep = { loaf: 1, sleep: 1, dim: 1, th: 0.3, _prop: 'pillow', armL: 0.15, armR: 0.15 };
+      if (T < WAKE) c.pose('zcode', zsleep);
+      else c.pose('zcode', { loaf: 1 - easeOut(wk), sleep: 1 - easeOut(clamp((T - WAKE) / 0.35)) * 0.85, dim: 1 - wk, th: 0.3 * (1 - wk), _prop: 'pillow', armL: 0.15 + 2.2 * wk, armR: 0.15 + 2.2 * wk, look: 0.3 });
+      if (T >= WAKE && T < WAKE + 1 / 60 + 1e-6) c.emit('zcode', { t: '?', x: 12, y: -74, vx: 6, vy: -22, life: 0, max: 1.1, s: 24, col: 'clay' });
+    }
+  }
+  void LEAVE_GAP;
+
   // ---------- the party (until the group photo) ----------
-  if (T >= PARTY && T < at(11, 0) - 0.02) {
+  if (T >= FLIP - 0.02 && T < at(11, 0) - 0.02) {
     const a = T - PARTY, h = hit(T), k = beatIdx(T), s = Math.sin((T - PARTY) * TAU * (1 / (2 * BEAT)));
     const phones = { _phones: 1, _notes: 0.2, happy: 0.55 };
     // the whole pyramid bounces on the beat
@@ -79,10 +145,10 @@ export function act4(c: Ctx): void {
   // ---------- captions ----------
   const size = p ? 92 : 72, cy = p ? 230 : 78;
   c.front.push(x => {
-    const t0 = PARTY + 0.15, out = PARTY + 2.7, ink = c.theme.text;
+    const t0 = CLICK, tb = DISPERSE, out = DISPERSE + 2.0, ink = c.theme.text;
     const words = p
-      ? [[{ text: 'Allow.', t: t0, out, color: ink }], [{ text: 'Back', t: t0 + 0.3, out, color: ink }, { text: 'to', t: t0 + 0.4, out, color: ink }, { text: 'work.', t: t0 + 0.5, out, color: '#D97757' }]]
-      : [[{ text: 'Allow.', t: t0, out, color: ink }, { text: 'Back', t: t0 + 0.3, out, color: ink }, { text: 'to', t: t0 + 0.4, out, color: ink }, { text: 'work.', t: t0 + 0.5, out, color: '#D97757' }]];
+      ? [[{ text: 'Allow.', t: t0, out, color: ink }], [{ text: 'Back', t: tb, out, color: ink }, { text: 'to', t: tb + 0.1, out, color: ink }, { text: 'work.', t: tb + 0.2, out, color: '#D97757' }]]
+      : [[{ text: 'Allow.', t: t0, out, color: ink }, { text: 'Back', t: tb, out, color: ink }, { text: 'to', t: tb + 0.1, out, color: ink }, { text: 'work.', t: tb + 0.2, out, color: '#D97757' }]];
     drawCaption(x, T, words, { size: p ? size * 1.1 : size, cx: p ? fmt.W / 2 : fmt.W * 0.4, cy: p ? cy + 50 : cy, lineGap: 1.05 });
   });
   // the user has done their bit: the pointer slips away
@@ -95,13 +161,15 @@ export function act4(c: Ctx): void {
     const since = (T - FLIP) - i * BEAT, dir = i % 2 ? -1 : 1;
     const pyC = worldToScreen({ x: 0, y: 0, z: 1 }, fmt, 0, 0); void pyC;
     c.wipe = i > 0 || LOOKS[0] !== 'clean' ? { prev: i === 0 ? THEME.clean : prev, k: clamp(since / 0.2), cx: fmt.W * (dir > 0 ? 0.85 : 0.15), cy: fmt.H * 0.62 } : undefined;
-    const ALL: Who[] = ['clawd', 'opencode', 'copilot', 'cursor', 'grok', 'kodek', 'kilo', 'android', 'zcode'];
     for (const w of ALL) c.set(w, { look: { style, motion: 'calm' } });
     // one pet per look, cut in from alternating sides with a squash; Sticker and Pixel exist for Clawd and Kodek only. The last beat brings the crew back.
     const solo = SOLO[i], enter = clamp(since / 0.3), lz = landing(since - 0.22);
     if (solo) {
-      for (const w of ALL) if (w !== solo) c.set(w, { hidden: true });
-      c.set(solo, { x: 98 + dir * (1 - easeOutBack(enter, 1.3)) * 560, y: -7 * hit(T), s: 1.9, z: 60, sx: lz.sx, sy: lz.sy, rot: dir * (1 - easeOut(enter)) * 0.4 });
+      // the first look grows out of Clawd where he stands; the others fade out beside him or are simply gone
+      const e0 = easeInOut(clamp(since / 0.3));
+      for (const w of ALL) if (w !== solo) c.set(w, i === 0 ? { alpha: 1 - e0, x: HOME[w] ?? 0, y: 0 } : { hidden: true });
+      if (i === 0) c.set(solo, { x: lerp(0, 98, e0), y: -7 * hit(T) * e0, s: lerp(1, 1.9, e0), z: 60, sx: 1, sy: 1, rot: 0 });
+      else c.set(solo, { x: 98 + dir * (1 - easeOutBack(enter, 1.3)) * 560, y: -7 * hit(T), s: 1.9, z: 60, sx: lz.sx, sy: lz.sy, rot: dir * (1 - easeOut(enter)) * 0.4 });
       c.front.push(x => { const [tx, ty] = c.crew[solo].pt(0, -heightOf(solo) - 44); drawTag(x, T, tx, ty, { ...TAGS[solo], t: FLIP + i * BEAT + 0.12, out: FLIP + (i + 1) * BEAT - 0.04, h: p ? 68 : 62, tilt: -0.03 * dir, anchor: 'c' }); });
     }
     // a pulse on every change

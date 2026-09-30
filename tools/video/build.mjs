@@ -1,4 +1,4 @@
-// One command for the whole promo video: cues -> soundtrack -> both formats -> muxed and silent MP4s in docs/video/.
+// One command for the whole promo video: cues -> soundtrack -> both formats -> muxed, effects-only and silent MP4s in docs/video/.
 //   pnpm dev            (in another terminal: the page that draws the pets)
 //   node build.mjs [--quick]     --quick renders at a lower quality to check a change fast
 import { execFileSync, spawn } from 'node:child_process';
@@ -13,7 +13,7 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' });
 console.log('1/4 cues');
 run('node', ['render.mjs', '--format=16x9', `--cues=${out}/cues.json`]);
 console.log('2/4 soundtrack');
-run('python3', ['audio/make_audio.py', `${out}/cues.json`, `${out}/audio.wav`]);
+run('python3', ['audio/make_audio.py', `${out}/cues.json`, `${out}/audio.wav`, `${out}/audio_sfx.wav`]);
 run('python3', ['audio/normalize.py', `${out}/audio.wav`, `${out}/audio_norm.wav`]);
 
 console.log('3/4 picture (both formats at once)');
@@ -28,6 +28,9 @@ console.log('4/4 mux');
 for (const f of ['16x9', '9x16']) {
   run('ffmpeg', ['-y', '-loglevel', 'error', '-i', `${out}/agent-pets-${f}-silent.mp4`, '-i', `${out}/audio_norm.wav`, '-map', '0:v', '-map', '1:a',
     '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', '-shortest', `${docs}/agent-pets-${f}.mp4`]);
+  // the same picture with only the sound effects (no music), already scaled to -1.6 dBTP by make_audio.py
+  run('ffmpeg', ['-y', '-loglevel', 'error', '-i', `${out}/agent-pets-${f}-silent.mp4`, '-i', `${out}/audio_sfx.wav`, '-map', '0:v', '-map', '1:a',
+    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', '-shortest', `${docs}/agent-pets-${f}-sfx.mp4`]);
   run('ffmpeg', ['-y', '-loglevel', 'error', '-i', `${out}/agent-pets-${f}-silent.mp4`, '-c', 'copy', '-an', '-movflags', '+faststart', `${docs}/agent-pets-${f}-silent.mp4`]);
 }
 console.log('done ->', docs);

@@ -17,7 +17,7 @@ export const UI_FONT = '"Segoe UI", system-ui, sans-serif';
 
 /** Where things sit in the world. The taskbar top is y = 0, pets stand on it; negative y is up. */
 export const WORLD = {
-  barX0: -520, barX1: 1000, barH: 64,
+  barX0: -680, barX1: 1000, barH: 64,
   /** the document window the user is reading: right above the crew, which is the joke */
   win: { x: -120, y: -560, w: 460, h: 350 },
   win2: { x: 380, y: -500, w: 280, h: 230 },

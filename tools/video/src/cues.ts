@@ -6,7 +6,7 @@ import { HEY } from './beat';
 import { CATCH, CLICK, HI, HOP1, HOP2, HOP_TIME, PLANE_HIT, PLANE_THROW, SWING1 } from './act3';
 import { FLIP, LOOKS, PARTY, WAKE } from './act4';
 import { END, FINE, LAST_KNOCK, OFFER, TITLE } from './act5';
-import { FALL_TIME, SLOTS, ZCODE } from './tower';
+import { FALL_TIME, LEAVE_ORDER, LEAVE_TIME, SLOTS, ZCODE, leaveAt } from './tower';
 
 export interface Cue { t: number; name: string; /** loudness 0..1 */ v?: number; /** free parameter: pitch index, duration... */ p?: number }
 
@@ -39,7 +39,9 @@ export function buildCues(): Cue[] {
   add(CLICK + 0.02, 'burst', 0.9);
 
   // the party
-  add(PARTY, 'drop', 1); add(PARTY + 0.01, 'confetti', 1); add(PARTY + 0.03, 'phones', 0.9);
+  add(PARTY, 'drop', 1); add(PARTY + 0.01, 'confetti', 1); add(PARTY + 0.12, 'sigh', 0.5); add(PARTY + 0.3, 'ding', 0.8);
+  LEAVE_ORDER.forEach((w, i) => { add(leaveAt(w), 'hop', 0.6); add(leaveAt(w) + LEAVE_TIME, 'land', 0.55, i); });
+  add(FLIP - 0.02, 'phones', 0.9);
   add(WAKE, 'wake', 0.9);
   LOOKS.forEach((_, i) => add(FLIP + i * BEAT, 'look', 0.9, i));
 

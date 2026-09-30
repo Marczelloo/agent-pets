@@ -40,6 +40,13 @@ export const slotOf = (w: Who): Slot | undefined => SLOTS.find(s => s.who === w)
 export const ZCODE = { land: at(4, 3), x: 276 };
 export const ANDROID_LAND = at(5, 0);
 
+/** After the click the crew climbs down from the pile, top first, and walks home along the taskbar (Clawd stays where he is). */
+export const DISPERSE = at(7, 2);
+export const LEAVE_ORDER: Who[] = ['android', 'kodek', 'kilo', 'grok', 'cursor', 'copilot', 'opencode', 'zcode'];
+export const HOME: Partial<Record<Who, number>> = { clawd: 0, kilo: -105, zcode: -210, android: -315, kodek: -420, copilot: -525, cursor: 165, opencode: 270, grok: 375 };
+export const LEAVE_GAP = 0.15, LEAVE_TIME = 0.5;
+export const leaveAt = (w: Who): number => { const i = LEAVE_ORDER.indexOf(w); return i < 0 ? Infinity : DISPERSE + i * LEAVE_GAP; };
+
 export interface Pose { x: number; y: number; sx: number; sy: number; rot: number; hidden: boolean; airborne: boolean; age: number }
 
 /** Squash and bounce of a pet that just landed (age = seconds since touchdown, negative = still in the air). */
@@ -56,7 +63,7 @@ const ROW_H = [78, 82, 76];
 export function rowLoad(T: number, r: number): number {
   let q = 0, above = 0;
   for (const s of SLOTS) {
-    if (s.row <= r || s.on || s.land > T) continue;
+    if (s.row <= r || s.on || s.land > T || T >= leaveAt(s.who)) continue;
     above++;
     q += ring(T - s.land, 0.1 / (1 + (s.row - r - 1) * 0.9), 3.6, 7.5);
   }

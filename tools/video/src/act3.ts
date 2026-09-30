@@ -11,7 +11,7 @@ import { clamp, easeIn, easeInOut, easeOut, easeOutBack, hash, lerp, remap, ring
 import { PAL } from './world';
 import { fit, still, worldToScreen, type CamFn } from './camera';
 import type { Format } from './format';
-import { partyCam, rainCam } from './act2';
+import { partyCam, rainCam, wideRow } from './act2';
 import type { Actor, Who } from './actors';
 
 /* ---- the plan, in seconds ---- */
@@ -257,7 +257,8 @@ export function act3Cam(fmt: Format): [number, CamFn, ((t: number) => number)?][
   const low = p ? fit({ x0: -225, x1: 60, y0: -200, y1: 60 }, fmt, { top: 300, bottom: 300 }) : fit({ x0: -250, x1: 40, y0: -150, y1: 60 }, fmt, { top: 20, bottom: 20 });
   return [
     [HI - 0.2, rainCam(fmt), easeInOut], [CATCH - 0.12, still(top), easeInOut], [HOP1 + 0.1, still(top)],
-    [HOP2 + 0.3, still(low), easeInOut], [PARTY_AT - 0.02, still(low)], [PARTY_AT + 0.55, partyCam(fmt), t => easeOutBack(t, 1.25)],
+    [HOP2 + 0.3, still(low), easeInOut], [CLICK - 0.02, still(low)],
+    // the crew disperses and the camera backs away with it, then rests on the whole row before drifting in on Clawd for the looks
+    [CLICK + 1.5, partyCam(fmt), easeInOut], [CLICK + 2.6, wideRow(fmt), easeInOut], [at(9, 0), partyCam(fmt), easeInOut],
   ];
 }
-const PARTY_AT = at(7, 1);

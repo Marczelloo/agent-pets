@@ -41,6 +41,13 @@ export function partyCam(fmt: Format): CamFn {
   return () => cam;
 }
 
+/** A calm wide shot of the whole taskbar row: everyone at home after the crew has dispersed. */
+export function wideRow(fmt: Format): CamFn {
+  const p = fmt.portrait;
+  const cam = p ? fit({ x0: -590, x1: 450, y0: -230, y1: 70 }, fmt, { ground: 1100 }) : fit({ x0: -590, x1: 450, y0: -250, y1: 70 }, fmt, { top: 130, bottom: 30 });
+  return () => cam;
+}
+
 /** Arms up and flailing, eyes wide: the pose of anything falling out of the sky. */
 const FALLING = { armL: 2.7, armR: 2.7, oscL: 0.5, oscR: 0.5, _f: 14, look: -0.2, ex: 0 };
 

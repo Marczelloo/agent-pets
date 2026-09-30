@@ -3,7 +3,7 @@
 claps; no vocals) plus sound effects placed from out/cues.json, which the animation itself produces.
 Structure: a ticking clock and a muffled motif that opens up until HEY!, a second of near silence, then the groove enters with Clawd's landing
 and gains a layer for every pet that lands; it thins out for "Got your attention?", comes back with the Allow click, and rings out on the end card.
-Usage: make_audio.py cues.json out.wav"""
+Usage: make_audio.py cues.json out.wav [sfx_only.wav]"""
 import json
 import sys
 
@@ -106,7 +106,21 @@ class Score:
             if t >= t0: self.m.add(S.bell(note(top), 1.2, 0.9), t, gain, 0.35, 0.4)
 
 
-def build(cues_path, out_path):
+class SoftMix(S.Mix):
+    """A mix whose every event gets a raised-cosine fade in (5 ms) and out (10 ms), so nothing clicks at its edges."""
+    def add(self, x, t, gain=1.0, pan=0.0, send=0.0):
+        x = np.array(x, dtype=float); n = len(x); a = min(n // 2, int(0.005 * S.SR)); b = min(n // 2, int(0.010 * S.SR))
+        if a > 1: x[:a] *= 0.5 - 0.5 * np.cos(np.pi * np.arange(a) / a)
+        if b > 1: x[-b:] *= 0.5 + 0.5 * np.cos(np.pi * np.arange(b) / b)
+        super().add(x, t, gain, pan, send)
+
+
+def true_peak(y):
+    from scipy.signal import resample_poly
+    return float(np.max(np.abs(resample_poly(y, 4, 1, axis=1))))
+
+
+def build(cues_path, out_path, sfx_path=None):
     data = json.load(open(cues_path))
     cues, dur = data['cues'], data['duration']
     by = lambda name: [c for c in cues if c['name'] == name]
@@ -118,8 +132,6 @@ def build(cues_path, out_path):
 
     # ============================================================ 0 - 4.5 s: a clock and a muffled motif that opens up ============================================================
     n_beats = int(hey / BEAT + 1e-6)
-    for k in range(n_beats):
-        pre.add(S.clock_tick(0.4 + 0.3 * k / n_beats, tock=(k % 2 == 1)), k * BEAT, 1.0, 0.0, 0.0)
     motif = ['F4', 'A4', 'C5', 'A4', 'D5', 'C5', 'A4', 'F4']
     for k in range(n_beats):
         if k % 2 == 0: pre.add(S.marimba(note(motif[(k // 2) % len(motif)]), 0.55, 0.6 + 0.4 * k / n_beats), k * BEAT, 0.7, 0.0, 0.0)
@@ -200,45 +212,59 @@ def build(cues_path, out_path):
     fade[a:b] = np.linspace(1, 0, b - a) ** 1.3; fade[b:] = 0
 
     # ============================================================ sound effects: dry and present, they carry the picture ============================================================
-    sfx.bus = SFX
-    # the knock's own echo after HEY!, the only thing in the room
-    for d, v in ((0.32, 0.4), (0.78, 0.25), (1.25, 0.14)): sfx.add(S.knock(1.0, True), hey + d, v, 0.0, 0.8)
-    tick_pitch = [1100, 1250, 1400, 1600, 1800, 2000]
-    for c in cues:
-        n, t, v, p = c['name'], c['t'], c.get('v', 1.0), c.get('p')
-        if n == 'knock':
-            far = v < 0.35
-            sfx.add(S.knock(1.0, far), t, (0.35 + 0.65 * v) * 0.95, 0.0, 0.3 if far else 0.14)
-        elif n == 'hey': sfx.add(S.impact(1.0), t, 1.0 * v, 0.0, 0.2); sfx.add(S.pop(700, 1.0), t + 0.01, 0.5 * v, 0.0, 0.2)
-        elif n == 'pop': sfx.add(S.pop(520 * (1.09 ** (p or 0)), 1.0), t, 0.55 * v, 0.1, 0.2)
-        elif n == 'whoosh': sfx.add(S.swipe(0.4, 1.0, True), t - 0.05, 0.5 * v, 0.0, 0.2)
-        elif n == 'fall': sfx.add(S.swipe(0.5, 1.0, False), t, 0.18 * v, -0.3 + 0.1 * (p or 0), 0.2)
-        elif n == 'land':
-            sfx.add(S.thump(90 + 4 * (p or 0), 1.0, 0.14), t, 0.45 * v, 0.0, 0.08); sfx.add(S.pop(380 * (1.08 ** (p or 0)), 1.0), t, 0.6 * v, -0.2 + 0.07 * (p or 0), 0.2)
-        elif n == 'snore': sfx.add(S.snore(1.0, 1.7), t, 0.35 * v, 0.4, 0.2)
-        elif n == 'ping': sfx.add(S.pop(880, 1.0), t, 0.5 * v, -0.3, 0.3)
-        elif n == 'miss': sfx.add(S.whoosh(0.16, 1.0, False), t, 0.35 * v, 0.0, 0.15)
-        elif n == 'plane':
-            m = int(S.SR * 0.42); tt_ = S.tt(m)
-            sfx.add(S.bp(S.noise(m), 1800, 6500) * np.sin(np.pi * tt_ / tt_[-1]) ** 1.5, t, 0.28 * v, 0.2, 0.2)
-        elif n == 'bonk': sfx.add(S.tock(1.0), t, 0.8 * v, 0.0, 0.25); sfx.add(S.thump(110, 1.0, 0.14), t, 0.4, 0.0, 0.15)
-        elif n == 'catch': sfx.add(S.impact(1.0), t, 0.9 * v, 0.0, 0.25); sfx.add(S.click(1.0), t, 0.5, 0.0, 0.1)
-        elif n == 'ding': sfx.add(S.pop(1100, 1.0), t, 0.35 * v, 0.0, 0.3)
-        elif n == 'hop': sfx.add(S.pop(300, 1.0), t, 0.55 * v, 0.0, 0.2)
-        elif n == 'thud': sfx.add(S.thump(110, 1.0, 0.12), t, 0.4 * v, 0.0, 0.1)
-        elif n == 'press': sfx.add(S.click(0.5), t, 0.5 * v, 0.0, 0.08)
-        elif n == 'click': sfx.add(S.click(1.0), t, 1.0 * v, 0.0, 0.1)
-        elif n == 'burst': sfx.add(S.softburst(1.0), t, 0.5 * v, 0.0, 0.3)
-        elif n == 'drop': sfx.add(S.thump(100, 1.0, 0.2), t, 0.6 * v, 0.0, 0.1)
-        elif n == 'confetti':
-            for side in (-1, 1): sfx.add(S.softburst(1.0), t + (0.012 if side > 0 else 0), 0.45 * v, 0.8 * side, 0.3)
-        elif n == 'phones': sfx.add(S.slide(420, 1500, 0.2, 1.0, 5, 0.005), t, 0.12 * v, 0.0, 0.2)
-        elif n == 'wake': sfx.add(S.slide(300, 430, 0.26, 1.0, 5, 0.03), t, 0.3 * v, 0.4, 0.3); sfx.add(S.slide(430, 290, 0.32, 1.0, 5, 0.03), t + 0.26, 0.3 * v, 0.4, 0.3)
-        elif n == 'look': sfx.add(S.snap(1.0), t, 0.7 * v, 0.0, 0.15); sfx.add(S.woodtick(2600, 1.0), t + 0.012, 0.3, 0.0, 0.1)
-        elif n == 'shutter': sfx.add(S.shutter(1.0), t, 0.6 * v, 0.0, 0.15)
-        elif n == 'ta-da': sfx.add(S.pop(900, 1.0), t + 0.02, 0.4, 0.0, 0.3)
-        elif n == 'tick': sfx.add(S.woodtick(tick_pitch[(p or 0) % 6], 1.0), t, 0.3 * v, 0.0, 0.15)
+    def place_sfx(mx):
+        mx.bus = SFX
+        # the clock in the cold open: one tick or tock per beat, getting a little louder
+        for k in range(int(hey / BEAT + 1e-6)):
+            mx.add(S.clock_tick(0.4 + 0.3 * k / int(hey / BEAT + 1e-6), tock=(k % 2 == 1)), k * BEAT, 1.0, 0.0, 0.0)
+        # the knock's own echo after HEY!, the only thing in the room
+        for d, v in ((0.32, 0.4), (0.78, 0.25), (1.25, 0.14)): mx.add(S.knock(1.0, True), hey + d, v, 0.0, 0.8)
+        tick_pitch = [1100, 1250, 1400, 1600, 1800, 2000]
+        for c in cues:
+            n, t, v, p = c['name'], c['t'], c.get('v', 1.0), c.get('p')
+            if n == 'knock':
+                far = v < 0.35
+                mx.add(S.knock(1.0, far), t, (0.35 + 0.65 * v) * 0.95, 0.0, 0.3 if far else 0.14)
+            elif n == 'hey': mx.add(S.impact(1.0), t, 1.0 * v, 0.0, 0.2); mx.add(S.pop(700, 1.0), t + 0.01, 0.5 * v, 0.0, 0.2)
+            elif n == 'pop': mx.add(S.pop(520 * (1.09 ** (p or 0)), 1.0), t, 0.55 * v, 0.1, 0.2)
+            elif n == 'whoosh': mx.add(S.swipe(0.4, 1.0, True), t - 0.05, 0.5 * v, 0.0, 0.2)
+            elif n == 'fall': mx.add(S.swipe(0.5, 1.0, False), t, 0.18 * v, -0.3 + 0.1 * (p or 0), 0.2)
+            elif n == 'land':
+                mx.add(S.thump(90 + 4 * (p or 0), 1.0, 0.14), t, 0.45 * v, 0.0, 0.08); mx.add(S.pop(380 * (1.08 ** (p or 0)), 1.0), t, 0.6 * v, -0.2 + 0.07 * (p or 0), 0.2)
+            elif n == 'snore': mx.add(S.snore(1.0, 1.7), t, 0.35 * v, 0.4, 0.2)
+            elif n == 'ping': mx.add(S.pop(880, 1.0), t, 0.5 * v, -0.3, 0.3)
+            elif n == 'miss': mx.add(S.whoosh(0.16, 1.0, False), t, 0.35 * v, 0.0, 0.15)
+            elif n == 'plane':
+                m = int(S.SR * 0.42); tt_ = S.tt(m)
+                mx.add(S.bp(S.noise(m), 1800, 6500) * np.sin(np.pi * tt_ / tt_[-1]) ** 1.5, t, 0.28 * v, 0.2, 0.2)
+            elif n == 'bonk': mx.add(S.tock(1.0), t, 0.8 * v, 0.0, 0.25); mx.add(S.thump(110, 1.0, 0.14), t, 0.4, 0.0, 0.15)
+            elif n == 'catch': mx.add(S.impact(1.0), t, 0.9 * v, 0.0, 0.25); mx.add(S.click(1.0), t, 0.5, 0.0, 0.1)
+            elif n == 'ding': mx.add(S.pop(1100, 1.0), t, 0.35 * v, 0.0, 0.3)
+            elif n == 'hop': mx.add(S.pop(300, 1.0), t, 0.55 * v, 0.0, 0.2)
+            elif n == 'thud': mx.add(S.thump(110, 1.0, 0.12), t, 0.4 * v, 0.0, 0.1)
+            elif n == 'press': mx.add(S.click(0.5), t, 0.5 * v, 0.0, 0.08)
+            elif n == 'click': mx.add(S.click(1.0), t, 1.0 * v, 0.0, 0.1)
+            elif n == 'burst': mx.add(S.softburst(1.0), t, 0.5 * v, 0.0, 0.3)
+            elif n == 'drop': mx.add(S.thump(100, 1.0, 0.2), t, 0.6 * v, 0.0, 0.1)
+            elif n == 'confetti':
+                for side in (-1, 1): mx.add(S.softburst(1.0), t + (0.012 if side > 0 else 0), 0.45 * v, 0.8 * side, 0.3)
+            elif n == 'phones': mx.add(S.slide(420, 1500, 0.2, 1.0, 5, 0.005), t, 0.12 * v, 0.0, 0.2)
+            elif n == 'wake': mx.add(S.slide(300, 430, 0.26, 1.0, 5, 0.03), t, 0.3 * v, 0.4, 0.3); mx.add(S.slide(430, 290, 0.32, 1.0, 5, 0.03), t + 0.26, 0.3 * v, 0.4, 0.3)
+            elif n == 'look': mx.add(S.snap(1.0), t, 0.7 * v, 0.0, 0.15); mx.add(S.woodtick(2600, 1.0), t + 0.012, 0.3, 0.0, 0.1)
+            elif n == 'shutter': mx.add(S.shutter(1.0), t, 0.6 * v, 0.0, 0.15)
+            elif n == 'ta-da': mx.add(S.pop(900, 1.0), t + 0.02, 0.4, 0.0, 0.3)
+            elif n == 'tick': mx.add(S.woodtick(tick_pitch[(p or 0) % 6], 1.0), t, 0.3 * v, 0.0, 0.15)
 
+    sfx = S.Mix(dur); place_sfx(sfx)
+
+    if sfx_path:
+        # the effects on their own: soft edges, the same reverb, no compression or clipping, scaled to a true peak of -1.6 dBTP (the AAC encode stays under -1)
+        soft = SoftMix(dur); place_sfx(soft)
+        only = S.Mix(dur); only.absorb(soft); only.reverb(0.55, 0.8)
+        z = np.stack([only.L, only.R]); z = np.stack([S.hp(c, 60) for c in z])[:, :int(S.SR * (dur + 0.05))]
+        z *= 10 ** (-1.6 / 20) / true_peak(z)
+        wavfile.write(sfx_path, S.SR, np.round(z.T * 32767).astype(np.int16))
+        print('wrote', sfx_path, 'true peak', round(20 * np.log10(true_peak(z)), 2), 'dBTP')
     final = S.Mix(dur)
     final.absorb(music, fade); final.absorb(sfx)
     final.reverb(0.55, 0.8)
@@ -252,4 +278,4 @@ def build(cues_path, out_path):
 
 
 if __name__ == '__main__':
-    build(sys.argv[1], sys.argv[2])
+    build(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
