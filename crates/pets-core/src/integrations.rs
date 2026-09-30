@@ -82,7 +82,7 @@ fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
 /// set (space, apostrophe, `&`, parentheses…). An ordinary path stays unquoted, so it also works in PowerShell.
 pub fn hook_command(hook: &Path, agent: &str, event: &str) -> String {
     let p = hook.to_string_lossy().replace('\\', "/");
-    let safe = p.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | ':' | '_' | '-'));
+    let safe = p.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | ':' | '_' | '-' | '~'));
     let p = if safe { p } else { format!("\"{p}\"") };
     format!("{p} --agent {agent} --event {event}")
 }
@@ -745,6 +745,8 @@ mod tests {
         let ap = Path::new(r"C:\Users\O'Neil\.agent-pets\hook.exe");
         assert_eq!(hook_command(ap, "antigravity", "Stop"), r#""C:/Users/O'Neil/.agent-pets/hook.exe" --agent antigravity --event Stop"#);
         assert!(hook_command(Path::new(r"C:\Users\R&D\hook.exe"), "copilot", "Stop").starts_with('"'));
+        // a short 8.3 name (e.g. a temp folder): `~` inside a path is plain text in cmd, bash and PowerShell
+        assert_eq!(hook_command(Path::new(r"C:\Users\RUNNER~1\hook.exe"), "cursor", "Stop"), "C:/Users/RUNNER~1/hook.exe --agent cursor --event Stop");
         assert_eq!(hook_command_ps(ap, "copilot", "Stop"), "& 'C:/Users/O''Neil/.agent-pets/hook.exe' --agent copilot --event Stop");
         assert_eq!(hook_command_ps(sp, "copilot", "Stop"), "& 'C:/Users/Jan Kowalski/.agent-pets/hook.exe' --agent copilot --event Stop");
     }
