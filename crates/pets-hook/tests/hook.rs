@@ -82,6 +82,25 @@ fn run_agent(endpoint_path: &std::path::Path, args: &[&str], stdin: &str) -> std
 /// Variables by which `hook.exe` identifies another caller; tests set only the ones they need.
 const CALLER_VARS: [&str; 3] = ["GROK_HOOK_EVENT", "GROK_SESSION_ID", "ZCODE_SESSION_ID"];
 
+#[test]
+fn an_agent_that_never_closes_stdin_still_gets_its_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = Command::new(env!("CARGO_BIN_EXE_hook"))
+        .args(["--agent", "antigravity", "--event", "Stop"]).env("AGENT_PETS_ENDPOINT", dir.path().join("missing.json"))
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut si = c.stdin.take().unwrap();
+    si.write_all(br#"{"conversationId":"d5"#).unwrap();
+    let t = Instant::now();
+    while c.try_wait().unwrap().is_none() {
+        if t.elapsed() > Duration::from_secs(20) { let _ = c.kill(); panic!("hook.exe waits for stdin forever"); }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let out = c.wait_with_output().unwrap();
+    drop(si);
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"decision":"stop"}"#);
+}
+
 fn run_with(endpoint_path: &std::path::Path, args: &[&str], vars: &[(&str, &str)], stdin: &str) -> std::process::Output {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_hook"));
     cmd.args(args).env("AGENT_PETS_ENDPOINT", endpoint_path)
