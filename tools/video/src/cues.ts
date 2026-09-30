@@ -19,7 +19,7 @@ export function buildCues(): Cue[] {
   add(PULL_BACK - 0.02, 'whoosh', 1);
   add(PULL_BACK + 0.35, 'pop', 0.8, 0); add(PULL_BACK + 0.5, 'pop', 0.9, 1); add(PULL_BACK + 0.62, 'pop', 0.8, 2);
   add(PULL_BACK + 1.15, 'cricket', 0.5); add(PULL_BACK + 1.6, 'cricket', 0.4);
-  CUTS.forEach(k => add(k - 0.2, 'whoosh', 0.8));
+  add(CUTS[2] - 0.35, 'whoosh', 0.7);
   add(at(2, 3) + 0.3, 'sigh', 0.8);
 
   // the call and the rain
