@@ -102,7 +102,7 @@ pub fn take_basic(pending: &mut Vec<Cmd>, want: &mut f64) -> bool {
 /// at most one second old: enumerating monitors and traversing UI Automation are costly.
 pub fn remeasure(pending: &[Cmd], age: Option<Duration>) -> bool {
     let only_drags = !pending.is_empty() && pending.iter().all(|c| matches!(c, Cmd::Drag(_)));
-    !only_drags || age.map_or(true, |a| a >= Duration::from_secs(1))
+    !only_drags || age.is_none_or(|a| a >= Duration::from_secs(1))
 }
 
 /// Active "Move": anchor at grab time (screen pixels) and current position.

@@ -73,7 +73,7 @@ pub fn process_created(pid: u32) -> Option<u64> {
         let (mut c, mut x, mut k, mut u) = (z(), z(), z(), z());
         let ok = GetProcessTimes(h, &mut c, &mut x, &mut k, &mut u);
         CloseHandle(h);
-        (ok != 0).then(|| ((c.dwHighDateTime as u64) << 32) | c.dwLowDateTime as u64)
+        (ok != 0).then_some(((c.dwHighDateTime as u64) << 32) | c.dwLowDateTime as u64)
     }
 }
 

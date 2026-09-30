@@ -108,7 +108,7 @@ pub fn summary(book: &Book, q: &Query, now: i64, tz: &dyn Fn(i64) -> i64) -> Sta
     let podium = ranked.iter().take(3).map(|(n, p)| Place { project: (*n).clone(), value: value(&p.cell), agent: p.agent() }).collect();
     let race = match q.race {
         RaceBy::Agents => [(StatAgent::Claude, "claude"), (StatAgent::Codex, "codex"), (StatAgent::Router, "router"), (StatAgent::Opencode, "opencode")].iter()
-            .filter_map(|(a, k)| agents.get(a).map(|c| value(c)).filter(|&v| v > 0).map(|v| Lane { key: k.to_string(), agent: Some(*a), value: v }))
+            .filter_map(|(a, k)| agents.get(a).map(&value).filter(|&v| v > 0).map(|v| Lane { key: k.to_string(), agent: Some(*a), value: v }))
             .collect(),
         RaceBy::Projects => ranked.iter().take(5).map(|(n, p)| Lane { key: (*n).clone(), agent: Some(p.agent()), value: value(&p.cell) }).collect(),
     };

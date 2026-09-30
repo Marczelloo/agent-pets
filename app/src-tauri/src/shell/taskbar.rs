@@ -54,7 +54,7 @@ impl Uia {
         if depth > 3 { return None; }
         let mut c = unsafe { self.walker.GetFirstChildElement(el) }.ok();
         while let Some(ch) = c {
-            if unsafe { ch.CurrentAutomationId() }.map(|b| b.to_string() == id).unwrap_or(false) { return Some(ch); }
+            if unsafe { ch.CurrentAutomationId() }.map(|b| b == id).unwrap_or(false) { return Some(ch); }
             if let Some(f) = self.find(&ch, id, depth + 1) { return Some(f); }
             c = unsafe { self.walker.GetNextSiblingElement(&ch) }.ok();
         }
@@ -72,7 +72,7 @@ impl Uia {
         let mut c = unsafe { self.walker.GetFirstChildElement(&frame) }.ok();
         while let Some(ch) = c {
             if let Ok(r) = unsafe { ch.CurrentBoundingRectangle() } {
-                let start = unsafe { ch.CurrentAutomationId() }.map(|b| b.to_string() == "StartButton").unwrap_or(false);
+                let start = unsafe { ch.CurrentAutomationId() }.map(|b| b == "StartButton").unwrap_or(false);
                 if r.right > r.left { boxes.push((r.left, r.right, start)); }
             }
             c = unsafe { self.walker.GetNextSiblingElement(&ch) }.ok();

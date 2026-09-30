@@ -290,8 +290,7 @@ mod tests {
     fn the_view_reports_the_windows_language_not_the_resolved_one() {
         let d = tempfile::tempdir().unwrap();
         let p = core_settings::path(d.path());
-        let mut s = Settings::default();
-        s.language = pets_core::settings::Language::En;
+        let s = Settings { language: pets_core::settings::Language::En, ..Settings::default() };
         core_settings::save(&p, &s).unwrap();
         let v = SettingsState::load(d.path().to_path_buf()).view(Lang::Pl);
         assert_eq!((v.lang, v.system_lang), (Lang::En, Lang::Pl));
@@ -308,8 +307,7 @@ mod tests {
         // only integration_set / wizard_finish change apps; the UI may have a stale list
         let mut current = Settings::default();
         current.apps.claude_code = false;
-        let mut incoming = Settings::default();
-        incoming.autostart = false;
+        let incoming = Settings { autostart: false, ..Settings::default() };
         let merged = merge_user_settings(&current, incoming);
         assert!(!merged.apps.claude_code);
         assert!(!merged.autostart);
