@@ -27,6 +27,9 @@ The app listens only on `127.0.0.1` and requires a random token, stored with its
 - **In memory only:** the file names, commands, search patterns and questions shown in bubbles, tooltips and the panel. They are never written to disk, logs, the diagnostics report or a `pets-cli --record` file.
 - **`~/.agent-pets/stats.json`:** numbers only (tokens, work time, questions, tool calls per hour and model), project folder names, model names and the paths of transcripts already read. Never message content, commands, file names or session titles.
 - **`~/.agent-pets/links.json`:** which Agent Router task belongs to which session (ids only), kept for 7 days.
+- **`~/.agent-pets/agent-pets.log`:** app errors and a line each time the app starts, with your home folder written as `~`. Never session titles, prompts, commands or tokens. It rotates at 512 KB, keeping one older copy (`agent-pets.log.1`); its last 40 lines are in the diagnostics report.
 - **Settings** and backups of the agent config files Agent Pets edited.
+
+The diagnostics report is only copied to your clipboard. **Report a problem** (Settings → Diagnostics, or the tray menu) opens a new GitHub issue in your browser; nothing is sent until you paste the report and submit the form yourself.
 
 Uninstalling removes the hooks, the autostart entry and the files in `~/.agent-pets`; tick "delete app data" to remove your settings as well.
