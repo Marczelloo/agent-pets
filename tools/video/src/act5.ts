@@ -5,9 +5,9 @@ import { at, BEAT } from './beat';
 import { fit, still, type CamFn } from './camera';
 import type { Ctx } from './ctx';
 import type { Format } from './format';
-import { drawCaption, drawRipple, drawSpark, drawWord } from './overlays';
+import { drawCaption, drawRipple, drawWord } from './overlays';
 import { SLOTS } from './tower';
-import { clamp, easeInOut, easeOut, hash, TAU } from './util';
+import { clamp, easeInOut, easeOut, TAU } from './util';
 import { FONT, PAL, UI_FONT } from './world';
 import { partyCam } from './act2';
 import { hit } from './act4';
@@ -44,7 +44,7 @@ export function act5(c: Ctx): void {
       { x: 196, session: { agent: 'claude', state: 'working', progress: { done: 2, total: 6 } } });
     ALL.forEach((w, i) => {
       c.reset(w);
-      const base = { armR: 2.3, oscR: 0.5, _f: 9 + (i % 4) * 1.3, happy: 0.95, look: -0.05, ex: 0, armL: 0.35 };
+      const base = { armR: 2.3, oscR: 0.5, _f: 9 + (i % 4) * 1.3, happy: 0.5, look: -0.05, ex: 0, armL: 0.35 };
       if (w === 'kodek') c.pose(w, { ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: 34, hyR: -58, _hold: 'net', pole: 0.32 + 0.08 * Math.sin(T * 2), _poleDirect: 1, happy: 0.95 });
       else if (w === 'kilo') c.pose(w, { armL: 2.6, armR: 2.6, oscL: 0.3, oscR: 0.3, _f: 10, happy: 1 });
       else if (w === 'clawd') c.pose(w, T >= LAST_KNOCK - 0.05 ? {} : { ...base, bubble: 0 });
@@ -77,26 +77,19 @@ export function act5(c: Ctx): void {
   c.top.push(x => {
     const a = T - TITLE;
     if (a < -0.05 || a > 0.35) return;
-    x.save(); x.globalAlpha = a < 0 ? (1 + a / 0.05) * 0.9 : (1 - easeOut(a / 0.35)) * 0.9; x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, fmt.W, fmt.H); x.restore();
+    x.save(); x.globalAlpha = a < 0 ? (1 + a / 0.05) * 0.6 : (1 - easeOut(a / 0.35)) * 0.6; x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, fmt.W, fmt.H); x.restore();
   });
 
   // ---------- the card ----------
-  const ink = PAL.ink, W = fmt.W;
+  const ink = c.theme.text, W = fmt.W;
   c.windows = 1 - 0.88 * easeOut(clamp((T - TITLE) / 0.9));
   c.front.push(x => {
-    // sparkles drifting around the title
-    for (let i = 0; i < 9; i++) {
-      const t0 = TITLE + 0.2 + i * 0.35, age = T - t0;
-      if (age < 0) continue;
-      const px = p ? W * (0.1 + 0.8 * hash(i * 2.3)) : W * (0.05 + 0.42 * hash(i * 2.3)), py = (p ? 200 + 480 * hash(i * 5.1) : 90 + 620 * hash(i * 5.1)) - age * 14;
-      x.save(); x.globalAlpha = 0.85 * Math.abs(Math.sin(age * 2.4)); drawSpark(x, px, py, 10 + 12 * hash(i * 7), i % 2 ? '#EF9F27' : '#D97757', age * 0.8); x.restore();
-    }
     if (p) {
       drawCaption(x, T, [[{ text: 'Agent', t: TITLE + 0.05 }], [{ text: 'Pets', t: TITLE + 0.15, color: PAL.clay }]], { size: 196, cx: W / 2, cy: 335, lineGap: 0.96 });
-      drawCaption(x, T, [[{ text: 'Your', t: TITLE + 0.7 }, { text: 'coding', t: TITLE + 0.8 }, { text: 'agents,', t: TITLE + 0.9 }], [{ text: 'but', t: TITLE + 1.2 }, { text: 'tiny.', t: TITLE + 1.3, color: PAL.clay }]], { size: 66, cx: W / 2, cy: 612, lineGap: 1.1, weight: 600 });
+      drawCaption(x, T, [[{ text: 'Your', t: TITLE + 0.7 }, { text: 'coding', t: TITLE + 0.8 }, { text: 'agents,', t: TITLE + 0.9 }], [{ text: 'in', t: TITLE + 1.2 }, { text: 'your', t: TITLE + 1.3 }, { text: 'taskbar.', t: TITLE + 1.4, color: PAL.clay }]], { size: 66, cx: W / 2, cy: 612, lineGap: 1.1, weight: 600 });
     } else {
       drawCaption(x, T, [[{ text: 'Agent', t: TITLE + 0.05 }, { text: 'Pets', t: TITLE + 0.15, color: PAL.clay }]], { size: 152, cx: 108, cy: 276, lineGap: 1, align: 'left' });
-      drawCaption(x, T, [[{ text: 'Your', t: TITLE + 0.7 }, { text: 'coding', t: TITLE + 0.8 }, { text: 'agents,', t: TITLE + 0.9 }], [{ text: 'but', t: TITLE + 1.2 }, { text: 'tiny.', t: TITLE + 1.3, color: PAL.clay }]], { size: 66, cx: 112, cy: 486, lineGap: 1.12, align: 'left', weight: 600 });
+      drawCaption(x, T, [[{ text: 'Your', t: TITLE + 0.7 }, { text: 'coding', t: TITLE + 0.8 }, { text: 'agents,', t: TITLE + 0.9 }], [{ text: 'in', t: TITLE + 1.2 }, { text: 'your', t: TITLE + 1.3 }, { text: 'taskbar.', t: TITLE + 1.4, color: PAL.clay }]], { size: 66, cx: 112, cy: 486, lineGap: 1.12, align: 'left', weight: 600 });
     }
     // the offer
     const oa = T - OFFER;
@@ -104,9 +97,9 @@ export function act5(c: Ctx): void {
       const pop = Math.min(1, oa / 0.35), sc = pop < 1 ? 1 + 0.12 * Math.sin(pop * Math.PI) : 1;
       const cx = p ? W / 2 : 110, cy = p ? 1615 : 690, size = p ? 50 : 44;
       x.save(); x.translate(cx, cy); x.scale(sc * easeOut(pop), sc * easeOut(pop)); x.globalAlpha = pop;
-      x.font = `700 ${size}px ${FONT}`; const tw = x.measureText('Free for Windows 11').width, pw = tw + size * 1.4, ph = size * 1.7, bx = p ? -pw / 2 : 0;
-      x.fillStyle = PAL.ink; x.beginPath(); x.roundRect(bx, -ph / 2, pw, ph, ph / 2); x.fill();
-      x.fillStyle = '#FBF1E8'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText('Free for Windows 11', bx + size * 0.7, size * 0.04);
+      x.font = `700 ${size}px ${FONT}`; const tw = x.measureText('Free & open source').width, pw = tw + size * 1.4, ph = size * 1.7, bx = p ? -pw / 2 : 0;
+      x.fillStyle = PAL.clay; x.beginPath(); x.roundRect(bx, -ph / 2, pw, ph, ph / 2); x.fill();
+      x.fillStyle = '#1A1210'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText('Free & open source', bx + size * 0.7, size * 0.04);
       x.restore();
       const ua = T - (OFFER + 0.35);
       if (ua > 0) {
@@ -117,8 +110,8 @@ export function act5(c: Ctx): void {
     // the small print (the README's own disclaimers)
     const fa = T - FINE;
     if (fa > 0) {
-      x.save(); x.globalAlpha = clamp(fa / 0.4) * 0.9; x.fillStyle = p ? '#8A7D72' : '#B9AC9F'; x.font = `600 ${p ? 22 : 19}px ${UI_FONT}`; x.textBaseline = 'alphabetic';
-      const lines = ['Free for noncommercial use (PolyForm Noncommercial 1.0.0).', 'Not affiliated with Anthropic, OpenAI, GitHub, Google, Cursor, xAI, Z.ai or opencode.', 'Android robot by Google, used under CC BY 3.0.'];
+      x.save(); x.globalAlpha = clamp(fa / 0.4) * 0.9; x.fillStyle = '#7E8AA3'; x.font = `600 ${p ? 22 : 19}px ${UI_FONT}`; x.textBaseline = 'alphabetic';
+      const lines = ['Licensed under the GNU GPL v3.0.', 'Not affiliated with Anthropic, OpenAI, GitHub, Google, Cursor, xAI, Z.ai or opencode.', 'Android robot by Google, used under CC BY 3.0.'];
       lines.forEach((l, i) => { x.textAlign = p ? 'center' : 'left'; x.fillText(l, p ? W / 2 : 112, (p ? 1758 : 996) + i * (p ? 30 : 26)); });
       x.restore();
     }

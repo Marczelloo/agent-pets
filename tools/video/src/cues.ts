@@ -6,7 +6,7 @@ import { CALL } from './act2';
 import { CATCH, CLICK, HI, HOP1, HOP2, HOP_TIME, PLANE_HIT, PLANE_THROW, SWING1 } from './act3';
 import { FLIP, LOOKS, PARTY, WAKE } from './act4';
 import { END, FINE, LAST_KNOCK, OFFER, TITLE } from './act5';
-import { ANDROID_LAND, FALL_TIME, SLOTS, ZCODE } from './tower';
+import { FALL_TIME, SLOTS, ZCODE } from './tower';
 
 export interface Cue { t: number; name: string; /** loudness 0..1 */ v?: number; /** free parameter: pitch index, duration... */ p?: number }
 
@@ -25,8 +25,7 @@ export function buildCues(): Cue[] {
   add(CALL, 'whistle', 1);
   add(CALL + 0.35, 'pop', 0.7, 0);
   SLOTS.filter(s => s.land > 0).forEach((s, i) => { add(s.land - FALL_TIME, 'fall', 0.8, i); add(s.land, 'land', 1, i); });
-  add(ZCODE.land - FALL_TIME, 'fall', 0.7, 6); add(ZCODE.land, 'land', 0.9, 6); add(ZCODE.land + 0.5, 'snore', 0.6);
-  add(ANDROID_LAND - 1.7, 'float', 0.7); add(ANDROID_LAND, 'sparkle', 0.8);
+  add(ZCODE.land - FALL_TIME, 'fall', 0.7, 7); add(ZCODE.land, 'land', 0.9, 7); add(ZCODE.land + 0.5, 'snore', 0.6);
 
   // getting the user's attention
   add(HI, 'ping', 0.9);

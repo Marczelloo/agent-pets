@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Builds the Agent Pets soundtrack: an original 108 BPM score (the tempo the app's own music-dance uses) plus sound effects
-placed from out/cues.json, which the animation itself produces. Usage: make_audio.py cues.json out.wav"""
-import functools
+"""Builds the Agent Pets soundtrack: an original 108 BPM score (dark electronic over a dusty lo-fi beat, in A minor) plus dry sound
+effects placed from out/cues.json, which the animation itself produces. Usage: make_audio.py cues.json out.wav"""
 import json
 import sys
 
@@ -14,155 +13,196 @@ from synth import note
 BPM = 108
 BEAT = 60 / BPM
 BAR = 4 * BEAT
+SWING = 0.07   # off-beats land a little late, like a drummer who is not in a hurry
 
 
 def T(bar, beat=0.0): return (bar - 1) * BAR + beat * BEAT
 
 
-# C major: the tune only ever uses C D E G A, the chords are I, IV, V and vi, so nothing can clash.
-CHORDS = {
-    'C': dict(root='C3', uke=['C4', 'E4', 'G4', 'C5'], tones=['C3', 'G3', 'E4'], hook='E5'),
-    'G': dict(root='G2', uke=['B3', 'D4', 'G4', 'B4'], tones=['G3', 'D4', 'B4'], hook='D5'),
-    'Am': dict(root='A2', uke=['A3', 'C4', 'E4', 'A4'], tones=['A3', 'E4', 'C5'], hook='C5'),
-    'F': dict(root='F2', uke=['F4', 'A4', 'C5', 'F5'], tones=['F3', 'C4', 'A4'], hook='A4'),
+# i - VI - iv - v in A minor. Each chord: bass root, pad voicing, keys voicing.
+CH = {
+    'Am9':   dict(bass='A2', pad=['A2', 'E3', 'G3', 'B3'], keys=['A3', 'C4', 'E4', 'G4', 'B4']),
+    'Fmaj7': dict(bass='F2', pad=['F2', 'C3', 'E3', 'A3'], keys=['F3', 'A3', 'C4', 'E4', 'G4']),
+    'Dm9':   dict(bass='D2', pad=['D3', 'A3', 'C4', 'E4'], keys=['D3', 'F3', 'A3', 'C4', 'E4']),
+    'Em7':   dict(bass='E2', pad=['E3', 'B3', 'D4', 'G3'], keys=['E3', 'G3', 'B3', 'D4', 'A4']),
 }
-POP = ['C5', 'E5', 'G5', 'C6', 'E6', 'G6', 'C7']
-
-pluck_cached = functools.lru_cache(maxsize=None)(lambda f, v, b: S.pluck(f, 0.7, v, b))
-
-
-def uke(mix, t, chord, vel=1.0, up=False, gain=0.3, pan=-0.25):
-    fs = [note(n) for n in CHORDS[chord]['uke']]
-    if up: fs = list(reversed(fs))
-    n = int(S.SR * 1.2); out = np.zeros(n)
-    for i, f in enumerate(fs):
-        p = pluck_cached(round(f, 2), 1.0, 0.6) * (0.85 + 0.15 * (i % 2)) * vel
-        s = int(S.SR * 0.011 * i); out[s:s + len(p)] += p[:n - s]
-    out = out[:int(S.SR * 0.7)] * np.exp(-S.tt(int(S.SR * 0.7)) / 0.3)
-    mix.add(out, t, gain, pan, send=0.18)
-
-
-def bass_pat(mix, bar, chord, party=True, gain=0.8):
-    r = note(CHORDS[chord]['root']); f5 = r * 1.5; oct_ = r * 2
-    pat = [(0, r, 0.36), (0.75, r, 0.2), (1.5, f5, 0.3), (2, r, 0.36), (2.75, r, 0.2), (3.5, oct_, 0.3)] if party else [(0, r, 0.5), (1.5, r, 0.3), (2, r, 0.5), (3.5, f5, 0.3)]
-    for b, f, d in pat: mix.add(S.bass(f, d + 0.1, 1.0), T(bar, b), gain, 0.0, 0.02)
-
-
-def drums(mix, bar, beat_from=0, kick_all=True, clap=True, hats=True, vel=1.0):
-    for b in range(beat_from, 4):
-        if kick_all or b % 2 == 0: mix.add(S.kick(0.9 * vel), T(bar, b), 0.62, 0.0, 0.03)
-        if clap and b in (1, 3): mix.add(S.clap(0.9 * vel), T(bar, b), 0.55, 0.05, 0.22)
-        if hats:
-            mix.add(S.hat(0.7 * vel), T(bar, b + 0.5), 0.5, 0.25, 0.05)
-            if b == 3: mix.add(S.hat(0.6 * vel, True), T(bar, b + 0.5), 0.35, 0.25, 0.08)
-            mix.add(S.shaker(0.5 * vel), T(bar, b + 0.25), 0.28, -0.3, 0.04)
-            mix.add(S.shaker(0.65 * vel), T(bar, b + 0.75), 0.28, -0.3, 0.04)
-
-
-# the party hook, two bars per phrase, in eighth notes ('-' rests). Bars follow C | G | Am | F.
-HOOK = {
-    'C': ['E5', '-', 'G5', '-', 'A5', 'G5', 'E5', '-'],
-    'G': ['D5', '-', 'E5', 'D5', 'B4', '-', 'D5', '-'],
-    'Am': ['C5', '-', 'E5', '-', 'A5', 'G5', 'E5', 'D5'],
-    'F': ['C5', '-', 'F5' if False else 'E5', '-', 'A5', '-', 'G5', '-'],
+LOOP = ['Am9', 'Fmaj7', 'Dm9', 'Em7']
+chord_of = lambda bar: LOOP[(bar - 3) % 4]
+MELODY = {   # two-bar motif in A minor pentatonic, eighth-note steps ('-' rests)
+    'Am9':   ['E5', '-', 'G5', '-', 'A5', '-', 'G5', 'E5'],
+    'Fmaj7': ['C5', '-', 'E5', '-', 'G5', '-', 'E5', '-'],
+    'Dm9':   ['D5', '-', 'F5', '-', 'A5', '-', 'G5', '-'],
+    'Em7':   ['B4', '-', 'D5', 'E5', '-', 'D5', 'B4', '-'],
 }
 
-
-def hook_bar(mix, bar, chord, gain=0.55, start=0):
-    for i, n in enumerate(HOOK[chord]):
-        if n == '-' or i < start * 2: continue
-        f = note(n)
-        mix.add(S.marimba(f, 0.5, 1.0), T(bar, i * 0.5), gain * (1.0 if i % 2 == 0 else 0.75), 0.18, 0.2)
-        if i % 4 == 0: mix.add(S.bell(f * 2, 1.0, 0.5), T(bar, i * 0.5), gain * 0.3, 0.3, 0.3)
+MUSIC, SFX = 0.8, 0.9
+rng = np.random.default_rng(11)
 
 
-MUSIC = 0.72   # music bus level
-SFX = 0.95     # sound-effect bus level
+def human(vel): return vel * rng.uniform(0.88, 1.0)
+
+
+def strum(stem, t, chord, vel=1.0, gain=0.3, pan=-0.1, dur=1.4, send=0.25, bright=0.5):
+    for i, n in enumerate(CH[chord]['keys']):
+        stem.add(S.ep(note(n), dur, human(vel) * (0.9 + 0.1 * (i % 2)), bright), t + i * 0.014, gain, pan + 0.04 * i, send)
+
+
+def beat_lofi(mix, bar, vel=1.0, kick_ghost=True):
+    """Half-time: kick on 1 and the 'and' of 2, snare on 3, swung hats."""
+    for b, v in ((0, 1.0), (1.5, 0.7)): mix.add(S.lkick(human(vel * v)), T(bar, b), 0.7, 0.0, 0.02)
+    if kick_ghost: mix.add(S.lkick(human(vel * 0.45)), T(bar, 2.75), 0.5, 0.0, 0.02)
+    mix.add(S.lsnare(human(vel)), T(bar, 2), 0.5, 0.05, 0.18)
+    for i in range(8):
+        b = i * 0.5 + (SWING if i % 2 else 0)
+        mix.add(S.lhat(human(vel * (0.9 if i % 2 else 0.6)), open_=(i == 7)), T(bar, b), 0.42, 0.25, 0.05)
+
+
+def beat_groove(mix, bar, vel=1.0, start=0):
+    """The party: kicks pushed forward, snare on 2 and 4, sixteenth hats."""
+    for b, v in ((0, 1.0), (0.75, 0.5), (2, 0.95), (2.75, 0.55)):
+        if b >= start: mix.add(S.lkick(human(vel * v)), T(bar, b), 0.72, 0.0, 0.02)
+    for b in (1, 3):
+        if b >= start: mix.add(S.lsnare(human(vel)), T(bar, b), 0.52, 0.05, 0.2)
+    for i in range(16):
+        b = i * 0.25 + (SWING * 0.5 if i % 2 else 0)
+        if b >= start: mix.add(S.lhat(human(vel * (0.75 if i % 4 == 2 else 0.4 if i % 2 else 0.55)), open_=(i == 14)), T(bar, b), 0.38, 0.25, 0.05)
+    mix.add(S.rim(human(0.7 * vel)), T(bar, 3.5), 0.3, -0.25, 0.1)
+
+
+def bass_line(mix, bar, chord, party, gain=0.8):
+    r = note(CH[chord]['bass'])
+    pat = [(0, 1, 0.95), (1.5, 0.5, 0.7), (2.75, 0.5, 0.75), (3.5, 0.5, 0.65)] if party else [(0, 1.5, 0.95), (2.5, 0.75, 0.6)]
+    for b, d, v in pat: mix.add(S.sub(r * (2 if (b == 3.5 and party) else 1), d * BEAT, v), T(bar, b), gain, 0.0, 0.02)
+
+
+def duck_curve(n, kicks, depth=0.55, tau=0.11):
+    """Sidechain: pull the pads and keys down on every kick, then let them swell back."""
+    t = np.arange(n) / S.SR; g = np.ones(n)
+    for k in kicks:
+        m = t >= k
+        g[m] = np.minimum(g[m], 1 - depth * np.exp(-(t[m] - k) / tau))
+    return g
 
 
 def build(cues_path, out_path):
     data = json.load(open(cues_path))
     cues, dur = data['cues'], data['duration']
     mix = S.Mix(dur)
+    keys, pads = S.Mix(dur), S.Mix(dur)
     by = lambda name: [c for c in cues if c['name'] == name]
-
-    # ============================================================ score ============================================================
-    mix.bus = MUSIC * 0.8
-    # bars 1-2: nothing but the knocks and a whisper of drone, so the first sound is the first knock
-    mix.add(S.pad([note('C2'), note('G2')], 4.6, 1.0, 0.8, 0.9), 0.0, 0.5, 0.0, 0.2)
-
-    # bars 3-5: the crew arrives. A light groove that grows, and every landing is a note of the tune.
-    prog = {3: 'C', 4: 'F', 5: 'G'}
-    for bar, ch in prog.items():
-        drums(mix, bar, kick_all=(bar >= 4), clap=(bar >= 4), hats=True, vel=0.55 + 0.15 * (bar - 3))
-        bass_pat(mix, bar, ch, party=False, gain=0.62)
-        for b in (1.5, 3.5): uke(mix, T(bar, b), ch, 0.9, up=(b == 3.5), gain=0.22)
-    tune = ['C5', 'D5', 'E5', 'G5', 'A5', 'C6']
-    for i, c in enumerate(by('land')[:6]):
-        f = note(tune[i]); mix.add(S.marimba(f, 0.7, 1.0), c['t'], 0.75, -0.15 + 0.06 * i, 0.22)
-        mix.add(S.bell(f * 2, 1.2, 0.6), c['t'], 0.22, 0.2, 0.3)
-
-    mix.bus = MUSIC * 0.85
-    # bar 5 (second half) to the catch: tension. A staccato marimba ostinato over a held G, no kick.
-    t0 = T(5, 2)
-    steps = int((T(6, 1) - t0) / (BEAT / 2)) + 1
-    osc = ['G4', 'B4', 'D5', 'B4']
-    for i in range(steps):
-        t = t0 + i * BEAT / 2
-        mix.add(S.marimba(note(osc[i % 4]), 0.25, 1.0), t, 0.36 + 0.005 * i, 0.1, 0.12)
-        if i % 2 == 1: mix.add(S.hat(0.5), t, 0.28, 0.2, 0.04)
-    mix.add(S.pad([note('G2'), note('D3'), note('B3')], T(6, 1) - T(5, 2), 1.0, 0.4, 0.15), T(5, 2), 1.0, 0.0, 0.2)
-
-    # the catch: crash, then almost nothing. Two suspended notes, a rising hum, then the click cuts everything.
-    click = by('click')[0]['t']; drop = by('drop')[0]['t']; catch = by('catch')[0]['t']
-    mix.add(S.pad([note('C3'), note('G3'), note('D4')], click - catch - 0.02, 1.0, 0.25, 0.05), catch, 1.0, 0.0, 0.3)
-    for i, n in enumerate(['E5', 'D5', 'C5']):
-        t = catch + 0.55 * (i + 1)
-        if t < click - 0.1: mix.add(S.marimba(note(n), 0.5, 1.0), t, 0.32, 0.0, 0.2)
-    # silence, with a swelling riser, then the drop
-    mix.add(S.riser(drop - click - 0.2, 1.0), click + 0.18, 0.5, 0.0, 0.25)
-
-    mix.bus = MUSIC * 1.1
-    # the party: bars 7-10, C | G | Am | F. Four on the floor, claps, bass, uke chops, and the hook.
-    party_bars = [(7, 'C', 1), (8, 'G', 0), (9, 'Am', 0), (10, 'F', 0)]
-    for bar, ch, start in party_bars:
-        drums(mix, bar, beat_from=start, vel=1.0)
-        bass_pat(mix, bar, ch, party=True, gain=0.85)
-        for b in (0.5, 1.5, 2.5, 3.5):
-            if bar == 7 and b < 1: continue
-            uke(mix, T(bar, b), ch, 0.9, up=(b in (1.5, 3.5)), gain=0.34)
-        hook_bar(mix, bar, ch, 0.72, start=start)
-        if not (bar == 7): mix.add(S.bell(note(CHORDS[ch]['hook']) * 2, 1.4, 0.5), T(bar, 0), 0.22, 0.3, 0.35)
-    mix.add(S.marimba(note('C5'), 0.6, 1.0), drop, 0.7, 0.0, 0.25)
-    # the seven looks: a bell for every one, climbing, each on its own beat
-    climb = ['C6', 'D6', 'E6', 'G6', 'A6', 'C7', 'D7', 'E7']
-    for c in by('look'):
-        i = c['p']; f = note(climb[i])
-        mix.add(S.bell(f, 1.2, 1.0), c['t'], 0.34, -0.3 + 0.085 * i, 0.4)
-        mix.add(S.marimba(f / 2, 0.3, 1.0), c['t'], 0.3, 0.0, 0.2)
-
-    mix.bus = MUSIC * 0.95
-    # the group photo and the card: a big C, then a calmer version of the groove
-    title = by('ta-da')[0]['t']
-    for n in ('C6', 'E6', 'G6', 'C7'): mix.add(S.bell(note(n), 2.2, 1.0), title, 0.22, 0.0, 0.5)
-    for n in ('C4', 'E4', 'G4'): mix.add(S.marimba(note(n), 0.9, 1.0), title, 0.28, 0.0, 0.3)
-    mix.add(S.pad([note('C3'), note('E3'), note('G3'), note('D4')], T(14, 0) - title + 0.25, 1.0, 0.1, 0.5), title, 1.0, 0.0, 0.35)
-    mix.add(S.crash(2.2, 0.8), title, 0.42, 0.0, 0.3)
+    click = by('click')[0]['t']; drop = by('drop')[0]['t']; catch = by('catch')[0]['t']; title = by('ta-da')[0]['t']
     end_bar = T(14, 0)
-    for bar, ch in ((11, 'C'), (12, 'G'), (13, 'F')):
-        drums(mix, bar, kick_all=True, clap=(bar != 11), hats=True, vel=0.62)
-        bass_pat(mix, bar, ch, party=True, gain=0.66)
-        for b in (0.5, 1.5, 2.5, 3.5): uke(mix, T(bar, b), ch, 0.85, up=(b in (1.5, 3.5)), gain=0.2)
-        hook_bar(mix, bar, ch, 0.44)
-    # the resolution: a last C chord that rings out
-    uke(mix, end_bar, 'C', 1.0, gain=0.36, pan=-0.15)
-    mix.add(S.bass(note('C2'), 1.6, 1.0), end_bar, 0.85, 0.0, 0.05)
-    mix.add(S.kick(0.9), end_bar, 0.8, 0.0, 0.03)
-    for n in ('E5', 'G5', 'C6'): mix.add(S.marimba(note(n), 1.0, 1.0), end_bar, 0.3, 0.1, 0.35)
-    mix.add(S.bell(note('C7'), 2.4, 1.0), end_bar + 0.02, 0.3, 0.2, 0.5)
-    mix.add(S.pad([note('C3'), note('G3'), note('E4')], dur - end_bar + 0.6, 1.0, 0.3, 1.0), end_bar, 1.0, 0.0, 0.4)
+    kicks = []   # times the sidechain reacts to
 
-    # ============================================================ sound effects ============================================================
+    def kick_track(bar, fn, *a, **k):
+        fn(mix, bar, *a, **k)
+
+    # ============================================================ bed: vinyl dust all the way through ============================================================
+    mix.bus = 1.0
+    mix.add(S.vinyl(dur + 0.5), 0.0, 0.9, 0.0, 0.0)
+
+    # ============================================================ bars 1-2: the knocks, a low drone, nothing else ============================================================
+    mix.bus = MUSIC
+    mix.add(S.sub(note('A1'), 4.6, 0.7), 0.0, 0.5, 0.0, 0.1)
+    pads.bus = MUSIC * 0.8
+    pads.add(S.dpad([note('A2'), note('E3'), note('A3')], T(3) - 0.3, 1.0, 1.6, 0.5, 700), 0.3, 0.6, 0.0, 0.25)
+
+    # ============================================================ bars 3-5: the crew arrives, one layer per landing ============================================================
+    for bar in (3, 4, 5):
+        ch = chord_of(bar)
+        # the beat comes in a piece at a time: hats, then the rim, then the whole half-time pattern
+        if bar == 3:
+            for i in range(8): mix.add(S.lhat(human(0.5 if i % 2 == 0 else 0.35)), T(bar, i * 0.5 + (SWING if i % 2 else 0)), 0.34, 0.25, 0.05)
+            mix.add(S.rim(0.7), T(bar, 2), 0.3, -0.2, 0.1)
+        else:
+            beat_lofi(mix, bar, vel=0.7 + 0.1 * (bar - 4))
+        bass_line(mix, bar, ch, False, 0.7)
+        pads.add(S.dpad([note(n) for n in CH[ch]['pad']], BAR + 0.2, 1.0, 0.5, 0.7, 900 + 150 * (bar - 3)), T(bar) - 0.05, 0.75, 0.0, 0.3)
+        keys.bus = MUSIC * 0.8
+        strum(keys, T(bar, 0), ch, 0.7, gain=0.2)
+        if bar > 3: strum(keys, T(bar, 2.5), ch, 0.5, gain=0.14, dur=0.9)
+    keys.bus = MUSIC
+    melody = ['A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5']
+    for i, c in enumerate(by('land')):
+        f = note(melody[min(i, len(melody) - 1)])
+        keys.add(S.ep(f, 1.2, 1.0, 0.7), c['t'] + 0.01, 0.34, -0.2 + 0.06 * i, 0.4)
+
+    # ============================================================ bar 6 to the catch: no kick, a held chord, a slow arpeggio ============================================================
+    t0 = T(6, 0)
+    pads.bus = MUSIC * 0.9
+    pads.add(S.dpad([note(n) for n in CH['Em7']['pad']], catch - t0, 1.0, 0.8, 0.1, 1200), t0, 0.8, 0.0, 0.3)
+    mix.bus = MUSIC * 0.9
+    mix.add(S.sub(note('E2'), catch - t0, 0.9), t0, 0.6, 0.0, 0.05)
+    keys.bus = MUSIC * 0.85
+    arp = ['E4', 'G4', 'B4', 'D5', 'B4', 'G4']
+    steps = int((catch - 0.05 - T(5, 3)) / (BEAT / 2))
+    for i in range(steps):
+        tt_ = T(5, 3) + i * BEAT / 2 + (SWING if i % 2 else 0)
+        keys.add(S.ep(note(arp[i % len(arp)]), 0.5, 0.55 + 0.02 * i, 0.5 + 0.02 * i), tt_, 0.2, 0.25, 0.35)
+        if i % 2: mix.add(S.lhat(0.35), tt_, 0.3, 0.25, 0.05)
+
+    # the catch: one heavy hit, then almost nothing until the click
+    mix.bus = MUSIC
+    pads.add(S.dpad([note('A2'), note('E3'), note('B3')], click - catch - 0.02, 1.0, 0.3, 0.05, 800), catch, 0.6, 0.0, 0.3)
+    mix.add(S.riser(drop - click - 0.2, 1.0), click + 0.18, 0.45, 0.0, 0.25)
+
+    # ============================================================ bars 7-10: the party. Dark electronic groove ============================================================
+    keys_pl, pad_pl = MUSIC * 1.0, MUSIC * 0.85
+    for bar in (7, 8, 9, 10):
+        ch = chord_of(bar); start = 1 if bar == 7 else 0
+        mix.bus = MUSIC * 1.05
+        beat_groove(mix, bar, 1.0, start=start)
+        bass_line(mix, bar, ch, True, 0.85)
+        for b in (0, 0.75, 2, 2.75):
+            if b >= start: kicks.append(T(bar, b))
+        pads.bus = pad_pl
+        pads.add(S.dpad([note(n) for n in CH[ch]['pad']], BAR + 0.15, 1.0, 0.05, 0.4, 1500), T(bar) + (BEAT if bar == 7 else 0), 0.75, 0.0, 0.3)
+        keys.bus = keys_pl
+        for b in (0.75, 1.75, 3.25):
+            if b >= start: strum(keys, T(bar, b), ch, 0.55, gain=0.16, dur=0.7, bright=0.6)
+        # the motif, on top, with a long shadow
+        for i, n in enumerate(MELODY[ch]):
+            if n == '-' or i * 0.5 < start: continue
+            keys.add(S.ep(note(n), 0.6, 0.85 if i % 2 == 0 else 0.6, 0.85), T(bar, i * 0.5), 0.22, 0.3, 0.6)
+
+    # the looks: a low stab on each flip, climbing the scale
+    mix.bus = MUSIC
+    climb = ['A2', 'C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'E4']
+    for c in by('look'):
+        i = c['p']
+        mix.add(S.stab([note(climb[i]), note(climb[i]) * 1.5], 0.5, 1.0), c['t'], 0.5, 0.0, 0.25)
+
+    # ============================================================ bars 11-14: the group photo, a calmer beat, the last knock ============================================================
+    for bar in (11, 12, 13):
+        ch = chord_of(bar)
+        mix.bus = MUSIC * 0.95
+        if bar == 11: mix.add(S.lkick(1.0), T(bar, 0), 0.9, 0.0, 0.02)
+        else: beat_lofi(mix, bar, vel=0.75)
+        bass_line(mix, bar, ch, False, 0.75)
+        pads.bus = MUSIC * 0.85
+        pads.add(S.dpad([note(n) for n in CH[ch]['pad']], BAR + 0.3, 1.0, 0.4, 0.8, 1400 - 200 * (bar - 11)), T(bar) - 0.02, 0.8, 0.0, 0.3)
+        keys.bus = MUSIC * 0.85
+        strum(keys, T(bar, 0), ch, 0.8, gain=0.2)
+        if bar > 11: strum(keys, T(bar, 2.5), ch, 0.5, gain=0.14, dur=0.9)
+    mix.bus = MUSIC * 1.0
+    mix.add(S.sub(note('A1'), 2.0, 1.0), title, 0.9, 0.0, 0.05)
+    mix.add(S.crash(1.8, 0.6), title, 0.28, 0.0, 0.3)
+    pads.bus = MUSIC * 0.95
+    pads.add(S.dpad([note('A2'), note('E3'), note('G3'), note('B3'), note('E4')], T(14, 0) - title + 0.4, 1.0, 0.1, 1.0, 1600), title, 0.9, 0.0, 0.4)
+    # the resolution: one last Am9 that rings out
+    keys.bus = MUSIC * 0.95
+    strum(keys, end_bar, 'Am9', 1.0, gain=0.26, dur=2.4, send=0.4)
+    mix.add(S.sub(note('A2'), 1.8, 1.0), end_bar, 0.85, 0.0, 0.05)
+    mix.add(S.lkick(0.9), end_bar, 0.7, 0.0, 0.03)
+    pads.add(S.dpad([note('A2'), note('E3'), note('G3'), note('B3')], dur - end_bar + 0.6, 1.0, 0.3, 1.0, 1000), end_bar, 0.8, 0.0, 0.4)
+
+    # sidechain the pads and keys under the party's kicks, then fold the stems into the mix
+    duck = duck_curve(mix.n, kicks)
+    mix.absorb(pads, duck); mix.absorb(keys, (duck ** 0.5) * 1.4)
+    # tame the sub: felt more than heard, so the mids carry the tune on phone speakers
+    for ch in (mix.L, mix.R): ch -= 0.42 * S.lp(ch, 120, 2)
+
+    # ============================================================ sound effects: dry, close, no cartoon ============================================================
     mix.bus = SFX
     tick_pitch = [1100, 1250, 1400, 1600, 1800, 2000]
     for c in cues:
@@ -170,59 +210,46 @@ def build(cues_path, out_path):
         if n == 'knock':
             far = v < 0.7
             mix.add(S.knock(1.0, far), t, 0.9 * v, 0.0, 0.35 if far else 0.16)
-        elif n == 'whoosh': mix.add(S.whoosh(0.44, 1.0, True), t, 0.5 * v, 0.0, 0.2)
-        elif n == 'pop':
-            f = note(POP[p or 0])
-            mix.add(S.bloop(f / 1.5, 1.0), t, 0.5 * v, 0.0, 0.15); mix.add(S.marimba(f, 0.4, 1.0), t, 0.28 * v, 0.1, 0.2)
+        elif n == 'whoosh': mix.add(S.swipe(0.42, 1.0, True), t - 0.05, 0.6 * v, 0.0, 0.2)
+        elif n == 'pop': mix.add(S.uiblip(620 * (1.12 ** (p or 0)), 1.0), t, 0.45 * v, 0.1, 0.2)
         elif n == 'cricket': mix.add(S.cricket(1.0), t, v, -0.35, 0.25)
-        elif n == 'sigh': mix.add(S.slide(520, 320, 0.5, 1.0, 5.5, 0.01), t, 0.7 * v, 0.0, 0.3)
-        elif n == 'whistle':
-            mix.add(S.slide(1300, 2200, 0.15, 1.0, 5, 0.005), t, 0.4 * v, 0.0, 0.25); mix.add(S.slide(2200, 1450, 0.3, 1.0, 8, 0.02), t + 0.15, 0.4 * v, 0.0, 0.25)
-        elif n == 'fall': mix.add(S.slide(1700 - 60 * (p or 0), 480, 0.5, 1.0, 9, 0.02), t, 0.16 * v, -0.3 + 0.1 * (p or 0), 0.2)
+        elif n == 'sigh': mix.add(S.slide(520, 320, 0.5, 1.0, 5.5, 0.01), t, 0.55 * v, 0.0, 0.3)
+        elif n == 'whistle':   # the call for help: a system alert, two falling blips
+            mix.add(S.uiblip(880, 1.0), t, 0.55 * v, 0.0, 0.25); mix.add(S.uiblip(660, 1.0), t + 0.16, 0.55 * v, 0.0, 0.25)
+        elif n == 'fall': mix.add(S.swipe(0.5, 1.0, False), t, 0.22 * v, -0.3 + 0.1 * (p or 0), 0.2)
         elif n == 'land':
-            mix.add(S.thump(62 + 3 * (p or 0), 1.0, 0.24), t, 0.55 * v, 0.0, 0.08); mix.add(S.boing(200 + 20 * (p or 0), 1.0, 0.36), t, 0.16 * v, 0.0, 0.15)
-        elif n == 'snore': mix.add(S.snore(1.0, 1.7), t, 0.45 * v, 0.4, 0.2)
-        elif n == 'float': mix.add(S.slide(700, 470, 1.4, 1.0, 4, 0.01), t, 0.16 * v, 0.3, 0.3)
-        elif n == 'sparkle': mix.add(S.sparkle_run('G6', 5), t, 0.3 * v, 0.25, 0.4)
-        elif n == 'ping': mix.add(S.bell(note('E6'), 1.0, 1.0), t, 0.45 * v, -0.4, 0.3)
-        elif n == 'miss': mix.add(S.whoosh(0.16, 1.0, False), t, 0.35 * v, 0.0, 0.15); mix.add(S.boing(420, 1.0, 0.3), t + 0.04, 0.16 * v, 0.2, 0.2)
+            mix.add(S.thump(58 + 3 * (p or 0), 1.0, 0.24), t, 0.6 * v, 0.0, 0.08); mix.add(S.click(0.6), t, 0.25 * v, 0.0, 0.1)
+        elif n == 'snore': mix.add(S.snore(1.0, 1.7), t, 0.4 * v, 0.4, 0.2)
+        elif n == 'ping': mix.add(S.uiblip(1046, 1.0), t, 0.5 * v, -0.3, 0.3)
+        elif n == 'miss': mix.add(S.whoosh(0.16, 1.0, False), t, 0.35 * v, 0.0, 0.15)
         elif n == 'plane':
             m = int(S.SR * 0.42); tt_ = S.tt(m)
-            sw = S.bp(S.noise(m), 1800, 6500) * np.sin(np.pi * tt_ / tt_[-1]) ** 1.5
-            mix.add(sw, t, 0.3 * v, 0.2, 0.2)
+            mix.add(S.bp(S.noise(m), 1800, 6500) * np.sin(np.pi * tt_ / tt_[-1]) ** 1.5, t, 0.28 * v, 0.2, 0.2)
         elif n == 'bonk':
-            mix.add(S.boing(520, 1.0, 0.36), t, 0.7 * v, 0.0, 0.25); mix.add(S.bell(note('D6'), 0.6, 1.0), t, 0.28, 0.0, 0.3); mix.add(S.slide(400, 900, 0.55, 1.0, 11, 0.05), t + 0.08, 0.22, 0.0, 0.3)
+            mix.add(S.tock(1.0), t, 0.8 * v, 0.0, 0.25); mix.add(S.thump(90, 1.0, 0.2), t, 0.5, 0.0, 0.15)
         elif n == 'catch':
-            mix.add(S.crash(1.4, 1.0), t, 0.5 * v, 0.0, 0.3); mix.add(S.thump(52, 1.0, 0.55), t, 0.95 * v, 0.0, 0.1); mix.add(S.click(1.0), t, 0.5, 0.0, 0.1); mix.add(S.sparkle_run('C6', 5), t + 0.02, 0.4, 0.0, 0.4)
-        elif n == 'ding': mix.add(S.bell(note('C7'), 1.6, 1.0), t, 0.28 * v, 0.2, 0.4); mix.add(S.bell(note('G6'), 1.6, 1.0), t + 0.03, 0.22 * v, -0.2, 0.4)
-        elif n == 'hop': mix.add(S.boing(240, 1.0, 0.36), t, 0.5 * v, 0.0, 0.2)
+            mix.add(S.thump(50, 1.0, 0.55), t, 1.0 * v, 0.0, 0.1); mix.add(S.click(1.0), t, 0.5, 0.0, 0.1); mix.add(S.crash(1.0, 0.7), t, 0.32 * v, 0.0, 0.3)
+        elif n == 'ding': mix.add(S.uiblip(440, 1.0), t, 0.4 * v, 0.0, 0.4)
+        elif n == 'hop': mix.add(S.thump(130, 1.0, 0.12), t, 0.5 * v, 0.0, 0.15); mix.add(S.click(0.5), t, 0.3, 0.0, 0.1)
         elif n == 'thud': mix.add(S.thump(95, 1.0, 0.16), t, 0.5 * v, 0.0, 0.1)
         elif n == 'press': mix.add(S.click(0.5), t, 0.5 * v, 0.0, 0.08)
         elif n == 'click': mix.add(S.click(1.0), t, 0.9 * v, 0.0, 0.1)
         elif n == 'burst':
-            m = int(S.SR * 0.1); nz = S.bp(S.noise(m), 2200, 8500) * np.exp(-S.tt(m) / 0.03)
-            mix.add(nz, t, 0.4 * v, 0.0, 0.25); mix.add(S.sparkle_run('E6', 4), t + 0.02, 0.28, 0.0, 0.4)
-        elif n == 'drop':
-            mix.add(S.thump(46, 1.0, 0.95), t, 1.0 * v, 0.0, 0.12); mix.add(S.crash(1.1, 0.8), t, 0.3, 0.0, 0.3)
+            m = int(S.SR * 0.1); mix.add(S.bp(S.noise(m), 2200, 8500) * np.exp(-S.tt(m) / 0.03), t, 0.3 * v, 0.0, 0.25)
+        elif n == 'drop': mix.add(S.thump(46, 1.0, 0.95), t, 1.0 * v, 0.0, 0.12)
         elif n == 'confetti':
             for side in (-1, 1):
-                m = int(S.SR * 0.1); nz = S.bp(S.noise(m), 700, 4200) * np.exp(-S.tt(m) / 0.03)
-                mix.add(nz, t + (0.012 if side > 0 else 0), 0.5 * v, 0.8 * side, 0.3); mix.add(S.thump(140, 1.0, 0.1), t + (0.012 if side > 0 else 0), 0.3, 0.6 * side, 0.1)
-            mix.add(S.sparkle_run('G6', 6, 0.04), t + 0.05, 0.3, 0.0, 0.5)
-        elif n == 'phones': mix.add(S.slide(420, 1500, 0.2, 1.0, 5, 0.005), t, 0.18 * v, 0.0, 0.2)
-        elif n == 'wake':
-            mix.add(S.slide(300, 430, 0.26, 1.0, 5, 0.03), t, 0.4 * v, 0.4, 0.3); mix.add(S.slide(430, 290, 0.32, 1.0, 5, 0.03), t + 0.26, 0.4 * v, 0.4, 0.3); mix.add(S.bloop(note('G5'), 1.0), t + 0.75, 0.3, 0.4, 0.2)
-        elif n == 'look':
-            mix.add(S.whoosh(0.2, 1.0, True), t - 0.02, 0.32 * v, 0.0, 0.15)
+                m = int(S.SR * 0.1); mix.add(S.bp(S.noise(m), 700, 4200) * np.exp(-S.tt(m) / 0.03), t + (0.012 if side > 0 else 0), 0.35 * v, 0.8 * side, 0.3)
+        elif n == 'phones': mix.add(S.slide(420, 1500, 0.2, 1.0, 5, 0.005), t, 0.14 * v, 0.0, 0.2)
+        elif n == 'wake': mix.add(S.slide(300, 430, 0.26, 1.0, 5, 0.03), t, 0.35 * v, 0.4, 0.3); mix.add(S.slide(430, 290, 0.32, 1.0, 5, 0.03), t + 0.26, 0.35 * v, 0.4, 0.3)
+        elif n == 'look': mix.add(S.swipe(0.2, 1.0, True), t - 0.05, 0.3 * v, 0.0, 0.15)
         elif n == 'shutter': mix.add(S.shutter(1.0), t, 0.6 * v, 0.0, 0.15)
-        elif n == 'ta-da': mix.add(S.sparkle_run('C6', 6, 0.05), t + 0.05, 0.4, 0.0, 0.5)
-        elif n == 'tick': mix.add(S.woodtick(tick_pitch[(p or 0) % 6], 1.0), t, 0.32 * v, 0.0, 0.15)
+        elif n == 'tick': mix.add(S.woodtick(tick_pitch[(p or 0) % 6], 1.0), t, 0.3 * v, 0.0, 0.15)
 
-    mix.reverb(0.6, 1.0)
+    mix.reverb(0.7, 1.0)
     y = mix.master()
     keep = int(S.SR * (dur + 0.05))
     y = y[:, :keep]
-    # fade the very end so the tail never clicks
     n = int(S.SR * 0.25); y[:, -n:] *= np.linspace(1, 0, n)
     wavfile.write(out_path, S.SR, (np.clip(y.T, -1, 1) * 32767).astype(np.int16))
     print('wrote', out_path, f'{y.shape[1] / S.SR:.2f} s', 'peak', float(np.max(np.abs(y))))

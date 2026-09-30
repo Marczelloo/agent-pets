@@ -1,6 +1,6 @@
 # Promo video
 
-A 30-second silly-and-cute video for social media, made with the **real Agent Pets renderer**: the pets, their poses, the speech bubbles and the taskbar HUD are the app's own drawing code, imported straight from `app/src`. Nothing is re-drawn or faked; the video only adds a stage, a camera, a timeline and a few video-only poses (the same trick `app/src/showcaseBanner.ts` uses for the README banner).
+A 30-second launch video with a dry sense of humor for social media, made with the **real Agent Pets renderer**: the pets, their poses, the speech bubbles and the taskbar HUD are the app's own drawing code, imported straight from `app/src`. Nothing is re-drawn or faked; the video only adds a stage, a camera, a timeline and a few video-only poses (the same trick `app/src/showcaseBanner.ts` uses for the README banner).
 
 Outputs (in `docs/video/`):
 
@@ -15,10 +15,12 @@ All text is on screen, so the silent cuts tell the whole story.
 ## The story (108 BPM, 13¾ bars)
 
 1. **Cold open.** Clawd knocks on the glass of your screen: *Your coding agent has been waiting… for 20 minutes.* The camera pulls back: you are right there, browsing, not looking.
-2. **The crew steps in.** Clawd calls for help and the crew drops out of the sky, one pet per beat, onto a pyramid. Every landing pops a name tag: Clawd, opencode, Copilot, Cursor, Grok, Kodek, Kilo, ZCode (asleep) and Antigravity (floating).
-3. **Got your attention?** Kilo waves, Kodek's net misses, Grok's paper plane bonks the cursor dizzy, the net scoops it up (in the app's Dynamic look: impact frame, sparks) and it hops down to Clawd's question. Click.
-4. **Party.** *Never keep them waiting.* Headphones on (the music break), the whole pyramid bops, the panda finally wakes up, then the **seven looks** flip on the beat.
-5. **Group photo.** Flash, the headphones fly off, *Agent Pets: your coding agents, but tiny*, the offer, and one last knock that rhymes with the first frame.
+2. **Escalation.** *So it cc'd the team.* The crew drops out of the sky, one pet per beat, onto a pyramid. Every landing pops a name tag: Clawd, opencode, Copilot, Cursor, Grok, Kodek, the generic "Any agent" blob, ZCode (asleep) and Antigravity.
+3. **Got your attention?** Kodek's net misses, Grok's paper plane bonks the cursor dizzy, the net scoops it up (in the app's Dynamic look: impact frame, sparks) and it hops down to Clawd's question. Click.
+4. **Allow. Back to work.** Headphones on, the whole pyramid bops, the panda finally wakes up, then the **seven looks** flip on the beat. Sticker and Pixel are drawn for Clawd and Kodek only, so those two beats tag just them.
+5. **Group photo.** Flash, the headphones fly off, *Agent Pets: your coding agents, in your taskbar*, the offer, and one last knock that rhymes with the first frame.
+
+The desktop is the dark Windows 11 look (`themes.ts`); every look of the flip gets its own dark backdrop, except Ink, which stays paper white.
 
 ## How it works
 
@@ -28,7 +30,7 @@ app/src/renderer, skins, styles, stage/hud ...   the app's real drawing code (un
 tools/video/src
   actors.ts     wraps a real PetPainter; adds a "puppet" scene so the timeline can drive any pose parameter per frame
   camera.ts     stateless camera (pure function of time): world units are pet units
-  world.ts      cream backdrop, the user's desktop windows, the taskbar, the mouse cursor
+  world.ts      dark desktop backdrop, the user's desktop windows, the taskbar, the mouse cursor
   tower.ts      the pyramid and the rain of pets: falling, squashing, swaying, all pure functions of time
   act1..act5.ts the story; each act owns a stretch of time and writes into the shared context (ctx.ts)
   cues.ts       every sound effect as data, computed from the same time constants as the animation
@@ -68,11 +70,11 @@ node render.mjs --format=9x16 --out=out/test.mp4 --crf=28 --preset=veryfast
 
 ## Sound
 
-The soundtrack is original and synthesized in `audio/`; there are no samples, so there is nothing to license. The tune only uses C, D, E, G and A over I–IV–V–vi chords. Levels are normalised to −14 LUFS with a −1.5 dBTP ceiling. To use your own track instead, take the `*-silent.mp4` files and add it in any editor.
+The soundtrack is original and synthesized in `audio/`; there are no samples, so there is nothing to license. It is dark electronic over a dusty lo-fi beat in A minor (Am9, Fmaj7, Dm9, Em7): sub bass, an electric piano, a slow pad that ducks under the kicks, a half-time beat that turns into a groove for the party. The sound effects are dry on purpose (knocks, UI blips, soft thuds). Levels are normalised to −14 LUFS with a −1.5 dBTP ceiling. To use your own track instead, take the `*-silent.mp4` files and add it in any editor.
 
 ## Credits and licenses
 
 - Pets, poses and styles: Agent Pets (see the repository [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE)).
 - Fonts: [Fredoka](https://fonts.google.com/specimen/Fredoka) (titles) and [Nunito](https://fonts.google.com/specimen/Nunito) (bubbles and small text), both SIL Open Font License 1.1, installed from npm (`@fontsource-variable/*`).
 - The Antigravity pet is the Android robot, reproduced or modified from work created and shared by Google under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/); the video's end card says so.
-- The end card also repeats the README's disclaimer: Agent Pets is not affiliated with Anthropic, OpenAI, GitHub, Google, Cursor, xAI, Z.ai or opencode.
+- The end card names the license (GPL-3.0) and repeats the README's disclaimer: Agent Pets is not affiliated with Anthropic, OpenAI, GitHub, Google, Cursor, xAI, Z.ai or opencode.

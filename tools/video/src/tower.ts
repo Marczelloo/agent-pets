@@ -1,9 +1,9 @@
 // The crew's pyramid and the rain of pets that builds it, as pure functions of time (no simulation state).
 // Pets fall from above, land with a squash, and every landing squeezes the pets below and sets the stack swaying.
 //
-//            Kodek (net)                row 2
-//          Cursor    Grok               row 1      (Kilo sits on Clawd's head)
-//      Clawd  opencode  Copilot         row 0
+//            Kodek (net)                    row 2
+//          Cursor    Grok   Android         row 1      (the blob sits on Clawd's head)
+//      Clawd  opencode  Copilot  ZCode       row 0
 import { SKINS, type SkinId } from '@app/skins';
 import type { Who } from './actors';
 import { at } from './beat';
@@ -32,6 +32,7 @@ export const SLOTS: Slot[] = [
   { who: 'grok', x: 147, row: 1, land: at(4, 1) },
   { who: 'kodek', x: 98, row: 2, land: at(4, 2) },
   { who: 'kilo', x: -24, row: 1, land: at(4, 3), on: 'clawd' },
+  { who: 'android', x: 245, row: 1, land: at(5, 1) },
 ];
 export const slotOf = (w: Who): Slot | undefined => SLOTS.find(s => s.who === w);
 

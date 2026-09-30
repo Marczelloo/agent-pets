@@ -150,12 +150,12 @@ export function act3(c: Ctx): void {
   if (gt > -0.5) {
     const wind = clamp((gt + 0.5) / 0.4), thr = clamp(gt / 0.1);
     if (gt < 0) c.pose('grok', { ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: lerp(25, 36, wind), hyR: lerp(-21, -92, easeOut(wind)), th: -0.05, look: -0.4, _hold: 'paper', _fold: 1 });
-    else c.pose('grok', { ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: lerp(36, 74, thr), hyR: lerp(-92, -52, thr), th: 0.05, look: -0.5, _hold: gt < 0.05 ? 'paper' : null, _fold: 1, tilt: 0.06 });
+    else c.pose('grok', { ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: lerp(36, 62, thr), hyR: lerp(-92, -52, thr), th: 0.05, look: -0.5, _hold: gt < 0.05 ? 'paper' : null, _fold: 1, tilt: 0.06 });
   }
   c.front.push((x, cam) => {
     if (gt < 0 || gt > 0.6) return;
     const k = clamp(gt / (PLANE_HIT - PLANE_THROW));
-    const [x0, y0] = grok.pt(74, -52), tgt = freeCursor(PLANE_HIT), [x1, y1] = worldToScreen(cam, fmt, tgt.x, tgt.y);
+    const [x0, y0] = grok.pt(62, -52), tgt = freeCursor(PLANE_HIT), [x1, y1] = worldToScreen(cam, fmt, tgt.x, tgt.y);
     const bend = -70 * cam.z * Math.sin(k * Math.PI), px = lerp(x0, x1, easeIn(k) * 0.4 + k * 0.6), py = lerp(y0, y1, k) + bend;
     const dx = x1 - x0, dy = y1 - y0 + bend * 0.2, rot = Math.atan2(dy, dx) + Math.sin(k * 9) * 0.15;
     drawPlane(x, px, py, rot, 26 * cam.z * 0.9 + 12);
@@ -197,6 +197,10 @@ export function act3(c: Ctx): void {
     }
     return null;
   };
+
+  // the Antigravity robot, on the top corner of the stack, cheers when the net comes up full and flinches at the plane
+  if (T >= PLANE_HIT && T < PLANE_HIT + 0.5) c.pose('android', { armL: 1.2, armR: 1.2, squint: 0.6 });
+  if (T >= CATCH && T < HOP2) c.pose('android', { armL: 2.6, armR: 2.6, oscL: 0.3, oscR: 0.3, _f: 10, happy: 0.9 });
 
   // Cursor (the pet) gets a mouse cursor on its head and a look of surprise
   if (T >= HOP1 + HOP_TIME - 0.05 && T < HOP2) { c.pose('cursor', { ...{ ikL: 1, hxL: -47, hyL: -25 }, ikR: 1, hxR: 42, hyR: -76, _hold: 'lens', look: -1, ex: 0, squint: 0, bubble: 1 }); }

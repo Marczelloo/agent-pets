@@ -247,6 +247,112 @@ def sparkle_run(base='G6', n=4, gap=0.045, vel=1.0):
     return out
 
 
+# ------------------------------------------------------------------ v2: dark electronic / lo-fi instruments
+
+def ep(freq, dur=1.2, vel=1.0, bright=0.6):
+    """Electric piano: two-operator FM with a short tine, a slow wobble like tired tape."""
+    n = int(SR * dur); t = tt(n)
+    wob = 1 + 0.0016 * np.sin(TWO_PI * 0.7 * t + freq)
+    ph = TWO_PI * freq * t * wob
+    idx = (0.9 + 2.0 * bright) * np.exp(-t / 0.32)
+    y = np.sin(ph + idx * np.sin(ph)) * np.exp(-t / 0.95)
+    y += 0.22 * bright * np.sin(TWO_PI * freq * 14 * t) * np.exp(-t / 0.025)
+    y *= np.minimum(1, t / 0.004) * np.minimum(1, (dur - t) / 0.08)
+    return lp(y, 4800) * vel * 0.5
+
+
+def sub(freq, dur=0.5, vel=1.0):
+    """Round sub bass with enough saturation to be heard on small speakers."""
+    n = int(SR * dur); t = tt(n)
+    y = np.sin(TWO_PI * freq * t) + 0.35 * np.sin(TWO_PI * 2 * freq * t) * np.exp(-t / 0.25) + 0.12 * np.sin(TWO_PI * 3 * freq * t)
+    env = np.minimum(1, t / 0.012) * np.minimum(1, (dur - t) / 0.07) * np.exp(-t / (dur * 1.6))
+    return np.tanh(1.7 * y * env) * vel * 0.6
+
+
+def saw_bl(freq, t, cutoff):
+    """Band-limited saw by additive synthesis (no aliasing)."""
+    K = max(1, int(cutoff / freq)); y = np.zeros_like(t)
+    for k in range(1, K + 1): y += np.sin(TWO_PI * freq * k * t) / k
+    return y
+
+
+def dpad(freqs, dur, vel=1.0, atk=0.7, rel=0.9, cut=1100):
+    """Dark pad: detuned saws under a low cutoff, slow attack."""
+    n = int(SR * dur); t = tt(n); y = np.zeros(n)
+    for f in freqs:
+        for det in (-0.0055, 0.0055): y += saw_bl(f * (1 + det), t, cut * 1.5)
+    env = np.minimum(1, t / atk) * np.minimum(1, (dur - t) / rel)
+    return lp(y * env, cut, 2) * vel * 0.05
+
+
+def stab(freqs, dur=0.45, vel=1.0, cut=2400):
+    n = int(SR * dur); t = tt(n); y = np.zeros(n)
+    for f in freqs:
+        for det in (-0.004, 0.004): y += saw_bl(f * (1 + det), t, cut * 1.4)
+    sweep = np.exp(-t / 0.09)
+    out = np.zeros(n); blocks = 8; step = n // blocks
+    for b in range(blocks):
+        a, e = b * step, n if b == blocks - 1 else (b + 1) * step
+        c = 500 + (cut - 500) * float(np.exp(-(a / SR) / 0.09))
+        out[a:e] = lp(y, c, 2)[a:e]
+    return out * np.exp(-t / 0.24) * np.minimum(1, t / 0.003) * vel * 0.09
+
+
+def lkick(vel=1.0):
+    n = int(SR * 0.34); t = tt(n)
+    f = 46 + 100 * np.exp(-t / 0.028)
+    y = np.sin(TWO_PI * np.cumsum(f) / SR) * np.exp(-t / 0.17) + 0.22 * lp(noise(n), 900) * np.exp(-t / 0.004)
+    return np.tanh(1.3 * lp(y, 1600)) * vel
+
+
+def lsnare(vel=1.0):
+    n = int(SR * 0.32); t = tt(n)
+    tone = 0.6 * np.sin(TWO_PI * 188 * t) * np.exp(-t / 0.05) + 0.3 * np.sin(TWO_PI * 331 * t) * np.exp(-t / 0.03)
+    nz = 0.7 * bp(noise(n), 1100, 7000) * np.exp(-t / 0.1)
+    return lp(tone + nz, 6200) * np.minimum(1, t / 0.0015) * vel * 0.9
+
+
+def rim(vel=1.0):
+    n = int(SR * 0.09); t = tt(n)
+    return (np.sin(TWO_PI * 1650 * t) * np.exp(-t / 0.009) + 0.45 * bp(noise(n), 800, 3200) * np.exp(-t / 0.006)) * vel * 0.55
+
+
+def lhat(vel=1.0, open_=False):
+    n = int(SR * (0.2 if open_ else 0.06)); t = tt(n)
+    return lp(hp(noise(n), 7200), 11000) * np.exp(-t / (0.07 if open_ else 0.016)) * vel * 0.3
+
+
+def vinyl(dur):
+    n = int(SR * dur); y = np.zeros(n)
+    idx = np.nonzero(rng.random(n) < 11 / SR)[0]
+    for i in idx:
+        a = rng.uniform(0.25, 1.0) * rng.choice([-1, 1]); L = int(SR * rng.uniform(0.0008, 0.004)); m = min(L, n - i)
+        y[i:i + m] += a * np.exp(-tt(m) / (L / SR / 3))
+    return lp(y, 7000) * 0.08 + lp(noise(n), 4200) * 0.0035
+
+
+def uiblip(freq=880, vel=1.0):
+    n = int(SR * 0.09); t = tt(n)
+    y = np.sin(TWO_PI * freq * t) * np.exp(-t / 0.022) + 0.3 * np.sin(TWO_PI * freq * 2 * t) * np.exp(-t / 0.01)
+    return y * np.minimum(1, t / 0.002) * vel * 0.5
+
+
+def tock(vel=1.0):
+    n = int(SR * 0.12); t = tt(n)
+    return (np.sin(TWO_PI * 760 * t) + 0.5 * np.sin(TWO_PI * 1250 * t)) * np.exp(-t / 0.016) * vel * 0.5
+
+
+def swipe(dur=0.3, vel=1.0, up=True):
+    """Filtered-noise swipe: a dry transition sound."""
+    n = int(SR * dur); t = tt(n); base = noise(n); out = np.zeros(n); blocks = 12; step = n // blocks
+    for b in range(blocks):
+        k = b / (blocks - 1); c = 300 * (12 ** (k if up else 1 - k))
+        a, e = b * step, n if b == blocks - 1 else (b + 1) * step
+        out[a:e] = bp(base, c * 0.6, c * 1.6)[a:e]
+    env = np.sin(np.pi * t / dur) ** 1.5
+    return out * env * vel * 0.4
+
+
 # ------------------------------------------------------------------ mixing
 
 class Mix:
@@ -265,6 +371,11 @@ class Mix:
         self.L[s + a:s + b] += seg * lg; self.R[s + a:s + b] += seg * rg
         if send:
             self.rL[s + a:s + b] += seg * lg * send; self.rR[s + a:s + b] += seg * rg * send
+
+    def absorb(self, other, curve=None):
+        """Add another mix (a stem), optionally multiplied by a gain curve, e.g. a sidechain duck."""
+        c = 1.0 if curve is None else curve[:self.n]
+        self.L += other.L * c; self.R += other.R * c; self.rL += other.rL * c; self.rR += other.rR * c
 
     def reverb(self, decay_s=0.55, wet=1.0):
         n = int(SR * decay_s * 2.2); t = tt(n)

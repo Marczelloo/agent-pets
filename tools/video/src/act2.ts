@@ -9,7 +9,7 @@ import { wander } from './cursor';
 import type { Format } from './format';
 import { drawCaption, drawTag, drawWord } from './overlays';
 import { ANDROID_LAND, drop, heightOf, slotPose, SLOTS, sway, ZCODE } from './tower';
-import { clamp, easeInOut, easeOut, lerp, ring } from './util';
+import { clamp, ring } from './util';
 import { PAL } from './world';
 
 export const CALL = at(3, 0);
@@ -23,7 +23,7 @@ export const TAGS: Record<Who, { name: string; sub?: string; color: string }> = 
   cursor: { name: 'Cursor', color: '#2A2A2A' },
   grok: { name: 'Grok', sub: 'Build', color: '#8A8A96' },
   kodek: { name: 'Kodek', sub: 'Codex', color: '#5DCAA5' },
-  kilo: { name: 'Kilo', sub: 'any agent', color: '#7FCB6A' },
+  kilo: { name: 'Any agent', color: '#7FCB6A' },
   zcode: { name: 'ZCode', color: '#2F6BFF' },
   android: { name: 'Antigravity', color: '#3DDC84' },
 };
@@ -75,21 +75,16 @@ export function act2(c: Ctx): void {
       case 'grok': { const m = clamp((a - 0.2) / 1.6), hw = foldHW(m), jig = (m * 3) % 1 < 0.25 && m < 1 ? 1.5 * Math.sin(a * 30) : 0;
         c.pose(s.who, m < 0.66 ? { ikR: 1, hxR: hw + 3, hyR: -21 - jig, ikL: 1, hxL: -hw - 3, hyL: -21 + jig, look: 0.85, _hold: 'paper', _fold: m } : { ...HIP, ikR: 1, hxR: hw + 3, hyR: -21, look: 0.5, _hold: 'paper', _fold: m }); break; }
       case 'kodek': c.pose(s.who, { ...HIP, ikR: 1, hxR: 34, hyR: -58, _hold: 'net', pole: 0.32, _poleDirect: 1, look: -0.9, ex: -0.5 }); break;
+      case 'android': c.pose(s.who, { armL: 0.4, armR: a < 1.6 ? 2.3 : 0.4, oscR: 0.5, _f: 7, happy: 0.3, look: -0.3, ex: 0 }); break;
       case 'kilo': c.pose(s.who, { armL: 2.6, armR: 2.6, oscL: 0.32, oscR: 0.32, _f: 9, happy: 0.9, look: -0.5, hopW: 0.25, _hf: 0.9 }); break;
     }
   });
 
-  // --- the sleeper lands on its pillow and stays asleep; the floater drifts in last ---
+  // --- the sleeper lands on its pillow and stays asleep ---
   const zp = drop(T, ZCODE.land, ZCODE.x, 0, 0.35);
   c.set('zcode', { x: zp.x, y: zp.y, sx: zp.sx, sy: zp.sy, rot: zp.rot, hidden: zp.hidden, z: 2 });
   // asleep on its pillow (the same parameters as the app's own sleep scene, driven by the timeline so the panda can wake up later)
   c.pose('zcode', { loaf: 1, sleep: 1, dim: 1, th: 0.3, _prop: 'pillow', armL: 0.15, armR: 0.15 });
-  const hover = -(heightOf('opencode') + heightOf('grok') + heightOf('kodek')) + 6, aStart = ANDROID_LAND - 1.7;
-  const au = clamp((T - aStart) / 1.7);
-  const ay = T < ANDROID_LAND ? lerp(-760, hover, easeOut(au)) : hover + 6 * Math.sin((T - ANDROID_LAND) * 2.4);
-  // it comes down out of frame on the right and only then glides over, so it never crosses the heading
-  c.set('android', { x: 246 + 380 * (1 - easeInOut(clamp((au - 0.35) / 0.6))), y: ay, hidden: T < aStart, z: 3 });
-  c.pose('android', { armL: 2.1, armR: 2.1, oscL: 0.3, oscR: 0.3, _f: 6, happy: 0.7, look: -0.4, tilt: 0.06 * Math.sin(T * 2) });
 
   // --- the user: notices the noise a little more with every landing ---
   const w = wander(T);
@@ -119,14 +114,14 @@ export function act2(c: Ctx): void {
     const grok = at1('grok'), [gx, gy] = grok.pt(SKINS.grok.width / 2 + 16, -heightOf('grok') * 0.5);
     tag('grok', SLOTS[4].land, gx, gy, 'l', 0.03);
     const kod = at1('kodek'), [kx, ky] = kod.pt(SKINS.kodek.width / 2 + 16, -heightOf('kodek') * 0.85);
-    tag('kodek', SLOTS[5].land, kx, ky, 'l', -0.03, 2.2);
+    tag('kodek', SLOTS[5].land, kx, ky, 'l', -0.03, 1.2);
     const kil = at1('kilo'), [lx, ly] = kil.pt(0, -heightOf('kilo') - 26);
     tag('kilo', SLOTS[6].land, lx, ly, 'c', 0.03);
     const z = at1('zcode'), [zx, zy] = z.pt(0, -70);
     tag('zcode', ZCODE.land, zx, zy, 'c', 0.03);
     // beside the floater; above it in portrait, where it hovers near the right edge and a tag on that side would be cut off
-    const an = at1('android'), [ax, ay2] = p ? an.pt(0, -heightOf('android') - 26) : an.pt(46, -30);
-    tag('android', ANDROID_LAND, ax, ay2, p ? 'c' : 'l', -0.03);
+    const an = at1('android'), [ax, ay2] = an.pt(0, -heightOf('android') - 34);
+    tag('android', ANDROID_LAND, ax, ay2, 'c', -0.03);
     // the call itself
     const [hx, hy] = at1('clawd').pt(-4, -heightOf('clawd') - 30);
     drawWord(x, T, CALL + 0.02, hx + 20, hy - 46, 'HEY!', clamp(cam.z * 30, 72, 140), PAL.clay, 0.95, -0.1);
@@ -135,7 +130,7 @@ export function act2(c: Ctx): void {
   // a small heading over the rain
   c.front.push(x => {
     const o = at(5, 3), t0 = CALL + 0.35;
-    drawCaption(x, T, [[{ text: 'So', t: t0, out: o }, { text: 'the', t: t0 + 0.1, out: o }, { text: 'crew', t: t0 + 0.2, color: PAL.clay, out: o }, { text: 'stepped', t: t0 + 0.3, out: o }, { text: 'in.', t: t0 + 0.4, out: o }]],
+    drawCaption(x, T, [[{ text: 'So', t: t0, out: o }, { text: 'it', t: t0 + 0.1, out: o }, { text: 'cc’d', t: t0 + 0.2, out: o }, { text: 'the', t: t0 + 0.3, out: o }, { text: 'team.', t: t0 + 0.4, color: PAL.clay, out: o }]],
       { size: p ? 88 : 68, cx: fmt.W / 2, cy: p ? 190 : 72, lineGap: 1.1 });
   });
   void BEAT;

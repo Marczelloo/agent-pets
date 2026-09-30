@@ -7,6 +7,10 @@ import { FONT, PAL, UI_FONT } from './world';
 
 /* ---------- kinetic captions ---------- */
 
+/** Default caption ink: the story sets it from the current theme every frame (light on the dark desktop, dark on Ink). */
+let INK = PAL.ink;
+export const setInk = (c: string): void => { INK = c; };
+
 export interface Tok {
   text: string;
   /** appear time (global seconds); the word keeps its place in the line before that so nothing shifts */
@@ -58,7 +62,7 @@ export function drawCaption(x: CanvasRenderingContext2D, T: number, lines: Tok[]
         x.rotate((1 - clamp(age / 0.42)) * (hash(ti * 3 + li * 7) - 0.5) * 0.22);
         x.scale(sc, sc);
         x.font = `${weight} ${size}px ${font}`; x.textAlign = 'center';
-        x.fillStyle = tk.color ?? PAL.ink;
+        x.fillStyle = tk.color ?? INK;
         x.fillText(tk.text, 0, size * 0.36 - size * 0.0);
         x.restore();
       }
@@ -192,7 +196,7 @@ export function drawRipple(x: CanvasRenderingContext2D, T: number, t0: number, s
 
 /* ---------- confetti: a pure function of time, so it needs no state ---------- */
 
-const CONFETTI = ['#EF9F27', '#E24B4A', '#5DCAA5', '#85B7EB', '#7F77DD', '#F0997B'];
+const CONFETTI = ['#D97757', '#5DCAA5', '#EF9F27', '#E9E2DA', '#D97757', '#9AA6C4'];
 
 export interface Burst { t: number; x: number; y: number; n: number; speed: number; up?: number; spread?: number; seed?: number; life?: number; size?: number; dir?: number; gravity?: number }
 

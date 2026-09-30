@@ -13,7 +13,7 @@ export const CREW: Who[] = ['clawd', 'kodek', 'opencode', 'copilot', 'android', 
 const SOURCE: Record<Who, { agent: Agent; name?: string }> = {
   clawd: { agent: 'claude' }, kodek: { agent: 'codex' }, opencode: { agent: 'opencode' }, copilot: { agent: 'copilot' },
   android: { agent: 'antigravity' }, cursor: { agent: 'cursor' }, grok: { agent: 'grok' }, zcode: { agent: 'zcode' },
-  kilo: { agent: 'other', name: 'Kilo' },
+  kilo: { agent: 'other', name: 'Any agent' },
 };
 
 // The puppet scene: the timeline writes pose parameters into pet.drive every frame and the pet's own springs follow them.

@@ -5,7 +5,9 @@ import type { Who } from './actors';
 import { at, BEAT } from './beat';
 import type { Ctx } from './ctx';
 import { CLICK } from './act3';
-import { drawBurst, drawCaption, type Burst } from './overlays';
+import { SKINS } from '@app/skins';
+import { TAGS } from './act2';
+import { drawBurst, drawCaption, drawTag, type Burst } from './overlays';
 import { SLOTS, ZCODE, heightOf } from './tower';
 import { THEME, STYLE_NAMES } from './themes';
 import { clamp, easeInOut, easeOut, hash, lerp, TAU } from './util';
@@ -20,8 +22,6 @@ export const WAKE = PARTY + 0.45;
 export const hit = (T: number, from = PARTY) => { const ph = (((T - from) / BEAT) % 1 + 1) % 1; return ph < 0.18 ? easeOut(ph / 0.18) : 1 - easeInOut((ph - 0.18) / 0.82); };
 const beatIdx = (T: number) => Math.floor((T - PARTY) / BEAT + 1e-9);
 
-/** The pet's own sparkle ring (the app's `burst`). */
-const sparkle = (c: Ctx, who: Who) => { for (let i = 0; i < 9; i++) { const a = -Math.PI * (i / 8); c.emit(who, { t: '✦', x: 0, y: -72, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, g: 60, life: 0, max: 1, s: 13, col: 'clay', tw: 1 }); } };
 
 export function act4(c: Ctx): void {
   const { T, fmt } = c, p = fmt.portrait;
@@ -38,7 +38,7 @@ export function act4(c: Ctx): void {
   // ---------- the party (until the group photo) ----------
   if (T >= PARTY && T < at(11, 0) - 0.02) {
     const a = T - PARTY, h = hit(T), k = beatIdx(T), s = Math.sin((T - PARTY) * TAU * (1 / (2 * BEAT)));
-    const phones = { _phones: 1, _notes: 0.55, happy: 1 };
+    const phones = { _phones: 1, _notes: 0.2, happy: 0.55 };
     // the whole pyramid bounces on the beat
     const bounce = -7 * h * clamp(a / 0.15);
     for (const slot of SLOTS) c.set(slot.who, { y: c.crew[slot.who].spec.y + bounce });
@@ -50,7 +50,7 @@ export function act4(c: Ctx): void {
     c.reset('grok'); c.pose('grok', { ...phones, ikL: 1, ikR: 1, hxR: sg > 0 ? 42 : 47, hyR: sg > 0 ? -96 : -25, hxL: sg < 0 ? -42 : -47, hyL: sg < 0 ? -96 : -25, lx: 4 * sg, tilt: -0.08 * sg, th: 0.2 * sg, look: -0.6, ex: 0.8 * sg });
     c.reset('kodek'); c.pose('kodek', { ...phones, ikL: 1, hxL: -47, hyL: -25, ikR: 1, hxR: 34 + 8 * s, hyR: -70, _hold: 'net', pole: 0.32 + 0.55 * s, _poleDirect: 1 });
     c.reset('kilo'); c.pose('kilo', { ...phones, armL: 2.8, armR: 2.8, oscL: 0.4, oscR: 0.4, _f: 11, hopW: 0.5, _hf: 1 / BEAT });
-    c.reset('android'); c.pose('android', { ...phones, armL: 2.3 + 0.5 * s, armR: 2.3 - 0.5 * s, th: TAU * easeInOut(clamp(((T - PARTY) % (4 * BEAT)) / (BEAT * 1.4))) * 0.5, tilt: 0.05 * s });
+    c.reset('android'); c.pose('android', { ...phones, armL: 2.3 + 0.5 * s, armR: 2.3 - 0.5 * s, tilt: 0.05 * s });
     // the panda slept through all of it: the confetti wakes it
     const w = clamp((T - WAKE) / 0.6), yawn = clamp((T - (WAKE + 0.5)) / 0.5);
     c.reset('zcode');
@@ -61,7 +61,6 @@ export function act4(c: Ctx): void {
     if (T >= WAKE && T < WAKE + 1 / 60 + 1e-6) c.emit('zcode', { t: '?', x: 12, y: -74, vx: 6, vy: -22, life: 0, max: 1.1, s: 24, col: 'clay' });
     c.set('zcode', { y: c.crew.zcode.spec.y + bounce * 0.4 });
     // sparkles on the downbeat
-    if (a < 1 / 60 + 1e-6) for (const w2 of ['clawd', 'opencode', 'copilot', 'cursor', 'grok', 'kodek', 'kilo', 'android'] as Who[]) sparkle(c, w2);
     // headphones and the equaliser lines under the base row
     for (const [who, wx] of [['clawd', 0], ['opencode', 98], ['copilot', 196]] as [Who, number][]) c.bars.push({ x: wx, session: { agent: who === 'clawd' ? 'claude' : 'codex', state: 'idle', progress: null }, music: 'dance' });
     c.punches.push([PARTY, 2.4]);
@@ -71,10 +70,8 @@ export function act4(c: Ctx): void {
   // ---------- confetti ----------
   const bursts: Burst[] = [];
   const W = fmt.W, H = fmt.H, spd = p ? 1500 : 1750;
-  bursts.push({ t: PARTY, x: W * 0.06, y: H * 0.95, n: 110, speed: spd, dir: -1.05, spread: 0.75, seed: 3, size: p ? 1.9 : 2.1, life: 3.6 });
-  bursts.push({ t: PARTY, x: W * 0.94, y: H * 0.95, n: 110, speed: spd, dir: -Math.PI + 1.05, spread: 0.75, seed: 8, size: p ? 1.9 : 2.1, life: 3.6 });
-  for (let i = 0; i < 4; i++) bursts.push({ t: PARTY + 0.35 + i * 0.28, x: W * (0.15 + i * 0.23), y: -30, n: 34, speed: 240, dir: Math.PI / 2, spread: 0.6, gravity: 640, seed: 20 + i, size: 1.7, life: 3.4 });
-  bursts.push({ t: at(8, 0), x: W * 0.5, y: -30, n: 50, speed: 260, dir: Math.PI / 2, spread: 1.5, gravity: 560, seed: 41, size: 1.7, life: 3.4 });
+  bursts.push({ t: PARTY, x: W * 0.06, y: H * 0.95, n: 34, speed: spd, dir: -1.05, spread: 0.75, seed: 3, size: p ? 1.3 : 1.5, life: 3.0 });
+  bursts.push({ t: PARTY, x: W * 0.94, y: H * 0.95, n: 34, speed: spd, dir: -Math.PI + 1.05, spread: 0.75, seed: 8, size: p ? 1.3 : 1.5, life: 3.0 });
   c.top.push(x => { for (const b of bursts) drawBurst(x, T, b, fmt); });
   void STYLES; void hash; void lerp; void worldToScreen; void heightOf; void ZCODE;
 
@@ -83,8 +80,8 @@ export function act4(c: Ctx): void {
   c.front.push(x => {
     const t0 = PARTY + 0.15, out = PARTY + 2.7, ink = c.theme.text;
     const words = p
-      ? [[{ text: 'Never', t: t0, out, color: ink }, { text: 'keep', t: t0 + 0.1, out, color: ink }], [{ text: 'them', t: t0 + 0.2, out, color: ink }, { text: 'waiting.', t: t0 + 0.32, out, color: '#D97757' }]]
-      : [[{ text: 'Never', t: t0, out, color: ink }, { text: 'keep', t: t0 + 0.1, out, color: ink }, { text: 'them', t: t0 + 0.2, out, color: ink }, { text: 'waiting.', t: t0 + 0.32, out, color: '#D97757' }]];
+      ? [[{ text: 'Allow.', t: t0, out, color: ink }], [{ text: 'Back', t: t0 + 0.3, out, color: ink }, { text: 'to', t: t0 + 0.4, out, color: ink }, { text: 'work.', t: t0 + 0.5, out, color: '#D97757' }]]
+      : [[{ text: 'Allow.', t: t0, out, color: ink }, { text: 'Back', t: t0 + 0.3, out, color: ink }, { text: 'to', t: t0 + 0.4, out, color: ink }, { text: 'work.', t: t0 + 0.5, out, color: '#D97757' }]];
     drawCaption(x, T, words, { size: p ? size * 1.1 : size, cx: p ? fmt.W / 2 : fmt.W * 0.4, cy: p ? cy + 50 : cy, lineGap: 1.05 });
   });
   // the user has done their bit: the pointer slips away
@@ -105,6 +102,12 @@ export function act4(c: Ctx): void {
       const ink = th.text, sub = th.sub;
       drawCaption(x, T, [[{ text: 'Seven', t: FLIP - 0.02, color: sub, k: 0.5, out: at(11, 0) }, { text: 'looks.', t: FLIP + 0.02, color: sub, k: 0.5, out: at(11, 0) }]], { size: size * 0.8, cx: fmt.W / 2, cy: cy - (p ? 60 : 42), lineGap: 1.1 });
       drawCaption(x, T, [[{ text: name, t: t0, out: outAt - 0.05, color: ink }]], { size: size * 1.1, cx: fmt.W / 2, cy: cy + (p ? 70 : 30), lineGap: 1.1, weight: 700 });
+      // Sticker and Pixel are drawn for Clawd and Kodek only (the rest of the crew keeps its Clean look for those two beats): tag the two
+      if (style === 'sticker' || style === 'pixel') {
+        const h = p ? 68 : 62, [cx0, cy0] = c.crew.clawd.pt(-6, -heightOf('clawd') - 60), [kx, ky] = c.crew.kodek.pt(SKINS.kodek.width / 2 + 14, -heightOf('kodek') * 0.6);
+        drawTag(x, T, cx0, cy0, { ...TAGS.clawd, t: t0 + 0.04, out: outAt - 0.05, h, tilt: -0.03, anchor: 'c' });
+        drawTag(x, T, kx, ky, { ...TAGS.kodek, t: t0 + 0.09, out: outAt - 0.05, h, tilt: 0.03, anchor: 'l' });
+      }
     });
   }
 }

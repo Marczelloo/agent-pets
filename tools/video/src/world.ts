@@ -5,11 +5,11 @@ import { worldToScreen } from './camera';
 import type { Format } from './format';
 import { drawLimits, drawProgress, limitBars } from '@app/stage/hud';
 import type { Limit, Session } from '@app/types';
-import { CREAM, type Theme } from './themes';
+import { DARK, type Theme } from './themes';
 import { TAU } from './util';
 
 export const PAL = {
-  cream: '#FBF1E8', glow: '#F7DDC9', ink: '#2B2622', bar: '#1F1C1A', barEdge: '#2F2A27', clay: '#D97757', teal: '#1D9E75',
+  cream: '#FBF1E8', glow: '#F7DDC9', ink: '#2B2622', bar: '#1A2131', barEdge: '#33405E', clay: '#D97757', teal: '#1D9E75',
   amber: '#EF9F27', win: '#FFF9F3', winEdge: '#EED9C8', winBar: '#F6E6D8', winLine: '#F1E0D0', winLine2: '#EAD3BF',
 };
 export const FONT = '"Fredoka Variable", "Segoe UI", sans-serif';
@@ -41,7 +41,7 @@ function paintTheme(x: CanvasRenderingContext2D, fmt: Format, cam: Cam, T: numbe
 }
 
 /** Backdrop in the current theme; a `wipe` paints the previous theme first and grows the new one out of a circle. */
-export function drawBackdrop(x: CanvasRenderingContext2D, fmt: Format, cam: Cam, T: number, th: Theme = CREAM, wipe?: Wipe, windows = 1): void {
+export function drawBackdrop(x: CanvasRenderingContext2D, fmt: Format, cam: Cam, T: number, th: Theme = DARK, wipe?: Wipe, windows = 1): void {
   x.setTransform(1, 0, 0, 1, 0, 0);
   if (wipe && wipe.k < 1) {
     paintTheme(x, fmt, cam, T, wipe.prev, windows);
@@ -68,7 +68,7 @@ function ghostWindow(x: CanvasRenderingContext2D, fmt: Format, cam: Cam, T: numb
   const [sx, sy] = worldToScreen(cam, fmt, w.x, w.y), z = cam.z, W = w.w * z, H = w.h * z;
   if (sx > fmt.W + 50 || sy > fmt.H + 50 || sx + W < -50 || sy + H < -50) return;
   x.save();
-  x.shadowColor = th.bg === '#14111C' ? 'rgba(0,0,0,0.35)' : 'rgba(217,150,110,0.18)'; x.shadowBlur = 30 * z; x.shadowOffsetY = 10 * z;
+  x.shadowColor = /^#[0-3]/.test(th.bg) ? 'rgba(0,0,0,0.45)' : 'rgba(60,60,60,0.16)'; x.shadowBlur = 30 * z; x.shadowOffsetY = 10 * z;
   x.fillStyle = th.win; rr(x, sx, sy, W, H, 16 * z); x.fill();
   x.restore();
   x.strokeStyle = th.winEdge; x.lineWidth = Math.max(1, 2 * z); rr(x, sx, sy, W, H, 16 * z); x.stroke();

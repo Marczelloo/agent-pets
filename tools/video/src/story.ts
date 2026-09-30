@@ -8,7 +8,8 @@ import { act3 } from './act3';
 import type { Format } from './format';
 import type { Limit } from '@app/types';
 import { clamp, easeInOut, easeOutBack, ring } from './util';
-import { CREAM } from './themes';
+import { DARK } from './themes';
+import { setInk } from './overlays';
 import { drawBackdrop, drawCursor, drawTaskbar } from './world';
 import { act4 } from './act4';
 import { act5, camKeys as endKeys, END } from './act5';
@@ -40,7 +41,7 @@ export class Story {
     const { fmt, crew } = this;
     for (const w of CREW) { const a = crew[w]; a.spec = blank(); a.spec.hidden = true; }
     const c: Ctx = {
-      T, fmt, crew, back: [], front: [], top: [], punches: [], theme: CREAM, windows: 1, bars: [],
+      T, fmt, crew, back: [], front: [], top: [], punches: [], theme: DARK, windows: 1, bars: [],
       reset: (w: Who) => { crew[w].spec.drive = {}; },
       cursor: { x: 0, y: -400, rot: 0, size: 44, alpha: 1, press: 0 },
       set: (w: Who, p) => Object.assign(crew[w].spec, { hidden: false }, p),
@@ -64,6 +65,7 @@ export class Story {
     }
     const cam: Cam = { x: base.x + sx / base.z, y: base.y + sy / base.z, z: base.z * (1 + punch) };
 
+    setInk(c.theme.text);
     drawBackdrop(x, fmt, cam, T, c.theme, c.wipe, c.windows * clamp((7.4 - cam.z) / 3.4));
     drawTaskbar(x, fmt, cam, T, { limits: LIMITS, bars: c.bars });
     for (const o of c.back) o(x, cam);
