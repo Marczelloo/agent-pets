@@ -7,3 +7,8 @@ app/dist
 app/src-tauri/gen
 app/src-tauri/resources
 *.tsbuildinfo
+
+# promo video tooling
+tools/video/node_modules
+tools/video/out
+tools/video/audio/__pycache__

@@ -1,0 +1,20 @@
+{
+  "name": "agent-pets-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.55.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/fredoka": "^5.2.0",
+    "@fontsource-variable/nunito": "^5.2.0",
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}

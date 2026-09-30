@@ -1,0 +1,8 @@
+/* The app's renderer and bubbles ask for "Segoe UI"; the video has no Windows fonts, so that name maps to Nunito.
+   Titles use Fredoka (imported in code). Both are SIL Open Font License, loaded from npm. */
+@font-face {
+  font-family: 'Segoe UI';
+  font-style: normal;
+  font-weight: 200 1000;
+  src: url('../node_modules/@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2') format('woff2-variations');
+}
