@@ -1,15 +1,23 @@
 Agent Pets
 Copyright (c) 2026 Marczelloo (https://github.com/Marczelloo)
 
-Agent Pets is licensed under the PolyForm Noncommercial License 1.0.0
-(see LICENSE). You may use, change and share it for noncommercial
-purposes, as long as you keep this notice and the Required Notice line
-in LICENSE.
+Agent Pets is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version (see LICENSE).
+
+Agent Pets is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+Public License for more details.
 
 Earlier versions
 ----------------
 Versions up to and including 0.12.2 were released under the MIT License.
 Copies of those versions keep the MIT terms they were published with.
+For a short time after 0.12.2 the source code carried the PolyForm
+Noncommercial License 1.0.0. No release was published under it, and
+that code is now covered by the GNU General Public License as well.
 
 Contributions made under the MIT License
 ----------------------------------------
@@ -19,7 +27,8 @@ Parts of this project were contributed while it was MIT licensed:
   released in 0.9.1) and the Android robot pet with Gemini limits for
   Antigravity (pull request #2, released in 0.12.2).
 
-Those contributions remain available under the MIT License:
+Those contributions remain available under the MIT License, which is
+compatible with the GNU General Public License:
 
   MIT License
 
