@@ -47,14 +47,22 @@ pub fn install(settings: &mut Value, hook_exe: &str) {
     }
 }
 
+/// A settings file as an editor or PowerShell leaves it: a UTF-8 BOM in front is fine, and an empty (or blank) file
+/// is the same as `{}`. Anything else must be valid JSON.
+pub(crate) fn parse_config(b: &[u8]) -> Result<Value, serde_json::Error> {
+    let b = b.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(b);
+    if b.iter().all(u8::is_ascii_whitespace) { return Ok(json!({})); }
+    serde_json::from_slice(b)
+}
+
 /// Edit the file with a `<name>.agent-pets.bak` backup and atomic write. Invalid JSON fails without writing.
 pub(crate) fn edit_file(path: &Path, f: impl FnOnce(&mut Value)) -> std::io::Result<()> { edit_file_opts(path, true, f) }
 
 /// Like `edit_file`; `backup = false` keeps the existing backup (e.g. the original file before our first edit).
 pub(crate) fn edit_file_opts(path: &Path, backup: bool, f: impl FnOnce(&mut Value)) -> std::io::Result<()> {
-    let mut v: Value = match std::fs::read_to_string(path) {
+    let mut v: Value = match std::fs::read(path) {
         Ok(s) => {
-            let v = serde_json::from_str(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            let v = parse_config(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             if backup { std::fs::write(path.with_file_name(format!(
                 "{}.agent-pets.bak", path.file_name().unwrap().to_string_lossy())), &s)?; }
             v

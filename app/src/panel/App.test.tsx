@@ -17,6 +17,13 @@ describe('PanelView', () => {
     expect(html).toContain('Przejdź');
     expect(html).toContain('Czeka na Ciebie');
   });
+  it('shows what the agent asks on a waiting card, escaped, and nowhere else', () => {
+    const view = (x: Session) => renderToString(<PanelView snap={{ sessions: [x], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
+    const asking = view({ ...sess, question: 'Allow <b>Bash</b>?' });
+    expect(asking).toContain('class="question"');
+    expect(asking).toContain('Allow &lt;b&gt;Bash&lt;/b&gt;?');
+    expect(view({ ...sess, state: 'working', question: 'stale' })).not.toContain('class="question"');
+  });
   it('an opencode card shows its tokens and the bars of its account; a Claude card has neither', () => {
     const oc: Session = { ...sess, id: 'opencode:o', agent: 'opencode', state: 'working', title: 'oc',
       usage: { tokens: 1_200_000, cost: 0, account: 'codex' } };

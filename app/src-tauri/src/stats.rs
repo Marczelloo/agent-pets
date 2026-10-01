@@ -55,7 +55,9 @@ pub fn run_until_done(sc: &Mutex<Scanner>, step: u64, pause: &dyn Fn() -> bool, 
 pub fn sync_opencode(sc: &Mutex<Scanner>, db_path: &std::path::Path, on: bool, pause: &dyn Fn() -> bool) -> usize {
     if !on || pause() { return 0; }
     let Some(c) = pets_core::opencode_db::open(db_path) else { return 0 };
-    pets_core::stats::opencode::sync(&mut sc.lock().unwrap().book, &c, pause)
+    // the lock is held only for a lookup or an insert, never while the database is read: the statistics window stays responsive
+    pets_core::stats::opencode::sync_with(&|key| sc.lock().unwrap().book.files.get(key).map(|e| e.cursor.mtime), &c, pause,
+        &mut |key, e| { sc.lock().unwrap().book.files.insert(key, e); })
 }
 
 /// Ledger from disk; retry read errors (e.g. antivirus lock at startup), then return `None` if they persist:

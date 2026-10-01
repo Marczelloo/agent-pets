@@ -43,6 +43,7 @@ export function formatReset(resetsAt: number | null, nowMs: number): string {
 
 export function petTooltip(s: Session, nowMs: number, media?: Media | null): TooltipContent {
   const lines = [s.action || actionLabel(s, media)];
+  if (s.state === 'needs_you' && s.question) lines.push(cut(s.question, 200)); // what the agent asks, also with bubbles switched off
   const f = progressFraction(s.progress);
   if (f != null && s.progress) lines.push(t().tooltip.tasks(s.progress.done, s.progress.total));
   if (s.context && s.context.max > 0) lines.push(t().tooltip.context(Math.round(clampPct(s.context.used * 100 / s.context.max))));

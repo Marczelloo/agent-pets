@@ -48,6 +48,9 @@ const LONG_DEAD_MS: i64 = 60_000;
 pub const CHILD_QUIET_MS: i64 = 120_000;
 /// A background subagent ends only via `SubagentStop` or after this much quiet time.
 pub const CHILD_BACKGROUND_QUIET_MS: i64 = 600_000;
+/// Antigravity sends no `Stop` when the user cancels a turn, so silence is the only sign: its pet rests sooner
+/// than the 10 minutes of the others (the next hook wakes it again).
+const ANTIGRAVITY_STALE_MS: i64 = 180_000;
 /// A child that ended (or has an error) disappears after this duration.
 pub const CHILD_DONE_MS: i64 = 10_000;
 /// How long to remember a child's end (the router retains finished tasks for 2 h).
@@ -273,6 +276,7 @@ impl Store {
             out.push(Change::Upsert(s.clone()));
             return out;
         }
+        let prev_activity = s.last_activity;
         s.last_activity = e.ts;
         texts(s, e);
         let child = s.parent.is_some();
@@ -303,7 +307,12 @@ impl Store {
                 else { Some((State::Thinking, None)) }
             }
             Kind::NeedsInput => Some((if child { State::Thinking } else { State::NeedsYou }, None)),
-            Kind::TurnEnd => Some((State::Done, None)),
+            Kind::TurnEnd => {
+                // opencode follows `session.error` with `session.status idle` at once: the error is the outcome, not "done"
+                let now = self.pending.get(&e.session_id).map(|p| p.0).unwrap_or(s.state);
+                if e.source == Source::Opencode && now == State::Error && e.ts - prev_activity <= 5_000 { None }
+                else { Some((State::Done, None)) }
+            }
             Kind::Error => Some((State::Error, None)),
             Kind::Compact => Some((State::Compacting, None)),
             Kind::SessionStart => if s.state == State::Ended { Some((State::Idle, None)) } else { None },
@@ -464,7 +473,8 @@ impl Store {
                 let calm = now - s.state_since.max(s.last_activity);
                 match s.state {
                     State::Done if calm >= t.done_to_idle_ms => set(s, State::Idle, None, now),
-                    State::Thinking | State::Working | State::Compacting if quiet >= t.stale_to_idle_ms =>
+                    State::Thinking | State::Working | State::Compacting
+                        if quiet >= if s.agent == Agent::Antigravity { t.stale_to_idle_ms.min(ANTIGRAVITY_STALE_MS) } else { t.stale_to_idle_ms } =>
                         set(s, State::Idle, None, now),
                     State::Idle if calm >= t.idle_to_sleep_ms => set(s, State::Sleep, None, now),
                     _ => {}
@@ -593,6 +603,31 @@ mod tests {
         assert_eq!(s.session("s1").unwrap().turn_started_at, Some(20_000), "new turn after the previous one ended");
     }
 
+    /// opencode reports `session.error` and then `session.status idle` right away: the idle must not turn the error into "done".
+    #[test]
+    fn an_idle_right_after_an_opencode_error_keeps_the_error() {
+        let oc = |k: Kind, ts: i64| Event::new(Source::Opencode, "s1", k, ts);
+        let mut s = Store::new(Timing::default());
+        s.apply(&oc(Kind::Prompt, 0));
+        s.tick(1000, &alive);
+        s.apply(&oc(Kind::Error, 2000));
+        s.apply(&oc(Kind::TurnEnd, 2010));
+        s.tick(3000, &alive);
+        assert_eq!(st(&s).0, State::Error);
+        // a later, real end of a new turn is still "done"
+        s.apply(&oc(Kind::Prompt, 20_000));
+        s.tick(21_000, &alive);
+        s.apply(&oc(Kind::TurnEnd, 25_000));
+        s.tick(26_000, &alive);
+        assert_eq!(st(&s).0, State::Done);
+        // other agents keep their rules: an idle after an error is "done"
+        let mut c = Store::new(Timing::default());
+        c.apply(&ev(Kind::Error, 0));
+        c.apply(&ev(Kind::TurnEnd, 10));
+        c.tick(1000, &alive);
+        assert_eq!(st(&c).0, State::Done);
+    }
+
     /// After an interrupted turn (`stop` with `aborted`), Cursor sends `postToolUseFailure` for tools in flight (verified live).
     #[test]
     fn a_late_tool_end_does_not_reopen_a_finished_turn() {
@@ -694,6 +729,16 @@ mod tests {
         let mut s = Store::new(Timing::default());
         s.apply(&tool(Tool::Edit, 0));
         s.tick(600_000, &alive);
+        assert_eq!(st(&s).0, State::Idle);
+    }
+
+    #[test]
+    fn an_antigravity_turn_that_went_silent_rests_after_3_min() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Antigravity, "s1", Kind::Prompt, 0));
+        s.tick(179_000, &alive);
+        assert_eq!(st(&s).0, State::Thinking);
+        s.tick(180_000, &alive);
         assert_eq!(st(&s).0, State::Idle);
     }
 

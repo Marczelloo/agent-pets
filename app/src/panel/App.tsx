@@ -116,6 +116,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
             <div className="info">
               <div className="title">{petTooltip(s, nowMs).title}</div>
               <div className="sub">{s.jump.app && hostLabel(s) && <HostIcon app={s.jump.app} />}{sessionSubtitle(s)}</div>
+              {s.state === 'needs_you' && s.question && <div className="question">{s.question}</div>}
               <div className="meta">
                 <span className="state">{actionLabel(s, media)}</span>
                 {appBadge(appFor(s)) && <span className="exp">{appBadge(appFor(s))}</span>}

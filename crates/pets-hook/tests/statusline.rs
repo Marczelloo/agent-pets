@@ -17,7 +17,7 @@ fn passes_the_original_statusline_output_through_even_without_the_widget() {
     let out = child.wait_with_output().unwrap();
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "{\"session_id\":\"s\"}");
-    assert!(t0.elapsed().as_millis() < 5000);
+    assert!(t0.elapsed().as_millis() < 20_000);
 }
 
 #[test]

@@ -26,7 +26,12 @@ pub struct AgentEnvelope {
 /// Action text from allowlisted tool arguments: `keys` = (agent key, Claude key), and `claude_name` is
 /// the Claude tool with the same text. Other arguments (file contents, diffs) are never read.
 pub fn action_from(claude_name: &str, args: Option<&serde_json::Value>, keys: &[(&str, &str)], lang: crate::i18n::Lang) -> Option<String> {
-    let src = args?.as_object()?;
+    // Copilot CLI sends `toolArgs` as a JSON string, the others as an object
+    let parsed;
+    let src = match args? {
+        serde_json::Value::String(s) if s.len() <= 256 * 1024 => { parsed = serde_json::from_str::<serde_json::Value>(s).ok()?; parsed.as_object()? }
+        v => v.as_object()?,
+    };
     let mut only = serde_json::Map::new();
     for (from, to) in keys {
         if only.contains_key(*to) { continue; }

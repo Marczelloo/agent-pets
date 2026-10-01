@@ -53,7 +53,9 @@ pub fn codex_line(e: &mut FileEntry, line: &str) {
             let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
             let now = [n("input_tokens").saturating_sub(n("cached_input_tokens")), n("cached_input_tokens"),
                 n("cache_write_input_tokens"), n("output_tokens")];
-            let before = e.cursor.last_total.unwrap_or_default();
+            // After a resume the counter restarts from zero (the first event's total equals its own turn):
+            // a total that fell below the previous one is a fresh count, so all of it is new.
+            let before = e.cursor.last_total.filter(|b| now[0] + now[1] + now[3] >= b[0] + b[1] + b[3]).unwrap_or_default();
             let c = e.cell(ts, &model);
             c.input += now[0].saturating_sub(before[0]);
             c.cache_read += now[1].saturating_sub(before[1]);
@@ -120,9 +122,10 @@ mod tests {
     }
 
     #[test]
-    fn a_falling_total_adds_nothing() {
-        let t = total(&feed(&[meta("Codex Desktop"), tokens("10:00:05", 1000, 800, 50), tokens("10:00:10", 10, 0, 1)]));
-        assert_eq!((t.input, t.cache_read, t.output), (200, 800, 50));
+    fn the_first_turn_after_a_resume_counts_in_full() {
+        // the counter restarted: 1000/800/50 before, then a fresh 400/100/20
+        let t = total(&feed(&[meta("Codex Desktop"), tokens("10:00:05", 1000, 800, 50), tokens("10:00:10", 400, 100, 20), tokens("10:00:15", 500, 150, 30)]));
+        assert_eq!((t.input, t.cache_read, t.output), (200 + 300 + 50, 800 + 100 + 50, 50 + 20 + 10));
     }
 
     #[test]

@@ -12,6 +12,11 @@ describe('petTooltip', () => {
   it('shows the live action text instead of the generic label', () => {
     expect(petTooltip({ ...base, action: 'npm test' }, 220_000).lines[0]).toBe('npm test');
   });
+  it('a waiting pet shows the question as well, so it is not lost when bubbles are off', () => {
+    const t = petTooltip({ ...base, state: 'needs_you', action: null, question: 'Allow Bash? npm test' }, 220_000);
+    expect(t.lines).toContain('Allow Bash? npm test');
+    expect(petTooltip({ ...base, state: 'working', question: 'stale' }, 220_000).lines).not.toContain('stale');
+  });
   it('a child names its task, runs for a while and shows router health', () => {
     const kid: Session = { ...base, id: 'p/a', title: 'Znajdź testy', parent: 'p', progress: null, context: null, started_at: 40_000,
       sub: { kind: 'router', agent_type: null, description: 'Znajdź testy', background: false },

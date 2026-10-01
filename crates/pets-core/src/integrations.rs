@@ -94,8 +94,8 @@ pub fn hook_command_ps(hook: &Path, agent: &str, event: &str) -> String {
 }
 
 /// Copilot events: PascalCase for those also known to VS Code, camelCase for CLI-only events (spec 0.11 §3.1).
-pub const COPILOT_EVENTS: [&str; 11] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart",
-    "SubagentStop", "Stop", "sessionEnd", "notification", "errorOccurred", "postToolUseFailure"];
+pub const COPILOT_EVENTS: [&str; 12] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart",
+    "SubagentStop", "Stop", "sessionEnd", "notification", "errorOccurred", "postToolUseFailure", "permissionRequest"];
 /// Without `PreToolUse`: it is a permission gate where every response makes a decision (`{}` denies, `ask` forces a prompt).
 pub const ANTIGRAVITY_EVENTS: [&str; 3] = ["PreInvocation", "PostToolUse", "Stop"];
 /// Our hook key in Antigravity `hooks.json`.
@@ -211,7 +211,7 @@ fn read_antigravity(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>
     let v: serde_json::Value = match std::fs::read(&f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
-        Ok(b) => serde_json::from_slice(&b).map_err(|e| format!("{} {} ({e})", f.display(), tr(lang, "jest uszkodzony", "is damaged")))?,
+        Ok(b) => crate::hooks_install::parse_config(&b).map_err(|e| format!("{} {} ({e})", f.display(), tr(lang, "jest uszkodzony", "is damaged")))?,
     };
     if !v.is_object() {
         return Err(format!("{} {}", f.display(), tr(lang, "ma nieoczekiwany format, nie zmieniam go.", "has an unexpected format; not changing it.")));
@@ -262,7 +262,7 @@ fn read_hook_map(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, Stri
     let v: serde_json::Value = match std::fs::read(f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
-        Ok(b) => serde_json::from_slice(&b).map_err(|_| unusual())?,
+        Ok(b) => crate::hooks_install::parse_config(&b).map_err(|_| unusual())?,
     };
     let shape = v.is_object() && match v.get("hooks") {
         None => true,
@@ -353,7 +353,10 @@ fn disable_cursor(home: &Path, lang: Lang) -> Result<String, String> {
 
 fn grok_json(hook: &Path) -> serde_json::Value {
     let hooks: serde_json::Map<String, serde_json::Value> = GROK_EVENTS.iter().map(|ev| {
-        let mut g = serde_json::json!({"hooks": [{"type": "command", "command": hook_command(hook, "grok", ev), "timeout": 5}]});
+        // Grok Build runs the command through PowerShell on Windows (`-Command`): `"path" --agent` is a parser error there
+        let cmd = hook_command(hook, "grok", ev);
+        let cmd = if cmd.starts_with('"') { hook_command_ps(hook, "grok", ev) } else { cmd };
+        let mut g = serde_json::json!({"hooks": [{"type": "command", "command": cmd, "timeout": 5}]});
         // `matcher` only for tool events, as in Claude Code
         if ev.contains("ToolUse") { g["matcher"] = serde_json::json!("*"); }
         (ev.to_string(), serde_json::json!([g]))
@@ -411,7 +414,7 @@ fn read_zcode(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String>
     let v: serde_json::Value = match std::fs::read(f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
-        Ok(b) => serde_json::from_slice(&b).map_err(|_| unusual())?,
+        Ok(b) => crate::hooks_install::parse_config(&b).map_err(|_| unusual())?,
     };
     let shape = v.is_object() && match v.get("hooks") {
         None => true,
@@ -513,7 +516,7 @@ pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
 
 fn read_claude_settings(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
     match std::fs::read(claude_settings(home)) {
-        Ok(b) => serde_json::from_slice(&b).map(Some)
+        Ok(b) => crate::hooks_install::parse_config(&b).map(Some)
             .map_err(|e| match lang {
                 Lang::Pl => format!("{} jest uszkodzony ({e})", claude_settings(home).display()),
                 Lang::En => format!("{} is damaged ({e})", claude_settings(home).display()),
@@ -832,6 +835,28 @@ mod tests {
         disable(AppId::Antigravity, h.path(), Lang::Pl).unwrap();
         assert_eq!(ag_json(h.path()), json!({"my-linter": mine}));
         assert!(!status(AppId::Antigravity, h.path(), Lang::Pl).installed);
+    }
+
+    /// Editors and PowerShell leave a UTF-8 BOM, or an empty file: neither is "damaged". Other keys keep their order.
+    #[test]
+    fn a_bom_or_an_empty_hooks_file_is_not_damaged_and_key_order_survives() {
+        for (name, text) in [("bom", "\u{feff}{\"zeta\": {}, \"alpha\": {}}"), ("empty", ""), ("blank", "  \r\n")] {
+            let h = home();
+            let f = antigravity_hooks(h.path());
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(&f, text).unwrap();
+            enable(AppId::Antigravity, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let keys: Vec<String> = ag_json(h.path()).as_object().unwrap().keys().cloned().collect();
+            if name == "bom" { assert_eq!(keys, ["zeta", "alpha", "agent-pets"], "their keys stay in place, ours is appended"); }
+            else { assert_eq!(keys, ["agent-pets"], "{name}"); }
+            disable(AppId::Antigravity, h.path(), Lang::Pl).unwrap();
+        }
+        let h = home();
+        std::fs::create_dir_all(claude_settings(h.path()).parent().unwrap()).unwrap();
+        std::fs::write(claude_settings(h.path()), "\u{feff}{\"theme\": \"dark\", \"a\": 1}").unwrap();
+        enable(AppId::ClaudeCode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap();
+        let keys: Vec<String> = claude_json(h.path()).as_object().unwrap().keys().cloned().collect();
+        assert_eq!(&keys[..2], ["theme", "a"], "Claude settings are not re-sorted");
     }
 
     #[test]
@@ -1286,7 +1311,10 @@ mod tests {
             // Cursor runs hooks through PowerShell (verified live): `"path" --agent` is a syntax error there
             #[cfg(windows)]
             assert_eq!(ps_program(&c), Some((hook.replace('\\', "/"), 5)), "{c}");
-            assert!(g.starts_with('"') && g.contains(&hook.replace('\\', "/")), "{g}");
+            // Grok Build also runs hooks through PowerShell (docs: `-Command`)
+            #[cfg(windows)]
+            assert_eq!(ps_program(&g), Some((hook.replace('\\', "/"), 5)), "{g}");
+            assert!(g.contains(&hook.replace('\\', "/").replace('\'', "''")), "{g}");
             let z = rd(&zcode_config(&h, None))["hooks"]["events"]["Stop"][0]["hooks"][0].clone();
             assert_eq!(z["command"].as_str(), Some(hook.as_str()));
             assert_eq!(z["args"].as_array().unwrap().len(), 4);

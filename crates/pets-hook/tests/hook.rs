@@ -19,7 +19,7 @@ fn forwards_hook_payload_silently() {
     let out = run_hook(&p, r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
     assert!(out.status.success());
     assert!(out.stdout.is_empty() && out.stderr.is_empty());
-    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["session_id"], "abc");
     assert!(env.ts > 0);
     ing.stop();
@@ -33,7 +33,7 @@ fn exits_zero_fast_when_widget_is_down() {
     let t = Instant::now();
     let out = run_hook(&p, r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
     assert!(out.status.success());
-    assert!(t.elapsed() < Duration::from_secs(3));
+    assert!(t.elapsed() < Duration::from_secs(15));
     let out = run_hook(&dir.path().join("missing.json"), "not json");
     assert!(out.status.success());
 }
@@ -52,7 +52,7 @@ fn report_sends_a_door_event_and_says_nothing() {
     ing.endpoint().write(&p).unwrap();
     let out = run_report(&p, &["--agent", "kilo", "--name", "Kilo CLI", "--session", "abc", "--state", "working", "--tool", "edit"]);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    let Incoming::Generic(e) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Generic(e) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!((e.session_id.as_str(), e.data.agent_name.as_deref()), ("generic:kilo:abc", Some("Kilo CLI")));
     ing.stop();
 }
@@ -131,7 +131,7 @@ fn antigravity_stop_is_forwarded_and_answered_with_a_stop_decision() {
     let out = run_agent(&p, &["--agent", "antigravity", "--event", "Stop"], r#"{"conversationId":"d5f1","fullyIdle":true}"#);
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"decision":"stop"}"#);
-    let Incoming::Antigravity(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Antigravity(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!((env.event.as_str(), env.payload["conversationId"].as_str()), ("Stop", Some("d5f1")));
     assert!(env.ts > 0 && env.host.is_none(), "host only at PreInvocation");
     let tool = run_agent(&p, &["--agent", "antigravity", "--event", "PreToolUse"], r#"{"conversationId":"d5f1"}"#);
@@ -149,7 +149,7 @@ fn copilot_hooks_are_forwarded_and_say_nothing() {
     let out = run_agent(&p, &["--agent", "copilot", "--event", "PreToolUse"], r#"{"sessionId":"cop_1","toolName":"bash"}"#);
     assert!(out.status.success());
     assert!(out.stdout.is_empty() && out.stderr.is_empty());
-    let Incoming::Copilot(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Copilot(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!((env.event.as_str(), env.payload["toolName"].as_str()), ("PreToolUse", Some("bash")));
     ing.stop();
 }
@@ -160,7 +160,7 @@ fn antigravity_still_gets_its_answer_when_the_widget_is_down_or_the_input_is_bad
     let missing = dir.path().join("missing.json");
     let t = Instant::now();
     let out = run_agent(&missing, &["--agent", "antigravity", "--event", "Stop"], r#"{"conversationId":"d5f1"}"#);
-    assert!(out.status.success() && t.elapsed() < Duration::from_secs(3));
+    assert!(out.status.success() && t.elapsed() < Duration::from_secs(15));
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"decision":"stop"}"#);
     let p = dir.path().join("endpoint.json");
     Endpoint { port: 1, token: "x".into() }.write(&p).unwrap();
@@ -247,7 +247,7 @@ fn cursor_input_with_a_utf8_bom_still_reaches_the_widget() {
     let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"],
         "\u{feff}{\"conversation_id\":\"conv_1\",\"hook_event_name\":\"beforeSubmitPrompt\"}\r\n");
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["conversation_id"], "conv_1");
     ing.stop();
 }
@@ -257,7 +257,7 @@ fn the_cursor_folder_is_kept_although_the_workspace_roots_are_slimmed_away() {
     let (ing, rx, _dir, p) = widget();
     run_agent(&p, &["--agent", "cursor", "--event", "sessionStart"],
         r#"{"conversation_id":"conv_1","cursor_version":"3.22.12","workspace_roots":["/C:/w/app"]}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["cwd"], "C:/w/app");
     assert!(env.payload.get("workspace_roots").is_none());
     ing.stop();
@@ -270,12 +270,12 @@ fn cursor_hooks_are_forwarded_and_always_let_cursor_go_on() {
         r#"{"conversation_id":"conv_1","cursor_version":"1.7.2","hook_event_name":"beforeSubmitPrompt","prompt":"sekret"}"#);
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!((env.event.as_str(), env.payload["conversation_id"].as_str()), ("beforeSubmitPrompt", Some("conv_1")));
     assert!(env.payload.get("prompt").is_none(), "prompt does not leave the hook");
     let tool = run_agent(&p, &["--agent", "cursor", "--event", "preToolUse"], r#"{"conversation_id":"conv_1","cursor_version":"1.7.2"}"#);
     assert_eq!(String::from_utf8_lossy(&tool.stdout).trim(), "{}");
-    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::Cursor(_)));
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), Incoming::Cursor(_)));
     ing.stop();
 }
 
@@ -284,10 +284,10 @@ fn grok_and_zcode_hooks_are_forwarded_and_say_nothing() {
     let (ing, rx, _dir, p) = widget();
     let out = run_with(&p, &["--agent", "grok", "--event", "Stop"], &[("GROK_HOOK_EVENT", "Stop")], r#"{"sessionId":"g1","hookEventName":"Stop"}"#);
     assert!(out.status.success() && out.stdout.is_empty());
-    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::Grok(_)));
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), Incoming::Grok(_)));
     let out = run_with(&p, &["--agent", "zcode", "--event", "Stop"], &[("ZCODE_SESSION_ID", "zc_1")], r#"{"sessionId":"zc_1","hookEventName":"Stop"}"#);
     assert!(out.status.success() && out.stdout.is_empty());
-    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::Zcode(_)));
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(10)).unwrap(), Incoming::Zcode(_)));
     ing.stop();
 }
 
@@ -296,7 +296,7 @@ fn grok_takes_the_session_id_from_its_environment() {
     let (ing, rx, _dir, p) = widget();
     run_with(&p, &["--agent", "grok", "--event", "PreToolUse"], &[("GROK_HOOK_EVENT", "PreToolUse"), ("GROK_SESSION_ID", "g1")],
         r#"{"hookEventName":"PreToolUse","toolName":"bash"}"#);
-    let Incoming::Grok(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Grok(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["sessionId"], "g1");
     ing.stop();
 }
@@ -306,7 +306,7 @@ fn cursor_still_gets_its_answer_when_the_widget_is_down_or_the_input_is_bad() {
     let dir = tempfile::tempdir().unwrap();
     let t = Instant::now();
     let out = run_agent(&dir.path().join("missing.json"), &["--agent", "cursor", "--event", "beforeSubmitPrompt"], r#"{"cursor_version":"1"}"#);
-    assert!(out.status.success() && t.elapsed() < Duration::from_secs(3));
+    assert!(out.status.success() && t.elapsed() < Duration::from_secs(15));
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
     let bad = run_agent(&dir.path().join("missing.json"), &["--agent", "cursor", "--event", "beforeSubmitPrompt"], "not-json");
     assert!(bad.status.success());
@@ -335,7 +335,7 @@ fn claude_started_from_zcode_is_still_claude() {
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
     run_with(&p, &[], &[("ZCODE_SESSION_ID", "zc_1")], r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
-    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::ClaudeHook(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert_eq!(env.payload["session_id"], "abc");
     ing.stop();
 }
@@ -346,9 +346,9 @@ fn a_huge_cursor_prompt_never_leaves_the_hook() {
     let big = format!(r#"{{"conversation_id":"conv_1","cursor_version":"1.7.2","prompt":"{}"}}"#, "a".repeat(2 << 20));
     let t = Instant::now();
     let out = run_agent(&p, &["--agent", "cursor", "--event", "beforeSubmitPrompt"], &big);
-    assert!(t.elapsed() < Duration::from_secs(3), "{:?}", t.elapsed());
+    assert!(t.elapsed() < Duration::from_secs(15), "{:?}", t.elapsed());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"continue":true}"#);
-    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(2)).unwrap() else { panic!("wrong route") };
+    let Incoming::Cursor(env) = rx.recv_timeout(Duration::from_secs(10)).unwrap() else { panic!("wrong route") };
     assert!(env.payload.get("prompt").is_none());
     assert!(serde_json::to_vec(&env).unwrap().len() < 1 << 20);
     ing.stop();

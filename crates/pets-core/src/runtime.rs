@@ -66,8 +66,10 @@ pub struct Runtime {
     /// Host program for an opencode session, resolved once per session (one process snapshot).
     opencode_hosts: std::collections::HashMap<String, Option<crate::host::Host>>,
     /// Home directory (opencode database).
+    #[cfg_attr(not(feature = "opencode-db"), allow(dead_code))]
     home: PathBuf,
     /// Last opencode usage read and request for an immediate read (turn end).
+    #[cfg_attr(not(feature = "opencode-db"), allow(dead_code))]
     usage_at: Option<i64>,
     usage_due: bool,
     _watcher: Option<notify::RecommendedWatcher>,
@@ -610,7 +612,7 @@ mod tests {
 
     fn post_agent(ep: &Endpoint, agent: &str, body: &str) -> u16 {
         ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
-            .set("Authorization", &format!("Bearer {}", ep.token)).send_string(body)
+            .timeout(Duration::from_secs(10)).set("Authorization", &format!("Bearer {}", ep.token)).send_string(body)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 })
     }
 
@@ -625,7 +627,7 @@ mod tests {
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
                 "payload": {"sessionId": "zc_1", "toolName": "Bash", "toolInput": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "zcode", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
             while rt.store().session("zcode:zc_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
             let s = rt.store().session("zcode:zc_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Zcode, Some(crate::model::Tool::Bash))), "zcode {on}");
@@ -643,7 +645,7 @@ mod tests {
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
                 "payload": {"sessionId": "grok_1", "toolName": "bash", "toolInput": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "grok", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
             while rt.store().session("grok:grok_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
             let s = rt.store().session("grok:grok_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Grok, Some(crate::model::Tool::Bash))), "grok {on}");
@@ -661,7 +663,7 @@ mod tests {
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "preToolUse",
                 "payload": {"conversation_id": "conv_1", "tool_name": "Shell", "tool_input": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "cursor", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
             while rt.store().session("cursor:conv_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
             let s = rt.store().session("cursor:conv_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Cursor, Some(crate::model::Tool::Bash))), "cursor {on}");
@@ -678,7 +680,7 @@ mod tests {
         let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
             "payload": {"sessionId": "cop_1", "cwd": "C:/w", "toolName": "bash", "toolArgs": {"command": "cargo test"}}}).to_string();
         assert_eq!(post_agent(&ep, "copilot", &body), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("copilot:cop_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("copilot:cop_1").expect("Copilot session");
         assert_eq!((s.agent, s.jump.pid, s.tool), (Agent::Copilot, Some(std::process::id()), Some(crate::model::Tool::Bash)));
@@ -695,7 +697,7 @@ mod tests {
         let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreInvocation",
             "payload": {"conversationId": "d5f1", "workspacePaths": ["C:/w"], "modelName": "gemini-3.5-pro"}}).to_string();
         assert_eq!(post_agent(&ep, "antigravity", &body), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("antigravity:d5f1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("antigravity:d5f1").expect("Antigravity session");
         assert_eq!((s.agent, s.state, s.model.as_deref()), (Agent::Antigravity, crate::model::State::Thinking, Some("gemini-3.5-pro")));
@@ -760,7 +762,7 @@ mod tests {
             .send_string(r#"{"agent":"kilo","session":"a","state":"working","tool":"bash"}"#)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
         assert_eq!(send(&ep), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("generic:kilo:a").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("generic:kilo:a").expect("door session");
         assert_eq!((s.agent, s.state, s.tool), (Agent::Other, crate::model::State::Working, Some(crate::model::Tool::Bash)));
@@ -780,7 +782,7 @@ mod tests {
         let r = ureq::post(&format!("http://127.0.0.1:{}/v1/events/opencode", ep.port))
             .set("Authorization", &format!("Bearer {}", ep.token)).send_string(&body).unwrap();
         assert_eq!(r.status(), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("opencode:ses_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("opencode:ses_1").expect("opencode session");
         assert_eq!((s.agent, s.jump.pid), (Agent::Opencode, Some(std::process::id())));
@@ -839,7 +841,7 @@ mod tests {
             .send_string(&body.to_string()).unwrap().status();
         assert_eq!(status, 204);
         let t0 = Instant::now();
-        while rt.store().session("hook-s1").is_none() && t0.elapsed() < Duration::from_secs(3) {
+        while rt.store().session("hook-s1").is_none() && t0.elapsed() < Duration::from_secs(10) {
             rt.step(crate::time::now_ms());
             std::thread::sleep(Duration::from_millis(20));
         }

@@ -113,5 +113,5 @@ const onSettings = (s: Settings) => { setLang(resolveLang(s.language ?? 'auto'))
 void listen<Settings>('pets://settings', e => onSettings(e.payload));
 void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); onSettings(v.settings); });
 void invoke<Snapshot>('snapshot').then(s => { snap = s; refresh(); });
-// action bubble fades after 3 s without new events
-setInterval(refresh, 500);
+// action bubble fades after 3 s without new events; nothing to time out while idle, so do not wake up then
+setInterval(() => { if (live.size > 0 || picker.pending()) refresh(); }, 500);
