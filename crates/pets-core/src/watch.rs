@@ -105,11 +105,11 @@ mod tests {
 
     #[test]
     fn kinds_by_path() {
-        assert_eq!(kind_of(Path::new(r"C:\u\.codex\sessions\2026\09\24\rollout-x.jsonl")), Some(FileKind::CodexRollout));
-        assert_eq!(kind_of(Path::new(r"C:\u\.claude\projects\p\abc.jsonl")), Some(FileKind::ClaudeTranscript));
-        assert_eq!(kind_of(Path::new(r"C:\u\notes.txt")), None);
-        assert_eq!(kind_of(Path::new(r"C:\u\.claude\projects\p\abc\subagents\agent-a1.jsonl")), Some(FileKind::ClaudeSubagent));
-        assert_eq!(kind_of(Path::new(r"C:\u\.claude\projects\p\abc\subagents\agent-a1.meta.json")), None);
+        assert_eq!(kind_of(Path::new("/u/.codex/sessions/2026/09/24/rollout-x.jsonl")), Some(FileKind::CodexRollout));
+        assert_eq!(kind_of(Path::new("/u/.claude/projects/p/abc.jsonl")), Some(FileKind::ClaudeTranscript));
+        assert_eq!(kind_of(Path::new("/u/notes.txt")), None);
+        assert_eq!(kind_of(Path::new("/u/.claude/projects/p/abc/subagents/agent-a1.jsonl")), Some(FileKind::ClaudeSubagent));
+        assert_eq!(kind_of(Path::new("/u/.claude/projects/p/abc/subagents/agent-a1.meta.json")), None);
     }
 
     #[test]

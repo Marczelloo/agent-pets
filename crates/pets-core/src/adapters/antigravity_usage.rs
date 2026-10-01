@@ -145,8 +145,8 @@ fn ask(s: &Server, now: i64, post: &dyn Fn(&Server, &str) -> Result<Value, Failu
     }
 }
 
-/// Currently running Antigravity servers: each listening port with its process token.
-#[cfg(windows)]
+/// Currently running Antigravity servers: each listening port with its process token. On Linux the server
+/// binary is `language_server_linux_x64` (no `.exe`), which the same name filter covers.
 pub fn find_servers() -> Vec<Server> {
     crate::pid::process_list().into_iter()
         .filter(|(_, _, exe)| exe.to_lowercase().starts_with("language_server"))

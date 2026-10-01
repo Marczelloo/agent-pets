@@ -1,18 +1,21 @@
 //! Panel above the taskbar: session list, limits, "Jump". Show and hide the window only through the Tauri API.
 use crate::shell::placement::{self, Rect};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const W: f64 = 400.0;
 const H: f64 = 540.0;
 const MARGIN: f64 = 12.0;
 const BLUR_GRACE_MS: i64 = 400;
+/// On X11 the compositor may bounce focus right after `set_focus` on a freshly shown window;
+/// a focus-out that close to opening is the compositor, not the user clicking away.
+const BLUR_GUARD_MS: i64 = 300;
 
 #[derive(Default)]
-pub struct PanelToggle { visible: bool, blurred_at: Option<i64> }
+pub struct PanelToggle { visible: bool, blurred_at: Option<i64>, shown_at: i64 }
 
 impl PanelToggle {
-    pub fn shown(&mut self) { self.visible = true; self.blurred_at = None; }
+    pub fn shown(&mut self) { self.visible = true; self.blurred_at = None; self.shown_at = pets_core::time::now_ms(); }
     pub fn blurred(&mut self, now: i64) { self.visible = false; self.blurred_at = Some(now); }
     pub fn hidden(&mut self) { self.visible = false; }
     /// Whether the panel should be visible after a click. Clicking the icon or stage removes panel focus,
@@ -20,6 +23,11 @@ impl PanelToggle {
     pub fn toggle(&mut self, now: i64) -> bool {
         if self.visible { return false; }
         !matches!(self.blurred_at, Some(t) if now - t < BLUR_GRACE_MS)
+    }
+    /// Whether a focus-out this close to opening is the compositor fighting over focus (X11),
+    /// not the user leaving: the hide is ignored so the panel does not flash and die.
+    pub fn transient_blur(&self, now: i64) -> bool {
+        self.shown_at > 0 && now - self.shown_at < BLUR_GUARD_MS
     }
 }
 
@@ -54,11 +62,18 @@ pub fn origin_near(stage: Rect, work: Rect, scale: f64) -> (i32, i32) {
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let w = WebviewWindowBuilder::new(app, "panel", WebviewUrl::App("panel.html".into()))
         .title("Agent Pets").inner_size(W, H).decorations(false).transparent(true).always_on_top(true)
-        .skip_taskbar(true).resizable(false).shadow(true).visible(false).build()?;
+        // Linux: `resizable(false)` freezes GTK size hints and later resizing is ignored
+        .skip_taskbar(true).resizable(cfg!(target_os = "linux")).shadow(true).visible(false).build()?;
     let a = app.clone();
     w.on_window_event(move |e| if let WindowEvent::Focused(false) = e {
+        let st = a.state::<Panel>();
+        let mut p = st.0.lock().unwrap();
+        if p.transient_blur(pets_core::time::now_ms()) {
+            return;
+        }
+        p.blurred(pets_core::time::now_ms());
+        drop(p);
         if let Some(win) = a.get_webview_window("panel") { let _ = win.hide(); }
-        a.state::<Panel>().0.lock().unwrap().blurred(pets_core::time::now_ms());
         let _ = a.emit_to("panel", "panel://visible", false);
     });
     Ok(())
@@ -82,18 +97,21 @@ fn place(app: &AppHandle) {
             (x, y, scale)
         }
     };
-    let _ = win.set_size(tauri::PhysicalSize::new((W * scale).round() as u32, (H * scale).round() as u32));
-    let _ = win.set_position(PhysicalPosition::new(x, y));
+    crate::shell::place_window(&win, Rect { left: x, top: y, right: x + (W * scale).round() as i32, bottom: y + (H * scale).round() as i32 }, false);
 }
 
 pub fn open(app: &AppHandle, focus: Option<String>) {
-    let Some(win) = app.get_webview_window("panel") else { return };
-    place(app);
-    let _ = win.show();
-    let _ = win.set_focus();
-    app.state::<Panel>().0.lock().unwrap().shown();
-    let _ = app.emit_to("panel", "panel://visible", true);
-    if let Some(id) = focus { let _ = app.emit_to("panel", "panel://focus", id); }
+    // Bubble clicks call this from their own thread; placing and focusing the window touches GTK.
+    let a = app.clone();
+    let _ = crate::shell::on_main(move || {
+        let Some(win) = a.get_webview_window("panel") else { return };
+        place(&a);
+        let _ = win.show();
+        let _ = win.set_focus();
+        a.state::<Panel>().0.lock().unwrap().shown();
+        let _ = a.emit_to("panel", "panel://visible", true);
+        if let Some(id) = focus { let _ = a.emit_to("panel", "panel://focus", id); }
+    });
 }
 
 /// Open the panel with a status-bar message (e.g. a "Jump" result from a toast).
@@ -138,6 +156,15 @@ mod tests {
         let mut t = PanelToggle::default();
         t.shown();
         assert!(!t.toggle(5_000));
+    }
+
+    #[test]
+    fn focus_out_right_after_open_is_a_compositor_bounce() {
+        let mut t = PanelToggle::default();
+        t.shown();
+        t.shown_at = 1_000;
+        assert!(t.transient_blur(1_200), "bounce within the guard is ignored");
+        assert!(!t.transient_blur(1_400), "later focus-out still hides");
     }
 
     const SCREEN: Rect = Rect { left: 0, top: 0, right: 2560, bottom: 1440 };

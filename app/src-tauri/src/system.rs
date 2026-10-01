@@ -1,13 +1,26 @@
-//! Windows integration: startup (`HKCU\...\Run`) and notification registration cleanup on uninstall.
+//! System integration: startup, notification registration cleanup, power state, taskbar brightness.
+//! Windows: registry (`HKCU\...\Run`) and Win32 power status. Linux: XDG autostart `.desktop` entry
+//! and `/sys/class/power_supply`.
+#[cfg(windows)]
 use windows::core::HSTRING;
+#[cfg(windows)]
 use windows::Win32::System::Registry::*;
 
 pub const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const RUN_VALUE: &str = "Agent Pets";
 
+/// Startup entry: quoted path and `--autostart` so a second instance launched by the system
+/// (when the app is already running) opens nothing.
+pub fn autostart_command(exe: &str) -> String { format!("\"{exe}\" {AUTOSTART_ARG}") }
+
+pub const AUTOSTART_ARG: &str = "--autostart";
+
+#[cfg(windows)]
 fn wide(s: &str) -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() }
 
 /// Enable or disable Windows startup for `exe` under `key` (in HKCU).
+#[cfg(windows)]
 pub fn set_autostart_at(key: &str, exe: &str, on: bool) -> std::io::Result<()> {
     unsafe {
         let mut h = HKEY::default();
@@ -27,10 +40,35 @@ pub fn set_autostart_at(key: &str, exe: &str, on: bool) -> std::io::Result<()> {
     }
 }
 
-/// Whether a startup entry exists under `key`.
+/// XDG autostart entry (`~/.config/autostart/AgentPets.desktop`).
+#[cfg(not(windows))]
+fn desktop_file() -> std::path::PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config"))
+        .join("autostart").join("AgentPets.desktop")
+}
+
+/// Write or remove the XDG autostart entry; `key`/`exe` keep the Windows signature.
+#[cfg(not(windows))]
+pub fn set_autostart_at(_key: &str, exe: &str, on: bool) -> std::io::Result<()> {
+    let f = desktop_file();
+    if !on {
+        return match std::fs::remove_file(&f) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
+        };
+    }
+    let text = format!("[Desktop Entry]\nType=Application\nName=Agent Pets\nExec=\"{exe}\" {AUTOSTART_ARG}\nComment=Animated pets for your coding agents\n");
+    if let Some(dir) = f.parent() { std::fs::create_dir_all(dir)?; }
+    std::fs::write(&f, text)
+}
+
+/// Whether a startup entry exists under `key` (Linux ignores it: there is one autostart file).
 pub fn autostart_at(key: &str) -> bool { autostart_value(key).is_some() }
 
 /// Command from the startup entry under `key`, if present.
+#[cfg(windows)]
 pub fn autostart_value(key: &str) -> Option<String> {
     let mut size: u32 = 0;
     unsafe {
@@ -43,13 +81,15 @@ pub fn autostart_value(key: &str) -> Option<String> {
     }
 }
 
-/// Startup entry: quoted path and `--autostart` so a second instance launched by Windows
-/// (when the app is already running) opens nothing.
-pub fn autostart_command(exe: &str) -> String { format!("\"{exe}\" {AUTOSTART_ARG}") }
-
-pub const AUTOSTART_ARG: &str = "--autostart";
+/// `Exec` line of the XDG autostart entry, if present.
+#[cfg(not(windows))]
+pub fn autostart_value(_key: &str) -> Option<String> {
+    std::fs::read_to_string(desktop_file()).ok()?
+        .lines().find(|l| l.starts_with("Exec=")).map(|l| l[5..].to_string())
+}
 
 /// Light taskbar (Settings → Personalization → Colors → Windows mode). Missing value = dark.
+#[cfg(windows)]
 pub fn light_taskbar() -> bool {
     let mut v: u32 = 0;
     let mut size = std::mem::size_of::<u32>() as u32;
@@ -58,6 +98,18 @@ pub fn light_taskbar() -> bool {
             &HSTRING::from("SystemUsesLightTheme"), RRF_RT_REG_DWORD, None, Some(&mut v as *mut u32 as *mut core::ffi::c_void), Some(&mut size))
             .is_ok() && v == 1
     }
+}
+
+/// Light theme on Linux: the freedesktop color-scheme preference (`gsettings` on GNOME; `prefer-light`).
+#[cfg(not(windows))]
+pub fn light_taskbar() -> bool {
+    static LIGHT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *LIGHT.get_or_init(|| {
+        let out = std::process::Command::new("gsettings").args(["get", "org.gnome.desktop.interface", "color-scheme"])
+            .output().ok();
+        let text = out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+        text.contains("light") && !text.contains("dark")
+    })
 }
 
 /// Decide what to do with the startup entry: compare with the registry, not previous settings
@@ -82,11 +134,15 @@ pub fn current_autostart_command() -> Option<String> {
     std::env::current_exe().ok().map(|e| autostart_command(&e.to_string_lossy()))
 }
 
-/// Remove the app's notification registration key (AUMID).
+/// Remove the app's notification registration key (AUMID). Windows only.
+#[cfg(windows)]
 pub fn remove_aumid() {
     let key = format!(r"Software\Classes\AppUserModelId\{}", crate::notify::AUMID);
     unsafe { let _ = RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(key)); }
 }
+
+#[cfg(not(windows))]
+pub fn remove_aumid() {}
 
 /// Whether to enable power-saving mode: `auto` on battery or with Windows battery saver.
 pub fn decide_power_saving(mode: pets_core::settings::PowerSaving, on_battery: bool, saver_on: bool) -> bool {
@@ -95,11 +151,31 @@ pub fn decide_power_saving(mode: pets_core::settings::PowerSaving, on_battery: b
 }
 
 /// (on battery, Windows battery saver enabled).
+#[cfg(windows)]
 pub fn power_status() -> (bool, bool) {
     use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
     let mut s = SYSTEM_POWER_STATUS::default();
     if unsafe { GetSystemPowerStatus(&mut s) }.is_err() { return (false, false); }
     (s.ACLineStatus == 0, s.SystemStatusFlag == 1)
+}
+
+/// (on battery, saver on). Linux: on battery when no mains supply is online but a battery exists.
+#[cfg(not(windows))]
+pub fn power_status() -> (bool, bool) {
+    let base = std::path::Path::new("/sys/class/power_supply");
+    let read = |p: std::path::PathBuf| std::fs::read_to_string(p).map(|s| s.trim().to_string()).ok();
+    let mut has_battery = false;
+    let mut ac_online = false;
+    if let Ok(dir) = std::fs::read_dir(base) {
+        for e in dir.flatten() {
+            match read(e.path().join("type")).as_deref() {
+                Some("Mains") => ac_online |= read(e.path().join("online")).as_deref() == Some("1"),
+                Some("Battery") => has_battery = true,
+                _ => {}
+            }
+        }
+    }
+    (has_battery && !ac_online, false)
 }
 
 #[derive(Default)]
@@ -153,6 +229,7 @@ mod tests {
         assert_eq!(autostart_action(true, Some("\"C:/old/agent-pets.exe\" --autostart"), &cmd), Some(true));
     }
 
+    #[cfg(windows)]
     #[test]
     fn autostart_entry_can_be_set_and_removed() {
         let key = r"Software\AgentPetsTest\Run";
@@ -163,5 +240,19 @@ mod tests {
         assert!(!autostart_at(key));
         set_autostart_at(key, "", false).unwrap();
         unsafe { let _ = RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(r"Software\AgentPetsTest")); }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn autostart_entry_can_be_set_and_removed() {
+        let home = tempfile::tempdir().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", home.path());
+        set_autostart_at(RUN_KEY, "/opt/agent-pets/agent-pets", true).unwrap();
+        assert!(autostart_at(RUN_KEY));
+        assert_eq!(autostart_value(RUN_KEY).as_deref(), Some("\"/opt/agent-pets/agent-pets\" --autostart"));
+        set_autostart_at(RUN_KEY, "", false).unwrap();
+        assert!(!autostart_at(RUN_KEY));
+        set_autostart_at(RUN_KEY, "", false).unwrap();
+        std::env::remove_var("XDG_CONFIG_HOME");
     }
 }

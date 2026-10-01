@@ -42,8 +42,8 @@ pub fn show(app: &AppHandle, target: Target, x: f64, y: f64) -> tauri::Result<()
     let refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = built.iter().map(|b| b.as_ref()).collect();
     let menu = Menu::with_items(app, &refs)?;
     *app.state::<MenuTarget>().0.lock().unwrap() = Some(target);
-    let raw = shell.stage.load(std::sync::atomic::Ordering::Relaxed);
-    let Some(win) = app.webview_windows().into_values().find(|w| w.hwnd().map(|h| h.0 as isize == raw).unwrap_or(false)) else { return Ok(()) };
+    // the stage window is rebuilt under new labels (stage0, stage1…) after an Explorer restart
+    let Some(win) = app.webview_windows().into_values().find(|w| w.label().starts_with("stage")) else { return Ok(()) };
     win.as_ref().window().popup_menu_at(&menu, Position::Logical(LogicalPosition::new(x, y)))
 }
 

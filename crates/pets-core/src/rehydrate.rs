@@ -43,9 +43,9 @@ mod tests {
     #[test]
     fn claude_transcripts_only_for_live_sessions_codex_always() {
         let files = vec![
-            PathBuf::from(r"C:\u\.claude\projects\p\live-1.jsonl"),
-            PathBuf::from(r"C:\u\.claude\projects\p\dead-2.jsonl"),
-            PathBuf::from(r"C:\u\.codex\sessions\2026\09\24\rollout-x.jsonl"),
+            PathBuf::from("/u/.claude/projects/p/live-1.jsonl"),
+            PathBuf::from("/u/.claude/projects/p/dead-2.jsonl"),
+            PathBuf::from("/u/.codex/sessions/2026/09/24/rollout-x.jsonl"),
         ];
         let live: std::collections::HashSet<String> = ["live-1".to_string()].into();
         let kept = keep_for_rehydration(&files, &live);
@@ -55,8 +55,8 @@ mod tests {
     #[test]
     fn subagents_come_back_only_with_their_live_parent() {
         let files = vec![
-            PathBuf::from(r"C:\u\.claude\projects\p\live-1\subagents\agent-a.jsonl"),
-            PathBuf::from(r"C:\u\.claude\projects\p\dead-2\subagents\agent-b.jsonl"),
+            PathBuf::from("/u/.claude/projects/p/live-1/subagents/agent-a.jsonl"),
+            PathBuf::from("/u/.claude/projects/p/dead-2/subagents/agent-b.jsonl"),
         ];
         let live: std::collections::HashSet<String> = ["live-1".to_string()].into();
         assert_eq!(keep_for_rehydration(&files, &live), vec![files[0].clone()]);

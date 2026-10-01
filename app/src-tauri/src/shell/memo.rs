@@ -1,8 +1,11 @@
 //! Cached value for a key. Finding `TaskbarFrame` through UI Automation traverses the taskbar tree
 //! (including our embedded WebView2), so do it once per taskbar handle instead of every second.
+//! Windows-only (UI Automation); tests keep it compiled everywhere.
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub struct KeyedCache<K, V> { key: Option<K>, val: Option<V> }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 impl<K: PartialEq + Copy, V: Clone> KeyedCache<K, V> {
     pub fn new() -> Self { KeyedCache { key: None, val: None } }
 

@@ -39,7 +39,12 @@ pub struct Status { pub installed: bool, pub detail: String }
 
 pub fn claude_settings(home: &Path) -> PathBuf { home.join(".claude").join("settings.json") }
 pub fn pets_dir(home: &Path) -> PathBuf { home.join(".agent-pets") }
-pub fn installed_hook(home: &Path) -> PathBuf { pets_dir(home).join("hook.exe") }
+/// Hook binary name: `hook.exe` on Windows, `hook` elsewhere.
+#[cfg(windows)]
+pub const HOOK_FILE: &str = "hook.exe";
+#[cfg(not(windows))]
+pub const HOOK_FILE: &str = "hook";
+pub fn installed_hook(home: &Path) -> PathBuf { pets_dir(home).join(HOOK_FILE) }
 fn statusline_original(home: &Path) -> PathBuf { pets_dir(home).join("statusline-original.json") }
 
 /// First line of our plugin: a file without it is not ours and is left untouched.
@@ -519,8 +524,8 @@ fn is_zcode(e: &serde_json::Value) -> bool {
     e["hooks"].as_array().is_some_and(|a| !a.is_empty() && a.iter().all(|h| {
         let args = h["args"].as_array();
         let has = |w: &str| args.is_some_and(|a| a.iter().any(|x| x.as_str() == Some(w)));
-        let cmd = h["command"].as_str().unwrap_or("").to_lowercase();
-        has("--agent") && has("zcode") && (cmd.ends_with(".agent-pets\\hook.exe") || cmd.ends_with(".agent-pets/hook.exe"))
+        let cmd = h["command"].as_str().unwrap_or("").to_lowercase().replace('\\', "/");
+        has("--agent") && has("zcode") && (cmd.ends_with(".agent-pets/hook.exe") || cmd.ends_with(".agent-pets/hook"))
     }))
 }
 
@@ -702,8 +707,8 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
     }
 }
 
-/// Copy `hook.exe` to `~/.agent-pets` only if absent or contents differ (e.g. new version).
-/// Also for the door: `hook.exe report` has a stable path at `~/.agent-pets/hook.exe` (spec 8).
+/// Copy the hook to `~/.agent-pets` only if absent or contents differ (e.g. new version).
+/// Also for the door: `hook report` has a stable path at `~/.agent-pets/<hook>` (spec 8).
 pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, Error> {
     let dst = installed_hook(home);
     if let Some(src) = src.filter(|s| s.is_file()) {
@@ -711,9 +716,19 @@ pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf
         if std::fs::read(&dst).ok().as_deref() != Some(new.as_slice()) {
             std::fs::create_dir_all(pets_dir(home)).map_err(|e| e.to_string())?;
             std::fs::write(&dst, new).map_err(|e| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), dst.display()))?;
+            #[cfg(unix)]
+            std::fs::set_permissions(&dst, std::os::unix::fs::PermissionsExt::from_mode(0o755)).map_err(|e| e.to_string())?;
         }
     }
-    if dst.is_file() { Ok(dst) } else { Err(tr(lang, "Brak hook.exe w instalacji Agent Pets; zainstaluj aplikację ponownie.", "hook.exe is missing from the Agent Pets install; reinstall the app.").into()) }
+    if dst.is_file() {
+        Ok(dst)
+    } else {
+        let msg = match lang {
+            Lang::Pl => format!("Brak {HOOK_FILE} w instalacji Agent Pets; zainstaluj aplikację ponownie."),
+            Lang::En => format!("{HOOK_FILE} is missing from the Agent Pets install; reinstall the app."),
+        };
+        Err(msg.into())
+    }
 }
 
 /// Restores the `statusLine` that was replaced by our former statusline pass-through (limits now come from the
@@ -1130,11 +1145,11 @@ mod tests {
         for ev in COPILOT_EVENTS {
             let entry = &hooks[ev][0];
             assert_eq!(entry["type"], "command");
-            assert!(entry["command"].as_str().unwrap().ends_with(&format!("hook.exe --agent copilot --event {ev}")), "{entry}");
+            assert!(entry["command"].as_str().unwrap().ends_with(&format!("{HOOK_FILE} --agent copilot --event {ev}")), "{entry}");
             assert!(entry["powershell"].as_str().unwrap().starts_with("& '"), "{entry}");
             assert_eq!(entry["timeoutSec"], 5);
         }
-        assert!(installed_hook(h.path()).is_file(), "hook.exe at a stable path");
+        assert!(installed_hook(h.path()).is_file(), "hook at a stable path");
         assert_eq!(std::fs::read_dir(copilot_hooks(h.path()).parent().unwrap()).unwrap().count(), 1, "no temporary files");
         assert!(status(AppId::Copilot, h.path(), Lang::Pl).installed);
         disable(AppId::Copilot, h.path(), Lang::Pl).unwrap();
@@ -1181,7 +1196,7 @@ mod tests {
             let group = &ours[ev][0];
             let hook = if ev.ends_with("ToolUse") { &group["hooks"][0] } else { group };
             let cmd = hook["command"].as_str().unwrap_or_else(|| panic!("{ev}: {group}"));
-            assert!(cmd.ends_with(&format!("hook.exe --agent antigravity --event {ev}")), "{cmd}");
+            assert!(cmd.ends_with(&format!("{HOOK_FILE} --agent antigravity --event {ev}")), "{cmd}");
             assert_eq!((hook["type"].as_str(), &hook["timeout"]), (Some("command"), &json!(5)), "{ev}");
             assert_eq!(group.get("matcher").and_then(|m| m.as_str()), if ev.ends_with("ToolUse") { Some("*") } else { None }, "{ev}");
         }
@@ -1457,7 +1472,7 @@ mod tests {
         for ev in CURSOR_EVENTS {
             let a = v["hooks"][ev].as_array().unwrap();
             assert_eq!(a.len(), 1, "{ev}");
-            assert!(a[0]["command"].as_str().unwrap().ends_with(&format!("hook.exe --agent cursor --event {ev}")), "{ev}");
+            assert!(a[0]["command"].as_str().unwrap().ends_with(&format!("{HOOK_FILE} --agent cursor --event {ev}")), "{ev}");
             assert_eq!(a[0]["timeout"], json!(5));
         }
         assert!(!f.with_file_name("hooks.json.agent-pets.bak").exists(), "there was nothing to back up");
@@ -1533,7 +1548,7 @@ mod tests {
         for ev in GROK_EVENTS {
             let group = &v["hooks"][ev][0];
             let cmd = &group["hooks"][0];
-            assert!(cmd["command"].as_str().unwrap().ends_with(&format!("hook.exe --agent grok --event {ev}")), "{ev}");
+            assert!(cmd["command"].as_str().unwrap().ends_with(&format!("{HOOK_FILE} --agent grok --event {ev}")), "{ev}");
             assert_eq!((cmd["type"].as_str(), &cmd["timeout"]), (Some("command"), &json!(5)), "{ev}");
             let tool = matches!(ev, "PreToolUse" | "PostToolUse" | "PostToolUseFailure");
             assert_eq!(group.get("matcher").and_then(|m| m.as_str()), tool.then_some("*"), "{ev}");
@@ -1688,6 +1703,7 @@ mod tests {
             let src = hook_src(t.path());
             for id in [AppId::Cursor, AppId::Grok, AppId::Zcode] { enable(id, &h, Some(&src), Lang::Pl).unwrap(); }
             let hook = installed_hook(&h).to_string_lossy().into_owned();
+            #[cfg_attr(not(windows), allow(unused_variables))]
             let c = rd(&cursor_hooks_path(&h))["hooks"]["stop"][0]["command"].as_str().unwrap().to_string();
             let g = rd(&grok_hooks(&h))["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap().to_string();
             // Cursor runs hooks through PowerShell (verified live): `"path" --agent` is a syntax error there

@@ -2,6 +2,7 @@
 
 - [Requirements](#requirements)
 - [Build and test](#build-and-test)
+- [Linux](#linux)
 - [Run in development](#run-in-development)
 - [pets-cli](#pets-cli)
 - [Connect Claude Code without the wizard](#connect-claude-code-without-the-wizard)
@@ -12,7 +13,7 @@
 
 ## Requirements
 
-- Windows 11
+- Windows 11, or Linux with X11/XWayland (see [Linux](#linux))
 - [Rust](https://rustup.rs) 1.93 or newer (MSVC toolchain)
 - [Node.js](https://nodejs.org) 22 and [pnpm](https://pnpm.io) 10
 - Optional: Python 3, only for the fixture anonymizer in `tools/`
@@ -37,6 +38,25 @@ pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
 ```
 
 It lands in `target\release\bundle\nsis\`. The config override turns off signing the update files, which needs the release key only the maintainer has.
+
+## Linux
+
+The app also builds and runs on Linux (GTK + WebKitGTK through X11/XWayland; `deb` and `AppImage` bundles come from `app/src-tauri/tauri.linux.conf.json`). Build and test like on Windows, minus the `.exe` suffixes; `pnpm tauri build` in `app/` produces the packages in `target/release/bundle/`.
+
+The stage is not embedded in a taskbar (X11 has none): it is an always-on-top strip flush against the panel edge of the work area. The app forces `GDK_BACKEND=x11` at startup, because `gtk move()` is ignored on Wayland.
+
+### To do: window rules for compositors
+
+Compositors draw their own border and shadow around managed windows (the panel, settings), which look wrong around the app's overlays. Users should add rules to disable them. This is a manual step for now - the app should detect the compositor and offer to install them (e.g. into Hyprland's config) in a future release.
+
+Hyprland 0.55+ (Lua config, e.g. omarchy `~/.config/hypr/hyprland.lua`); the window class is `Agent-pets`:
+
+```lua
+o.window({ class = "^Agent-pets$" }, { border_size = 0, no_shadow = true })
+o.window({ class = "^Agent-pets$", title = "^agent-pets-(stage|bubbles|tooltip)$" }, { no_focus = true, pin = true })
+```
+
+`pin` keeps the strip on every workspace, like a real taskbar. For older Hyprland (hyprlang `windowrulev2`) or other compositors, the equivalent is `noborder`, `noshadow`, `nofocus`, and `pin` rules for the same class and titles.
 
 ## Run in development
 

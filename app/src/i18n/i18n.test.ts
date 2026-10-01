@@ -67,7 +67,7 @@ describe('i18n', () => {
     expect(nsh.charCodeAt(0)).not.toBe(0xfeff);
     const found = [...nsh.matchAll(/^LangString (\w+) \$\{LANG_POLISH\} "/gm)].map(m => m[1]);
     expect(found.sort()).toEqual([...keys].sort());
-    const conf = JSON.parse(readFileSync(join(__dirname, '..', '..', 'src-tauri', 'tauri.conf.json'), 'utf8'));
+    const conf = JSON.parse(readFileSync(join(__dirname, '..', '..', 'src-tauri', 'tauri.windows.conf.json'), 'utf8'));
     expect(conf.bundle.windows.nsis.customLanguageFiles).toEqual({ Polish: 'nsis/Polish.nsh' });
   });
 });

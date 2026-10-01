@@ -33,6 +33,14 @@ impl ProcTable {
         ProcTable { procs, live: true }
     }
 
+    /// Linux: the `/proc` snapshot carries creation times already, so no live lookups are needed.
+    #[cfg(not(windows))]
+    pub fn snapshot() -> ProcTable {
+        let procs = crate::pid::process_list().into_iter()
+            .map(|(pid, parent, exe)| (pid, Proc { pid, parent, exe, created: crate::pid::process_created(pid) })).collect();
+        ProcTable { procs, live: false }
+    }
+
     pub fn get(&self, pid: u32) -> Option<&Proc> { self.procs.get(&pid) }
 
     /// Creation time (FILETIME); absent if it cannot be checked (e.g. access denied).
@@ -47,20 +55,23 @@ impl ProcTable {
 }
 
 /// Program by file name. Deliberately exclude `claude.exe`: both the CLI and Claude app use it (spike S3).
+/// Linux process names carry no `.exe` suffix; X11 terminal emulators map to `App::Terminal`.
 pub fn app_of_exe(exe: &str) -> Option<App> {
     let e = exe.to_ascii_lowercase();
-    Some(match e.as_str() {
-        "t3 code.exe" | "t3code.exe" => App::T3code,
-        "code.exe" | "code - insiders.exe" => App::Vscode,
-        "cursor.exe" => App::Cursor,
+    let e = e.strip_suffix(".exe").unwrap_or(&e);
+    Some(match e {
+        "t3 code" | "t3code" => App::T3code,
+        "code" | "code - insiders" | "code-oss" | "vscodium" => App::Vscode,
+        "cursor" => App::Cursor,
         // since 2.0: the "Antigravity" app and a separate "Antigravity IDE"
-        "antigravity.exe" | "antigravity ide.exe" => App::Antigravity,
-        "zed.exe" => App::Zed,
+        "antigravity" | "antigravity ide" => App::Antigravity,
+        "zed" => App::Zed,
         // verified live: %LOCALAPPDATA%\Programs\ZCode\ZCode.exe
-        "zcode.exe" => App::Zcode,
-        "idea64.exe" | "pycharm64.exe" | "webstorm64.exe" | "goland64.exe" | "rider64.exe" | "clion64.exe"
-            | "rustrover64.exe" | "phpstorm64.exe" => App::Jetbrains,
-        "windowsterminal.exe" => App::Terminal,
+        "zcode" => App::Zcode,
+        "idea64" | "pycharm64" | "webstorm64" | "goland64" | "rider64" | "clion64" | "rustrover64" | "phpstorm64"
+            | "idea" | "pycharm" | "webstorm" | "goland" | "rider" | "clion" | "rustrover" | "phpstorm" => App::Jetbrains,
+        "windowsterminal" | "gnome-terminal-server" | "gnome-terminal" | "konsole" | "kitty" | "alacritty"
+            | "foot" | "footclient" | "wezterm-gui" | "wezterm" | "ghostty" | "xterm" => App::Terminal,
         _ => return None,
     })
 }
@@ -176,6 +187,15 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[test]
+    fn the_snapshot_knows_this_process_and_its_parent() {
+        let t = ProcTable::snapshot();
+        let me = t.get(std::process::id()).expect("current process in snapshot");
+        assert_eq!(Some(me.parent), crate::pid::process_entry(std::process::id()).map(|(p, _)| p));
+        assert!(t.created(std::process::id()).is_some());
+    }
+
+    #[cfg(not(windows))]
     #[test]
     fn the_snapshot_knows_this_process_and_its_parent() {
         let t = ProcTable::snapshot();

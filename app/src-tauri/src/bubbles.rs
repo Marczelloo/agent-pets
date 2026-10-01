@@ -6,7 +6,7 @@ use crate::shell::{self, placement::Rect, Shell};
 use serde::{Deserialize, Serialize};
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -74,9 +74,15 @@ pub struct Placed { pub offset: f64, pub above: bool }
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let w = WebviewWindowBuilder::new(app, "bubbles", WebviewUrl::App("bubbles.html".into()))
         .title("agent-pets-bubbles").inner_size(400.0, 80.0).decorations(false).transparent(true)
-        .always_on_top(true).skip_taskbar(true).resizable(false).shadow(false).focused(false).visible(false)
+        .always_on_top(true).skip_taskbar(true)
+        // Linux: `resizable(false)` freezes GTK size hints and later resizing is ignored
+        .resizable(cfg!(target_os = "linux")).shadow(false).focused(false).visible(false)
         .build()?;
+    // Linux: GTK panics when a not-yet-realized window gets an input region; shell routes it safely.
+    #[cfg(windows)]
     w.set_ignore_cursor_events(true)?;
+    #[cfg(not(windows))]
+    shell::set_passthrough(&w, true);
     shell::no_activate(&w);
     spawn_pointer(app.clone());
     Ok(())
@@ -100,8 +106,7 @@ pub fn bubbles_place(app: AppHandle, state: State<Bubbles>, shell: State<Shell>,
     let (stage, monitor, scale) = shell.stage_geom()?;
     let win = app.get_webview_window("bubbles")?;
     let b = band(stage, monitor, (w * scale).round() as i32, (h * scale).round() as i32, (MARGIN_CSS * scale).round() as i32);
-    let _ = win.set_size(PhysicalSize::new((b.rect.right - b.rect.left).max(1) as u32, (b.rect.bottom - b.rect.top).max(1) as u32));
-    let _ = win.set_position(PhysicalPosition::new(b.rect.left, b.rect.top));
+    shell::place_window(&win, b.rect, true);
     let mut s = state.inner.lock().unwrap();
     if !s.shown { shell::show_no_activate(&win); s.shown = true; state.wake.notify_one(); }
     Some(Placed { offset: b.offset as f64 / scale, above: b.above })

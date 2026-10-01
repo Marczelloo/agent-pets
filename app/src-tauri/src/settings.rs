@@ -36,7 +36,9 @@ impl SettingsState {
     }
 }
 
-pub fn home() -> PathBuf { std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_else(std::env::temp_dir) }
+pub fn home() -> PathBuf {
+    std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from).unwrap_or_else(std::env::temp_dir)
+}
 
 #[derive(Serialize, Clone, Debug)]
 pub struct SettingsView { pub settings: Settings, pub first_run: bool, pub load_error: Option<String>, pub lang: Lang, pub system_lang: Lang }
@@ -97,16 +99,20 @@ fn set_app(s: &mut Settings, id: AppId, on: bool) {
     }
 }
 
-/// First existing `hook.exe` candidate: installed resources, program directory, release build next to debug.
+/// First existing hook candidate: installed resources, program directory, release build next to debug.
 pub fn pick_hook(candidates: &[PathBuf]) -> Option<PathBuf> { candidates.iter().find(|p| p.is_file()).cloned() }
 
+/// Hook file name (`hook.exe` on Windows, `hook` elsewhere).
+pub fn hook_file() -> &'static str { pets_core::integrations::HOOK_FILE }
+
 pub fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
+    let hook = hook_file();
     let mut out = Vec::new();
-    if let Ok(r) = app.path().resource_dir() { out.push(r.join("resources").join("hook.exe")); out.push(r.join("hook.exe")); }
+    if let Ok(r) = app.path().resource_dir() { out.push(r.join("resources").join(hook)); out.push(r.join(hook)); }
     if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
-        out.push(dir.join("hook.exe"));
-        // `target/debug/agent-pets.exe` in development builds; hook built in release mode
-        if let Some(target) = dir.parent() { out.push(target.join("release").join("hook.exe")); }
+        out.push(dir.join(hook));
+        // `target/debug/agent-pets` in development builds; hook built in release mode
+        if let Some(target) = dir.parent() { out.push(target.join("release").join(hook)); }
     }
     out
 }

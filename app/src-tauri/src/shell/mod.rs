@@ -3,7 +3,20 @@ pub mod memo;
 pub mod menu;
 pub mod placement;
 pub mod pointer;
-mod taskbar;
+#[cfg(windows)]
+mod taskbar_windows;
+#[cfg(target_os = "linux")]
+mod taskbar_linux;
+#[cfg(windows)]
+use taskbar_windows as taskbar;
+#[cfg(target_os = "linux")]
+use taskbar_linux as taskbar;
+/// GTK reads (widget visibility, monitor queries) must run on the main thread on Linux.
+#[cfg(target_os = "linux")]
+pub use taskbar_linux::on_main;
+/// Windows: window calls are thread-safe, run inline.
+#[cfg(windows)]
+pub fn on_main<T>(f: impl FnOnce() -> T) -> Option<T> { Some(f()) }
 
 use pets_core::settings::{Align, Position, Stage};
 use placement::{Anchor, Mode};
@@ -111,13 +124,29 @@ pub fn remeasure(pending: &[Cmd], age: Option<Duration>) -> bool {
 struct Moving { anchor: Anchor, at: f64, grab: Option<i32> }
 
 pub fn build_stage(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
-    WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+    let win = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("agent-pets-stage").inner_size(400.0, 48.0).decorations(false).transparent(true)
-        .always_on_top(true).skip_taskbar(true).resizable(false).shadow(false).focused(false).visible(false)
-        .build()
+        .always_on_top(true).skip_taskbar(true)
+        // Linux: `resizable(false)` freezes GTK size hints (min=max) at the natural webview size
+        // and later `set_size` is ignored; the undecorated strip is not user-resizable in practice anyway.
+        .resizable(cfg!(target_os = "linux")).shadow(false).focused(false).visible(false)
+        .build()?;
+    #[cfg(target_os = "linux")]
+    taskbar::register(app.clone(), &win);
+    Ok(win)
 }
 
+/// Window id for the platform backend (HWND number on Windows, registry id on Linux).
+#[cfg(windows)]
 fn raw(w: &WebviewWindow) -> isize { w.hwnd().map(|h| h.0 as isize).unwrap_or(0) }
+#[cfg(not(windows))]
+fn raw(w: &WebviewWindow) -> isize { taskbar::id_of(w) }
+
+/// Stage handle for the platform backend.
+#[cfg(windows)]
+fn handle_of(s: &AtomicIsize) -> taskbar::Handle { taskbar::hwnd(s.load(Ordering::Relaxed)) }
+#[cfg(not(windows))]
+fn handle_of(s: &AtomicIsize) -> taskbar::Handle { taskbar::hwnd(s.load(Ordering::Relaxed)) }
 
 impl Shell {
     pub fn start(app: &AppHandle) -> tauri::Result<Shell> {
@@ -138,7 +167,7 @@ impl Shell {
     pub fn hello(&self) { let _ = self.tx.send(Cmd::Hello); }
     pub fn settings_changed(&self) { let _ = self.tx.send(Cmd::Settings); }
     pub fn start_move(&self) { let _ = self.tx.send(Cmd::Move(true)); }
-    fn hwnd(&self) -> windows::Win32::Foundation::HWND { taskbar::hwnd(self.stage.load(Ordering::Relaxed)) }
+    fn hwnd(&self) -> taskbar::Handle { handle_of(&self.stage) }
     pub fn floating(&self) -> bool { self.mode.load(Ordering::Relaxed) == pointer::FLOATING }
     pub fn layout(&self) -> Option<Layout> { *self.layout.lock().unwrap() }
 
@@ -180,32 +209,69 @@ pub fn monitors() -> Vec<placement::MonitorInfo> { taskbar::monitors().into_iter
 /// Fullscreen game, movie, or presentation.
 pub fn fullscreen_app() -> bool { taskbar::fullscreen_app() }
 
+/// Resolve the Hyprland IPC socket path once, while single-threaded (startup).
+#[cfg(not(windows))]
+pub fn init_hyprland_socket() { taskbar::init_hyprland_socket() }
+
+/// Pid of the compositor's active window (Linux): "is the session window in the foreground".
+#[cfg(not(windows))]
+pub fn active_window_pid() -> Option<u32> { taskbar::active_window_pid() }
+
 pub fn screen_size() -> (i32, i32) { let r = taskbar::screen_rect(); (r.right, r.bottom) }
 
 /// Taskbar rectangle, screen, and taskbar DPI scale (for placing the panel above it).
+/// Linux: the strip stands in for the taskbar.
+#[cfg(windows)]
 pub fn taskbar_geometry() -> Option<(placement::Rect, placement::Rect, f64)> {
     let t = taskbar::tray()?;
     Some((taskbar::rect_of(t)?, taskbar::screen_rect(), taskbar::scale_of(t)))
 }
+#[cfg(not(windows))]
+pub fn taskbar_geometry() -> Option<(placement::Rect, placement::Rect, f64)> { taskbar::taskbar_geometry() }
 
-pub fn show_no_activate(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::show_no_activate(h); } }
+/// Window id for the platform backend (HWND number on Windows, registry id on Linux).
+#[cfg(windows)]
+fn win_id(w: &WebviewWindow) -> isize { w.hwnd().map(|h| h.0 as isize).unwrap_or(0) }
+#[cfg(not(windows))]
+fn win_id(w: &WebviewWindow) -> isize { taskbar::id_of(w) }
 
-/// Hide a window shown by `show_no_activate`. Must use Win32: Tauri does not know it was shown
-/// by `ShowWindow`, considers it hidden, and its `hide()` does nothing.
+pub fn show_no_activate(w: &WebviewWindow) { let h = win_id(w); if h != 0 { taskbar::show_no_activate(taskbar::hwnd(h)); } }
+
+/// Hide a window shown by `show_no_activate`. On Windows it must use Win32: Tauri does not know it was shown
+/// by `ShowWindow`, considers it hidden, and its `hide()` does nothing. On Linux Tauri did the showing.
+#[cfg(windows)]
 pub fn hide(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::hide(h); } }
+#[cfg(not(windows))]
+pub fn hide(w: &WebviewWindow) { let h = win_id(w); if h != 0 { taskbar::hide(taskbar::hwnd(h)); } }
 
 /// Show without activation: clicking it does not take focus from the active window (bubble window).
-pub fn no_activate(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::no_activate(h); } }
+pub fn no_activate(w: &WebviewWindow) { let h = win_id(w); if h != 0 { taskbar::no_activate(taskbar::hwnd(h)); } }
 
 /// Pass pointer events through the entire window (bubbles: yes outside bubbles, no over a bubble).
-pub fn set_passthrough(w: &WebviewWindow, on: bool) { if let Ok(h) = w.hwnd() { taskbar::passthrough(h, on); } }
+pub fn set_passthrough(w: &WebviewWindow, on: bool) { let h = win_id(w); if h != 0 { taskbar::passthrough(taskbar::hwnd(h), on); } }
+
+/// Size and position a window in physical pixels. On Linux the taskbar backend goes through GTK
+/// (`gtk_window`, type hints), so the call is routed to the main thread when it arrives from
+/// a background thread (bubble clicks run on their own thread); tao setters are channel-based.
+pub fn place_window(w: &WebviewWindow, r: placement::Rect, dock: bool) {
+    #[cfg(windows)]
+    {
+        let _ = w.set_size(tauri::PhysicalSize::new((r.right - r.left).max(1) as u32, (r.bottom - r.top).max(1) as u32));
+        let _ = w.set_position(tauri::PhysicalPosition::new(r.left, r.top));
+    }
+    #[cfg(not(windows))]
+    {
+        let w = w.clone();
+        let _ = taskbar::on_main(move || taskbar::place(&w, r, dock));
+    }
+}
 
 /// Cursor relative to the window in CSS pixels and left-button state.
 pub struct Cursor { pub x: f64, pub y: f64, pub left: bool }
 
 pub fn cursor_in(w: &WebviewWindow) -> Option<Cursor> {
-    let h = w.hwnd().ok()?;
-    let (x, y, left) = taskbar::cursor_rel(h)?;
+    let h = win_id(w);
+    let (x, y, left) = taskbar::cursor_rel(taskbar::hwnd(h))?;
     Some(Cursor { x, y, left })
 }
 
@@ -277,7 +343,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         }
         let hw = taskbar::hwnd(h);
         let since = embed_failed_at.map(|t| t.elapsed().as_millis() as u64).unwrap_or(0);
-        match attach_or_retry(parent, bar.map(|b| b.0 as isize), embed_failed, since) {
+        match attach_or_retry(parent, bar.map(|b| b.raw()), embed_failed, since) {
             Attach::Embed(b) => {
                 // from the floating window: in the taskbar, clicks are always ours
                 pointer::PASSTHROUGH.store(false, Ordering::Relaxed);
@@ -350,9 +416,9 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         last_rect = None;
         if moving.is_none() { set_pmode(pointer::NORMAL); }
         let Some(b) = bar else { continue };
-        let cached = bar_metrics.filter(|(h, _)| !fresh && *h == b.0 as isize).map(|(_, m)| m);
+        let cached = bar_metrics.filter(|(h, _)| !fresh && *h == b.raw()).map(|(_, m)| m);
         let Some(m) = cached.or_else(|| taskbar::metrics(b, uia.as_ref())) else { continue };
-        bar_metrics = Some((b.0 as isize, m));
+        bar_metrics = Some((b.raw(), m));
         let width = (m.tray.right - m.tray.left).max(1) as f64;
         let px_of = |at: f64| m.tray.left + (at * width).round() as i32;
         for c in std::mem::take(&mut pending) {
