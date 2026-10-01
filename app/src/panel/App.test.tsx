@@ -1,7 +1,7 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { PanelView } from './App';
-import type { Session, UpdateStatus } from '../types';
+import type { NotificationEntry, Session, UpdateStatus } from '../types';
 
 const sess: Session = {
   id: 'a', agent: 'claude', origin: 'cli', title: '<img src=x onerror=alert(1)>', cwd: 'C:\\work\\a', state: 'needs_you',
@@ -105,5 +105,31 @@ describe('PanelView', () => {
     expect(view(1)).toContain('Cofnij');
     expect(view(3)).toContain('Usunięto 3');
     expect(view(0)).not.toContain('Cofnij');
+  });
+  describe('notification center', () => {
+    const note = (o: Partial<NotificationEntry>): NotificationEntry => ({ id: 1, kind: 'update', title: 'Dostępna wersja 1.2.3', body: '', session_id: null, at: 0, read: false, ...o });
+    const view = (n: NotificationEntry[], open = false) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={60_000} status={null}
+      focusId={null} onJump={() => {}} animate={false} notifications={n} notificationsOpen={open} onNotificationsSeen={() => {}} onNotificationRemove={() => {}} onNotificationsClear={() => {}} onNotificationOpen={() => {}} />);
+    it('shows a bell with the unread count', () => {
+      const html = view([note({ id: 1 }), note({ id: 2, read: true }), note({ id: 3, kind: 'needs_you', session_id: 'a' })]);
+      expect(html).toMatch(/class="badge"[^>]*>2</);
+      expect(html).not.toContain('class="inbox"');
+    });
+    it('lists agent events and updates when open, escaping their text', () => {
+      const html = view([note({ id: 1, title: '<b>x</b>' }), note({ id: 2, kind: 'needs_you', session_id: 'a', title: 'Claude czeka' })], true);
+      expect(html).toContain('class="inbox"');
+      expect(html).toContain('&lt;b&gt;x');
+      expect(html).not.toContain('<b>x');
+      expect(html).toContain('Czeka na Ciebie');
+      expect(html).toContain('Aktualizacja');
+      expect(html).toContain('Wyczyść wszystko');
+      expect(html).not.toContain('class="limits"');
+    });
+    it('has an empty state and no bell without a handler', () => {
+      expect(view([], true)).toContain('Brak powiadomień');
+      const plain = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
+      expect(plain).not.toContain('class="badge"');
+      expect(plain).not.toContain('bell');
+    });
   });
 });

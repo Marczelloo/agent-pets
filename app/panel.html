@@ -26,6 +26,22 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .gear:hover{color:var(--txt)}
 .gear svg{display:block}
 .gear+.gear{margin-left:4px}
+.bell{position:relative}
+.bell.on{color:var(--txt)}
+.bell .badge{position:absolute;top:-2px;right:-1px;min-width:14px;height:14px;box-sizing:border-box;padding:0 3px;border-radius:7px;background:var(--hot);color:#fff;font:600 10px/14px "Segoe UI",system-ui,sans-serif;text-align:center}
+.inbox{flex:1;overflow:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:6px}
+.inbox .tools{justify-content:space-between}
+.inbox ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.note{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:8px 10px;background:var(--card);border:1px solid var(--line);border-radius:6px}
+.note.unread{box-shadow:inset 3px 0 0 var(--claude)}
+.note.needs_you.unread{box-shadow:inset 3px 0 0 var(--needs)}
+.note.limit.unread{box-shadow:inset 3px 0 0 var(--hot)}
+.note .body{min-width:0}
+.note .line1{display:flex;gap:8px;font-size:11px;color:var(--mut)}
+.note .line1 .kind{font-weight:600}
+.note .when{margin-left:auto;white-space:nowrap}
+.note .title{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.note .text{font-size:12px;color:var(--mut);overflow-wrap:anywhere}
 .update{margin:0 12px 8px;padding:8px 10px 8px 12px;background:var(--focus);border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;gap:10px;font-size:12px}
 .update .text{flex:1;min-width:0;overflow-wrap:anywhere}
 .update .bar{flex:0 0 96px}

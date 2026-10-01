@@ -54,7 +54,7 @@ export interface Usage { tokens: number; cost: number; account: Agent | null }
 export interface AgentUsage { agent: Agent; tokens_today: number; cost_today: number }
 export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[] }
 /** Layout from Rust; `mode` and `light` since 0.7 (absent = taskbar, dark). */
-export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean }
+export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean; left_fallback?: boolean; vertical_bar?: boolean }
 export type PointerMsg =
   | { kind: 'move'; x: number; y: number }
   | { kind: 'leave' }
@@ -98,6 +98,9 @@ export type UpdateStatus =
   | { state: 'ready'; version: string }
   /** `verify`: problem with the update itself (panel and settings); otherwise a check error (settings only) */
   | { state: 'error'; message: string; verify: boolean };
+/** Mirrors `notify::center::Entry` (event `pets://notifications`). */
+export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update';
+export interface NotificationEntry { id: number; kind: NotificationKind; title: string; body: string; session_id: string | null; at: number; read: boolean }
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';
 export type StageOrder = 'start' | 'attention' | 'agent';

@@ -82,6 +82,15 @@ export const en: Dict = {
     removed: n => (n === 1 ? 'Removed' : `Removed ${n}`),
     undo: 'Undo',
     stats: 'Statistics',
+    notifications: {
+      title: 'Notifications',
+      empty: 'No notifications',
+      clear: 'Clear all',
+      remove: title => `Remove notification: ${title}`,
+      back: 'Back to sessions',
+      unread: n => `${n} unread`,
+      kind: { needs_you: 'Needs you', done: 'Finished', limit: 'Limit', update: 'Update' },
+    },
     subagents: n => `${n} ${n === 1 ? 'subagent' : 'subagents'}`,
     child: { router: 'Router', background: 'background', runningFor: d => `Running for ${d}` },
     update: {
@@ -235,6 +244,7 @@ export const en: Dict = {
     pos: { right: 'Next to the tray', left: 'On the left', custom: 'Custom', floating: 'Floating' },
     move: 'Move',
     moveDesc: 'Drag the stage to a free spot on the taskbar; Enter or a click outside saves, Esc cancels',
+    verticalBar: 'The taskbar is docked to the side of the screen, so the stage floats beside it. You can drag it elsewhere',
     leftFallback: 'Taskbar icons are aligned left, so the stage stays next to the tray',
     monitor: 'Monitor',
     monitorName: (index, w, h, primary) => `Display ${index} · ${w}×${h}${primary ? ' (main)' : ''}`,

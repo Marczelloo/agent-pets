@@ -1,5 +1,5 @@
 //! Panel above the taskbar: session list, limits, "Jump". Show and hide the window only through the Tauri API.
-use crate::shell::placement::Rect;
+use crate::shell::placement::{self, Rect};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
@@ -30,6 +30,11 @@ pub struct Panel(pub Mutex<PanelToggle>);
 /// If the taskbar is hidden (auto-hide) or unknown: above the bottom edge of the screen.
 pub fn origin(tray: Option<Rect>, screen: Rect, scale: f64) -> (i32, i32) {
     let (w, h, m) = (W * scale, H * scale, MARGIN * scale);
+    // taskbar docked to the left or right edge: beside it, at the bottom
+    if let Some(t) = tray.filter(|t| t.width() < t.height()) {
+        let x = if placement::bar_side(t, screen) == placement::Side::Left { (t.right as f64).max(screen.left as f64) + m } else { (t.left as f64).min(screen.right as f64) - w - m };
+        return (x.round() as i32, (screen.bottom as f64 - h - m).round() as i32);
+    }
     let bottom = match tray {
         Some(t) if t.top > screen.top && t.top < screen.bottom - 2 => t.top,
         _ => screen.bottom,
@@ -136,6 +141,14 @@ mod tests {
     }
 
     const SCREEN: Rect = Rect { left: 0, top: 0, right: 2560, bottom: 1440 };
+
+    #[test]
+    fn panel_opens_beside_a_vertical_taskbar_at_the_bottom() {
+        let left = Rect { left: 0, top: 0, right: 62, bottom: 1440 };
+        assert_eq!(origin(Some(left), SCREEN, 1.0), (62 + 12, 1440 - 540 - 12));
+        let right = Rect { left: 2498, top: 0, right: 2560, bottom: 1440 };
+        assert_eq!(origin(Some(right), SCREEN, 1.0), (2498 - 400 - 12, 1440 - 540 - 12));
+    }
 
     #[test]
     fn panel_sits_above_the_real_taskbar_at_the_right_edge() {

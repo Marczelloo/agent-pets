@@ -55,12 +55,14 @@ interface Props {
   monitors: MonitorInfo[];
   /** left-side mode with no room on the left (icons left-aligned): stage stays near the tray */
   leftFallback: boolean;
+  /** the taskbar is docked to the left or right edge: the stage floats beside it */
+  verticalBar?: boolean;
   onChange: (s: Settings) => void;
   onMove: () => void;
 }
 
 /** Taskbar tab: position, monitor, background, size, spacing, alignment, order, and visible items. */
-export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove }: Props) {
+export function StageTab({ settings: s, monitors, leftFallback, verticalBar = false, onChange, onMove }: Props) {
   const st = s.stage;
   const x = t().stage;
   const set = (patch: Partial<StageSettings>) => onChange({ ...s, stage: { ...st, ...patch } });
@@ -87,6 +89,7 @@ export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove
           <span className="text" />
           <button type="button" onClick={onMove}>{x.move}</button>
         </div>}
+        {verticalBar && st.position !== 'floating' && <p className="desc" role="status">{x.verticalBar}</p>}
         {st.position === 'left' && leftFallback && <p className="desc" role="status">{x.leftFallback}</p>}
         <div className="row">
           <span className="text"><span className="label">{x.monitor}</span></span>

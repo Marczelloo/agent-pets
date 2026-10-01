@@ -1,7 +1,7 @@
 import { LIMIT_AGENTS, clampPct, progressFraction, type LimitAgent } from '../stage/hud';
-import { actionLabel, formatReset, limitName } from '../tooltip/text';
+import { actionLabel, formatAgo, formatReset, limitName } from '../tooltip/text';
 import { isLive, routerHealth } from '../stage/router';
-import type { AgentUsage, Limit, Session, UpdateStatus } from '../types';
+import type { AgentUsage, Limit, NotificationEntry, Session, UpdateStatus } from '../types';
 import { formatTokens } from '../stats/model';
 import { t } from '../i18n';
 import { agentLabel, hostLabel, modelLabel } from '../model-label';
@@ -127,4 +127,14 @@ export function clock(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000)), p = (n: number) => String(n).padStart(2, '0');
   const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60;
   return h ? `${h}:${p(m)}:${p(s % 60)}` : `${m}:${p(s % 60)}`;
+}
+
+/** Unread count for the bell badge. */
+export const unreadCount = (items: readonly NotificationEntry[]): number => items.filter(e => !e.read).length;
+
+/** Time of a notification: "5 min ago" for the first day, then the date. */
+export function notificationTime(at: number, nowMs: number): string {
+  const d = nowMs - at;
+  if (d < 24 * 3_600_000) return formatAgo(Math.max(0, d));
+  return new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }

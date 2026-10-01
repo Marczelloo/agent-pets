@@ -5,6 +5,7 @@ pub struct Rect { pub left: i32, pub top: i32, pub right: i32, pub bottom: i32 }
 
 impl Rect {
     pub fn height(&self) -> i32 { self.bottom - self.top }
+    pub fn width(&self) -> i32 { self.right - self.left }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -163,9 +164,34 @@ pub fn tooltip_pos(anchor_x: i32, stage: Rect, monitor: Rect, pw: i32, ph: i32, 
     (x, if above >= monitor.top { above } else { stage.bottom + gap })
 }
 
-/// Auto-hidden taskbar moves below the screen edge, leaving about 2 px.
+/// Screen edge a taskbar is docked to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side { Left, Right, Top, Bottom }
+
+impl Side { pub fn vertical(self) -> bool { matches!(self, Side::Left | Side::Right) } }
+
+/// Edge of its monitor that the taskbar sits on, judged from its shape and position (an auto-hidden bar
+/// keeps its shape and mostly stays on its side of the monitor's centre).
+pub fn bar_side(bar: Rect, monitor: Rect) -> Side {
+    if bar.width() < bar.height() {
+        if bar.left + bar.right < monitor.left + monitor.right { Side::Left } else { Side::Right }
+    } else if bar.top + bar.bottom < monitor.top + monitor.bottom { Side::Top } else { Side::Bottom }
+}
+
+/// Stage next to a taskbar docked at the left or right edge: the embedded layout assumes a horizontal bar,
+/// so the stage floats in the work area's bottom corner beside it.
+pub fn beside_vertical_bar(work: Rect, side: Side, w_css: f64, h_css: f64, scale: f64) -> Rect {
+    let (w, h, m) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32, (GAP_CSS * scale).round() as i32);
+    let x = if side == Side::Right { work.right - w - m } else { work.left + m };
+    let x = x.clamp(work.left, (work.right - w).max(work.left));
+    let y = (work.bottom - m - h).clamp(work.top, (work.bottom - h).max(work.top));
+    Rect { left: x, top: y, right: x + w, bottom: y + h }
+}
+
+/// Auto-hidden taskbar moves beyond the screen edge, leaving about 2 px.
 pub fn taskbar_visible(tray: Rect, screen: Rect) -> bool {
-    screen.bottom - tray.top > 4 && tray.bottom > screen.top
+    if tray.width() < tray.height() { tray.right.min(screen.right) - tray.left.max(screen.left) > 4 }
+    else { tray.bottom.min(screen.bottom) - tray.top.max(screen.top) > 4 }
 }
 
 #[cfg(test)]
@@ -339,5 +365,35 @@ mod tests {
     fn autohidden_taskbar_is_not_visible() {
         assert!(taskbar_visible(TRAY, SCREEN));
         assert!(!taskbar_visible(Rect { left: 0, top: 1438, right: 2560, bottom: 1486 }, SCREEN));
+        // top bar slid up, vertical bars slid left or right
+        assert!(taskbar_visible(Rect { left: 0, top: 0, right: 2560, bottom: 48 }, SCREEN));
+        assert!(!taskbar_visible(Rect { left: 0, top: -46, right: 2560, bottom: 2 }, SCREEN));
+        assert!(taskbar_visible(Rect { left: 0, top: 0, right: 62, bottom: 1440 }, SCREEN));
+        assert!(!taskbar_visible(Rect { left: -60, top: 0, right: 2, bottom: 1440 }, SCREEN));
+        assert!(!taskbar_visible(Rect { left: 2558, top: 0, right: 2620, bottom: 1440 }, SCREEN));
+    }
+
+    #[test]
+    fn taskbar_side_follows_its_shape_and_place_on_the_monitor() {
+        assert_eq!(bar_side(TRAY, SCREEN), Side::Bottom);
+        assert_eq!(bar_side(Rect { left: 0, top: 0, right: 2560, bottom: 48 }, SCREEN), Side::Top);
+        assert_eq!(bar_side(Rect { left: 0, top: 0, right: 62, bottom: 1440 }, SCREEN), Side::Left);
+        assert_eq!(bar_side(Rect { left: 2498, top: 0, right: 2560, bottom: 1440 }, SCREEN), Side::Right);
+        let second = Rect { left: -1920, top: 139, right: 0, bottom: 1219 };
+        assert_eq!(bar_side(Rect { left: -62, top: 139, right: 0, bottom: 1219 }, second), Side::Right, "secondary monitor left of the primary");
+        assert!(Side::Left.vertical() && Side::Right.vertical() && !Side::Top.vertical() && !Side::Bottom.vertical());
+    }
+
+    #[test]
+    fn the_stage_sits_beside_a_vertical_bar_in_the_work_area_corner() {
+        let work = Rect { left: 62, top: 0, right: 2560, bottom: 1440 };
+        let l = beside_vertical_bar(work, Side::Left, 200.0, 48.0, 1.0);
+        assert_eq!(l, Rect { left: 70, top: 1440 - 8 - 48, right: 270, bottom: 1432 });
+        let right_work = Rect { left: 0, top: 0, right: 2498, bottom: 1440 };
+        let r = beside_vertical_bar(right_work, Side::Right, 200.0, 48.0, 1.5);
+        assert_eq!((r.right, r.bottom, r.right - r.left, r.bottom - r.top), (2498 - 12, 1440 - 12, 300, 72));
+        let wide = beside_vertical_bar(work, Side::Left, 5000.0, 48.0, 1.0);
+        assert!(wide.left >= work.left && wide.right <= work.right + 5000, "never starts left of the work area");
+        assert_eq!(wide.left, work.left);
     }
 }

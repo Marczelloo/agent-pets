@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, formatDuration, petTooltip } from '../tooltip/text';
-import type { Media, Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { accountRows, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, updateBar, usageLine } from './model';
+import type { Media, NotificationEntry, Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
+import { accountRows, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
-import { GearIcon, StatsIcon } from '../ui/icons';
+import { BellIcon, GearIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 import { resolveLang, setLang, setSystemLang, t } from '../i18n';
@@ -34,10 +34,22 @@ interface ViewProps {
   onUndo?: () => void;
   /** what is playing in Windows (`null` when pets do not react to music) */
   media?: Media | null;
+  /** notification center (newest first); the bell appears when the handlers are given */
+  notifications?: NotificationEntry[];
+  /** open the list right away (tests, deep links) */
+  notificationsOpen?: boolean;
+  onNotificationsSeen?: () => void;
+  onNotificationOpen?: (n: NotificationEntry) => void;
+  onNotificationRemove?: (id: number) => void;
+  onNotificationsClear?: () => void;
 }
 
 /** Pure panel view: text through JSX only (React escapes characters), without `innerHTML`. */
-export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null }: ViewProps) {
+export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null,
+  notifications = [], notificationsOpen = false, onNotificationsSeen, onNotificationOpen, onNotificationRemove, onNotificationsClear }: ViewProps) {
+  const [inbox, setInbox] = useState(notificationsOpen);
+  const unread = unreadCount(notifications);
+  const toggleInbox = () => { setInbox(o => !o); if (!inbox && unread > 0) onNotificationsSeen?.(); };
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
   return (
@@ -45,6 +57,10 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
       <header>
         <h1>Agent Pets</h1>
         <span className="count">{t().sessions(sessions.length)}</span>
+        {onNotificationsSeen && <button type="button" className={`gear bell${inbox ? ' on' : ''}`} aria-label={unread ? `${t().panel.notifications.title}: ${t().panel.notifications.unread(unread)}` : t().panel.notifications.title}
+          title={t().panel.notifications.title} aria-pressed={inbox} onClick={toggleInbox}>
+          <BellIcon />{unread > 0 && <span className="badge">{unread > 9 ? '9+' : unread}</span>}
+        </button>}
         {onStats && <button type="button" className="gear" aria-label={t().panel.stats} title={t().panel.stats} onClick={onStats}><StatsIcon /></button>}
         {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}><GearIcon /></button>}
       </header>
@@ -54,6 +70,29 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           aria-valuemin={0} aria-valuemax={100} aria-valuenow={bar.pct}><i style={{ width: `${bar.pct}%` }} /></span>}
         {bar.action && onInstall && <button type="button" onClick={onInstall}>{bar.action}</button>}
       </div>}
+      {inbox ? <section className="inbox" aria-label={t().panel.notifications.title}>
+        <div className="tools">
+          <button type="button" className="quiet" onClick={toggleInbox}>← {t().panel.notifications.back}</button>
+          {notifications.length > 0 && onNotificationsClear && <button type="button" className="quiet" onClick={onNotificationsClear}>{t().panel.notifications.clear}</button>}
+        </div>
+        {notifications.length === 0 && <p className="empty">{t().panel.notifications.empty}</p>}
+        <ul>
+          {notifications.map(n => (
+            <li key={n.id} className={`note ${n.kind}${n.read ? '' : ' unread'}`}>
+              <div className="body">
+                <div className="line1"><span className="kind">{t().panel.notifications.kind[n.kind]}</span><span className="when">{notificationTime(n.at, nowMs)}</span></div>
+                <div className="title">{n.title}</div>
+                {n.body && <div className="text">{n.body}</div>}
+              </div>
+              <div className="actions">
+                {onNotificationOpen && (n.session_id || n.kind === 'update') && <button type="button" onClick={() => onNotificationOpen(n)}>{n.kind === 'update' ? t().panel.update.install : t().panel.open}</button>}
+                {onNotificationRemove && <button type="button" className="remove" aria-label={t().panel.notifications.remove(n.title)}
+                  title={t().panel.notifications.remove(n.title)} onClick={() => onNotificationRemove(n.id)}>✕</button>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section> : <>
       <section className="limits" aria-label={t().panel.limits}>
         {limitRows(snap.limits, nowMs).map(r => (
           <div className="limit" key={`${r.agent}-${r.window}`}>
@@ -106,7 +145,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
             {kids.map(c => <SubagentRow key={c.id} c={c} nowMs={nowMs} focus={focusId === c.id} animate={animate} pets={pets} />)}
           </ul>}
         </div>); })}
-      </section>
+      </section></>}
       {undo && undo.ids.length > 0 && <footer className="undo" role="status">
         <span>{t().panel.removed(undo.ids.length)}</span>
         {onUndo && <button type="button" onClick={onUndo}>{t().panel.undo}</button>}
@@ -144,6 +183,7 @@ export default function App() {
   const [shown, setShown] = useState(false);
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
   const [media, setMedia] = useState<Media>({ playing: false, app: null });
+  const [notes, setNotes] = useState<NotificationEntry[]>([]);
   const [undo, setUndo] = useState<{ ids: string[] } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const removed = (ids: string[]) => {
@@ -164,6 +204,7 @@ export default function App() {
       listen<boolean>('pets://power', e => setPetSaving(e.payload)),
       listen<UpdateStatus>('pets://update', e => setUpdate(e.payload)),
       listen<Media>('pets://media', e => setMedia(e.payload)),
+      listen<NotificationEntry[]>('pets://notifications', e => setNotes(e.payload)),
       listen<string>('panel://focus', e => {
         setStatus(null);
         setFocusId(e.payload);
@@ -181,6 +222,7 @@ export default function App() {
     void invoke<boolean>('power_get').then(saving => setPetSaving(saving));
     void invoke<UpdateStatus>('update_status').then(setUpdate);
     void invoke<Media>('media_get').then(setMedia);
+    void invoke<NotificationEntry[]>('notifications_list').then(setNotes);
     const t = setInterval(() => tick(n => n + 1), 1000);
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') void invoke('panel_hide'); };
     addEventListener('keydown', esc);
@@ -198,5 +240,8 @@ export default function App() {
     onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))}
     onDismiss={ids => void invoke<string[]>('session_dismiss', { ids }).then(removed)}
     onDismissInactive={() => void invoke<string[]>('sessions_dismiss_inactive').then(removed)}
+    notifications={notes} onNotificationsSeen={() => void invoke('notifications_read')}
+    onNotificationOpen={n => { if (n.session_id) void onJump(n.session_id); else if (n.kind === 'update') void invoke('update_install').catch(e => setStatus(String(e))); }}
+    onNotificationRemove={id => void invoke('notification_remove', { id })} onNotificationsClear={() => void invoke('notifications_clear')}
     undo={undo} onUndo={() => { if (undo) void invoke('session_undismiss', { ids: undo.ids }); clearTimeout(undoTimer.current); setUndo(null); }} />;
 }

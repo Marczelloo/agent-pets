@@ -28,6 +28,7 @@ interface Props {
   /** Taskbar tab */
   monitors?: MonitorInfo[];
   leftFallback?: boolean;
+  verticalBar?: boolean;
   onMove?: () => void;
 }
 
@@ -50,7 +51,7 @@ const NOTE: Partial<Record<AppId, () => string>> = {
   antigravity: () => t().settings.antigravityNote, cursor: () => t().settings.cursorNote, zcode: () => t().settings.zcodeNote,
 };
 
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, onReport, monitors = [], leftFallback = false, onMove = () => {} }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
 
@@ -101,7 +102,7 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
           </div>
         </section>}
 
-        {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} onChange={onChange} onMove={onMove} />}
+        {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar} onChange={onChange} onMove={onMove} />}
 
         {tab === 'notify' && <section className="card">
           <Toggle label={t().state.needs_you} checked={s.notifications.needs_you}

@@ -41,6 +41,7 @@ function Root() {
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [leftFallback, setLeftFallback] = useState(false);
+  const [verticalBar, setVerticalBar] = useState(false);
 
   const reload = useCallback(async () => {
     if (!inTauri) {
@@ -71,8 +72,8 @@ function Root() {
     const unUpdate = listen<UpdateStatus>('pets://update', e => setUpdate(e.payload));
     void invoke<UpdateStatus>('update_status').then(setUpdate);
     const unTab = listen<string>('settings://tab', e => { const t = tabFrom(e.payload); if (t) setTab(t); });
-    const unLayout = listen<StageLayout & { left_fallback?: boolean }>('pets://layout', e => setLeftFallback(!!e.payload.left_fallback));
-    void invoke<(StageLayout & { left_fallback?: boolean }) | null>('stage_layout').then(l => setLeftFallback(!!l?.left_fallback));
+    const unLayout = listen<StageLayout>('pets://layout', e => { setLeftFallback(!!e.payload.left_fallback); setVerticalBar(!!e.payload.vertical_bar); });
+    void invoke<StageLayout | null>('stage_layout').then(l => { setLeftFallback(!!l?.left_fallback); setVerticalBar(!!l?.vertical_bar); });
     return () => [un, unPower, unUpdate, unTab, unLayout].forEach(p => void p.then(f => f()));
   }, [reload]);
 
@@ -115,7 +116,7 @@ function Root() {
   };
 
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
-    onIntegration={onIntegration} message={message} update={update} monitors={monitors} leftFallback={leftFallback}
+    onIntegration={onIntegration} message={message} update={update} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar}
     onMove={() => { if (inTauri) void invoke('stage_move'); }}
     onReport={inTauri ? () => void invoke('report_problem_open') : undefined}
     onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;

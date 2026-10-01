@@ -1,4 +1,5 @@
 //! Windows notifications (spec 2.4): WinRT toasts with a "Jump" button. `rules` decides when to send them.
+pub mod center;
 pub mod rules;
 
 use crate::core::Snapshot;
@@ -13,8 +14,9 @@ pub const AUMID: &str = "dev.agentpets.app";
 static APP_ID: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
 /// Toast outside session rules (updates). `button`: label of the `install` action button.
-pub fn show_update(_app: &AppHandle, title: &str, body: &str, button: Option<&str>,
+pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str>,
                    on: impl Fn(Option<String>) + Send + Sync + 'static) {
+    center::record(app, center::Kind::Update, title, body, None);
     let id = APP_ID.get().copied().unwrap_or(AUMID);
     let mut toast = Toast::new(id).title(title);
     if !body.is_empty() { toast = toast.text1(body); }
@@ -80,6 +82,11 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
             // session window in foreground or visible question bubble: no toast needed (send later if the bubble disappears)
             let bubbles = app.state::<crate::bubbles::Bubbles>();
             for t in rules.observe(&last, now, &|s| focused(s) || bubbles.asking(&s.id)) {
+                center::record(&app, match t.kind {
+                    rules::ToastKind::NeedsYou => center::Kind::NeedsYou,
+                    rules::ToastKind::Done => center::Kind::Done,
+                    rules::ToastKind::Limit => center::Kind::Limit,
+                }, &t.title, &t.body, t.session_id.clone());
                 let a = app.clone();
                 let sid = t.session_id.clone();
                 let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body);

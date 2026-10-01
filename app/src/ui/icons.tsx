@@ -14,6 +14,16 @@ export function StatsIcon() {
   );
 }
 
+/** Notifications: bell. */
+export function BellIcon() {
+  return (
+    <svg {...base}>
+      <path d="M3.5 11.5h9l-1.2-1.6V7a3.3 3.3 0 0 0-6.6 0v2.9z" />
+      <path d="M6.7 13.4a1.4 1.4 0 0 0 2.6 0" />
+    </svg>
+  );
+}
+
 /** Gear outline: `n` teeth, outer radius `ro`, inner radius `ri` (center 8, 8). */
 export function gearPath(n = 8, ro = 7, ri = 5.3): string {
   const r = (v: number) => Math.round(v * 100) / 100;

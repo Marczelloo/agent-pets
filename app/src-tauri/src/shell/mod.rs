@@ -37,6 +37,8 @@ pub struct Layout {
     pub mode: &'static str,
     pub light: bool,
     pub left_fallback: bool,
+    /// Taskbar docked to the left or right edge: the stage floats beside it (note in the "Taskbar" tab).
+    pub vertical_bar: bool,
 }
 
 /// `layout`: most recently sent layout (a later settings window also sees the note about left-side icons).
@@ -250,9 +252,15 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         let fresh = remeasure(&pending, measured.as_ref().map(|(t, _)| t.elapsed()));
         if fresh || measured.is_none() { measured = Some((std::time::Instant::now(), taskbar::monitors())); }
         let Some((_, mons)) = measured.as_ref() else { continue };
-        let float = st.position == Position::Floating;
-        let chosen = placement::pick(&mons.iter().map(|m| (m.info.clone(), m.bar.is_some())).collect::<Vec<_>>(), &st.monitor, float);
+        let float_mode = st.position == Position::Floating;
+        let chosen = placement::pick(&mons.iter().map(|m| (m.info.clone(), m.bar.is_some())).collect::<Vec<_>>(), &st.monitor, float_mode);
         let Some(mon) = mons.get(chosen) else { continue };
+        // A taskbar docked to the left or right edge: the embedded layout assumes a horizontal bar,
+        // so the stage floats in the work area beside it.
+        let bar_rect = if float_mode { None } else { mon.bar.or_else(taskbar::tray).and_then(taskbar::rect_of) };
+        let vertical = bar_rect.map(|r| placement::bar_side(r, mon.monitor)).filter(|s| s.vertical());
+        let bar_hidden = bar_rect.is_some_and(|r| !placement::taskbar_visible(r, mon.monitor));
+        let float = float_mode || vertical.is_some();
         let bar = if float { None } else { mon.bar.or_else(taskbar::tray) };
         if !float && bar.is_none() { continue; }
         let mut h = stage.load(Ordering::Relaxed);
@@ -318,11 +326,15 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             }
             let at = dragging.as_ref().map(|d| d.at).or(saved);
             let l = Layout { max_css: ((mon.work.right - mon.work.left) as f64 / mon.scale - 16.0).floor(), height_css: h_css,
-                scale: mon.scale, mode: "floating", light: crate::system::light_taskbar(), left_fallback: false };
+                scale: mon.scale, mode: "floating", light: crate::system::light_taskbar(), left_fallback: false, vertical_bar: vertical.is_some() };
             if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); *shared.lock().unwrap() = Some(l); }
-            let vis = !taskbar::fullscreen_app();
+            // beside an auto-hidden vertical bar the stage goes away with it, like an embedded one
+            let vis = !taskbar::fullscreen_app() && !bar_hidden;
             if last_visible != Some(vis) { let _ = app.emit("pets://visibility", vis); last_visible = Some(vis); }
-            let r = (want > 0.0 && vis).then(|| placement::float_rect(mon.work, at, anchor, want, h_css, mon.scale));
+            let r = (want > 0.0 && vis).then(|| match (vertical, at) {
+                (Some(side), None) => placement::beside_vertical_bar(mon.work, side, want, h_css, mon.scale),
+                _ => placement::float_rect(mon.work, at, anchor, want, h_css, mon.scale),
+            });
             if needs_apply(r, last_rect, taskbar::rect_of(hw)) { taskbar::apply_rect(hw, r); last_rect = r; }
             continue;
         }
@@ -370,7 +382,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         let p = placement::place_mode(&m, want, mode);
         if let Some(p) = p {
             let l = Layout { max_css: p.max_css.floor(), height_css: p.height_css, scale: m.scale, mode: "taskbar",
-                light: crate::system::light_taskbar(), left_fallback: p.left_fallback && st.position == Position::Left };
+                light: crate::system::light_taskbar(), left_fallback: p.left_fallback && st.position == Position::Left, vertical_bar: false };
             if last_layout != Some(l) { let _ = app.emit("pets://layout", l); last_layout = Some(l); *shared.lock().unwrap() = Some(l); }
         }
         if embed_failed { taskbar::apply_floating(hw, &m, p) } else { taskbar::apply(hw, p) }

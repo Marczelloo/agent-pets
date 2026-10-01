@@ -93,6 +93,15 @@ export const pl = {
     removed: (n: number) => (n === 1 ? 'Usunięto' : `Usunięto ${n}`),
     undo: 'Cofnij',
     stats: 'Statystyki',
+    notifications: {
+      title: 'Powiadomienia',
+      empty: 'Brak powiadomień',
+      clear: 'Wyczyść wszystko',
+      remove: (title: string) => `Usuń powiadomienie: ${title}`,
+      back: 'Wróć do sesji',
+      unread: (n: number) => `${n} nieprzeczytanych`,
+      kind: { needs_you: 'Czeka na Ciebie', done: 'Zakończono', limit: 'Limit', update: 'Aktualizacja' },
+    },
     subagents: (n: number) => `${n} ${n === 1 ? 'subagent' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'subagenty' : 'subagentów'}`,
     child: { router: 'Router', background: 'w tle', runningFor: (d: string) => `Pracuje od ${d}` },
     update: {
@@ -246,6 +255,7 @@ export const pl = {
     pos: { right: 'Przy zasobniku', left: 'Po lewej', custom: 'Własna', floating: 'Pływające' },
     move: 'Przesuń',
     moveDesc: 'Przeciągnij scenę w wolne miejsce paska; Enter albo klik obok zapisuje, Esc cofa',
+    verticalBar: 'Pasek zadań jest przypięty z boku ekranu, więc scena unosi się obok niego. Możesz ją przeciągnąć gdzie indziej',
     leftFallback: 'Ikony paska są wyrównane do lewej, więc scena stoi przy zasobniku',
     monitor: 'Monitor',
     monitorName: (index: number, w: number, h: number, primary: boolean) => `Ekran ${index} · ${w}×${h}${primary ? ' (główny)' : ''}`,

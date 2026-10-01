@@ -198,6 +198,7 @@ pub fn run() {
             app.manage(panel::Panel::default());
             panel::build(app.handle())?;
             tray::build(app.handle(), app.state::<settings::SettingsState>().lang())?;
+            app.manage(notify::center::Center::load(settings::home()));
             let snaps = notify::start(app.handle().clone());
             let (core_tx, core_rx) = std::sync::mpsc::channel();
             app.manage(core::Control(std::sync::Mutex::new(core_tx)));
@@ -225,6 +226,7 @@ pub fn run() {
             bubbles::stage_pets, bubbles::bubbles_place, bubbles::bubbles_hide, bubbles::bubbles_hits,
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
+            notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
             updater::update_status, updater::update_check, updater::update_install,
             session_dismiss, sessions_dismiss_inactive, session_undismiss,
             stats::stats_open, stats::stats_view, stats::stats_progress
