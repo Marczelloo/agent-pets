@@ -6,6 +6,7 @@ use std::thread::JoinHandle;
 use crate::claude::{HookEnvelope, StatuslineEnvelope};
 use crate::endpoint::Endpoint;
 
+#[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 pub enum Incoming {
     ClaudeHook(HookEnvelope),
     ClaudeStatusline(StatuslineEnvelope),

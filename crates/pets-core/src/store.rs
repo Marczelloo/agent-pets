@@ -18,6 +18,7 @@ impl Default for Timing {
     }
 }
 
+#[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 #[derive(Clone, Debug, PartialEq)]
 pub enum Change { Upsert(Session), Removed(String), Limits(Vec<Limit>) }
 

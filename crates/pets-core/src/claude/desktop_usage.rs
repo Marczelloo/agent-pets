@@ -40,6 +40,7 @@ pub fn latest(bytes: &[u8], now: i64) -> Option<Event> {
     Some(e)
 }
 
+#[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 #[derive(Debug)]
 pub enum Usage {
     /// New sample.
