@@ -6,19 +6,31 @@ use crate::core::Snapshot;
 use pets_core::model::Session;
 use std::sync::mpsc::{channel, Sender};
 use tauri::{AppHandle, Manager};
-use tauri_winrt_notification::Toast;
+use tauri_winrt_notification::{IconCrop, Toast};
 
 pub const AUMID: &str = "dev.agentpets.app";
 
 /// Toast identifier determined when the notification thread starts (AUMID or PowerShell fallback).
 static APP_ID: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
+/// App icon file for the toasts, set when the notification thread starts (absent in development builds).
+static LOGO: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+/// Puts the app icon in the toast body. The header icon registered with the AUMID is not shown by this Windows
+/// notification host, so without this the toast carries no icon at all.
+fn with_logo(toast: Toast) -> Toast {
+    match LOGO.get() {
+        Some(p) => toast.icon(p, IconCrop::Square, "Agent Pets"),
+        None => toast,
+    }
+}
+
 /// Toast outside session rules (updates). `button`: label of the `install` action button.
 pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str>,
                    on: impl Fn(Option<String>) + Send + Sync + 'static) {
     center::record(app, center::Kind::Update, title, body, None);
     let id = APP_ID.get().copied().unwrap_or(AUMID);
-    let mut toast = Toast::new(id).title(title);
+    let mut toast = with_logo(Toast::new(id).title(title));
     if !body.is_empty() { toast = toast.text1(body); }
     if let Some(b) = button { toast = toast.add_button(b, "install"); }
     let _ = toast.on_activated(move |action| { on(action); Ok(()) }).show();
@@ -70,6 +82,7 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
     let (tx, rx) = channel::<Snapshot>();
     std::thread::spawn(move || {
         let icon = app.path().resource_dir().ok().map(|r| r.join("icons").join("128x128.png")).filter(|p| p.is_file());
+        if let Some(i) = &icon { let _ = LOGO.set(toast_icon_path(i).into()); }
         let app_id = if register_aumid(icon.as_deref()) { AUMID } else { Toast::POWERSHELL_APP_ID };
         let _ = APP_ID.set(app_id);
         let mut rules = rules::Rules::new(rules::Settings::default());
@@ -99,7 +112,7 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
                 }, &t.title, &t.body, t.session_id.clone());
                 let a = app.clone();
                 let sid = t.session_id.clone();
-                let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body);
+                let mut toast = with_logo(Toast::new(app_id).title(&t.title)).text1(&t.body);
                 if sid.is_some() { toast = toast.add_button(pets_core::i18n::tr(lang, "Przejdź", "Open"), "jump"); }
                 let _ = toast.on_activated(move |action| {
                     match (action.as_deref(), &sid) {
