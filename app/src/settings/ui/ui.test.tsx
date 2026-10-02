@@ -85,9 +85,19 @@ describe('Stepper', () => {
     expect(html).toContain('aria-label="Agents"');
     expect(html.match(/<button/g)?.length).toBe(2);
   });
-  it('disables the button at the bounds', () => {
-    expect(renderToString(<Stepper value={1} min={1} max={8} onChange={noop} aria-label="n" />)).toMatch(/disabled=""[^>]*>−/);
-    expect(renderToString(<Stepper value={8} min={1} max={8} onChange={noop} aria-label="n" />)).toMatch(/disabled=""[^>]*>\+/);
+  it('marks the button aria-disabled at the bounds without disabling it, so focus stays on it', () => {
+    const lo = renderToString(<Stepper value={1} min={1} max={8} onChange={noop} aria-label="n" />);
+    const hi = renderToString(<Stepper value={8} min={1} max={8} onChange={noop} aria-label="n" />);
+    expect(lo).toMatch(/aria-disabled="true"[^>]*>−/);
+    expect(hi).toMatch(/aria-disabled="true"[^>]*>\+/);
+    expect(lo).not.toContain(' disabled');
+    expect(renderToString(<Stepper value={3} min={1} max={8} onChange={noop} aria-label="n" />)).not.toContain('aria-disabled');
+  });
+  it('exposes the range to assistive tech as a spinbutton', () => {
+    expect(html).toMatch(/role="spinbutton"/);
+    expect(html).toContain('aria-valuemin="1"');
+    expect(html).toContain('aria-valuemax="8"');
+    expect(html).toContain('aria-valuenow="3"');
   });
 });
 

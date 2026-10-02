@@ -117,10 +117,10 @@ describe('panel tabs and limits', () => {
     expect(activeCount([])).toBe(0);
   });
   it('raises the limits alert from 80 % or for a stale reading, never without data', () => {
-    expect(limitsAlert([], now)).toBe(false);
-    expect(limitsAlert([lim('claude', 'five_hour', 79)], now)).toBe(false);
-    expect(limitsAlert([lim('claude', 'five_hour', 80)], now)).toBe(true);
-    expect(limitsAlert([lim('codex', 'weekly', 10, now - 3_600_000)], now)).toBe(true);
+    expect(limitsAlert([])).toBe(false);
+    expect(limitsAlert([lim('claude', 'five_hour', 79)])).toBe(false);
+    expect(limitsAlert([lim('claude', 'five_hour', 80)])).toBe(true);
+    expect(limitsAlert([lim('codex', 'weekly', 10, now - 3_600_000)])).toBe(true);
   });
   it('collapses more than three children until expanded', () => {
     const c = [1, 2, 3, 4, 5];

@@ -79,6 +79,17 @@ describe('PanelView', () => {
     expect(view(null)).not.toContain('class="ctx"');
     expect(view({ used: 50_000, max: 200_000 })).toMatch(/class="ctx"[^>]*width:25%/);
   });
+  it('exposes the context bar to assistive tech as a meter, not only as a tooltip', () => {
+    const html = renderToString(<PanelView snap={{ sessions: [{ ...sess, context: { used: 50_000, max: 200_000 } }], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
+    expect(html).toMatch(/class="ctx"[^>]*role="meter"/);
+    expect(html).toContain('aria-valuenow="25"');
+    expect(html).toMatch(/aria-valuetext="[^"]+"/);
+  });
+  it('tabs use a roving tabindex: only the selected tab is reachable with Tab', () => {
+    const html = renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
+    expect(html).toMatch(/aria-selected="true" tabindex="0"[^>]*>Sesje/);
+    expect(html).toMatch(/aria-selected="false" tabindex="-1"[^>]*>Limity/);
+  });
   it('draws no pets while the panel is hidden', () => {
     const view = (animate: boolean) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0}
       status={null} focusId={null} onJump={() => {}} animate={animate} />);

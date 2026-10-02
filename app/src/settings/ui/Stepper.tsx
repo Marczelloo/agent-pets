@@ -10,16 +10,18 @@ export function Stepper({ value, min, max, onChange, 'aria-label': label }: { va
     setDraft(String(n));
     if (n !== value) onChange(n);
   };
+  // aria-disabled instead of disabled: a disabled button drops focus the moment the bound is reached
+  const atMin = value <= min, atMax = value >= max;
   return (
     <span className="ui-stepper">
-      <button type="button" aria-label={`${label} −`} disabled={value <= min} onClick={() => commit(value - 1)}>−</button>
-      <input type="text" inputMode="numeric" aria-label={label} value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => commit(draft)}
+      <button type="button" aria-label={`${label} −`} aria-disabled={atMin || undefined} onClick={() => { if (!atMin) commit(value - 1); }}>−</button>
+      <input type="text" inputMode="numeric" role="spinbutton" aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} aria-label={label} value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => commit(draft)}
         onKeyDown={e => {
           if (e.key === 'Enter') commit(draft);
           else if (e.key === 'ArrowUp') { e.preventDefault(); commit(value + 1); }
           else if (e.key === 'ArrowDown') { e.preventDefault(); commit(value - 1); }
         }} />
-      <button type="button" aria-label={`${label} +`} disabled={value >= max} onClick={() => commit(value + 1)}>+</button>
+      <button type="button" aria-label={`${label} +`} aria-disabled={atMax || undefined} onClick={() => { if (!atMax) commit(value + 1); }}>+</button>
     </span>
   );
 }

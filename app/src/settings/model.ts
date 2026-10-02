@@ -13,7 +13,7 @@ export const appHint = (id: AppId): string => t().settings.appHint[id];
 export const EXPERIMENTAL: AppId[] = ['copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
 /** Integrations without a live check: never enabled merely because they were detected. */
 export const OPT_IN: AppId[] = ['cursor', 'grok', 'zcode'];
-/** Agents shown first in the Apps tab, in this order (the rest is experimental). */
+/** Agents shown first in the Apps tab, in this order (the rest is experimental). Agent Router is here on purpose: it is a first-class integration, checked against a live setup like the others. */
 const MAIN: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode'];
 /** Splits the integration rows into main agents and experimental ones; an id nobody knows is treated as experimental. */
 export function groupApps(rows: AppRow[]): { main: AppRow[]; experimental: AppRow[] } {

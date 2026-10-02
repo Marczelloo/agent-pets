@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, formatDuration, limitName, petTooltip } from '../tooltip/text';
@@ -13,6 +13,9 @@ import { hostLabel } from '../model-label';
 import { appBadge } from '../settings/model';
 import { HostIcon } from './HostIcon';
 import { applyTheme } from '../theme';
+
+/** Stable ref callback: focuses the first menu item once, when the menu opens (not on every re-render). */
+const focusFirstItem = (el: HTMLElement | null) => { el?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(); };
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
   isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
@@ -56,10 +59,33 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
   const [menu, setMenu] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const unread = unreadCount(notifications);
+  /** Arrow keys / Home / End move between the tabs and activate them (roving tabindex). */
+  const tabKeys = (e: ReactKeyEvent<HTMLElement>) => {
+    const order: PanelTab[] = ['sessions', 'limits'];
+    const i = order.indexOf(tab);
+    const n = e.key === 'ArrowRight' ? (i + 1) % order.length : e.key === 'ArrowLeft' ? (i + order.length - 1) % order.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? order.length - 1 : -1;
+    if (n < 0) return;
+    e.preventDefault();
+    setTab(order[n]);
+    e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[n]?.focus();
+  };
+  /** In the ⋯ menu: arrows cycle the items, Escape closes it and returns focus to the ⋯ button. */
+  const menuKeys = (e: ReactKeyEvent<HTMLElement>) => {
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'Escape') { e.preventDefault(); const btn = e.currentTarget.parentElement?.querySelector<HTMLElement>('.more'); setMenu(null); btn?.focus(); return; }
+    const n = e.key === 'ArrowDown' ? (at + 1) % items.length : e.key === 'ArrowUp' ? (at + items.length - 1) % items.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -1;
+    if (n < 0) return;
+    e.preventDefault();
+    items[n]?.focus();
+  };
   const toggleInbox = () => { setInbox(o => !o); if (!inbox && unread > 0) onNotificationsSeen?.(); };
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
-  const alert = limitsAlert(snap.limits, nowMs);
+  const alert = limitsAlert(snap.limits);
+  const cards = limitCards(snap.limits, nowMs);
   const toggleExpanded = (id: string) => setExpanded(prev => { const n = new Set(prev); if (!n.delete(id)) n.add(id); return n; });
   const copyPath = onCopyPath ?? ((p: string) => void navigator.clipboard?.writeText(p));
 
@@ -116,11 +142,11 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
         </ul>
       </section> : <>
       <div className="tabs">
-        <div className="seg" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === 'sessions'} className={tab === 'sessions' ? 'on' : ''} onClick={() => setTab('sessions')}>
+        <div className="seg" role="tablist" onKeyDown={tabKeys}>
+          <button type="button" role="tab" aria-selected={tab === 'sessions'} tabIndex={tab === 'sessions' ? 0 : -1} className={tab === 'sessions' ? 'on' : ''} onClick={() => setTab('sessions')}>
             {t().panel.sessions}<span className="n">{activeCount(snap.sessions)}</span>
           </button>
-          <button type="button" role="tab" aria-selected={tab === 'limits'} className={tab === 'limits' ? 'on' : ''} onClick={() => setTab('limits')}>
+          <button type="button" role="tab" aria-selected={tab === 'limits'} tabIndex={tab === 'limits' ? 0 : -1} className={tab === 'limits' ? 'on' : ''} onClick={() => setTab('limits')}>
             {t().panel.limits}{alert && <i className="alert-dot" role="img" aria-label={t().panel.limitsAlert} />}
           </button>
         </div>
@@ -128,7 +154,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           <button type="button" className="quiet clear" onClick={onDismissInactive}>{t().panel.removeInactive}</button>}
       </div>
       {tab === 'limits' ? <section className="limits" role="tabpanel" aria-label={t().panel.limits}>
-        {limitCards(snap.limits, nowMs).map(c => (
+        {cards.map(c => (
           <div className={c.stale ? 'lcard stale' : 'lcard'} key={c.agent}>
             <div className="lhead"><i className={`dot ${c.agent}`} /><span>{limitName(c.agent)}</span></div>
             {c.noData ? <p className="none">{t().panel.noData}</p> : c.rows.map(r => (
@@ -143,7 +169,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
             ))}
           </div>
         ))}
-        {limitCards(snap.limits, nowMs).some(c => c.stale) && <p className="hint">{t().limits.staleHint}</p>}
+        {cards.some(c => c.stale) && <p className="hint">{t().limits.staleHint}</p>}
       </section> : <section className="sessions" role="tabpanel" aria-label={t().panel.sessions}>
         {sessions.length === 0 && <div className="empty"><p>{t().panel.noSessions}</p><p className="hint">{t().panel.noSessionsHint}</p></div>}
         {sessions.map(s => {
@@ -179,14 +205,15 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
             <div className="menu-wrap">
               <button type="button" className="icon-btn more" aria-label={`${t().panel.menu}: ${title}`} aria-haspopup="menu" aria-expanded={menu === s.id}
                 onClick={() => setMenu(m => (m === s.id ? null : s.id))}>⋯</button>
-              {menu === s.id && <div className="menu" role="menu">
+              {menu === s.id && <div className="menu" role="menu" onKeyDown={menuKeys} ref={focusFirstItem}>
                 <button type="button" role="menuitem" onClick={() => { setMenu(null); onJump(s.id); }}>{t().panel.open}</button>
                 {s.cwd && <button type="button" role="menuitem" onClick={() => { setMenu(null); copyPath(s.cwd); }}>{t().panel.copyPath}</button>}
                 {onDismiss && INACTIVE_STATES.has(s.state) && <button type="button" role="menuitem" onClick={() => { setMenu(null); onDismiss([s.id]); }}>
                   {t().panel.remove(title)}</button>}
               </div>}
             </div>
-            {ctx != null && <span className="ctx" title={`${t().panel.context} ${contextText(s)}`} style={{ width: `${ctx}%` }} />}
+            {ctx != null && <span className="ctx" role="meter" aria-label={t().panel.context} aria-valuemin={0} aria-valuemax={100} aria-valuenow={ctx} aria-valuetext={contextText(s) ?? undefined}
+              title={`${t().panel.context} ${contextText(s)}`} style={{ width: `${ctx}%` }} />}
           </article>
           {kids.length > 0 && <ul className="kids" aria-label={t().panel.subagents(kids.length)}>
             {shown.map(c => <SubagentRow key={c.id} c={c} nowMs={nowMs} focus={focusId === c.id} animate={animate} pets={pets} />)}

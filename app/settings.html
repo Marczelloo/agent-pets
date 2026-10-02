@@ -84,7 +84,8 @@ button.link-btn:hover:not(:disabled){background:transparent;color:var(--txt)}
 .pet-tiles button{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:1 0 auto;white-space:nowrap;padding:4px 6px;border-radius:8px;font-size:12px}
 .pet-tiles button.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .pet-tiles button::before{content:"";width:8px;height:8px;border-radius:50%;flex:none;background:var(--sw)}
-canvas.preview-stage{display:block;border-radius:8px;background:var(--bg);border:1px solid var(--line);margin:0 0 4px;max-width:100%}
+canvas.preview-stage{display:block;border-radius:8px;background:var(--bg);border:1px solid var(--line);margin:0 0 4px;max-width:100%;height:auto;aspect-ratio:640/170}
+.check-ctl{display:flex;align-items:center;gap:12px}
 .scene-picker{display:flex;flex-direction:column;gap:8px;padding-top:10px}
 .scene-group{display:flex;flex-direction:column;gap:4px}
 .ui-seg.wrap{flex-wrap:wrap}
@@ -146,7 +147,8 @@ a,.link{color:var(--accent)}
 
 .ui-stepper{display:inline-flex;align-items:stretch;border:1px solid var(--btnb);border-radius:6px;overflow:hidden;background:var(--btn)}
 .ui-stepper button{border:0;border-radius:0;padding:0 10px;background:transparent;font-size:15px;line-height:1;color:var(--mut)}
-.ui-stepper button:hover:not(:disabled){background:var(--btnh);color:var(--txt)}
+.ui-stepper button:hover:not([aria-disabled]){background:var(--btnh);color:var(--txt)}
+.ui-stepper button[aria-disabled]{opacity:.5;cursor:default}
 .ui-stepper input{width:40px;border:0;border-radius:0;background:transparent;text-align:center;padding:5px 0;font:inherit;font-size:13px;font-variant-numeric:tabular-nums;color:var(--txt)}
 .ui-stepper input:focus-visible,.ui-stepper button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 

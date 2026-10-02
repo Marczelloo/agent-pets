@@ -50,7 +50,7 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
       <LookGallery style={pets.style} motion={pets.motion} scene={scene} agent={agent} onPick={s => onChange({ ...pets, style: s })} />
     </Section>
     <Section title={t().look.motionTitle}>
-      <Row label={t().look.motionTitle} hint={t().look.motionDesc} control={<MotionSwitch motion={pets.motion} onPick={m => onChange({ ...pets, motion: m })} />} />
+      <Row label={t().look.motionRow} hint={t().look.motionDesc} control={<MotionSwitch motion={pets.motion} onPick={m => onChange({ ...pets, motion: m })} />} />
     </Section>
     <Section title={t().look.bubblesTitle} note={t().look.bubblesDesc}>
       <BubblePreview look={look} agent={agent} />

@@ -131,8 +131,9 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
               <Segmented aria-label={t().settings.updates} value={s.updates ?? 'notify'} onChange={v => set({ updates: v })} options={[
                 { value: 'notify', label: t().settings.updateMode.notify }, { value: 'auto', label: t().settings.updateMode.auto }, { value: 'off', label: t().settings.updateMode.off },
               ]} />} />
-            <Row label={t().settings.checkNow} hint={<span role="status">{checkResult(update)}</span>} control={
-              <button type="button" disabled={update?.state === 'checking' || !onCheck} onClick={onCheck}>{t().settings.checkNow}</button>} />
+            <Row label={t().settings.latestVersion} control={<span className="check-ctl">
+              <span className="ui-hint" role="status">{checkResult(update)}</span>
+              <button type="button" disabled={update?.state === 'checking' || !onCheck} onClick={onCheck}>{t().settings.checkNow}</button></span>} />
             <p className="ui-note">{t().settings.version(diag?.version ?? '–')}</p>
           </Section>
         </>}

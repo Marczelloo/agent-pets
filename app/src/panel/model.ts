@@ -25,7 +25,7 @@ export type PanelTab = 'sessions' | 'limits';
 export const activeCount = (sessions: Session[]): number => sessions.filter(s => !s.parent && !INACTIVE.has(s.state)).length;
 
 /** Warning dot on the Limits tab: a reading at 80 % or more, or a stale one. */
-export const limitsAlert = (limits: Limit[], _nowMs: number): boolean =>
+export const limitsAlert = (limits: Limit[]): boolean =>
   limits.some(l => l.stale_since != null || (Number.isFinite(l.used_pct) && l.used_pct >= 80));
 
 export const COLLAPSE_AFTER = 3;
