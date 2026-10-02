@@ -148,6 +148,11 @@ export const en: Dict = {
       + '(~/.claude/.credentials.json). The token is sent only to api.anthropic.com and is never saved.',
   },
   settings: {
+    groups: { settings: 'Settings', app: 'Application' },
+    appearance: 'Appearance',
+    theme: 'Theme',
+    themeDesc: 'Light, dark or follow Windows',
+    themes: { system: 'System', light: 'Light', dark: 'Dark' },
     tabs: {
       apps: 'Apps',
       look: 'Look',

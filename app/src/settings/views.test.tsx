@@ -4,7 +4,7 @@ import { setLang } from '../i18n';
 import { PanelView } from '../panel/App';
 import type { AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
 import { defaultSettings } from './model';
-import { SettingsView } from './SettingsView';
+import { SettingsView, type Tab } from './SettingsView';
 import { resetStage, withBubbles } from './StageTab';
 import { Wizard } from './Wizard';
 
@@ -71,6 +71,37 @@ describe('language', () => {
   });
 });
 
+describe('settings shell and appearance', () => {
+  const render = (tab: Tab, s = defaultSettings()) => renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab={tab} onTab={() => {}}
+    onChange={() => {}} onIntegration={async () => ''} message={null} />);
+  it('the sidebar groups the tabs under Ustawienia and Aplikacja', () => {
+    const html = render('general');
+    expect(html).toContain('Ustawienia');
+    expect(html).toContain('Aplikacja');
+    for (const tab of ['Aplikacje', 'Wygląd', 'Pasek', 'Powiadomienia', 'Limity', 'Ogólne', 'Diagnostyka']) expect(html).toContain(tab);
+    expect(html).toMatch(/aria-current="page"[^>]*>(<svg[^>]*>.*?<\/svg>)?<span>Ogólne</);
+  });
+  it('general tab: theme is an icon-only radiogroup of system, light and dark with the current one checked', () => {
+    const html = render('general', { ...defaultSettings(), theme: 'dark' });
+    expect(html).toContain('Motyw');
+    expect(html).toMatch(/role="radiogroup" aria-label="Motyw"/);
+    expect(html.match(/role="radio" aria-checked="(true|false)"[^>]*title="(Systemowy|Jasny|Ciemny)"/g)?.length).toBe(3);
+    expect(html).toMatch(/aria-checked="true"[^>]*title="Ciemny"/);
+  });
+  it('general tab: power saving is a segmented control and the language stays a labelled select', () => {
+    const html = render('general', { ...defaultSettings(), power_saving: 'always' });
+    expect(html).toMatch(/role="radiogroup" aria-label="Tryb oszczędny"/);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>Zawsze</);
+    expect(html).toContain('aria-label="Język / Language"');
+  });
+  it('the theme labels are English after switching', () => {
+    setLang('en');
+    const html = render('general');
+    expect(html).toContain('Theme');
+    expect(html).toContain('title="Dark"');
+  });
+});
+
 describe('SettingsView', () => {
   it('general tab: update mode select, check button with its result and the installed version', () => {
     const s = { ...defaultSettings(), updates: 'auto' as const };
@@ -78,7 +109,7 @@ describe('SettingsView', () => {
       onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} update={update} onCheck={() => {}} />);
     const html = view();
     expect(html).toContain('Aktualizacje');
-    expect(html).toMatch(/<option[^>]*value="auto"[^>]*selected|<option[^>]*selected[^>]*value="auto"/);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>Instaluj automatycznie</);
     expect(html).toContain('Powiadamiaj');
     expect(html).toContain('Instaluj automatycznie');
     expect(html).toContain('Sprawdź teraz');

@@ -6,10 +6,20 @@ import { appBadge, appHint, appLabel, doorOn, reportText, withDoor } from './mod
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
+import { AppsIcon, BellIcon, DiagIcon, GeneralIcon, LimitsIcon, LookIcon, MonitorIcon, MoonIcon, SunIcon, TaskbarIcon } from '../ui/icons';
 import { LanguageSelect } from './LanguageSelect';
+import { Row, Section, Segmented, Switch } from './ui';
 
 export type Tab = 'apps' | 'look' | 'stage' | 'notify' | 'limits' | 'general' | 'diag';
-export const TABS: Tab[] = ['apps', 'look', 'stage', 'notify', 'limits', 'general', 'diag'];
+/** Sidebar groups, top to bottom. */
+export const TAB_GROUPS: { key: 'settings' | 'app'; tabs: Tab[] }[] = [
+  { key: 'settings', tabs: ['apps', 'look', 'stage', 'notify', 'limits'] },
+  { key: 'app', tabs: ['general', 'diag'] },
+];
+export const TABS: Tab[] = TAB_GROUPS.flatMap(g => g.tabs);
+const TAB_ICON: Record<Tab, () => React.JSX.Element> = {
+  apps: AppsIcon, look: LookIcon, stage: TaskbarIcon, notify: BellIcon, limits: LimitsIcon, general: GeneralIcon, diag: DiagIcon,
+};
 
 interface Props {
   settings: Settings;
@@ -60,9 +70,17 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
     <div className="settings">
       <nav aria-label={t().panel.settings}>
         <h1>Agent Pets</h1>
-        {TABS.map(id => (
-          <button type="button" key={id} className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined}
-            onClick={() => onTab(id)}>{t().settings.tabs[id]}</button>
+        {TAB_GROUPS.map(g => (
+          <div key={g.key} className="nav-group" role="group" aria-label={t().settings.groups[g.key]}>
+            <h4>{t().settings.groups[g.key]}</h4>
+            {g.tabs.map(id => {
+              const Icon = TAB_ICON[id];
+              return (
+                <button type="button" key={id} className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined}
+                  onClick={() => onTab(id)}><Icon /><span>{t().settings.tabs[id]}</span></button>
+              );
+            })}
+          </div>
         ))}
       </nav>
       <main>
@@ -91,18 +109,6 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         </section>}
 
         {tab === 'look' && <LookTab pets={s.pets} onChange={p => set({ pets: p })} />}
-        {tab === 'look' && <section className="card">
-          <div className="row">
-            <span className="text"><span className="label">{t().settings.powerSaving}</span>
-              <span className="desc">{t().settings.powerSavingDesc}</span></span>
-            <select aria-label={t().settings.powerSaving} value={s.power_saving} onChange={e => set({ power_saving: e.target.value as Settings['power_saving'] })}>
-              <option value="auto">{t().settings.power.auto}</option>
-              <option value="always">{t().settings.power.always}</option>
-              <option value="never">{t().settings.power.never}</option>
-            </select>
-          </div>
-        </section>}
-
         {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar} onChange={onChange} onMove={onMove} />}
 
         {tab === 'notify' && <section className="card">
@@ -124,29 +130,35 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
           </Toggle>}
         </section>}
 
-        {tab === 'general' && <section className="card">
-          <div className="row">
-            <span className="text"><span className="label">{LANGUAGE_LABEL}</span></span>
-            <LanguageSelect value={s.language ?? 'auto'} onChange={l => set({ language: l })} />
-          </div>
-          <Toggle label={t().settings.autostart} checked={s.autostart} onChange={on => set({ autostart: on })}>
-            {t().settings.autostartDesc}
-          </Toggle>
-          <div className="row">
-            <span className="text"><span className="label">{t().settings.updates}</span>
-              <span className="desc">{t().settings.updatesDesc}</span></span>
-            <select aria-label={t().settings.updates} value={s.updates ?? 'notify'} onChange={e => set({ updates: e.target.value as Settings['updates'] })}>
-              <option value="notify">{t().settings.updateMode.notify}</option>
-              <option value="auto">{t().settings.updateMode.auto}</option>
-              <option value="off">{t().settings.updateMode.off}</option>
-            </select>
-          </div>
-          <div className="row">
-            <button type="button" disabled={update?.state === 'checking' || !onCheck} onClick={onCheck}>{t().settings.checkNow}</button>
-            <span className="desc" role="status">{checkResult(update)}</span>
-          </div>
-          <p className="desc">{t().settings.version(diag?.version ?? '–')}</p>
-        </section>}
+        {tab === 'general' && <>
+          <Section title={t().settings.appearance}>
+            <Row label={t().settings.theme} hint={t().settings.themeDesc} control={
+              <Segmented aria-label={t().settings.theme} value={s.theme ?? 'system'} onChange={v => set({ theme: v })} options={[
+                { value: 'system', icon: <MonitorIcon />, title: t().settings.themes.system },
+                { value: 'light', icon: <SunIcon />, title: t().settings.themes.light },
+                { value: 'dark', icon: <MoonIcon />, title: t().settings.themes.dark },
+              ]} />} />
+            <Row label={LANGUAGE_LABEL} control={
+              <LanguageSelect value={s.language ?? 'auto'} onChange={l => set({ language: l })} />} />
+          </Section>
+          <Section>
+            <Row label={t().settings.autostart} hint={t().settings.autostartDesc}
+              control={<Switch checked={s.autostart} onChange={on => set({ autostart: on })} aria-label={t().settings.autostart} />} />
+            <Row label={t().settings.powerSaving} hint={t().settings.powerSavingDesc} control={
+              <Segmented aria-label={t().settings.powerSaving} value={s.power_saving} onChange={v => set({ power_saving: v })} options={[
+                { value: 'auto', label: t().settings.power.auto }, { value: 'always', label: t().settings.power.always }, { value: 'never', label: t().settings.power.never },
+              ]} />} />
+          </Section>
+          <Section>
+            <Row label={t().settings.updates} hint={t().settings.updatesDesc} control={
+              <Segmented aria-label={t().settings.updates} value={s.updates ?? 'notify'} onChange={v => set({ updates: v })} options={[
+                { value: 'notify', label: t().settings.updateMode.notify }, { value: 'auto', label: t().settings.updateMode.auto }, { value: 'off', label: t().settings.updateMode.off },
+              ]} />} />
+            <Row label={t().settings.checkNow} hint={<span role="status">{checkResult(update)}</span>} control={
+              <button type="button" disabled={update?.state === 'checking' || !onCheck} onClick={onCheck}>{t().settings.checkNow}</button>} />
+            <p className="ui-note">{t().settings.version(diag?.version ?? '–')}</p>
+          </Section>
+        </>}
 
         {tab === 'diag' && <section className="card">
           {diag ? <pre className="report">{reportText(diag, Date.now())}</pre> : <p className="desc">{t().settings.loading}</p>}

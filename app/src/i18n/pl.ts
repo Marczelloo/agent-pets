@@ -159,6 +159,11 @@ export const pl = {
       + 'Token trafia tylko do api.anthropic.com i nigdzie nie jest zapisywany.',
   },
   settings: {
+    groups: { settings: 'Ustawienia', app: 'Aplikacja' },
+    appearance: 'Wygląd aplikacji',
+    theme: 'Motyw',
+    themeDesc: 'Jasny, ciemny albo zgodny z Windows',
+    themes: { system: 'Systemowy', light: 'Jasny', dark: 'Ciemny' },
     tabs: {
       apps: 'Aplikacje',
       look: 'Wygląd',
