@@ -86,24 +86,26 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         {tab === 'look' && <LookTab pets={s.pets} onChange={p => set({ pets: p })} />}
         {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar} onChange={onChange} onMove={onMove} />}
 
-        {tab === 'notify' && <section className="card">
-          <Toggle label={t().state.needs_you} checked={s.notifications.needs_you}
-            onChange={on => set({ notifications: { ...s.notifications, needs_you: on } })}>{t().settings.notifyNeeds}</Toggle>
-          <Toggle label={t().state.done} checked={s.notifications.done}
-            onChange={on => set({ notifications: { ...s.notifications, done: on } })}>{t().settings.notifyDone}</Toggle>
-          <Toggle label={t().limits.label} checked={s.notifications.limits}
-            onChange={on => set({ notifications: { ...s.notifications, limits: on } })}>{t().limits.notification}</Toggle>
-          <p className="desc">{t().settings.notifyWindows}</p>
-        </section>}
+        {tab === 'notify' && <>
+          <Section>
+            <Toggle label={t().state.needs_you} checked={s.notifications.needs_you}
+              onChange={on => set({ notifications: { ...s.notifications, needs_you: on } })}>{t().settings.notifyNeeds}</Toggle>
+            <Toggle label={t().state.done} checked={s.notifications.done}
+              onChange={on => set({ notifications: { ...s.notifications, done: on } })}>{t().settings.notifyDone}</Toggle>
+            <Toggle label={t().limits.label} checked={s.notifications.limits}
+              onChange={on => set({ notifications: { ...s.notifications, limits: on } })}>{t().limits.notification}</Toggle>
+          </Section>
+          <p className="ui-note">{t().settings.notifyWindows}</p>
+        </>}
 
-        {tab === 'limits' && <section className="card">
+        {tab === 'limits' && <Section title="Claude" note={t().limits.cliNote}>
           <Toggle label={t().limits.fromAnthropic} checked={s.claude_plan_usage} onChange={on => set({ claude_plan_usage: on })}>
             {t().limits.usage}
           </Toggle>
           {onStatusline && <Toggle label={t().limits.statusline} checked={s.claude_statusline} onChange={on => onStatusline(on)}>
             {t().limits.statuslineDesc}
           </Toggle>}
-        </section>}
+        </Section>}
 
         {tab === 'general' && <>
           <Section title={t().settings.appearance}>
@@ -135,21 +137,21 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
           </Section>
         </>}
 
-        {tab === 'diag' && <section className="card">
-          {diag ? <pre className="report">{reportText(diag, Date.now())}</pre> : <p className="desc">{t().settings.loading}</p>}
-          <button type="button" disabled={!diag} onClick={() => {
-            if (!diag) return;
-            void navigator.clipboard.writeText(reportText(diag, Date.now())).then(() => setCopied(true));
-          }}>{copied ? t().settings.copied : t().settings.copyReport}</button>
-          {onReport && <div className="row">
-            <span className="desc">{t().settings.reportProblemDesc}</span>
-            <button type="button" onClick={() => {
+        {tab === 'diag' && <Section>
+          <div className="diag-actions">
+            <button type="button" disabled={!diag} onClick={() => {
+              if (!diag) return;
+              void navigator.clipboard.writeText(reportText(diag, Date.now())).then(() => setCopied(true));
+            }}>{copied ? t().settings.copied : t().settings.copyReport}</button>
+            {onReport && <button type="button" onClick={() => {
               // the form opens even when the clipboard refuses
               const copy = diag ? navigator.clipboard.writeText(reportText(diag, Date.now())).then(() => setCopied(true)) : Promise.resolve();
               void copy.catch(() => {}).finally(onReport);
-            }}>{t().settings.reportProblem}</button>
-          </div>}
-        </section>}
+            }}>{t().settings.reportProblem}</button>}
+          </div>
+          {onReport && <p className="ui-note">{t().settings.reportProblemDesc}</p>}
+          {diag ? <pre className="report">{reportText(diag, Date.now())}</pre> : <p className="ui-note">{t().settings.loading}</p>}
+        </Section>}
       </main>
     </div>
   );

@@ -152,8 +152,8 @@ export const pl = {
     asOf: (ago: string) => `odczyt: ${ago}`,
     staleHint: 'Dane z aplikacji Claude są nieświeże. Dla limitów na żywo zaloguj Claude CLI (claude auth login) i włącz limity z Anthropic w Ustawieniach.',
     statusline: 'Statusline Claude Code',
-    statuslineDesc: 'Przekazuje do Agent Pets dokładne limity Claude Code działającego w terminalu i zachowuje Twój dotychczasowy statusline. '
-      + 'Aplikacja Claude go nie uruchamia. Dla limitów podczas pracy w aplikacji Claude potrzebujesz zalogowanego Claude CLI (claude auth login) i włączonych limitów z Anthropic.',
+    statuslineDesc: 'Przekazuje do Agent Pets dokładne limity Claude Code działającego w terminalu i zachowuje Twój dotychczasowy statusline. Aplikacja Claude go nie uruchamia.',
+    cliNote: 'Limity w aplikacji Claude wymagają zalogowanego Claude CLI (claude auth login) i włączonych limitów z Anthropic.',
     notification: 'Gdy zużycie limitu przekroczy 90%',
     usage: 'Co 5 minut pyta api.anthropic.com o zużycie planu Claude, logowaniem Claude Code (~/.claude/.credentials.json). '
       + 'Token trafia tylko do api.anthropic.com i nigdzie nie jest zapisywany.',

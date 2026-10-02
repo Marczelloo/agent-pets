@@ -221,6 +221,27 @@ describe('SettingsView', () => {
     expect(view(() => {})).toContain('wklej go do formularza');
     expect(view()).not.toContain('Zgłoś problem');
   });
+  it('notifications, limits and diagnostics sit on the shared kit: no card chrome, Claude heading with the CLI note, actions above the report', () => {
+    const view = (tab: Tab, onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab={tab}
+      onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} onReport={onReport} onStatusline={() => {}} />);
+    for (const tab of ['notify', 'limits', 'diag'] as Tab[]) expect(view(tab), tab).not.toContain('class="card"');
+    expect(view('notify')).toContain('class="ui-note"');
+    const limits = view('limits');
+    expect(limits).toContain('<h3>Claude</h3>');
+    expect(limits).toContain('claude auth login');
+    const diagHtml = view('diag', () => {});
+    expect(diagHtml.indexOf('Skopiuj raport')).toBeGreaterThan(-1);
+    expect(diagHtml.indexOf('Skopiuj raport')).toBeLessThan(diagHtml.indexOf('class="report"'));
+    expect(diagHtml.indexOf('Zgłoś problem</button>')).toBeLessThan(diagHtml.indexOf('class="report"'));
+  });
+  it('the wizard groups apps like the Apps tab and drops the card chrome', () => {
+    const html = renderToString(<Wizard rows={newRows} initial={defaultSettings()} onFinish={noop} />);
+    const at = ['Główne agenty', 'Eksperymentalne'].map(x => html.indexOf(`<h3>${x}</h3>`));
+    expect(at[0]).toBeGreaterThan(-1);
+    expect(at[1]).toBeGreaterThan(at[0]);
+    for (const step of ['apps', 'limits', 'notify', 'look'] as const)
+      expect(renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} initialStep={step} />), step).not.toContain('class="card');
+  });
   it('lists the apps with their integration state', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
