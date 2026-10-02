@@ -25,7 +25,7 @@ export function defaultSettings(): Settings {
     version: 1, apps: { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
       cursor: false, grok: false, zcode: false }, claude_statusline: false, claude_plan_usage: false,
     notifications: { needs_you: true, done: true, limits: true }, pets: defaultPets(),
-    power_saving: 'auto', autostart: true, language: 'auto', updates: 'notify', stage: defaultStage(),
+    power_saving: 'auto', autostart: true, language: 'auto', theme: 'system', updates: 'notify', stage: defaultStage(),
   };
 }
 

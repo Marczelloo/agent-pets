@@ -84,10 +84,12 @@ export interface Settings {
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;
   language: Language;
+  theme: Theme;
   updates: Updates;
   stage: StageSettings;
   [extra: string]: unknown;
 }
+export type Theme = 'system' | 'light' | 'dark';
 export type Updates = 'notify' | 'auto' | 'off';
 /** Lustro `placement::MonitorInfo` (komenda `monitors_list`). */
 export interface MonitorInfo { id: string; primary: boolean; width: number; height: number; index: number; has_bar: boolean }

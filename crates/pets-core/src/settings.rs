@@ -19,6 +19,9 @@ pub struct Settings {
     /// Interface language: `auto` = Polish on Polish Windows, English otherwise.
     #[serde(deserialize_with = "or_default")]
     pub language: Language,
+    /// Colour theme of every window: follow Windows, or force light or dark.
+    #[serde(deserialize_with = "or_default")]
+    pub theme: Theme,
     /// Updates from GitHub releases: notify only, install during a quiet period, or disabled.
     #[serde(deserialize_with = "or_default")]
     pub updates: Updates,
@@ -80,6 +83,10 @@ pub enum Motion { #[default] Calm, #[serde(alias = "anime")] Dynamic }
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Language { #[default] Auto, Pl, En }
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme { #[default] System, Light, Dark }
 
 /// Agent appearance differing from the default; missing field means "use default".
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -325,7 +332,7 @@ impl Default for Settings {
         Settings {
             version: 1, apps: Apps::default(), claude_statusline: false, claude_plan_usage: false,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
-            autostart: true, language: Language::Auto, updates: Updates::Notify, stage: Stage::default(),
+            autostart: true, language: Language::Auto, theme: Theme::System, updates: Updates::Notify, stage: Stage::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -499,6 +506,18 @@ mod tests {
         assert_eq!(Settings::default().language, Language::Auto);
         assert_eq!(load_str(r#"{"version":1,"language":"en"}"#).settings.language, Language::En);
         assert_eq!(load_str(r#"{"version":1,"language":"klingon"}"#).settings.language, Language::Auto);
+    }
+
+    #[test]
+    fn theme_defaults_to_system_and_unknown_values_fall_back() {
+        assert_eq!(Settings::default().theme, Theme::System);
+        assert_eq!(load_str(r#"{"version":1,"theme":"dark"}"#).settings.theme, Theme::Dark);
+        let l = load_str(r#"{"version":1,"theme":"nonsense"}"#);
+        assert_eq!(l.settings.theme, Theme::System);
+        assert!(l.error.is_none());
+        let s = Settings { theme: Theme::Light, ..Settings::default() };
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.theme, Theme::Light);
     }
 
     #[test]

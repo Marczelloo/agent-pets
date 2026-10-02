@@ -12,6 +12,7 @@ import { resolveLang, setLang, setSystemLang, t } from '../i18n';
 import { hostLabel } from '../model-label';
 import { appBadge } from '../settings/model';
 import { HostIcon } from './HostIcon';
+import { applyTheme } from '../theme';
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
   isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
@@ -202,7 +203,7 @@ export default function App() {
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
       listen<boolean>('panel://visible', e => setShown(e.payload)),
-      listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); setPets(e.payload.pets); }),
+      listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); applyTheme(e.payload.theme); setPets(e.payload.pets); }),
       listen<boolean>('pets://power', e => setPetSaving(e.payload)),
       listen<UpdateStatus>('pets://update', e => setUpdate(e.payload)),
       listen<Media>('pets://media', e => setMedia(e.payload)),
@@ -219,6 +220,7 @@ export default function App() {
     void invoke<SettingsView>('settings_get').then(v => {
       setSystemLang(v.system_lang);
       setLang(resolveLang(v.settings.language ?? 'auto'));
+      applyTheme(v.settings.theme);
       setPets(v.settings.pets);
     });
     void invoke<boolean>('power_get').then(saving => setPetSaving(saving));

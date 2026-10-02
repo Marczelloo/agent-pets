@@ -9,6 +9,7 @@ import { Wizard } from './Wizard';
 import { setLoopSaving } from './look/loop';
 import { setPreviewSaving } from './look/PetsCanvas';
 import { resolveLang, setLang, setPreviewLang, setSystemLang, t } from '../i18n';
+import { applyTheme } from '../theme';
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 if (!inTauri) setPreviewLang();
@@ -53,6 +54,7 @@ function Root() {
     const [v, r, d] = await Promise.all([invoke<View>('settings_get'), invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
     setSystemLang(v.system_lang);
     setLang(resolveLang(v.settings.language ?? 'auto'));
+    applyTheme(v.settings.theme);
     setView(v);
     setRows(r);
     setDiag(d);
@@ -64,6 +66,7 @@ function Root() {
     if (!inTauri) return;
     const un = listen<Settings>('pets://settings', e => {
       setLang(resolveLang(e.payload.language ?? 'auto'));
+      applyTheme(e.payload.theme);
       setView(v => (v ? { ...v, settings: e.payload } : v));
     });
     const power = (s: boolean) => { setLoopSaving(s); setPreviewSaving(s); };
@@ -94,6 +97,7 @@ function Root() {
 
   const onChange = (s: Settings) => {
     setLang(resolveLang(s.language ?? 'auto'));
+    applyTheme(s.theme);
     setView({ ...view, settings: s });
     setMessage(null);
     if (!inTauri) return;

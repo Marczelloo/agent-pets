@@ -12,6 +12,7 @@ import { accentFor } from '../stage/sceneFor';
 import type { Pets, Session, Settings, SettingsView, Snapshot, StageSettings } from '../types';
 import { arrange } from './arrange';
 import { Picker, type BubbleWant } from './pick';
+import { applyTheme } from '../theme';
 
 /** Side margin around the stage in the bubble window (CSS px), like Rust `bubbles::MARGIN_CSS`. */
 const MARGIN = 150;
@@ -109,7 +110,7 @@ void listen<boolean>('pets://visibility', e => { visible = e.payload; refresh();
 void listen<boolean>('pets://moving', e => { moving = e.payload; refresh(); });
 void listen<string | null>('pets://hover', e => { if (hovered !== e.payload) { hovered = e.payload; refresh(); } });
 void listen<string | null>('pets://bubble-hover', e => { if (bubbleHovered !== e.payload) { bubbleHovered = e.payload; refresh(); } });
-const onSettings = (s: Settings) => { setLang(resolveLang(s.language ?? 'auto')); pets = s.pets; stage = s.stage ?? defaultStage(); refresh(); };
+const onSettings = (s: Settings) => { applyTheme(s.theme); setLang(resolveLang(s.language ?? 'auto')); pets = s.pets; stage = s.stage ?? defaultStage(); refresh(); };
 void listen<Settings>('pets://settings', e => onSettings(e.payload));
 void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); onSettings(v.settings); });
 void invoke<Snapshot>('snapshot').then(s => { snap = s; refresh(); });
