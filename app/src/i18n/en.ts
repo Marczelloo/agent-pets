@@ -132,6 +132,11 @@ export const en: Dict = {
     title: 'Limits',
     label: 'Limit',
     fromAnthropic: 'Anthropic limits',
+    asOf: (ago: string) => `read ${ago}`,
+    staleHint: 'Claude app data is out of date. For live limits, sign in to the Claude CLI (claude auth login) and turn on Anthropic limits in Settings.',
+    statusline: 'Claude Code statusline',
+    statuslineDesc: 'Passes the exact limits of Claude Code running in a terminal to Agent Pets and keeps your own statusline working. '
+      + 'The Claude app does not run it. For limits while you use the Claude app you need the Claude CLI signed in (claude auth login) and Anthropic limits turned on.',
     notification: 'When limit usage exceeds 90%',
     usage: 'Checks api.anthropic.com for Claude plan usage every 5 minutes using your Claude Code sign-in '
       + '(~/.claude/.credentials.json). The token is sent only to api.anthropic.com and is never saved.',
@@ -243,7 +248,7 @@ export const en: Dict = {
     positionDesc: 'Where in the taskbar the pets sit, or a separate window on the desktop',
     pos: { right: 'Next to the tray', left: 'On the left', custom: 'Custom', floating: 'Floating' },
     move: 'Move',
-    moveDesc: 'Drag the stage to a free spot on the taskbar; Enter or a click outside saves, Esc cancels',
+    moveDesc: 'Drag the stage to a free spot on the taskbar; Enter or a click outside saves, Esc cancels. Drop it against the icons or the edge of a free area and it stays glued there when icons come and go',
     verticalBar: 'The taskbar is docked to the side of the screen, so the stage floats beside it. You can drag it elsewhere',
     leftFallback: 'Taskbar icons are aligned left, so the stage stays next to the tray',
     monitor: 'Monitor',

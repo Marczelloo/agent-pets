@@ -95,7 +95,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
       </section> : <>
       <section className="limits" aria-label={t().panel.limits}>
         {limitRows(snap.limits, nowMs).map(r => (
-          <div className="limit" key={`${r.agent}-${r.window}`}>
+          <div className={r.stale ? 'limit stale' : 'limit'} key={`${r.agent}-${r.window}`}>
             <span className="label">{r.label}</span>
             {r.pct == null ? <span className="none">{t().panel.noData}</span> : <>
               <span className={`bar ${r.agent}`}><i style={{ width: `${r.pct}%` }} className={r.pct >= 90 ? 'hot' : ''} /></span>
@@ -104,6 +104,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
             </>}
           </div>
         ))}
+        {limitRows(snap.limits, nowMs).some(r => r.stale) && <p className="hint">{t().limits.staleHint}</p>}
       </section>
       <section className="sessions" aria-label={t().panel.sessions}>
         {onDismissInactive && sessions.length > 0 && <div className="tools">

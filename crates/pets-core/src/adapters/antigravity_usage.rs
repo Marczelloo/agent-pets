@@ -48,6 +48,7 @@ fn limit(window: Window, o: &Value) -> Option<Limit> {
     Some(Limit {
         agent: Agent::Antigravity, window, used_pct: used_pct(o)?,
         resets_at: o.get("resetTime").and_then(Value::as_str).and_then(crate::time::rfc3339_ms),
+        stale_since: None,
     })
 }
 
@@ -202,8 +203,8 @@ mod tests {
         let e = from_summary(&summary(), NOW).unwrap();
         assert_eq!((e.kind, e.source, e.ts, e.session_id.as_str()), (Kind::Limits, Source::Antigravity, NOW, SESSION_ID));
         assert_eq!(e.data.limits, vec![
-            Limit { agent: Agent::Antigravity, window: Window::FiveHour, used_pct: 1.9, resets_at: crate::time::rfc3339_ms("2026-09-29T17:31:55Z") },
-            Limit { agent: Agent::Antigravity, window: Window::Weekly, used_pct: 0.5, resets_at: crate::time::rfc3339_ms("2026-10-02T11:00:09Z") },
+            Limit { agent: Agent::Antigravity, window: Window::FiveHour, used_pct: 1.9, resets_at: crate::time::rfc3339_ms("2026-09-29T17:31:55Z"), stale_since: None },
+            Limit { agent: Agent::Antigravity, window: Window::Weekly, used_pct: 0.5, resets_at: crate::time::rfc3339_ms("2026-10-02T11:00:09Z"), stale_since: None },
         ]);
     }
 
@@ -224,7 +225,7 @@ mod tests {
     fn user_status_gives_the_most_used_gemini_model_as_the_5h_window() {
         let e = from_user_status(&user_status(), NOW).unwrap();
         assert_eq!(e.data.limits, vec![Limit { agent: Agent::Antigravity, window: Window::FiveHour, used_pct: 40.0,
-            resets_at: crate::time::rfc3339_ms("2026-09-29T17:40:00Z") }]);
+            resets_at: crate::time::rfc3339_ms("2026-09-29T17:40:00Z"), stale_since: None }]);
         // no account details (email, plan) go further
         assert!(!serde_json::to_string(&e).unwrap().contains("x@y"));
     }

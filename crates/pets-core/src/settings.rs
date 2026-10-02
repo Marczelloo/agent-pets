@@ -126,6 +126,13 @@ pub enum Updates { #[default] Notify, Auto, Off }
 #[serde(rename_all = "snake_case")]
 pub enum Position { #[default] Right, Left, Custom, Floating }
 
+/// Edge the dragged stage is glued to, so it follows that edge when the icons move: the left or right free
+/// zone of a horizontal taskbar (`Start` = its left edge, `End` = its right edge), or the top or bottom
+/// corner beside a vertical one.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Dock { LeftStart, LeftEnd, RightStart, RightEnd, Top, Bottom }
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BgKind { #[default] None, Glass, Solid }
@@ -168,6 +175,9 @@ pub struct Stage {
     /// Taskbar anchor as a fraction of its width (0–1).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_at: Option<f64>,
+    /// Edge `custom_at` was dropped on; wins over the fraction, which stays as the fallback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dock: Option<Dock>,
     /// Floating window anchor in CSS pixels relative to the monitor work area.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub floating_at: Option<Point>,
@@ -242,6 +252,7 @@ impl<'de> Deserialize<'de> for Stage {
         let mut s = Stage::default();
         field(&m, "position", &mut s.position);
         s.custom_at = m.get("custom_at").and_then(|v| v.as_f64());
+        field(&m, "dock", &mut s.dock);
         s.floating_at = m.get("floating_at").and_then(|v| serde_json::from_value(v.clone()).ok());
         if let Some(v) = m.get("monitor").and_then(|v| v.as_str()) { s.monitor = v.to_string(); }
         field(&m, "background", &mut s.background);
@@ -253,7 +264,7 @@ impl<'de> Deserialize<'de> for Stage {
         field(&m, "show", &mut s.show);
         field(&m, "bubbles", &mut s.bubbles);
         field(&m, "minis", &mut s.minis);
-        for k in ["position", "custom_at", "floating_at", "monitor", "background", "size", "gap", "padding", "align", "order", "show",
+        for k in ["position", "custom_at", "dock", "floating_at", "monitor", "background", "size", "gap", "padding", "align", "order", "show",
                   "bubbles", "minis"] {
             m.remove(k);
         }
@@ -273,7 +284,7 @@ impl Default for Bubbles { fn default() -> Self { Bubbles { questions: true, act
 impl Default for Stage {
     fn default() -> Self {
         Stage {
-            position: Position::Right, custom_at: None, floating_at: None, monitor: PRIMARY.into(),
+            position: Position::Right, custom_at: None, dock: None, floating_at: None, monitor: PRIMARY.into(),
             background: Background::default(), size: 100, gap: 0, padding: 2, align: Align::Right,
             order: Order::Start, show: Show::default(), bubbles: Bubbles::default(), minis: true,
             extra: serde_json::Map::new(),
@@ -580,6 +591,17 @@ mod tests {
         assert_eq!(l.settings.updates, Updates::Notify);
         assert_eq!((st.position, st.align, st.order, st.size), (Position::Right, Align::Right, Order::Start, 110));
         assert_eq!((st.background.kind, st.background.radius), (BgKind::None, 6));
+    }
+
+    #[test]
+    fn the_dock_survives_a_round_trip_and_an_unknown_one_is_dropped() {
+        let st: Stage = serde_json::from_str(r#"{"position":"custom","custom_at":0.3,"dock":"left_end"}"#).unwrap();
+        assert_eq!(st.dock, Some(Dock::LeftEnd));
+        assert_eq!(serde_json::to_value(&st).unwrap()["dock"], "left_end");
+        let bad: Stage = serde_json::from_str(r#"{"dock":"middle"}"#).unwrap();
+        assert_eq!(bad.dock, None);
+        assert!(serde_json::to_value(&bad).unwrap().get("dock").is_none());
+        assert!(!serde_json::to_value(&st).unwrap().get("extra").is_some(), "dock is a known field, not an extra one");
     }
 
     #[test]

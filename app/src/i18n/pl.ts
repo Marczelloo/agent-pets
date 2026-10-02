@@ -143,6 +143,11 @@ export const pl = {
     title: 'Limity',
     label: 'Limit',
     fromAnthropic: 'Limity z Anthropic',
+    asOf: (ago: string) => `odczyt: ${ago}`,
+    staleHint: 'Dane z aplikacji Claude są nieświeże. Dla limitów na żywo zaloguj Claude CLI (claude auth login) i włącz limity z Anthropic w Ustawieniach.',
+    statusline: 'Statusline Claude Code',
+    statuslineDesc: 'Przekazuje do Agent Pets dokładne limity Claude Code działającego w terminalu i zachowuje Twój dotychczasowy statusline. '
+      + 'Aplikacja Claude go nie uruchamia. Dla limitów podczas pracy w aplikacji Claude potrzebujesz zalogowanego Claude CLI (claude auth login) i włączonych limitów z Anthropic.',
     notification: 'Gdy zużycie limitu przekroczy 90%',
     usage: 'Co 5 minut pyta api.anthropic.com o zużycie planu Claude, logowaniem Claude Code (~/.claude/.credentials.json). '
       + 'Token trafia tylko do api.anthropic.com i nigdzie nie jest zapisywany.',
@@ -254,7 +259,7 @@ export const pl = {
     positionDesc: 'Gdzie w pasku stoją zwierzaki, albo osobne okno na pulpicie',
     pos: { right: 'Przy zasobniku', left: 'Po lewej', custom: 'Własna', floating: 'Pływające' },
     move: 'Przesuń',
-    moveDesc: 'Przeciągnij scenę w wolne miejsce paska; Enter albo klik obok zapisuje, Esc cofa',
+    moveDesc: 'Przeciągnij scenę w wolne miejsce paska; Enter albo klik obok zapisuje, Esc cofa. Upuszczona przy ikonach lub krawędzi wolnego obszaru zostaje do niej przyklejona, gdy ikony się pojawiają i znikają',
     verticalBar: 'Pasek zadań jest przypięty z boku ekranu, więc scena unosi się obok niego. Możesz ją przeciągnąć gdzie indziej',
     leftFallback: 'Ikony paska są wyrównane do lewej, więc scena stoi przy zasobniku',
     monitor: 'Monitor',

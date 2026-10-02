@@ -102,7 +102,8 @@ impl Runtime {
         let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
         for f in keep_for_rehydration(&recent, &live_ids) { rt.poll_file(&f); }
         rt.end_answered_subagents(crate::time::now_ms());
-        if let Some(claude::desktop_usage::Usage::Limits(e)) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
+        let first = rt.usage.poll(crate::time::now_ms());
+        rt.desktop_usage(first);
         rt.poll_router(crate::time::now_ms());
         // one tick before the first snapshot: old threads from recently touched files disappear before being shown
         rt.store.tick(crate::time::now_ms(), &pid::is_alive);
@@ -171,13 +172,24 @@ impl Runtime {
         for p in paths { changed |= self.poll_file(&p); }
         changed |= self.poll_router(now);
         changed |= self.poll_opencode_usage(now);
-        match self.usage.poll(now) {
-            Some(claude::desktop_usage::Usage::Limits(e)) => changed |= self.apply(e),
-            Some(claude::desktop_usage::Usage::Stale) => changed |= self.store.drop_limits_without_reset(crate::model::Agent::Claude),
-            None => {}
-        }
+        let usage = self.usage.poll(now);
+        changed |= self.desktop_usage(usage);
         changed |= !self.store.tick(now, &pid::is_alive).is_empty();
         changed
+    }
+
+    /// Claude app limits. An older "as of" reading is replaced by the next report, so a window that ran out disappears.
+    fn desktop_usage(&mut self, u: Option<claude::desktop_usage::Usage>) -> bool {
+        use claude::desktop_usage::Usage;
+        use crate::model::Agent;
+        match u {
+            Some(Usage::Limits(e)) => {
+                let dropped = self.store.retain_limits(|l| l.agent != Agent::Claude || l.stale_since.is_none());
+                self.apply(e) | dropped
+            }
+            Some(Usage::Stale) => self.store.drop_limits_without_reset(Agent::Claude),
+            None => false,
+        }
     }
 
     fn poll_router(&mut self, now: i64) -> bool {
@@ -423,6 +435,18 @@ mod tests {
         let rt = Runtime::start(cfg(&h)).unwrap();
         let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
         assert_eq!(five.map(|l| l.used_pct), Some(42.0));
+    }
+
+    #[test]
+    fn an_old_claude_app_reading_stays_visible_as_of_its_time() {
+        let h = home();
+        let t = crate::time::now_ms() - 18 * 3_600_000;
+        std::fs::create_dir_all(h.path().join("Claude")).unwrap();
+        std::fs::write(h.path().join("Claude").join(claude::desktop_usage::FILE),
+            serde_json::json!({"version": 2, "samples": [{"t": t, "org": "o", "u": {"fh": 38, "sd": 47}}]}).to_string()).unwrap();
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        let l: Vec<_> = rt.store().limits().iter().filter(|l| l.agent == Agent::Claude).map(|l| (l.window, l.used_pct, l.stale_since)).collect();
+        assert_eq!(l, vec![(crate::model::Window::Weekly, 47.0, Some(t))], "the 5 h window is long over");
     }
 
     #[test]
@@ -798,7 +822,7 @@ mod tests {
         rt.apply_external(event(Source::Codex, "x1", Kind::Prompt));
         rt.apply_external(event(Source::Router, "r1", Kind::Prompt));
         let mut l = event(Source::Codex, "x1", Kind::Limits);
-        l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 10.0, resets_at: None }];
+        l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 10.0, resets_at: None, stale_since: None }];
         rt.apply_external(l);
         let apps = crate::settings::Apps { claude_code: true, codex: false, agent_router: false, ..Default::default() };
         assert!(rt.set_apps(apps));

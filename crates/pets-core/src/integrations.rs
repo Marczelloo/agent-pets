@@ -594,6 +594,21 @@ pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf
     if dst.is_file() { Ok(dst) } else { Err(tr(lang, "Brak hook.exe w instalacji Agent Pets; zainstaluj aplikację ponownie.", "hook.exe is missing from the Agent Pets install; reinstall the app.").into()) }
 }
 
+/// Statusline pass-through of Claude Code in a terminal (exact limits); the previous `statusLine` is remembered and restored.
+pub fn set_statusline(home: &Path, hook_src: Option<&Path>, on: bool, lang: Lang) -> Result<String, String> {
+    let settings = claude_settings(home);
+    let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), settings.display());
+    if on {
+        let hook = place_hook(home, hook_src, lang)?;
+        crate::statusline_install::install_file_at(&settings, &hook.to_string_lossy(), &statusline_original(home)).map_err(err)?;
+        Ok(tr(lang, "Statusline włączony (działa w Claude Code w terminalu).", "Statusline enabled (works in Claude Code in a terminal).").into())
+    } else {
+        crate::statusline_install::uninstall_file_at(&settings, &statusline_original(home)).map_err(err)?;
+        let _ = std::fs::remove_file(statusline_original(home));
+        Ok(tr(lang, "Statusline wyłączony.", "Statusline disabled.").into())
+    }
+}
+
 pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
     if id == AppId::Opencode { return enable_opencode(home, lang); }
     if id == AppId::Copilot { return enable_copilot(home, hook_src, lang); }
@@ -1043,6 +1058,19 @@ mod tests {
         uninstall_all(h.path(), true, Lang::Pl);
         assert!(!pets_dir(h.path()).exists());
     }
+    #[test]
+    fn the_statusline_switch_keeps_and_restores_the_previous_statusline() {
+        let h = home();
+        std::fs::create_dir_all(h.path().join(".claude")).unwrap();
+        std::fs::write(claude_settings(h.path()), json!({"statusLine": {"type": "command", "command": "mine.exe"}}).to_string()).unwrap();
+        set_statusline(h.path(), Some(&hook_src(h.path())), true, Lang::En).unwrap();
+        assert!(crate::statusline_install::is_installed(&claude_json(h.path())));
+        assert!(installed_hook(h.path()).is_file() && statusline_original(h.path()).is_file());
+        set_statusline(h.path(), None, false, Lang::En).unwrap();
+        assert_eq!(claude_json(h.path())["statusLine"]["command"].as_str(), Some("mine.exe"));
+        assert!(!statusline_original(h.path()).exists());
+    }
+
     #[test]
     fn texts_follow_the_language() {
         let h = home();

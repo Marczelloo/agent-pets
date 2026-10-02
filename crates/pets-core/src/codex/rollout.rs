@@ -68,6 +68,7 @@ fn limits_from(rl: &Value) -> Vec<Limit> {
             window,
             used_pct: w.get("used_percent")?.as_f64()? as f32,
             resets_at: w.get("resets_at").and_then(|v| v.as_i64()).map(|s| s * 1000),
+            stale_since: None,
         })
     }).collect()
 }
@@ -474,8 +475,8 @@ mod tests {
                             "secondary": {"used_percent": 6.0, "window_minutes": 10080, "resets_at": 1790711013}}})));
         assert_eq!(e[0].data.context, Some(Context { used: 28370, max: 258400 }));
         assert_eq!(e[0].data.limits, vec![
-            Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 12.5, resets_at: Some(1_790_209_519_000) },
-            Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 6.0, resets_at: Some(1_790_711_013_000) }]);
+            Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 12.5, resets_at: Some(1_790_209_519_000), stale_since: None },
+            Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 6.0, resets_at: Some(1_790_711_013_000), stale_since: None }]);
     }
 
     #[test]

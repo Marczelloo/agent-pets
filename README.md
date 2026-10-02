@@ -23,7 +23,7 @@ Animated pets in the Windows 11 taskbar that show what your coding agents are do
 ## Features
 
 - **One pet per session**, posed by what the agent does: thinking, editing, running a command, reading, searching, browsing, delegating, waiting for you, done, error, asleep.
-- **Limits at a glance.** 5-hour and weekly bars for Claude, Codex and Antigravity, task progress under each pet, a "+N" badge when the taskbar runs out of room.
+- **Limits at a glance.** 5-hour and weekly bars for Claude, Codex and Antigravity, task progress under each pet, a "+N" badge when the taskbar runs out of room. **Claude limits while you use the Claude app require the Claude CLI, signed in with `claude auth login`** (plus Settings → Limits → Anthropic limits). Without it the app's own samples are shown, which can be hours old; Claude Code in a terminal can also use a statusline. See [Agents](docs/agents.md#claude-rate-limits).
 - **One click back to the session.** The panel lists every session; **Open** brings back the Claude or Codex app, the editor, the terminal, or resumes the session in a new one.
 - **Speech bubbles and subagents.** See the question an agent asks or the command it runs; subagents show up as mini pets next to their parent.
 - **Seven looks, two ways to move.** Sticker, Sketch, Clean, Pixel art, Neon, Ink and Pastel, plus a Dynamic mode with anime-inspired scenes.

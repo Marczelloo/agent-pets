@@ -20,8 +20,8 @@ describe('hud', () => {
       { agent: 'claude', window: 'five_hour', used_pct: 34, resets_at: null },
     ]);
     expect(bars).toEqual([
-      { agent: 'claude', window: 'five_hour', pct: 34 },
-      { agent: 'codex', window: 'weekly', pct: 91 },
+      { agent: 'claude', window: 'five_hour', pct: 34, stale: false },
+      { agent: 'codex', window: 'weekly', pct: 91, stale: false },
     ]);
     expect(limitBars([])).toEqual([]);
   });

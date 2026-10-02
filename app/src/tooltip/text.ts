@@ -65,8 +65,10 @@ export function limitsTooltip(limits: Limit[], nowMs: number): TooltipContent {
     const l = limits.find(v => v.agent === agent && v.window === window);
     if (!l || !Number.isFinite(l.used_pct)) continue;
     const reset = formatReset(l.resets_at, nowMs);
-    lines.push(`${limitName(agent)} · ${t().window[window as 'five_hour' | 'weekly']}: ${Math.round(clampPct(l.used_pct))}%${reset ? ` · ${reset}` : ''}`);
+    const note = l.stale_since != null ? t().limits.asOf(formatAgo(nowMs - l.stale_since)) : reset;
+    lines.push(`${limitName(agent)} · ${t().window[window as 'five_hour' | 'weekly']}: ${Math.round(clampPct(l.used_pct))}%${note ? ` · ${note}` : ''}`);
   }
+  if (limits.some(l => l.stale_since != null)) lines.push(t().limits.staleHint);
   return { title: t().limits.title, subtitle: '', lines };
 }
 

@@ -46,7 +46,7 @@ mod tests {
         e.data.context = Some(Context { used: 50_000, max: 200_000 });
         s.apply(&e);
         let mut l = Event::new(Source::Codex, "c", Kind::Limits, 0);
-        l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 42.0, resets_at: Some(3_600_000) }];
+        l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 42.0, resets_at: Some(3_600_000), stale_since: None }];
         s.apply(&l);
         let out = render(&s, 10_000);
         assert!(out.contains("Taskbar widget"));

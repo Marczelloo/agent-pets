@@ -6,7 +6,7 @@ use serde_json::Value;
 fn limit(v: &Value, window: Window) -> Option<Limit> {
     let used = v.get("used_percentage")?.as_f64()?;
     let resets_at = v.get("resets_at").and_then(Value::as_i64).map(|s| s * 1000);
-    Some(Limit { agent: Agent::Claude, window, used_pct: used as f32, resets_at })
+    Some(Limit { agent: Agent::Claude, window, used_pct: used as f32, resets_at, stale_since: None })
 }
 
 pub fn to_events(env: &StatuslineEnvelope) -> Vec<Event> {

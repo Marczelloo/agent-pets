@@ -95,7 +95,7 @@ impl Rules {
                 _ => {}
             }
         }
-        for l in &snap.limits {
+        for l in snap.limits.iter().filter(|l| l.stale_since.is_none()) {
             let key = format!("{:?}:{:?}", l.agent, l.window);
             if l.used_pct < LIMIT_REARM_PCT { self.limits.remove(&key); continue; }
             if l.used_pct <= LIMIT_PCT { continue; }
@@ -132,7 +132,7 @@ mod tests {
     fn nothing_on_startup_even_if_everything_qualifies() {
         let mut r = Rules::new(ALL);
         let s = snap(vec![sess("a", State::NeedsYou, 0, None), sess("b", State::Done, 200_000, Some(0))],
-            vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 95.0, resets_at: Some(9) }]);
+            vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 95.0, resets_at: Some(9), stale_since: None }]);
         assert!(r.observe(&s, 300_000, &|_| false).is_empty());
         assert!(r.observe(&s, 301_000, &|_| false).is_empty(), "preexisting episodes do not appear later");
     }
@@ -169,7 +169,7 @@ mod tests {
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         let t = r.observe(&snap(vec![sess("b", State::Done, 200_000, Some(0))], vec![]), 201_000, &|_| false);
         assert_eq!((t[0].title.as_str(), t[0].body.as_str()), ("Agent finished", "T-b finished (3 min)"));
-        let l = r.observe(&snap(vec![], vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 95.0, resets_at: Some(9) }]), 202_000, &|_| false);
+        let l = r.observe(&snap(vec![], vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 95.0, resets_at: Some(9), stale_since: None }]), 202_000, &|_| false);
         assert_eq!((l[0].title.as_str(), l[0].body.as_str()), ("Codex: weekly limit", "95% of the weekly limit used"));
     }
 
@@ -177,7 +177,7 @@ mod tests {
     fn limit_once_per_window_until_reset() {
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
-        let l = |pct: f32, reset: i64| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: Some(reset) };
+        let l = |pct: f32, reset: i64| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: Some(reset), stale_since: None };
         const R1: i64 = 18_000_000;
         const R2: i64 = 36_000_000;
         assert!(r.observe(&snap(vec![], vec![l(80.0, R1)]), 1, &|_| false).is_empty());
@@ -187,11 +187,19 @@ mod tests {
     }
 
     #[test]
+    fn an_old_reading_never_warns() {
+        let mut r = Rules::new(ALL);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let old = Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 97.0, resets_at: None, stale_since: Some(1) };
+        assert!(r.observe(&snap(vec![], vec![old]), 1, &|_| false).is_empty());
+    }
+
+    #[test]
     fn limit_without_reset_time_rearms_after_usage_drops() {
         // Claude app limits have no reset time: detect a new window when usage drops.
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
-        let l = |pct: f32| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: None };
+        let l = |pct: f32| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: None, stale_since: None };
         assert_eq!(r.observe(&snap(vec![], vec![l(91.0)]), 1, &|_| false).len(), 1);
         assert!(r.observe(&snap(vec![], vec![l(89.0)]), 2, &|_| false).is_empty());
         assert!(r.observe(&snap(vec![], vec![l(92.0)]), 3, &|_| false).is_empty(), "fluctuation around 90% is still the same window");
@@ -204,7 +212,7 @@ mod tests {
         // claude app reports 91% without reset, then statusline reports 92% with reset: still the same window
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
-        let l = |pct: f32, reset: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: reset };
+        let l = |pct: f32, reset: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: reset, stale_since: None };
         assert_eq!(r.observe(&snap(vec![], vec![l(91.0, None)]), 1, &|_| false).len(), 1);
         assert!(r.observe(&snap(vec![], vec![l(92.0, Some(18_000_000))]), 2, &|_| false).is_empty());
         assert!(r.observe(&snap(vec![], vec![l(93.0, Some(18_030_000))]), 3, &|_| false).is_empty(), "reset time fluctuates by seconds");

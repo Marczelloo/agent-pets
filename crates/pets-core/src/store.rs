@@ -808,7 +808,7 @@ mod tests {
     #[test]
     fn limits_merge_by_agent_and_window() {
         let mut s = Store::new(Timing::default());
-        let lim = |p: f32| Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: p, resets_at: None };
+        let lim = |p: f32| Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: p, resets_at: None, stale_since: None };
         let mut e = Event::new(Source::Codex, "c1", Kind::Limits, 0);
         e.data.limits = vec![lim(10.0)];
         s.apply(&e);
@@ -867,7 +867,7 @@ mod tests {
     fn an_older_reading_never_overrides_a_newer_one() {
         // The Codex app touches old threads: read their rollouts with August limits after September limits.
         let mut s = Store::new(Timing::default());
-        let week = |p: f32, r: i64| Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: p, resets_at: Some(r) };
+        let week = |p: f32, r: i64| Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: p, resets_at: Some(r), stale_since: None };
         let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Codex, "c", Kind::Limits, ts); e.data.limits = vec![l]; e };
         s.apply(&at(2_000_000, week(18.0, 9_000_000)));
         s.apply(&at(1_000_000, week(61.0, 1_500_000)));
@@ -878,7 +878,7 @@ mod tests {
     fn a_limit_whose_reset_passed_is_no_longer_shown() {
         let mut s = Store::new(Timing::default());
         let mut e = Event::new(Source::Codex, "c", Kind::Limits, 0);
-        e.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 61.0, resets_at: Some(5_000) }];
+        e.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 61.0, resets_at: Some(5_000), stale_since: None }];
         s.apply(&e);
         assert!(s.tick(4_000, &|_| true).is_empty());
         assert!(matches!(s.tick(5_000, &|_| true).as_slice(), [Change::Limits(l)] if l.is_empty()));
@@ -890,9 +890,9 @@ mod tests {
         let mut s = Store::new(Timing::default());
         let mut e = Event::new(Source::Claude, "x", Kind::Limits, 0);
         e.data.limits = vec![
-            Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 50.0, resets_at: None },
-            Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 60.0, resets_at: Some(9) },
-            Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 70.0, resets_at: None },
+            Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 50.0, resets_at: None, stale_since: None },
+            Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 60.0, resets_at: Some(9), stale_since: None },
+            Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 70.0, resets_at: None, stale_since: None },
         ];
         s.apply(&e);
         assert!(s.drop_limits_without_reset(Agent::Claude));
@@ -904,7 +904,7 @@ mod tests {
     #[test]
     fn limit_without_reset_keeps_a_future_reset_of_the_same_window() {
         let mut s = Store::new(Timing::default());
-        let lim = |p: f32, r: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: p, resets_at: r };
+        let lim = |p: f32, r: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: p, resets_at: r, stale_since: None };
         let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Claude, "x", Kind::Limits, ts); e.data.limits = vec![l]; e };
         s.apply(&at(1_000, lim(30.0, Some(10_000))));
         s.apply(&at(2_000, lim(40.0, None)));

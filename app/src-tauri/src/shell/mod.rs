@@ -52,7 +52,7 @@ fn align_of(a: Anchor) -> Align { match a { Anchor::Left => Align::Left, Anchor:
 pub fn mode_of(st: &Stage) -> Mode {
     match (st.position, st.custom_at) {
         (Position::Left, _) => Mode::Left,
-        (Position::Custom, Some(at)) => Mode::Custom { at, anchor: anchor_of(st.align) },
+        (Position::Custom, Some(at)) => Mode::Custom { at, anchor: anchor_of(st.align), dock: st.dock },
         _ => Mode::Right,
     }
 }
@@ -317,7 +317,12 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                     Cmd::Drag(Drag::End) => if let Some(d) = dragging.take() {
                         let r = placement::float_rect(mon.work, Some(d.at), anchor, want, h_css, mon.scale);
                         let (x, y) = placement::float_anchor(mon.work, r, anchor, mon.scale);
-                        if let Err(e) = crate::settings::update(&app, |s| s.stage.floating_at = Some(pets_core::settings::Point { x, y })) {
+                        let beside = vertical.is_some();
+                        let corner = if beside { placement::snap_corner(mon.work, r, mon.scale) } else { None };
+                        if let Err(e) = crate::settings::update(&app, |s| {
+                            s.stage.floating_at = Some(pets_core::settings::Point { x, y });
+                            if beside { s.stage.dock = corner; }
+                        }) {
                             pets_core::app_log!("{e}");
                         }
                     },
@@ -331,8 +336,11 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             // beside an auto-hidden vertical bar the stage goes away with it, like an embedded one
             let vis = !taskbar::fullscreen_app() && !bar_hidden;
             if last_visible != Some(vis) { let _ = app.emit("pets://visibility", vis); last_visible = Some(vis); }
-            let r = (want > 0.0 && vis).then(|| match (vertical, at) {
-                (Some(side), None) => placement::beside_vertical_bar(mon.work, side, want, h_css, mon.scale),
+            // glued to a corner beside a vertical bar: the position follows the work area, not saved pixels
+            let corner = vertical.and(st.dock).filter(|d| matches!(d, placement::Dock::Top | placement::Dock::Bottom));
+            let r = (want > 0.0 && vis).then(|| match (vertical, dragging.is_some(), corner, at) {
+                (Some(side), false, Some(d), _) => placement::beside_vertical_bar(mon.work, side, d == placement::Dock::Top, want, h_css, mon.scale),
+                (Some(side), _, _, None) => placement::beside_vertical_bar(mon.work, side, false, want, h_css, mon.scale),
                 _ => placement::float_rect(mon.work, at, anchor, want, h_css, mon.scale),
             });
             if needs_apply(r, last_rect, taskbar::rect_of(hw)) { taskbar::apply_rect(hw, r); last_rect = r; }
@@ -352,7 +360,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 Cmd::Width(_) | Cmd::Hello | Cmd::Settings => {}
                 Cmd::Move(true) if moving.is_none() => {
                     let mode = mode_of(&st);
-                    let anchor = match mode { Mode::Left => Anchor::Left, Mode::Custom { anchor, .. } => anchor, Mode::Right => Anchor::Right };
+                    let anchor = mode.anchor();
                     let Some(p) = placement::place_mode(&m, want, mode) else { continue };
                     let x = m.tray.left + p.x + match anchor { Anchor::Left => 0, Anchor::Center => p.w / 2, Anchor::Right => p.w };
                     moving = Some(Moving { anchor, at: placement::custom_at(&m, x), grab: None });
@@ -369,8 +377,15 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
                 Cmd::MoveDone(commit) => if let Some(mv) = moving.take() {
                     set_pmode(pointer::NORMAL);
                     if commit {
-                        let (at, align) = (mv.at, align_of(mv.anchor));
-                        if let Err(e) = crate::settings::update(&app, |s| { s.stage.position = Position::Custom; s.stage.custom_at = Some(at); s.stage.align = align; }) {
+                        // dropped against a zone edge: glue to it, so the stage follows the edge when the icons move
+                        let dock = placement::snap_dock(&m, want, mv.at, mv.anchor);
+                        let align = match dock {
+                            Some(placement::Dock::LeftStart | placement::Dock::RightStart) => Align::Left,
+                            Some(_) => Align::Right,
+                            None => align_of(mv.anchor),
+                        };
+                        let at = mv.at;
+                        if let Err(e) = crate::settings::update(&app, |s| { s.stage.position = Position::Custom; s.stage.custom_at = Some(at); s.stage.align = align; s.stage.dock = dock; }) {
                             pets_core::app_log!("{e}");
                         }
                     }
@@ -378,7 +393,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
             }
         }
         // during a move, use the dragged position; otherwise use settings
-        let mode = match &moving { Some(mv) => Mode::Custom { at: mv.at, anchor: mv.anchor }, None => mode_of(&st) };
+        let mode = match &moving { Some(mv) => Mode::Custom { at: mv.at, anchor: mv.anchor, dock: None }, None => mode_of(&st) };
         let p = placement::place_mode(&m, want, mode);
         if let Some(p) = p {
             let l = Layout { max_css: p.max_css.floor(), height_css: p.height_css, scale: m.scale, mode: "taskbar",

@@ -111,3 +111,14 @@ describe('actionLabel with music', () => {
     expect(actionLabel({ state: 'done', tool: null }, m)).toBe(actionLabel({ state: 'done', tool: null }));
   });
 });
+
+describe('limits from an old reading', () => {
+  const now = new Date(2026, 8, 24, 12, 0).getTime();
+  const old = { agent: 'claude' as const, window: 'weekly' as const, used_pct: 47, resets_at: null, stale_since: now - 18 * 3_600_000 };
+  it('says when it was read and how to refresh it, instead of passing as current', () => {
+    const t = limitsTooltip([old], now);
+    expect(t.lines[0]).toBe('Claude · tydzień: 47% · odczyt: 18 h temu');
+    expect(t.lines).toHaveLength(2);
+    expect(limitsTooltip([{ ...old, stale_since: null }], now).lines).toEqual(['Claude · tydzień: 47%']);
+  });
+});

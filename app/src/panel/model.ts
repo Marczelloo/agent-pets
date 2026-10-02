@@ -59,7 +59,7 @@ export function accountRows(s: Session, limits: Limit[], nowMs: number): LimitRo
   return limitRows(limits, nowMs).filter(r => r.agent === acct && r.pct != null);
 }
 
-export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string }
+export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string; stale: boolean }
 
 /** Always four Claude and Codex rows; missing data is `pct: null`, never 0%. Antigravity only with data. */
 export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
@@ -70,7 +70,9 @@ export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
     if (!ok && agent === 'antigravity') continue;
     rows.push({
       agent, window, label: `${limitName(agent)} · ${t().window[window]}`,
-      pct: ok ? clampPct(l!.used_pct) : null, reset: ok ? formatReset(l!.resets_at, nowMs) : '',
+      pct: ok ? clampPct(l!.used_pct) : null,
+      reset: !ok ? '' : l!.stale_since != null ? t().limits.asOf(formatAgo(nowMs - l!.stale_since)) : formatReset(l!.resets_at, nowMs),
+      stale: ok && l!.stale_since != null,
     });
   }
   return rows;
