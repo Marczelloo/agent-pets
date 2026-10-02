@@ -128,6 +128,7 @@ cd tools\showcase; pnpm install
 node record.mjs                     # all four: pets, states, styles, dynamic
 node record.mjs states --zoom=2     # one board, twice as sharp
 node record.mjs banner              # docs/images/banner.png, a still at twice the size
+node screens.mjs                    # docs/images/{panel,wizard,settings}.png from the demo data (needs the dev server on :1420)
 ```
 
 `app/showcase.html?mode=gallery|states|styles|dynamic|banner&live=1` shows a board live in the browser.

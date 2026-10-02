@@ -77,7 +77,7 @@ Claude Code, Codex and opencode get the most care and testing; the experimental 
 
 | Panel | First-run wizard | Settings |
 |---|---|---|
-| <img src="docs/images/panel.png" alt="Panel with limits and sessions" width="260"> | <img src="docs/images/wizard.png" alt="Wizard step: choose the pets' look, with a live preview" width="340"> | <img src="docs/images/settings.png" alt="Settings window, Apps tab" width="340"> |
+| <img src="docs/images/panel.png" alt="Panel with the session list: a main session with its subagents and two more sessions" width="260"> | <img src="docs/images/wizard.png" alt="Wizard step: pet appearance, motion and a gallery of seven styles" width="400"> | <img src="docs/images/settings.png" alt="Settings window, Look tab with the live preview and all scenes" width="400"> |
 
 ## Privacy
 
