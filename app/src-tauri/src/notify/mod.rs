@@ -24,6 +24,16 @@ pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str
     let _ = toast.on_activated(move |action| { on(action); Ok(()) }).show();
 }
 
+/// Path for the `IconUri` value: the toast shell does not load an image through the `\\?\` verbatim prefix
+/// that `resource_dir()` returns, so the notifications showed no app icon.
+fn toast_icon_path(p: &std::path::Path) -> String {
+    let s = p.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with(r"UNC\") => rest.to_string(),
+        _ => s.to_string(),
+    }
+}
+
 /// Register AUMID for an uninstalled app (HKCU), so toasts are labeled "Agent Pets".
 fn register_aumid(icon: Option<&std::path::Path>) -> bool {
     use windows::core::HSTRING;
@@ -39,7 +49,7 @@ fn register_aumid(icon: Option<&std::path::Path>) -> bool {
         let mut ok = RegSetValueExW(h, &HSTRING::from("DisplayName"), None, REG_SZ, Some(bytes)).is_ok();
         // toast icon (file from installed resources; absent in development builds)
         if let Some(icon) = icon {
-            let v: Vec<u16> = icon.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+            let v: Vec<u16> = toast_icon_path(icon).encode_utf16().chain(std::iter::once(0)).collect();
             let b = std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 2);
             ok &= RegSetValueExW(h, &HSTRING::from("IconUri"), None, REG_SZ, Some(b)).is_ok();
         }
@@ -106,4 +116,21 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
         }
     });
     tx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::toast_icon_path;
+    use std::path::Path;
+
+    #[test]
+    fn strips_the_verbatim_prefix_that_hides_the_toast_icon() {
+        assert_eq!(toast_icon_path(Path::new(r"\\?\C:\Users\a\Agent Pets\icons\128x128.png")), r"C:\Users\a\Agent Pets\icons\128x128.png");
+    }
+
+    #[test]
+    fn leaves_plain_and_unc_paths_alone() {
+        assert_eq!(toast_icon_path(Path::new(r"C:\x\i.png")), r"C:\x\i.png");
+        assert_eq!(toast_icon_path(Path::new(r"\\?\UNC\srv\x\i.png")), r"\\?\UNC\srv\x\i.png");
+    }
 }
