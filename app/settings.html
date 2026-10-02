@@ -122,6 +122,13 @@ details.overrides .pair{display:flex;gap:6px}
 ::-webkit-scrollbar-track{background:transparent}
 a,.link{color:var(--accent)}
 
+/* app rows */
+.app-details summary{cursor:pointer;color:var(--mut);font-size:12px;width:max-content;border-radius:4px}
+.app-details summary:hover{color:var(--txt)}
+.app-details summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app-details p{margin:6px 0 0;overflow-wrap:anywhere}
+.ui-section+.ui-section{margin-top:28px}
+
 /* shared controls (settings/ui) */
 .ui-section{margin:0 0 28px}
 .ui-section>h3{font-size:12px;font-weight:600;color:var(--mut);margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--line)}

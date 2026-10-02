@@ -13,6 +13,16 @@ export const appHint = (id: AppId): string => t().settings.appHint[id];
 export const EXPERIMENTAL: AppId[] = ['copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
 /** Integrations without a live check: never enabled merely because they were detected. */
 export const OPT_IN: AppId[] = ['cursor', 'grok', 'zcode'];
+/** Agents shown first in the Apps tab, in this order (the rest is experimental). */
+const MAIN: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode'];
+/** Splits the integration rows into main agents and experimental ones; an id nobody knows is treated as experimental. */
+export function groupApps(rows: AppRow[]): { main: AppRow[]; experimental: AppRow[] } {
+  const by = (ids: AppId[]) => ids.flatMap(id => rows.filter(r => r.id === id));
+  const main = by(MAIN);
+  const known = by(EXPERIMENTAL);
+  const rest = rows.filter(r => !MAIN.includes(r.id) && !EXPERIMENTAL.includes(r.id));
+  return { main, experimental: [...known, ...rest] };
+}
 export const appBadge = (id: AppId | null): string | undefined => id && EXPERIMENTAL.includes(id) ? t().settings.experimental : undefined;
 const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id in APP_LABEL ? appLabel(id as AppId) : id;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppRow, Diagnostics } from '../types';
 import { appFor } from '../look';
-import { APP_LABEL, appBadge, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, EXPERIMENTAL, OPT_IN, reportText, withApp, withDoor } from './model';
+import { APP_LABEL, appBadge, appLabel, clampMaxVisible, defaultAppChoice, defaultSettings, doorOn, EXPERIMENTAL, groupApps, OPT_IN, reportText, withApp, withDoor } from './model';
 
 const row = (id: AppRow['id'], found: boolean): AppRow =>
   ({ id, detected: { found, path: found ? `C:/home/.${id}` : null, note: found ? null : 'nie znaleziono' },
@@ -101,5 +101,22 @@ describe('settings model', () => {
       log_path: 'L', log_tail: ['2026-09-30T10:00:00.000Z Agent Pets 0.13.0 started', '2026-09-30T10:00:01.000Z update check: offline'] };
     const lines = reportText(d, 0).split('\n');
     expect(lines.slice(-3)).toEqual(['Log (L), ostatnie wpisy:', d.log_tail[0], d.log_tail[1]]);
+  });
+});
+
+describe('groupApps', () => {
+  const ids = (rows: AppRow[]) => rows.map(r => r.id);
+  it('puts the main agents first in a fixed order and the experimental ones in the EXPERIMENTAL order', () => {
+    const rows = ['zcode', 'opencode', 'cursor', 'agent_router', 'claude_code', 'copilot', 'codex', 'grok', 'antigravity'].map(id => row(id as AppRow['id'], true));
+    const { main, experimental } = groupApps(rows);
+    expect(ids(main)).toEqual(['claude_code', 'codex', 'agent_router', 'opencode']);
+    expect(ids(experimental)).toEqual(EXPERIMENTAL);
+  });
+  it('skips ids with no row and sends an unknown id to experimental, after the known ones', () => {
+    const odd = { ...row('codex', true), id: 'kilo' } as unknown as AppRow;
+    const { main, experimental } = groupApps([row('codex', true), odd, row('cursor', false)]);
+    expect(ids(main)).toEqual(['codex']);
+    expect(ids(experimental)).toEqual(['cursor', 'kilo']);
+    expect(groupApps([])).toEqual({ main: [], experimental: [] });
   });
 });

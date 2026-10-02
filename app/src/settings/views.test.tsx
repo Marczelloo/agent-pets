@@ -198,12 +198,16 @@ describe('SettingsView', () => {
     expect(html).toContain('opencode');
     expect(html).toContain('Plugin: brak');
   });
-  it('Copilot, Antigravity, Cursor, Grok and ZCode are experimental; the new three say what they write and what they cannot show', () => {
+  it('Copilot, Antigravity, Cursor, Grok and ZCode sit under Eksperymentalne, after the main agents; the new three say what they write and what they cannot show', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={newRows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
-    expect(html.match(/class="badge">eksperymentalne</g)?.length).toBe(3 + 2);
-    expect(html).toMatch(/>GitHub Copilot<span class="badge">/);
-    expect(html).toMatch(/>Cursor<span class="badge">/);
+    const at = (x: string) => html.indexOf(x);
+    expect(at('Główne agenty')).toBeGreaterThan(-1);
+    expect(at('Claude Code')).toBeLessThan(at('Eksperymentalne'));
+    expect(at('opencode')).toBeLessThan(at('Eksperymentalne'));
+    for (const name of ['GitHub Copilot', 'Antigravity', 'Cursor', 'Grok Build', 'ZCode']) expect(at(name)).toBeGreaterThan(at('Eksperymentalne'));
+    expect(at('Eksperymentalne')).toBeLessThan(at('Furtka dla innych agentów'));
+    expect(html).not.toContain('class="badge"');
     for (const path of ['~/.cursor/hooks.json', '~/.grok/hooks/agent-pets.json', '~/.zcode/cli/config.json']) expect(html).toContain(path);
     const only = renderToString(<SettingsView settings={defaultSettings()} rows={[found('cursor'), found('zcode')]} diag={diag} tab="apps"
       onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} />);
@@ -212,7 +216,18 @@ describe('SettingsView', () => {
     setLang('en');
     const en = renderToString(<SettingsView settings={defaultSettings()} rows={newRows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
-    expect(en.match(/class="badge">experimental</g)?.length).toBe(3 + 2);
+    expect(en).toContain('Experimental');
+    expect(en).toContain('Main agents');
+  });
+  it('an app row shows one status line, keeps its path and hint under Details, dims when not detected and offers Reinstall when hooks are missing', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toContain('Wykryto · Hooki: brak');
+    expect(html).toContain('Szczegóły');
+    expect(html).toContain('C:/h/.claude');
+    expect(html).toContain('Zainstaluj ponownie');
+    expect(html).toMatch(/class="ui-row dim"/);
+    expect(html).toContain('Nie znaleziono ~/.codex.');
   });
   it('Copilot and Antigravity say what they write and where; Antigravity says what it cannot show', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}

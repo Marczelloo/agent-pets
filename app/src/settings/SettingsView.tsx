@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, UpdateStatus } from '../types';
 import { LookTab } from './look/LookTab';
 import { StageTab } from './StageTab';
-import { appBadge, appHint, appLabel, doorOn, reportText, withDoor } from './model';
+import { AppsTab } from './AppsTab';
+import { reportText } from './model';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
@@ -55,13 +56,6 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
-/** Apps whose files receive hooks: the paragraph explains what and where. */
-const HOOK_FILES: AppId[] = ['copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
-/** What this app's pet will not show. */
-const NOTE: Partial<Record<AppId, () => string>> = {
-  antigravity: () => t().settings.antigravityNote, cursor: () => t().settings.cursorNote, zcode: () => t().settings.zcodeNote,
-};
-
 export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onStatusline, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
@@ -87,26 +81,7 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         <h2>{t().settings.tabs[tab]}</h2>
         {message && <p className="notice" role="status">{message}</p>}
 
-        {tab === 'apps' && <section className="card">
-          {rows.map(r => (
-            <div key={r.id}>
-              <Toggle label={appLabel(r.id)} badge={appBadge(r.id)} checked={!!s.apps[r.id]} disabled={!r.detected.found && !s.apps[r.id]}
-                onChange={on => void onIntegration(r.id, on)}>
-                {r.detected.found ? `${r.detected.path} · ${r.status.detail}` : r.detected.note}
-              </Toggle>
-              {HOOK_FILES.includes(r.id) && (
-                <p className="fix">{appHint(r.id)}{NOTE[r.id] && ` ${NOTE[r.id]!()}`}</p>
-              )}
-              {r.id === 'claude_code' && s.apps.claude_code && !r.status.installed && (
-                <p className="fix">{appHint('claude_code')}{' '}
-                  <button type="button" onClick={() => void onIntegration(r.id, true)}>{t().settings.reinstall}</button></p>
-              )}
-            </div>
-          ))}
-          <Toggle label={t().settings.door} checked={doorOn(s)} onChange={on => onChange(withDoor(s, on))}>
-            {t().settings.doorDesc}
-          </Toggle>
-        </section>}
+        {tab === 'apps' && <AppsTab settings={s} rows={rows} onChange={onChange} onIntegration={onIntegration} />}
 
         {tab === 'look' && <LookTab pets={s.pets} onChange={p => set({ pets: p })} />}
         {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar} onChange={onChange} onMove={onMove} />}
