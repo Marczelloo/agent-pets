@@ -273,6 +273,7 @@ export const pl = {
     position: 'Pozycja',
     positionDesc: 'Gdzie w pasku stoją zwierzaki, albo osobne okno na pulpicie',
     pos: { right: 'Przy zasobniku', left: 'Po lewej', custom: 'Własna', floating: 'Pływające' },
+    moveTitle: 'Własne położenie',
     move: 'Przesuń',
     moveDesc: 'Przeciągnij scenę w wolne miejsce paska; Enter albo klik obok zapisuje, Esc cofa. Upuszczona przy ikonach lub krawędzi wolnego obszaru zostaje do niej przyklejona, gdy ikony się pojawiają i znikają',
     verticalBar: 'Pasek zadań jest przypięty z boku ekranu, więc scena unosi się obok niego. Możesz ją przeciągnąć gdzie indziej',

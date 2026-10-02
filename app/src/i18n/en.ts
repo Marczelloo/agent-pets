@@ -262,6 +262,7 @@ export const en: Dict = {
     position: 'Position',
     positionDesc: 'Where in the taskbar the pets sit, or a separate window on the desktop',
     pos: { right: 'Next to the tray', left: 'On the left', custom: 'Custom', floating: 'Floating' },
+    moveTitle: 'Custom position',
     move: 'Move',
     moveDesc: 'Drag the stage to a free spot on the taskbar; Enter or a click outside saves, Esc cancels. Drop it against the icons or the edge of a free area and it stays glued there when icons come and go',
     verticalBar: 'The taskbar is docked to the side of the screen, so the stage floats beside it. You can drag it elsewhere',

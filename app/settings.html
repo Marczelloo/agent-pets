@@ -70,7 +70,8 @@ p.desc{margin:10px 0}
 .color input[type=color]:disabled{opacity:.45}
 label.check{display:flex;align-items:center;gap:6px;font-size:12px}
 .segmented[aria-disabled=true] button{cursor:default}
-button.reset{margin:16px 0 4px}
+button.link-btn{border:0;background:transparent;color:var(--mut);padding:4px 0;margin:4px 0 16px;text-decoration:underline}
+button.link-btn:hover:not(:disabled){background:transparent;color:var(--txt)}
 
 /* Windows 11 switch built from a checkbox */
 input.switch{appearance:none;flex:none;width:40px;height:20px;border-radius:10px;border:1px solid var(--track);background:transparent;position:relative;cursor:pointer;margin:0}

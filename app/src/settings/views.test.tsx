@@ -160,6 +160,27 @@ describe('SettingsView', () => {
     expect(view({ background: { kind: 'glass', radius: 12 } })).toContain('Przezroczystość');
     expect(html).not.toContain('Przezroczystość');
   });
+  it('taskbar tab: position is a set of cards and the Move row sits in that same section only for a custom position', () => {
+    const view = (stage: Partial<Settings['stage']>) => renderToString(<SettingsView
+      settings={{ ...defaultSettings(), stage: { ...defaultSettings().stage, ...stage } }} rows={rows} diag={diag} tab="stage" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} monitors={[]} onMove={() => {}} />);
+    const first = (h: string) => { const a = h.indexOf('<h3>Położenie</h3>'); return h.slice(a, h.indexOf('<h3>', a + 4)); };
+    const custom = first(view({ position: 'custom', custom_at: 0.3 }));
+    expect(custom).toMatch(/class="ui-card on"/);
+    expect(custom).toContain('<svg');
+    expect(custom).toContain('Przesuń');
+    expect(first(view({ position: 'right' }))).not.toContain('Przesuń');
+    expect(view({}).match(/<h3>[^<]*<\/h3>/g)).toEqual(['<h3>Położenie</h3>', '<h3>Okno</h3>', '<h3>Zwierzaki</h3>', '<h3>Elementy</h3>', '<h3>Dymki i subagenci</h3>']);
+  });
+  it('taskbar tab: the pet limit is a stepper with a name and no native number input', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="stage" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} monitors={[]} onMove={() => {}} />);
+    expect(html).toContain('class="ui-stepper"');
+    expect(html).toContain('aria-label="Najwięcej zwierzaków w pasku"');
+    expect(html).not.toContain('type="number"');
+    expect(html).not.toContain('class="segmented"');
+    expect(html).not.toContain('class="card"');
+  });
   it('taskbar tab: an unplugged saved monitor stays selected, a monitor without a taskbar gets a hint', () => {
     const monitors = [{ id: 'one', primary: true, width: 2560, height: 1440, index: 1, has_bar: true },
       { id: 'two', primary: false, width: 1920, height: 1080, index: 2, has_bar: false }];
