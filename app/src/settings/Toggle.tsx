@@ -1,15 +1,9 @@
-/** Windows 11 style toggle: a real checkbox (keyboard accessible), label, and description below. */
+import type { ReactNode } from 'react';
+import { Row, Switch } from './ui';
+
+/** A row with a switch; kept for the tabs that have not moved to Row + Switch directly. */
 export function Toggle({ label, badge, checked, disabled, onChange, children }: {
-  label: string; badge?: string; checked: boolean; disabled?: boolean; onChange: (on: boolean) => void; children?: React.ReactNode;
+  label: string; badge?: string; checked: boolean; disabled?: boolean; onChange: (on: boolean) => void; children?: ReactNode;
 }) {
-  return (
-    <label className={`row${disabled ? ' off' : ''}`}>
-      <span className="text">
-        <span className="label">{label}{badge && <span className="badge">{badge}</span>}</span>
-        {children && <span className="desc">{children}</span>}
-      </span>
-      <input type="checkbox" className="switch" role="switch" aria-label={label} checked={checked} disabled={disabled}
-        onChange={e => onChange(e.target.checked)} />
-    </label>
-  );
+  return <Row label={label} badge={badge} hint={children} dim={disabled} control={<Switch aria-label={label} checked={checked} disabled={disabled} onChange={onChange} />} />;
 }
