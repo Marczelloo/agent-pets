@@ -181,7 +181,17 @@ describe('SettingsView', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
     expect(html).toContain('class="preview-stage"');
-    for (const name of ['Wszystkie po kolei', 'Praca', 'Stany', 'Komendy', 'Subagent', 'Kompaktuje', 'Pożegnanie', 'Śpi']) expect(html).toContain(name);
+    for (const name of ['Wszystkie po kolei', 'Praca', 'Stany', 'Reakcje', 'Komendy', 'Subagent', 'Kompaktuje', 'Pożegnanie', 'Śpi']) expect(html).toContain(name);
+  });
+  it('look tab: sections run Podgląd, Styl, Ruch, Dymki, the taskbar, Osobno dla agentów and no old button rows remain', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    const at = ['Podgląd', 'Styl', 'Ruch', 'Dymki', 'Tak wygląda w pasku', 'Osobno dla agentów'].map(x => html.indexOf(`<h3>${x}</h3>`));
+    expect(at.every(i => i > -1)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(html).not.toContain('class="segmented"');
+    expect(html).not.toContain('class="chips"');
+    expect(html).toMatch(/aria-label="Słuchają muzyki"/);
   });
   it('the diagnostics tab offers to report a problem on GitHub, only when it can open it', () => {
     const view = (onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag"

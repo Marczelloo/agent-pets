@@ -41,6 +41,19 @@ describe('Segmented', () => {
   });
 });
 
+describe('Segmented extras', () => {
+  const opts = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B', playing: true }];
+  it('with no selected option the first one is still tabbable, and a playing option is marked', () => {
+    const html = renderToString(<Segmented aria-label="Scene" value="" onChange={noop} options={opts} />);
+    expect(html).not.toContain('aria-checked="true"');
+    expect(html).toMatch(/aria-checked="false" tabindex="0"[^>]*>A</);
+    expect(html).toMatch(/aria-checked="false" tabindex="-1" class="playing"[^>]*>B</);
+  });
+  it('wrap lets a long group flow onto several lines', () => {
+    expect(renderToString(<Segmented aria-label="x" value="a" onChange={noop} options={opts} wrap />)).toContain('class="ui-seg wrap"');
+  });
+});
+
 describe('OptionCards', () => {
   it('marks the selected card and renders label, hint and preview', () => {
     const html = renderToString(<OptionCards aria-label="Position" value="left" onChange={noop}
