@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { t } from '../../i18n';
 import type { SceneKey } from '../../stage/sceneFor';
 import type { Agent, Look } from '../../types';
-import { Row, Segmented, Switch } from '../ui';
+import { Segmented } from '../ui';
 import { PetsCanvas } from './PetsCanvas';
 import { CYCLE_MS, SCENE_GROUPS, cycleScene } from './scenes';
 
@@ -18,7 +18,9 @@ export function PreviewStage({ look, agent, scene, cycle, onScene, onCycle }: Pr
 
   return <>
     <PetsCanvas key={agent} className="preview-stage" scene={scene} u={0.8} width={640} height={170} pets={[{ agent, look }]} />
-    <Row label={t().look.allInOrder} control={<Switch checked={cycle} onChange={onCycle} aria-label={t().look.allInOrder} />} />
+    <button type="button" className={cycle ? 'play-all on' : 'play-all'} aria-pressed={cycle} onClick={() => onCycle(!cycle)}>
+      <span aria-hidden="true">{cycle ? '■' : '▶'}</span> {t().look.allInOrder}
+    </button>
     <div className="scene-picker">
       {SCENE_GROUPS.map(g => (
         <div className="scene-group" key={g.id}>

@@ -25,10 +25,10 @@ describe('PreviewStage', () => {
     const all = renderToString(<PreviewStage agent="claude" look={look} scene="bash" cycle onScene={noop} onCycle={noop} />);
     expect(all).not.toContain('aria-checked="true"');
   });
-  it('"play all" is a switch that is on while cycling, and every group stays reachable by Tab', () => {
+  it('"play all" is a toggle button that is pressed while cycling, and every group stays reachable by Tab', () => {
     setLang('en');
     const all = renderToString(<PreviewStage agent="claude" look={look} scene="bash" cycle onScene={noop} onCycle={noop} />);
-    expect(all).toMatch(/role="switch"[^>]*aria-label="All in order"[^>]*checked=""/);
+    expect(all).toMatch(/<button[^>]*aria-pressed="true"[^>]*>.*?All in order<\/button>/);
     expect(all.match(/tabindex="0"/g)?.length).toBe(3);
     const one = renderToString(<PreviewStage agent="claude" look={look} scene="bash" cycle={false} onScene={noop} onCycle={noop} />);
     expect(one.match(/role="radio"[^>]*tabindex="0"/g)?.length).toBe(3);

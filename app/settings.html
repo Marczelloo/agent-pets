@@ -89,7 +89,11 @@ canvas.preview-stage{display:block;border-radius:8px;background:var(--bg);border
 .scene-group{display:flex;flex-direction:column;gap:4px}
 .ui-seg.wrap{flex-wrap:wrap}
 .ui-seg button.playing{box-shadow:inset 0 0 0 1px var(--accent);color:var(--txt)}
-canvas.taskbar{display:block;border-radius:6px;background:#1C1C1C;margin:8px 0}
+canvas.taskbar{display:block;border-radius:6px;background:#1C1C1C}
+.taskbar-scroll{overflow-x:auto;margin:8px 0}
+.play-all{display:inline-flex;align-items:center;gap:6px;margin:8px 0 0;padding:5px 12px;border-radius:6px;font-size:13px}
+.play-all span{font-size:10px}
+.play-all.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);color:var(--txt)}
 details.overrides summary{cursor:pointer;padding:10px 0;color:var(--mut)}
 
 /* thin scrollbar in the settings column */

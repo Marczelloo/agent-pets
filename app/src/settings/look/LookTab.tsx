@@ -10,6 +10,7 @@ import { BubblePreview } from './BubblePreview';
 import { PetsCanvas } from './PetsCanvas';
 import { Row, Section, Segmented, Select, Switch } from '../ui';
 import { accentFor } from '../../stage/sceneFor';
+import { SLOT } from '../../stage/layout';
 
 const APPS: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode', 'copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
 /** Pets available in preview: every mascot and a blob for agents without one. */
@@ -55,8 +56,10 @@ export function LookTab({ pets, onChange }: { pets: Pets; onChange: (p: Pets) =>
       <BubblePreview look={look} agent={agent} />
     </Section>
     <Section title={t().look.taskbar}>
-      <PetsCanvas className="taskbar" scene={scene} u={0.3} width={330} height={48}
-        pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : a === 'agent_router' ? 'codex' : a, look: lookFor(pets, a) }))} />
+      <div className="taskbar-scroll"><PetsCanvas className="taskbar" scene={scene} u={0.3} width={SLOT * APPS.length} height={48}
+        pets={APPS.map(a => ({ agent: a === 'claude_code' ? 'claude' : a === 'agent_router' ? 'codex' : a, look: lookFor(pets, a) }))} /></div>
+    </Section>
+    <Section title={t().look.ambientTitle} note={t().look.ambientNote}>
       <Row label={t().look.mediaTitle} hint={t().look.mediaDesc}
         control={<Switch checked={pets.react_to_media !== false} onChange={on => onChange({ ...pets, react_to_media: on })} aria-label={t().look.mediaTitle} />} />
     </Section>

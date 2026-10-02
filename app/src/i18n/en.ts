@@ -365,6 +365,8 @@ export const en: Dict = {
     otherPet: 'Other agent',
     previewScene: 'Preview scene',
     taskbar: 'In the taskbar',
+    ambientTitle: 'Ambient',
+    ambientNote: 'How the pets react to what you are doing outside the agents.',
     perAgent: 'Per agent',
     perAgentOpen: 'Show settings',
     styleTitle: 'Style',

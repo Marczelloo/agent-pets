@@ -376,6 +376,8 @@ export const pl = {
     otherPet: 'Inny agent',
     previewScene: 'Scena podglądu',
     taskbar: 'Tak wygląda w pasku',
+    ambientTitle: 'Otoczenie',
+    ambientNote: 'Jak zwierzaki reagują na to, co robisz poza agentami.',
     perAgent: 'Osobno dla agentów',
     perAgentOpen: 'Pokaż ustawienia',
     styleTitle: 'Styl',

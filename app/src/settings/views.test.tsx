@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { setLang } from '../i18n';
 import { PanelView } from '../panel/App';
 import type { AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
+import { SLOT } from '../stage/layout';
 import { defaultSettings } from './model';
 import { SettingsView, type Tab } from './SettingsView';
 import { resetStage, withBubbles } from './StageTab';
@@ -207,12 +208,26 @@ describe('SettingsView', () => {
   it('look tab: sections run Podgląd, Styl, Ruch, Dymki, the taskbar, Osobno dla agentów and no old button rows remain', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
-    const at = ['Podgląd', 'Styl', 'Ruch', 'Dymki', 'Tak wygląda w pasku', 'Osobno dla agentów'].map(x => html.indexOf(`<h3>${x}</h3>`));
+    const at = ['Podgląd', 'Styl', 'Ruch', 'Dymki', 'Tak wygląda w pasku', 'Otoczenie', 'Osobno dla agentów'].map(x => html.indexOf(`<h3>${x}</h3>`));
     expect(at.every(i => i > -1)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(html).not.toContain('class="segmented"');
     expect(html).not.toContain('class="chips"');
     expect(html).toMatch(/aria-label="Słuchają muzyki"/);
+  });
+  it('look tab: all-in-order is a toggle button, not a switch, and music sits under Otoczenie rather than the taskbar preview', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toMatch(/<button[^>]*aria-pressed="false"[^>]*>.*?Wszystkie po kolei<\/button>/);
+    expect(html.match(/class="ui-switch"/g)?.length).toBe(1);
+    expect(html.indexOf('Słuchają muzyki')).toBeGreaterThan(html.indexOf('<h3>Otoczenie</h3>'));
+    expect(html.indexOf('<h3>Tak wygląda w pasku</h3>')).toBeLessThan(html.indexOf('<h3>Otoczenie</h3>'));
+    expect(html.indexOf('Słuchają muzyki')).toBeLessThan(html.indexOf('<h3>Osobno dla agentów</h3>'));
+  });
+  it('look tab: the taskbar preview gives every pet a full slot, so none overlap', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toMatch(new RegExp(`class="taskbar"[^>]*width="${SLOT * 9}"`));
   });
   it('the diagnostics tab offers to report a problem on GitHub, only when it can open it', () => {
     const view = (onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag"
