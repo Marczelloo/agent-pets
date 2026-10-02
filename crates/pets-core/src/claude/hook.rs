@@ -151,6 +151,10 @@ impl HookState {
             match (e.kind, &e.data.action) {
                 // include child action: permission for its tool waits at the parent
                 (Kind::ToolStart, Some(a)) => { self.last.insert(sid.to_string(), (tool.to_string(), a.clone())); }
+                // the permission request that follows a question must not replace the question's text
+                (Kind::NeedsInput, _) if tool == "AskUserQuestion" => {
+                    if let Some(q) = &e.data.question { self.last.insert(sid.to_string(), (tool.to_string(), q.clone())); }
+                }
                 (Kind::SessionEnd, _) if e.session_id == sid => { self.last.remove(sid); }
                 _ => {}
             }
@@ -407,6 +411,18 @@ mod tests {
         assert_eq!(e[0].data.question.as_deref(), Some("Zgoda na Bash? cargo test"));
         h.events(&env(json!({"hook_event_name": "SessionEnd", "session_id": "s"})), Lang::Pl);
         assert!(h.is_empty_for("s"), "retain nothing after the session ends");
+    }
+
+    #[test]
+    fn the_permission_to_ask_keeps_the_question_text() {
+        let mut h = HookState::default();
+        let ask = env(json!({"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "AskUserQuestion",
+            "tool_input": {"questions": [{"question": "Który wariant?"}]}}));
+        let perm = env(json!({"hook_event_name": "Notification", "session_id": "s",
+            "message": "Claude needs your permission to use AskUserQuestion", "notification_type": "permission_prompt"}));
+        assert_eq!(h.events(&perm, Lang::En)[0].data.question, None, "nothing to show without the question");
+        h.events(&ask, Lang::En);
+        assert_eq!(h.events(&perm, Lang::En)[0].data.question.as_deref(), Some("Question: Który wariant?"));
     }
 
     #[test]
