@@ -18,6 +18,22 @@ const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
 /** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately). */
 export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
 
+export type PanelTab = 'sessions' | 'limits';
+
+/** Number on the Sessions tab: top-level sessions that are not inactive. */
+export const activeCount = (sessions: Session[]): number => sessions.filter(s => !s.parent && !INACTIVE.has(s.state)).length;
+
+/** Warning dot on the Limits tab: a reading at 80 % or more, or a stale one. */
+export const limitsAlert = (limits: Limit[], _nowMs: number): boolean =>
+  limits.some(l => l.stale_since != null || (Number.isFinite(l.used_pct) && l.used_pct >= 80));
+
+export const COLLAPSE_AFTER = 3;
+/** Subagents under a card: more than three fold into "+N subagents" until expanded. */
+export function collapseChildren<T>(children: T[], expanded: boolean): { shown: T[]; hidden: number } {
+  if (expanded || children.length <= COLLAPSE_AFTER) return { shown: children, hidden: 0 };
+  return { shown: children.slice(0, COLLAPSE_AFTER), hidden: children.length - COLLAPSE_AFTER };
+}
+
 /** A finished child disappears from the panel after this time. */
 export const CHILD_DONE_MS = 10_000;
 const FINISHED = new Set(['done', 'error', 'ended']);
@@ -139,4 +155,15 @@ export function notificationTime(at: number, nowMs: number): string {
   const d = nowMs - at;
   if (d < 24 * 3_600_000) return formatAgo(Math.max(0, d));
   return new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+export interface AgentLimitCard { agent: LimitAgent; rows: LimitRow[]; noData: boolean; stale: boolean }
+
+/** One card per agent on the Limits tab; `noData` when none of its rows has a reading. */
+export function limitCards(limits: Limit[], nowMs: number): AgentLimitCard[] {
+  const rows = limitRows(limits, nowMs);
+  return LIMIT_AGENTS.map(agent => {
+    const mine = rows.filter(r => r.agent === agent);
+    return { agent, rows: mine, noData: mine.every(r => r.pct == null), stale: mine.some(r => r.stale) };
+  }).filter(c => c.rows.length > 0);
 }
