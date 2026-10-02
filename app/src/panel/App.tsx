@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { actionLabel, formatAgo, formatDuration, petTooltip } from '../tooltip/text';
+import { actionLabel, formatAgo, formatDuration, limitName, petTooltip } from '../tooltip/text';
 import type { Media, NotificationEntry, Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { accountRows, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine } from './model';
+import { INACTIVE_STATES, accountRows, activeCount, childLabels, childLine, childMark, childrenOf, clock, collapseChildren, contextPct, contextText, hasInactive, limitCards, limitsAlert, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine, type PanelTab } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { BellIcon, GearIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
@@ -43,27 +43,48 @@ interface ViewProps {
   onNotificationOpen?: (n: NotificationEntry) => void;
   onNotificationRemove?: (id: number) => void;
   onNotificationsClear?: () => void;
+  initialTab?: PanelTab;
+  /** copy a session folder (defaults to the clipboard) */
+  onCopyPath?: (path: string) => void;
 }
 
 /** Pure panel view: text through JSX only (React escapes characters), without `innerHTML`. */
 export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null,
-  notifications = [], notificationsOpen = false, onNotificationsSeen, onNotificationOpen, onNotificationRemove, onNotificationsClear }: ViewProps) {
+  notifications = [], notificationsOpen = false, onNotificationsSeen, onNotificationOpen, onNotificationRemove, onNotificationsClear, initialTab = 'sessions', onCopyPath }: ViewProps) {
   const [inbox, setInbox] = useState(notificationsOpen);
+  const [tab, setTab] = useState<PanelTab>(initialTab);
+  const [menu, setMenu] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const unread = unreadCount(notifications);
   const toggleInbox = () => { setInbox(o => !o); if (!inbox && unread > 0) onNotificationsSeen?.(); };
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
+  const alert = limitsAlert(snap.limits, nowMs);
+  const toggleExpanded = (id: string) => setExpanded(prev => { const n = new Set(prev); if (!n.delete(id)) n.add(id); return n; });
+  const copyPath = onCopyPath ?? ((p: string) => void navigator.clipboard?.writeText(p));
+
+  // Esc closes the menu only (ahead of the window-level handler that hides the panel); a click elsewhere closes it too.
+  useEffect(() => {
+    if (menu == null) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setMenu(null); } };
+    const away = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.('.menu-wrap')) setMenu(null); };
+    document.addEventListener('keydown', esc, true);
+    document.addEventListener('mousedown', away);
+    return () => { document.removeEventListener('keydown', esc, true); document.removeEventListener('mousedown', away); };
+  }, [menu]);
+
   return (
     <div className="panel">
       <header>
         <h1>Agent Pets</h1>
-        <span className="count">{t().sessions(sessions.length)}</span>
-        {onNotificationsSeen && <button type="button" className={`gear bell${inbox ? ' on' : ''}`} aria-label={unread ? `${t().panel.notifications.title}: ${t().panel.notifications.unread(unread)}` : t().panel.notifications.title}
-          title={t().panel.notifications.title} aria-pressed={inbox} onClick={toggleInbox}>
-          <BellIcon />{unread > 0 && <span className="badge">{unread > 9 ? '9+' : unread}</span>}
-        </button>}
-        {onStats && <button type="button" className="gear" aria-label={t().panel.stats} title={t().panel.stats} onClick={onStats}><StatsIcon /></button>}
-        {onSettings && <button type="button" className="gear" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}><GearIcon /></button>}
+        <div className="icons">
+          {onNotificationsSeen && <button type="button" className={`icon-btn bell${inbox ? ' on' : ''}`} aria-label={unread ? `${t().panel.notifications.title}: ${t().panel.notifications.unread(unread)}` : t().panel.notifications.title}
+            title={t().panel.notifications.title} aria-pressed={inbox} onClick={toggleInbox}>
+            <BellIcon />{unread > 0 && <span className="badge">{unread > 9 ? '9+' : unread}</span>}
+          </button>}
+          {onStats && <button type="button" className="icon-btn" aria-label={t().panel.stats} title={t().panel.stats} onClick={onStats}><StatsIcon /></button>}
+          {onSettings && <button type="button" className="icon-btn" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}><GearIcon /></button>}
+        </div>
       </header>
       {bar && <div className="update" role="status">
         <span className="text">{bar.text}</span>
@@ -94,42 +115,59 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           ))}
         </ul>
       </section> : <>
-      <section className="limits" aria-label={t().panel.limits}>
-        {limitRows(snap.limits, nowMs).map(r => (
-          <div className={r.stale ? 'limit stale' : 'limit'} key={`${r.agent}-${r.window}`}>
-            <span className="label">{r.label}</span>
-            {r.pct == null ? <span className="none">{t().panel.noData}</span> : <>
-              <span className={`bar ${r.agent}`}><i style={{ width: `${r.pct}%` }} className={r.pct >= 90 ? 'hot' : ''} /></span>
-              <span className="pct">{Math.round(r.pct)}%</span>
-              <span className="reset">{r.reset}</span>
-            </>}
+      <div className="tabs">
+        <div className="seg" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === 'sessions'} className={tab === 'sessions' ? 'on' : ''} onClick={() => setTab('sessions')}>
+            {t().panel.sessions}<span className="n">{activeCount(snap.sessions)}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'limits'} className={tab === 'limits' ? 'on' : ''} onClick={() => setTab('limits')}>
+            {t().panel.limits}{alert && <i className="alert-dot" role="img" aria-label={t().panel.limitsAlert} />}
+          </button>
+        </div>
+        {tab === 'sessions' && onDismissInactive && hasInactive(sessions) &&
+          <button type="button" className="quiet clear" onClick={onDismissInactive}>{t().panel.removeInactive}</button>}
+      </div>
+      {tab === 'limits' ? <section className="limits" role="tabpanel" aria-label={t().panel.limits}>
+        {limitCards(snap.limits, nowMs).map(c => (
+          <div className={c.stale ? 'lcard stale' : 'lcard'} key={c.agent}>
+            <div className="lhead"><i className={`dot ${c.agent}`} /><span>{limitName(c.agent)}</span></div>
+            {c.noData ? <p className="none">{t().panel.noData}</p> : c.rows.map(r => (
+              <div className="limit" key={r.window}>
+                <span className="label">{t().window[r.window]}</span>
+                {r.pct == null ? <span className="none">{t().panel.noData}</span> : <>
+                  <span className={`bar ${r.agent}`}><i style={{ width: `${r.pct}%` }} className={r.pct >= 90 ? 'hot' : ''} /></span>
+                  <span className="pct">{Math.round(r.pct)}%</span>
+                  <span className="reset">{r.reset}</span>
+                </>}
+              </div>
+            ))}
           </div>
         ))}
-        {limitRows(snap.limits, nowMs).some(r => r.stale) && <p className="hint">{t().limits.staleHint}</p>}
-      </section>
-      <section className="sessions" aria-label={t().panel.sessions}>
-        {onDismissInactive && sessions.length > 0 && <div className="tools">
-          <button type="button" className="quiet" disabled={!hasInactive(sessions)} onClick={onDismissInactive}>{t().panel.removeInactive}</button>
-        </div>}
-        {sessions.length === 0 && <p className="empty">{t().panel.noSessions}</p>}
-        {sessions.map(s => { const kids = childrenOf(snap.sessions, s.id, nowMs); return (<div key={s.id} className="group">
+        {limitCards(snap.limits, nowMs).some(c => c.stale) && <p className="hint">{t().limits.staleHint}</p>}
+      </section> : <section className="sessions" role="tabpanel" aria-label={t().panel.sessions}>
+        {sessions.length === 0 && <div className="empty"><p>{t().panel.noSessions}</p><p className="hint">{t().panel.noSessionsHint}</p></div>}
+        {sessions.map(s => {
+          const kids = childrenOf(snap.sessions, s.id, nowMs);
+          const { shown, hidden } = collapseChildren(kids, expanded.has(s.id));
+          const title = petTooltip(s, nowMs).title;
+          const ctx = contextPct(s);
+          const usage = usageLine(s, snap.agent_usage?.find(a => a.agent === s.agent));
+          return (<div key={s.id} className="group">
           <article id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
             {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} music={!!media?.playing} /> : <div className="pet" />}
             <div className="info">
-              <div className="title">{petTooltip(s, nowMs).title}</div>
+              <button type="button" className="title open" aria-label={`${t().panel.open}: ${title}`} onClick={() => onJump(s.id)}>{title}</button>
               <div className="sub">{s.jump.app && hostLabel(s) && <HostIcon app={s.jump.app} />}{sessionSubtitle(s)}</div>
               {s.state === 'needs_you' && s.question && <div className="question">{s.question}</div>}
               <div className="meta">
                 <span className="state">{actionLabel(s, media)}</span>
                 {appBadge(appFor(s)) && <span className="exp">{appBadge(appFor(s))}</span>}
-                {kids.length > 0 && <span>{t().panel.subagents(kids.length)}</span>}
                 {progressText(s) && <span>{t().panel.tasks} {progressText(s)}</span>}
-                {contextText(s) && <span>{t().panel.context} {contextText(s)}</span>}
                 {s.router_task && <span className={routerHot(s.router_task, nowMs, s.last_activity) ? 'router-hot' : undefined}>
                   {routerLine(s.router_task, nowMs, s.last_activity)}</span>}
                 <span>{formatAgo(nowMs - s.last_activity)}</span>
               </div>
-              {usageLine(s, snap.agent_usage?.find(a => a.agent === s.agent)) && <div className="usage">{usageLine(s, snap.agent_usage?.find(a => a.agent === s.agent))}</div>}
+              {usage && <div className="usage">{usage}</div>}
               {accountRows(s, snap.limits, nowMs).map(r => (
                 <div className="account" key={`${r.agent}-${r.window}`}>
                   <span className="label">{r.label}</span>
@@ -138,17 +176,27 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 </div>
               ))}
             </div>
-            <div className="actions">
-              <button type="button" onClick={() => onJump(s.id)}>{t().panel.open}</button>
-              {onDismiss && <button type="button" className="remove" aria-label={t().panel.remove(petTooltip(s, nowMs).title)}
-                title={t().panel.remove(petTooltip(s, nowMs).title)} onClick={() => onDismiss([s.id])}>✕</button>}
+            <div className="menu-wrap">
+              <button type="button" className="icon-btn more" aria-label={`${t().panel.menu}: ${title}`} aria-haspopup="menu" aria-expanded={menu === s.id}
+                onClick={() => setMenu(m => (m === s.id ? null : s.id))}>⋯</button>
+              {menu === s.id && <div className="menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setMenu(null); onJump(s.id); }}>{t().panel.open}</button>
+                {s.cwd && <button type="button" role="menuitem" onClick={() => { setMenu(null); copyPath(s.cwd); }}>{t().panel.copyPath}</button>}
+                {onDismiss && INACTIVE_STATES.has(s.state) && <button type="button" role="menuitem" onClick={() => { setMenu(null); onDismiss([s.id]); }}>
+                  {t().panel.remove(title)}</button>}
+              </div>}
             </div>
+            {ctx != null && <span className="ctx" title={`${t().panel.context} ${contextText(s)}`} style={{ width: `${ctx}%` }} />}
           </article>
           {kids.length > 0 && <ul className="kids" aria-label={t().panel.subagents(kids.length)}>
-            {kids.map(c => <SubagentRow key={c.id} c={c} nowMs={nowMs} focus={focusId === c.id} animate={animate} pets={pets} />)}
+            {shown.map(c => <SubagentRow key={c.id} c={c} nowMs={nowMs} focus={focusId === c.id} animate={animate} pets={pets} />)}
+            {(hidden > 0 || expanded.has(s.id)) && <li className="more-kids">
+              <button type="button" className="quiet" aria-expanded={expanded.has(s.id)} onClick={() => toggleExpanded(s.id)}>
+                {expanded.has(s.id) ? t().panel.fewerSubagents : t().panel.moreSubagents(hidden)}</button>
+            </li>}
           </ul>}
         </div>); })}
-      </section></>}
+      </section>}</>}
       {undo && undo.ids.length > 0 && <footer className="undo" role="status">
         <span>{t().panel.removed(undo.ids.length)}</span>
         {onUndo && <button type="button" onClick={onUndo}>{t().panel.undo}</button>}

@@ -256,7 +256,7 @@ describe('panel', () => {
       router_task: kind === 'router' ? { task_id: 't', status: 'running', last_activity_at: 100_000, blocked: false, stall_ms: 180_000 } : null });
     const snap = { sessions: [parent, kid('p/a', 'claude', 'Znajdź testy', 10_000), kid('c1', 'codex', 'Newton', 20_000), kid('th', 'router', 'Policz pliki', 30_000)], limits: [], now: 0 };
     const html = renderToString(<PanelView snap={snap} nowMs={300_000} status={null} focusId="c1" onJump={() => {}} />);
-    expect(html).toContain('1 sesja');
+    expect(html).toMatch(/>Sesje<span class="n">1</);
     for (const t of ['Znajdź testy', 'Newton', 'Policz pliki', 'Czyta a.rs', 'utknęło']) expect(html, t).toContain(t);
     expect(html.match(/class="kid[ "]/g)?.length).toBe(3);
     expect(html).toMatch(/class="kid[^"]*focus/);

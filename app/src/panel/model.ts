@@ -15,6 +15,7 @@ export function panelSessions(sessions: Session[]): Session[] {
 }
 
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
+export const INACTIVE_STATES: ReadonlySet<string> = INACTIVE;
 /** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately). */
 export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
 
@@ -103,6 +104,9 @@ export function sessionSubtitle(s: Session): string {
 export function progressText(s: Session): string | null {
   return progressFraction(s.progress) == null || !s.progress ? null : `${s.progress.done}/${s.progress.total}`;
 }
+
+/** Fill of the thin context bar on a card. */
+export const contextPct = (s: Session): number | null => s.context && s.context.max > 0 ? clampPct(s.context.used * 100 / s.context.max) : null;
 
 export function contextText(s: Session): string | null {
   return s.context && s.context.max > 0 ? `${Math.round(clampPct(s.context.used * 100 / s.context.max))}%` : null;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { CHILD_DONE_MS, accountRows, activeCount, collapseChildren, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
+import { CHILD_DONE_MS, accountRows, activeCount, collapseChildren, contextPct, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: 'C:\\work\\' + id, state, tool: null, progress: null, context: null,
@@ -140,5 +140,15 @@ describe('panel tabs and limits', () => {
     const cards = limitCards([lim('codex', 'weekly', 30, now - 7_200_000)], now);
     expect(cards.find(x => x.agent === 'codex')!.stale).toBe(true);
     expect(cards.find(x => x.agent === 'claude')!.stale).toBe(false);
+  });
+});
+
+describe('context bar', () => {
+  it('gives a clamped percentage, or null without a context window', () => {
+    const base = s('a', 'working', 1);
+    expect(contextPct(base)).toBeNull();
+    expect(contextPct({ ...base, context: { used: 50, max: 200 } })).toBe(25);
+    expect(contextPct({ ...base, context: { used: 500, max: 200 } })).toBe(100);
+    expect(contextPct({ ...base, context: { used: 5, max: 0 } })).toBeNull();
   });
 });

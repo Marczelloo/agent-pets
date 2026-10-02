@@ -14,7 +14,7 @@ describe('PanelView', () => {
     const html = renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
     expect(html).not.toContain('<img');
     expect(html).toContain('&lt;img');
-    expect(html).toContain('Przejdź');
+    expect(html).toMatch(/<button[^>]*class="title open"[^>]*aria-label="Przejdź: /);
     expect(html).toContain('Czeka na Ciebie');
   });
   it('shows what the agent asks on a waiting card, escaped, and nowhere else', () => {
@@ -43,11 +43,41 @@ describe('PanelView', () => {
     expect(html.match(/class="exp"/g)?.length).toBe(1);
     expect(html).toMatch(/class="exp"[^>]*>eksperymentalne</);
   });
-  it('has an empty state and says when limits are unknown', () => {
-    const html = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
-    expect(html).toContain('Brak aktywnych sesji');
-    expect(html).toContain('brak danych');
-    expect(html).not.toContain('0%');
+  it('has an empty state with a hint, and the limits tab says when limits are unknown', () => {
+    const view = (initialTab?: 'limits') => renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} initialTab={initialTab} />);
+    expect(view()).toContain('Brak aktywnych sesji');
+    expect(view()).toContain('Pojawią się tu');
+    const limits = view('limits');
+    expect(limits).toContain('brak danych');
+    expect(limits).not.toContain('0%');
+    expect(limits).not.toContain('Brak aktywnych sesji');
+  });
+  it('has Sessions and Limits tabs with the active-session count; the limits tab hides the sessions', () => {
+    const view = (initialTab?: 'limits') => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} initialTab={initialTab} />);
+    const html = view();
+    expect(html).toMatch(/role="tab" aria-selected="true"[^>]*>Sesje<span class="n">1</);
+    expect(html).toMatch(/role="tab" aria-selected="false"[^>]*>Limity</);
+    expect(html).toContain('class="session ');
+    const limits = view('limits');
+    expect(limits).toMatch(/role="tab" aria-selected="true"[^>]*>Limity</);
+    expect(limits).not.toContain('class="session ');
+  });
+  it('shows an alert dot on the Limits tab when an account is nearly out', () => {
+    const view = (pct: number) => renderToString(<PanelView snap={{ sessions: [], now: 0,
+      limits: [{ agent: 'claude' as const, window: 'five_hour' as const, used_pct: pct, resets_at: 3_600_000 }] }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
+    expect(view(95)).toContain('class="alert-dot"');
+    expect(view(20)).not.toContain('alert-dot');
+  });
+  it('limits tab: one card per agent with its bars', () => {
+    const html = renderToString(<PanelView snap={{ sessions: [], now: 0,
+      limits: [{ agent: 'claude' as const, window: 'weekly' as const, used_pct: 64, resets_at: null }] }} nowMs={0} status={null} focusId={null} onJump={() => {}} initialTab="limits" />);
+    expect(html).toContain('class="lcard');
+    expect(html).toContain('64%');
+  });
+  it('a session card shows a context bar only when the context is known', () => {
+    const view = (context: Session['context']) => renderToString(<PanelView snap={{ sessions: [{ ...sess, context }], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
+    expect(view(null)).not.toContain('class="ctx"');
+    expect(view({ used: 50_000, max: 200_000 })).toMatch(/class="ctx"[^>]*width:25%/);
   });
   it('draws no pets while the panel is hidden', () => {
     const view = (animate: boolean) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0}
@@ -75,14 +105,22 @@ describe('PanelView', () => {
     expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).not.toContain('class="update');
     expect(view({ state: 'error', message: 'Nie udało się zweryfikować aktualizacji', verify: true })).toContain('Nie udało się zweryfikować');
   });
-  it('each session has a labelled remove button; "remove inactive" is off when nothing is inactive', () => {
+  it('each card has a labelled ⋯ menu button (collapsed); "clear inactive" shows only when something is inactive', () => {
     const view = (sessions: Session[]) => renderToString(<PanelView snap={{ sessions, limits: [], now: 0 }} nowMs={0}
       status={null} focusId={null} onJump={() => {}} onDismiss={() => {}} onDismissInactive={() => {}} />);
     const busy = view([{ ...sess, title: 'Refaktor', state: 'working' }]);
-    expect(busy).toContain('aria-label="Usuń z paska: Refaktor"');
-    expect(busy).toMatch(/disabled=""[^>]*>Usuń nieaktywne/);
-    const idle = view([{ ...sess, state: 'idle' }]);
-    expect(idle).not.toMatch(/disabled=""[^>]*>Usuń nieaktywne/);
+    expect(busy).toMatch(/aria-label="Więcej: Refaktor" aria-haspopup="menu" aria-expanded="false"/);
+    expect(busy).not.toContain('role="menu"');
+    expect(busy).not.toContain('Wyczyść nieaktywne');
+    expect(view([{ ...sess, state: 'idle' }])).toContain('Wyczyść nieaktywne');
+  });
+  it('more than three subagents collapse behind a "+N" toggle', () => {
+    const parent: Session = { ...sess, id: 'p', title: 'Rodzic', state: 'working' };
+    const kids = Array.from({ length: 5 }, (_, i): Session => ({ ...sess, id: `p/${i}`, parent: 'p', title: `Kid${i}`, state: 'working', started_at: 0 }));
+    const html = renderToString(<PanelView snap={{ sessions: [parent, ...kids], limits: [], now: 0 }} nowMs={1000} status={null} focusId={null} onJump={() => {}} animate={false} />);
+    expect(html.match(/class="kid[ "]/g)?.length).toBe(3);
+    expect(html).toContain('+2 subagenty');
+    expect(html).toContain('aria-expanded="false">+2');
   });
   it('subagents sit in the parent card as a tree: title, labels, action and running time', () => {
     const parent: Session = { ...sess, id: 'p', title: 'Rodzic', state: 'working' };
