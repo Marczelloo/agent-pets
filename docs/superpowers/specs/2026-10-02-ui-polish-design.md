@@ -51,11 +51,12 @@ Files: `app/settings.html` (tokens), `app/src/settings/**`, `app/src/i18n/*`, `a
 
 ### Look and feel
 
-Modelled on the Claude app (from knowledge of it; the owner may send a screenshot for fine tuning of spacing).
-- **Palette.** Light: background `#FAF9F5`, cards white, accent `#D97757`. Dark: background `#262624`, cards `#30302E`. All colours are tokens on `:root`, with `prefers-color-scheme` and `data-theme` overrides as today.
-- **Navigation.** Plain text list on the left, selected item shown with a soft background (no accent bar at the side).
-- **Content.** Centred column, about 680 px wide at most. Page title in a serif face (Georgia fallback), section headings small and muted.
-- **Rows.** Label and description on the left, control on the right, hairline between rows. Cards without heavy borders.
+Modelled on a screenshot of the Claude app's Settings → General (dark theme) sent by the owner. What it shows, and what we copy:
+- **Palette.** Near-black neutral surfaces, no tint (dark: window `#1F1F1E`, sidebar a shade lighter, hairlines `rgba(255,255,255,.07)`); light theme mirrors it with warm off-white (`#FAF9F5`). Accent `#D97757` is used sparingly (links, switch on, focus), not for selection. All colours are tokens on `:root`, with `prefers-color-scheme` and `data-theme` overrides as today.
+- **Navigation.** Left sidebar with small icon + label items, grouped under muted group labels (for us: *Settings* → Apps, Look, Taskbar, Notifications, Limits; *Application* → General, Diagnostics). Selected item: rounded soft-grey pill, bold label, no side bar. Close "✕" stays out (native window frame). A search box is not needed with 7 tabs.
+- **Content.** No cards. Sections are a bold heading (sans, ~15 px) followed by flat rows separated by hairlines; the whole page scrolls in one column with a thin scrollbar. The page has no big serif title (the serif is only used for the chat font setting in Claude, so we do not use it).
+- **Rows.** Label (medium weight) and a muted one-line description on the left; control on the right, vertically centred. Row height about 56–68 px, generous padding, 24 px between sections.
+- **Controls.** Segmented control: dark track, the selected segment a raised lighter pill; icon-only variant for theme (monitor / sun / moon). Select: borderless-looking field with a chevron, right-aligned value. Switch: small, flat. Secondary button ("Manage"): small, bordered, low contrast. Links in the accent-blue-ish link colour inside descriptions.
 
 ### Shared components (`app/src/settings/ui/`)
 
@@ -76,7 +77,7 @@ A row: pet thumbnail, name, one status line ("Detected · hooks active"), switch
 
 ### Look
 
-Order: **Preview** (stage at full width; the pet to preview as a row of small tiles with a thumbnail, radio behaviour; animation states as grouped segments Work / State / Reactions plus a "Play all" toggle) → **Style** (cards with live previews, unchanged) → **Motion** (segmented Calm / Dynamic in a row) → **Bubbles** (preview) → **Taskbar** at actual size → **Per agent** (collapsible overrides) → reaction to media (switch). Each section has a heading and its own card.
+Order: **Preview** (stage at full width; the pet to preview as a row of small tiles with a thumbnail, radio behaviour; animation states as grouped segments Work / State / Reactions plus a "Play all" toggle) → **Style** (cards with live previews, unchanged) → **Motion** (segmented Calm / Dynamic in a row) → **Bubbles** (preview) → **Taskbar** at actual size → **Per agent** (collapsible overrides) → reaction to media (switch). Each section has a heading and flat rows (the preview stage and the style cards are the only boxed elements).
 
 ### Taskbar
 
@@ -121,5 +122,5 @@ Cloud sessions and regular chats, new agents, changes to pet artwork, the tray m
 
 ## Open points
 
-- A screenshot of the Claude app's settings would sharpen spacing and proportions (not blocking).
+- None blocking. (The Claude settings screenshot arrived and is folded into "Look and feel".)
 - Release as 0.15 after the owner's go-ahead.
