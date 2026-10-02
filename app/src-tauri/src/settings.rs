@@ -109,12 +109,23 @@ pub fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
     out
 }
 
+/// Theme setting as the native window theme (title bar, and WebView2's `prefers-color-scheme` before the page applies its own);
+/// `None` follows Windows.
+pub fn window_theme(t: core_settings::Theme) -> Option<tauri::Theme> {
+    match t {
+        core_settings::Theme::System => None,
+        core_settings::Theme::Light => Some(tauri::Theme::Light),
+        core_settings::Theme::Dark => Some(tauri::Theme::Dark),
+    }
+}
+
 /// Save and broadcast settings; `apply_effects` attaches effects (core, notifications, startup).
 fn store(app: &AppHandle, new: Settings) -> Result<(), String> {
     let st = app.state::<SettingsState>();
     core_settings::save(&st.path, &new).map_err(|e| format!("{} {}: {e}", i18n::tr(st.lang(), "Nie udało się zapisać", "Could not save"), st.path.display()))?;
     let old = std::mem::replace(&mut *st.current.write().unwrap(), new.clone());
     *st.load_error.lock().unwrap() = None;
+    if old.theme != new.theme { app.set_theme(window_theme(new.theme)); }
     crate::apply_effects(app, &old, &new);
     let _ = app.emit("pets://settings", &new);
     Ok(())
@@ -290,8 +301,9 @@ fn open_at(app: &AppHandle, tab: Option<&str>) {
     std::thread::spawn(move || {
         let url = tab.map(|t| format!("settings.html#{t}")).unwrap_or_else(|| "settings.html".into());
         let (w, h) = fit_size(WINDOW, work_area(&app));
+        let theme = window_theme(app.state::<SettingsState>().get().theme);
         let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App(url.into()))
-            .title(window_title(app.state::<SettingsState>().lang())).inner_size(w, h).min_inner_size(620.0, 460.0).center().build();
+            .title(window_title(app.state::<SettingsState>().lang())).inner_size(w, h).min_inner_size(620.0, 460.0).theme(theme).center().build();
     });
 }
 
@@ -301,6 +313,13 @@ pub fn settings_open(app: AppHandle) { crate::panel::hide(&app); open(&app); }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_theme_setting_maps_to_the_native_window_theme() {
+        assert_eq!(window_theme(core_settings::Theme::System), None);
+        assert_eq!(window_theme(core_settings::Theme::Light), Some(tauri::Theme::Light));
+        assert_eq!(window_theme(core_settings::Theme::Dark), Some(tauri::Theme::Dark));
+    }
 
     #[test]
     fn the_view_reports_the_windows_language_not_the_resolved_one() {

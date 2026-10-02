@@ -60,16 +60,9 @@ input[type=number]{width:64px}
 .color input[type=color]{width:40px;height:28px;padding:2px;border:1px solid var(--line);border-radius:4px;background:transparent}
 .color input[type=color]:disabled{opacity:.45}
 label.check{display:flex;align-items:center;gap:6px;font-size:12px}
-.segmented[aria-disabled=true] button{cursor:default}
 button.link-btn{border:0;background:transparent;color:var(--mut);padding:4px 0;margin:4px 0 16px;text-decoration:underline}
 button.link-btn:hover:not(:disabled){background:transparent;color:var(--txt)}
 
-/* Windows 11 switch built from a checkbox */
-input.switch{appearance:none;flex:none;width:40px;height:20px;border-radius:10px;border:1px solid var(--track);background:transparent;position:relative;cursor:pointer;margin:0}
-input.switch::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--track);transition:left .15s}
-input.switch:checked{background:var(--accent);border-color:var(--accent)}
-input.switch:checked::after{left:23px;background:var(--accentTxt)}
-input.switch:disabled{cursor:default}
 
 /* wizard */
 .wizard{max-width:600px;margin:0 auto;padding:28px 24px;display:flex;flex-direction:column;gap:16px;min-height:calc(100% - 56px)}

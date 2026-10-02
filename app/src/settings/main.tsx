@@ -53,7 +53,10 @@ function Root() {
       setDiag({ ...demoDiag, apps: demoDiag.apps.map(([id, on]) => [id, on, id === 'claude_code' ? t().demo.hooksInstalled : t().demo.nothingToInstall]) });
       return;
     }
-    const [v, r, d] = await Promise.all([invoke<View>('settings_get'), invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
+    // the theme goes on as soon as the settings arrive, not after the slower integration scan and diagnostics
+    const viewP = invoke<View>('settings_get');
+    void viewP.then(x => applyTheme(x.settings.theme), () => {});
+    const [v, r, d] = await Promise.all([viewP, invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
     setSystemLang(v.system_lang);
     setLang(resolveLang(v.settings.language ?? 'auto'));
     applyTheme(v.settings.theme);

@@ -186,6 +186,7 @@ pub fn run() {
         .setup(|app| {
             let prefs = settings::SettingsState::load(settings::home());
             let first_run = *prefs.first_run.lock().unwrap();
+            app.set_theme(settings::window_theme(prefs.get().theme));
             app.manage(prefs);
             app.manage(settings::LastSeen::default());
             let shared: core::Shared = Default::default();

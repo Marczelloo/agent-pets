@@ -151,8 +151,9 @@ pub fn open(app: &AppHandle) {
         let lang = app.state::<crate::settings::SettingsState>().lang();
         // 800×720 fits the whole window (podium, race, calendar, badges, and loading bar) without scrolling
         let (w, h) = crate::settings::fit_size((800.0, 720.0), crate::settings::work_area(&app));
+        let theme = crate::settings::window_theme(app.state::<crate::settings::SettingsState>().get().theme);
         let _ = WebviewWindowBuilder::new(&app, "stats", WebviewUrl::App("stats.html".into()))
-            .title(window_title(lang)).inner_size(w, h).min_inner_size(620.0, 460.0).center().build();
+            .title(window_title(lang)).inner_size(w, h).min_inner_size(620.0, 460.0).theme(theme).center().build();
     });
 }
 
