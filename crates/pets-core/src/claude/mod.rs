@@ -1,6 +1,7 @@
 pub mod account_usage;
 pub mod desktop_usage;
 pub mod hook;
+pub mod plugin;
 pub mod registry;
 pub mod statusline;
 pub mod subagent;
