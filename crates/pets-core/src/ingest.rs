@@ -1,15 +1,17 @@
 use std::io::Read;
 use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
-use crate::claude::{HookEnvelope, StatuslineEnvelope};
+use crate::claude::{plugin::ModPayload, HookEnvelope, StatuslineEnvelope};
 use crate::endpoint::Endpoint;
 
 #[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 pub enum Incoming {
     ClaudeHook(HookEnvelope),
     ClaudeStatusline(StatuslineEnvelope),
+    /// Payload from the Claude Code mod (`claude::plugin::to_update`).
+    ClaudeMod(ModPayload),
     /// Event from the door, already validated (`adapters::generic::to_event`).
     Generic(crate::model::Event),
     /// koperta pluginu opencode (`adapters::opencode::events`)
@@ -49,6 +51,9 @@ impl Doors {
     }
 }
 
+/// JSON served by `GET /v1/state`; the runtime keeps it current, the endpoint thread only reads it.
+pub type StateBoard = Arc<RwLock<Vec<u8>>>;
+
 pub struct Ingest {
     endpoint: Endpoint,
     server: Arc<tiny_http::Server>,
@@ -59,7 +64,8 @@ const MAX_BODY: u64 = 1 << 20;
 
 impl Ingest {
     /// `doors`: which settings-controlled routes are open (door, Copilot, Antigravity); changed live.
-    pub fn start(token: String, tx: Sender<Incoming>, doors: Arc<Doors>) -> anyhow::Result<Ingest> {
+    /// `board`: bytes returned by `GET /v1/state` (read on each request).
+    pub fn start(token: String, tx: Sender<Incoming>, doors: Arc<Doors>, board: StateBoard) -> anyhow::Result<Ingest> {
         let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").map_err(|e| anyhow::anyhow!(e))?);
         let port = server.server_addr().to_ip().map(|a| a.port()).ok_or_else(|| anyhow::anyhow!("no port"))?;
         let endpoint = Endpoint { port, token: token.clone() };
@@ -67,8 +73,14 @@ impl Ingest {
         let handle = std::thread::spawn(move || {
             let expected = format!("Bearer {token}");
             for mut req in srv.incoming_requests() {
-                let status = handle_request(&mut req, &expected, &tx, &doors);
-                let _ = req.respond(tiny_http::Response::empty(status));
+                let (status, body) = handle_request(&mut req, &expected, &tx, &doors, &board);
+                let _ = match body {
+                    Some(b) => {
+                        let json = tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).expect("static header");
+                        req.respond(tiny_http::Response::from_data(b).with_status_code(status).with_header(json))
+                    }
+                    None => req.respond(tiny_http::Response::empty(status)),
+                };
             }
         });
         Ok(Ingest { endpoint, server, handle: Some(handle) })
@@ -82,12 +94,27 @@ impl Ingest {
     }
 }
 
-enum Route { Claude, Statusline, Opencode, Generic, Copilot, Antigravity, Cursor, Grok, Zcode }
+enum Route { Claude, Statusline, ClaudeMod, Opencode, Generic, Copilot, Antigravity, Cursor, Grok, Zcode }
 
-fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, doors: &Doors) -> u16 {
+fn authorized(req: &tiny_http::Request, expected: &str) -> bool {
+    let auth = req.headers().iter().find(|h| h.field.equiv("Authorization")).map(|h| h.value.as_str().to_string());
+    auth.as_deref() == Some(expected)
+}
+
+fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, doors: &Doors, board: &StateBoard) -> (u16, Option<Vec<u8>>) {
+    if *req.method() == tiny_http::Method::Get && req.url() == "/v1/state" {
+        if !authorized(req, expected) { return (401, None); }
+        return (200, Some(board.read().map(|b| b.clone()).unwrap_or_default()));
+    }
+    (handle_post(req, expected, tx, doors), None)
+}
+
+fn handle_post(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, doors: &Doors) -> u16 {
     if *req.method() != tiny_http::Method::Post { return 404; }
     let route = match req.url() {
         "/v1/events/claude" => Route::Claude,
+        // not door-gated: the runtime checks `apps.claude_code`, as for hooks
+        "/v1/events/claude-mod" => Route::ClaudeMod,
         "/v1/events/claude-statusline" => Route::Statusline,
         "/v1/events/opencode" => Route::Opencode,
         // a disabled door or integration appears as a missing route
@@ -99,14 +126,14 @@ fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Inco
         "/v1/events/zcode" if doors.zcode.load(Ordering::Relaxed) => Route::Zcode,
         _ => return 404,
     };
-    let auth = req.headers().iter().find(|h| h.field.equiv("Authorization")).map(|h| h.value.as_str().to_string());
-    if auth.as_deref() != Some(expected) { return 401; }
+    if !authorized(req, expected) { return 401; }
     if req.body_length().map(|l| l as u64 > MAX_BODY).unwrap_or(false) { return 413; }
     let mut body = Vec::new();
     if req.as_reader().take(MAX_BODY + 1).read_to_end(&mut body).is_err() { return 400; }
     if body.len() as u64 > MAX_BODY { return 413; }
     let msg = match route {
         Route::Statusline => serde_json::from_slice::<StatuslineEnvelope>(&body).ok().map(Incoming::ClaudeStatusline),
+        Route::ClaudeMod => serde_json::from_slice::<ModPayload>(&body).ok().filter(|p| p.v == 1).map(Incoming::ClaudeMod),
         Route::Claude => serde_json::from_slice::<HookEnvelope>(&body).ok().map(Incoming::ClaudeHook),
         Route::Opencode => serde_json::from_slice::<serde_json::Value>(&body).ok().filter(|v| v.is_object()).map(Incoming::Opencode),
         Route::Generic => serde_json::from_slice::<crate::adapters::generic::GenericEvent>(&body).ok()
@@ -143,7 +170,7 @@ mod tests {
     #[test]
     fn accepts_valid_hook_and_rejects_bad_requests() {
         let (tx, rx) = channel();
-        let ing = Ingest::start("secret".into(), tx, door(true)).unwrap();
+        let ing = Ingest::start("secret".into(), tx, door(true), board()).unwrap();
         let port = ing.endpoint().port;
         let body = r#"{"ts":1,"ppid":5,"payload":{"hook_event_name":"Stop","session_id":"s"}}"#;
         assert_eq!(post(port, "/v1/events/claude", "secret", body), 204);
@@ -157,12 +184,25 @@ mod tests {
         ing.stop();
     }
 
+    fn board() -> StateBoard { Arc::new(RwLock::new(Vec::new())) }
+
+    fn get(port: u16, path: &str, token: &str) -> (u16, String) {
+        match ureq::get(&format!("http://127.0.0.1:{port}{path}"))
+            .set("Authorization", &format!("Bearer {token}"))
+            .timeout(Duration::from_secs(2))
+            .call() {
+            Ok(r) => (r.status(), r.into_string().unwrap()),
+            Err(ureq::Error::Status(c, r)) => (c, r.into_string().unwrap_or_default()),
+            Err(e) => panic!("{e}"),
+        }
+    }
+
     fn door(on: bool) -> Arc<Doors> { Arc::new(Doors::new(&crate::settings::Apps { generic: on, ..Default::default() })) }
 
     #[test]
     fn the_door_accepts_a_valid_event() {
         let (tx, rx) = channel();
-        let ing = Ingest::start("secret".into(), tx, door(true)).unwrap();
+        let ing = Ingest::start("secret".into(), tx, door(true), board()).unwrap();
         let port = ing.endpoint().port;
         let body = r#"{"agent":"kilo","name":"Kilo CLI","session":"abc","state":"working","tool":"edit"}"#;
         assert_eq!(post(port, "/v1/events/generic", "secret", body), 204);
@@ -179,7 +219,7 @@ mod tests {
     #[test]
     fn the_door_rejects_impostors_bad_ids_and_oversized_bodies() {
         let (tx, rx) = channel();
-        let ing = Ingest::start("secret".into(), tx, door(true)).unwrap();
+        let ing = Ingest::start("secret".into(), tx, door(true), board()).unwrap();
         let port = ing.endpoint().port;
         let ev = |agent: &str, session: &str| format!(r#"{{"agent":"{agent}","session":"{session}","state":"done"}}"#);
         assert_eq!(post(port, "/v1/events/generic", "secret", &ev("claude", "abc")), 400);
@@ -196,7 +236,7 @@ mod tests {
     #[test]
     fn opencode_envelopes_have_their_own_route() {
         let (tx, rx) = channel();
-        let ing = Ingest::start("secret".into(), tx, door(false)).unwrap();
+        let ing = Ingest::start("secret".into(), tx, door(false), board()).unwrap();
         let port = ing.endpoint().port;
         let body = r#"{"v":1,"event":"session.status","session":"ses_1","status":"busy"}"#;
         assert_eq!(post(port, "/v1/events/opencode", "secret", body), 204);
@@ -213,7 +253,7 @@ mod tests {
     fn a_closed_door_is_not_there() {
         let (tx, rx) = channel();
         let d = door(false);
-        let ing = Ingest::start("secret".into(), tx, d.clone()).unwrap();
+        let ing = Ingest::start("secret".into(), tx, d.clone(), board()).unwrap();
         let port = ing.endpoint().port;
         let body = r#"{"agent":"kilo","session":"abc","state":"done"}"#;
         assert_eq!(post(port, "/v1/events/generic", "secret", body), 404);
@@ -226,7 +266,7 @@ mod tests {
     #[test]
     fn accepts_statusline_on_its_own_route() {
         let (tx, rx) = channel();
-        let ing = Ingest::start("secret".into(), tx, door(true)).unwrap();
+        let ing = Ingest::start("secret".into(), tx, door(true), board()).unwrap();
         let port = ing.endpoint().port;
         let body = r#"{"ts":1,"payload":{"session_id":"s"}}"#;
         assert_eq!(post(port, "/v1/events/claude-statusline", "secret", body), 204);
@@ -235,6 +275,39 @@ mod tests {
             _ => panic!("wrong route"),
         }
         assert_eq!(post(port, "/v1/events/claude-statusline", "wrong", body), 401);
+        ing.stop();
+    }
+
+    #[test]
+    fn claude_mod_route_checks_auth_and_version() {
+        let (tx, rx) = channel();
+        let ing = Ingest::start("secret".into(), tx, door(false), board()).unwrap();
+        let port = ing.endpoint().port;
+        let ok = r#"{"v":1,"kind":"measure","session_id":"s","ts":1}"#;
+        assert_eq!(post(port, "/v1/events/claude-mod", "bad", ok), 401);
+        assert_eq!(post(port, "/v1/events/claude-mod", "secret", r#"{"v":2,"kind":"measure","session_id":"s","ts":1}"#), 400);
+        assert_eq!(post(port, "/v1/events/claude-mod", "secret", r#"{"kind":"measure","session_id":"s","ts":1}"#), 400, "missing version");
+        assert_eq!(post(port, "/v1/events/claude-mod", "secret", "not json"), 400);
+        assert_eq!(post(port, "/v1/events/claude-mod", "secret", ok), 204);
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::ClaudeMod(p) if p.session_id == "s"));
+        let big = format!(r#"{{"v":1,"kind":"measure","session_id":"s","cwd":"{}"}}"#, "x".repeat(1 << 20));
+        assert_eq!(post(port, "/v1/events/claude-mod", "secret", &big), 413);
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "only the valid payload reached the channel");
+        ing.stop();
+    }
+
+    #[test]
+    fn state_route_serves_the_board_to_the_token_holder_only() {
+        let (tx, _rx) = channel();
+        let b = board();
+        let ing = Ingest::start("secret".into(), tx, door(false), b.clone()).unwrap();
+        let port = ing.endpoint().port;
+        *b.write().unwrap() = br#"{"v":1}"#.to_vec();
+        assert_eq!(get(port, "/v1/state", "bad").0, 401);
+        assert_eq!(get(port, "/v1/state", "secret"), (200, r#"{"v":1}"#.to_string()));
+        assert_eq!(get(port, "/v1/events/claude", "secret").0, 404);
+        assert_eq!(get(port, "/nope", "secret").0, 404);
+        assert_eq!(post(port, "/v1/state", "secret", "{}"), 404);
         ing.stop();
     }
 }

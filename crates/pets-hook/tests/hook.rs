@@ -12,7 +12,7 @@ fn run_hook(endpoint_path: &std::path::Path, stdin: &str) -> std::process::Outpu
 #[test]
 fn forwards_hook_payload_silently() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default()))).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default())), Default::default()).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -46,7 +46,7 @@ fn run_report(endpoint_path: &std::path::Path, args: &[&str]) -> std::process::O
 #[test]
 fn report_sends_a_door_event_and_says_nothing() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default()))).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default())), Default::default()).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -67,7 +67,7 @@ fn report_errors_go_to_stderr_with_code_2() {
     let down = run_report(&dir.path().join("missing.json"), &["--agent", "kilo", "--session", "abc", "--state", "done"]);
     assert_eq!(down.status.code(), Some(2), "widget is down");
     let (tx, _rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps { generic: false, ..Default::default() }))).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps { generic: false, ..Default::default() })), Default::default()).unwrap();
     ing.endpoint().write(&p).unwrap();
     let closed = run_report(&p, &["--agent", "kilo", "--session", "abc", "--state", "done"]);
     assert_eq!(closed.status.code(), Some(2), "door is closed");
@@ -124,7 +124,7 @@ fn agents_open() -> std::sync::Arc<pets_core::ingest::Doors> {
 #[test]
 fn antigravity_stop_is_forwarded_and_answered_with_a_stop_decision() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, agents_open()).unwrap();
+    let ing = Ingest::start("tok".into(), tx, agents_open(), Default::default()).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -142,7 +142,7 @@ fn antigravity_stop_is_forwarded_and_answered_with_a_stop_decision() {
 #[test]
 fn copilot_hooks_are_forwarded_and_say_nothing() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, agents_open()).unwrap();
+    let ing = Ingest::start("tok".into(), tx, agents_open(), Default::default()).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -174,7 +174,7 @@ fn antigravity_still_gets_its_answer_when_the_widget_is_down_or_the_input_is_bad
 #[test]
 fn a_bad_or_missing_event_name_sends_nothing() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, agents_open()).unwrap();
+    let ing = Ingest::start("tok".into(), tx, agents_open(), Default::default()).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -233,7 +233,7 @@ fn new_agents_open() -> std::sync::Arc<pets_core::ingest::Doors> {
 
 fn widget() -> (Ingest, std::sync::mpsc::Receiver<Incoming>, tempfile::TempDir, std::path::PathBuf) {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, new_agents_open()).unwrap();
+    let ing = Ingest::start("tok".into(), tx, new_agents_open(), Default::default()).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
@@ -330,7 +330,7 @@ fn a_hook_run_by_another_agent_sends_nothing() {
 #[test]
 fn claude_started_from_zcode_is_still_claude() {
     let (tx, rx) = channel();
-    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default()))).unwrap();
+    let ing = Ingest::start("tok".into(), tx, std::sync::Arc::new(pets_core::ingest::Doors::new(&pets_core::settings::Apps::default())), Default::default()).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("endpoint.json");
     ing.endpoint().write(&p).unwrap();
