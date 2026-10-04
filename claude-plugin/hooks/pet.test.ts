@@ -15,7 +15,7 @@ const BAND = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
 
 type Dollar = Engine
-type Opts = { store?: Record<string, unknown>; verdict?: 'allow' | 'ask' | 'deny'; drop?: boolean; storeFails?: boolean }
+type Opts = { store?: Record<string, unknown>; verdict?: 'allow' | 'ask' | 'deny'; drop?: boolean; storeFails?: boolean; duplicate?: boolean }
 type Found = { type: string; key: string | undefined; props: Record<string, unknown>; text: string }
 type Band = { find: (q: object) => Promise<Found | undefined>; redraw: () => Promise<void>; unmount: () => Promise<void> }
 
@@ -23,6 +23,8 @@ type Band = { find: (q: object) => Promise<Found | undefined>; redraw: () => Pro
 // (an empty Box keyed `core`) and the blits. The test steers what a blit answers through `w.blit`, and holds a tool open with `w.gate`.
 function world(on: On, opts: Opts = {}) {
   const clock = mock.clock(on, { now: NOW })
+  mock.env(on, { USERPROFILE: 'C:\\Users\\tester' })
+  on('fs.exists', ($$, e) => ({ value: opts.duplicate === true && e.path.split(String.fromCharCode(92)).join('/') === 'C:/Users/tester/.claude/skills/agent-pets/.claude-plugin/plugin.json' }))
   const held: Record<string, unknown> = { ...opts.store }
   on('store.get', ($$, e) => (opts.storeFails ? { deny: 'EIO' } : { value: held[e.key] }))
   on('store.set', ($$, e) => {
@@ -40,7 +42,15 @@ function world(on: On, opts: Opts = {}) {
     attempts: 0,
     blit: 'ok' as 'ok' | 'deny' | 'throw',
     gate: undefined as Promise<void> | undefined,
+    stall: false,
+    stateFails: false,
   }
+  on('state.get', async ($$, e, next) => {
+    if (w.stall) await new Promise<never>(() => {})
+    if (w.stateFails) return { deny: 'EIO' }
+    return next(e)
+  })
+  on('state.set', async ($$, e, next) => (w.stateFails ? { deny: 'EIO' } : next(e)))
   on('tool.call', async () => {
     await w.gate
     return { result: 'ok' } as never
@@ -428,4 +438,41 @@ test('a subagent turn or tool does not move the pet', async ($, on) => {
   await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer', agentId: 'sub1' } as never)
   expect(await says(ui)).toBe('thinking\u2026')
   await ui.unmount()
+})
+
+test('a duplicate copy of the mod draws no band, blits nothing and leaves the band to the engine', async ($, on) => {
+  const w = world(on, { duplicate: true })
+  await startTerminal($)
+  const ui = await mountBand($)
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  expect(await ui.find({ type: 'Box', key: 'core' })).toBeDefined()
+  await submit($)
+  await w.clock.advance(1000)
+  await ui.redraw()
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  expect(w.attempts).toBe(0)
+  expect(w.blits).toEqual([])
+  await ui.unmount()
+})
+
+test('a tool call is handed on without waiting for the pet', async ($, on) => {
+  const w = world(on)
+  await startTerminal($)
+  // the pet cannot reach its state: it never answers
+  w.stall = true
+  const out = await Promise.race([
+    $.tool.call({ tool: 'Bash', command: 'ls' } as never),
+    new Promise(resolve => setTimeout(() => resolve('stuck'), 200)),
+  ])
+  expect(out).not.toBe('stuck')
+})
+
+test('a state that fails never throws out of a tool call and the result still comes back', async ($, on) => {
+  const w = world(on)
+  await startTerminal($)
+  w.stateFails = true
+  const out = (await $.tool.call({ tool: 'Bash', command: 'ls' } as never)) as { result?: unknown }
+  expect(out.result).toBe('ok')
+  const ask = (await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)) as { result?: unknown }
+  expect(ask.result).toBe('ok')
 })

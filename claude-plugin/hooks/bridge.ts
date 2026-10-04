@@ -22,6 +22,7 @@ export type BridgeIo = {
 }
 
 const BACKOFF_MS = 30_000
+const DUPLICATE_TTL_MS = 60_000
 const EVENTS_PATH = '/v1/events/claude-mod'
 const STATE_PATH = '/v1/state'
 const SKILLS_COPY = '/.claude/skills/agent-pets'
@@ -39,23 +40,29 @@ export function createBridge(io: BridgeIo) {
   let endpoint: Endpoint | null = null
   let backoffUntil = 0
   const stoppedSessions = new Set<string>()
-  let duplicate: Promise<boolean> | undefined
+  let duplicate: { value: boolean; at: number } | undefined
 
   const home = async () => normalise((await io.home()) ?? '')
 
-  // Another copy of this plugin (the app's own, in the skills folder) already reports: this one stays silent.
-  const isDuplicateCopy = (): Promise<boolean> =>
-    (duplicate ??= (async () => {
-      try {
+  // Another copy of this plugin (the app's own, in the skills folder) already reports and draws: this one stays silent.
+  // The answer is kept for a minute, so a running session follows the app's Settings toggle without a restart. Never throws.
+  const isDuplicateCopy = async (): Promise<boolean> => {
+    try {
+      const now = await io.now()
+      if (duplicate && now - duplicate.at >= 0 && now - duplicate.at < DUPLICATE_TTL_MS) return duplicate.value
+      const value = await (async () => {
         const base = await home()
         if (!base) return false
         const own = `${base}${SKILLS_COPY}`
         if (normalise(io.pluginRoot).toLowerCase() === own.toLowerCase()) return false
         return await io.exists(`${own}/.claude-plugin/plugin.json`)
-      } catch {
-        return false
-      }
-    })())
+      })()
+      duplicate = { value, at: now }
+      return value
+    } catch {
+      return false
+    }
+  }
 
   const readEndpoint = async (): Promise<Endpoint> => {
     const text = await io.read(`${await home()}/.agent-pets/endpoint.json`)
@@ -87,6 +94,9 @@ export function createBridge(io: BridgeIo) {
   }
 
   return {
+    /** True when this is not the app's copy and the app's copy is installed: draw and report nothing. Cached for 60 s; never throws. */
+    isDuplicateCopy,
+
     /** Fire-and-forget; never throws. */
     send(payload: ModPayload): void {
       if (stoppedSessions.has(payload.session_id)) return

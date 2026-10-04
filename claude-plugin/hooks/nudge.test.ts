@@ -106,16 +106,19 @@ test('entries that are not sessions are skipped and a board without sessions is 
 })
 
 // Everything beneath the plugin: clock, store, endpoint file, the widget's board, and what the plugin shows.
-function world(on: On, store: Record<string, unknown> = {}, toastFails = false) {
+function world(on: On, store: Record<string, unknown> = {}, toastFails = false, duplicate = false) {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:\\Users\\tester' })
   const held: Record<string, unknown> = { ...store }
-  on('store.get', ($$, e) => ({ value: held[e.key] }))
+  on('store.get', ($$, e) => {
+    w.storeReads++
+    return { value: held[e.key] }
+  })
   on('store.set', ($$, e) => {
     held[e.key] = e.value
     return { value: undefined }
   })
-  on('fs.exists', () => ({ value: false }))
+  on('fs.exists', ($$, e) => ({ value: duplicate && e.path.split('\\').join('/') === 'C:/Users/tester/.claude/skills/agent-pets/.claude-plugin/plugin.json' }))
   on('fs.read', ($$, e) => {
     const path = e.path.split('\\').join('/')
     if (path === 'C:/Users/tester/.agent-pets/endpoint.json') return { value: JSON.stringify({ port: 4711, token: 'tok' }) }
@@ -127,6 +130,7 @@ function world(on: On, store: Record<string, unknown> = {}, toastFails = false) 
     held,
     board: boardOf() as Board | 'down',
     fetched: 0,
+    storeReads: 0,
     toasts: [] as string[],
     statuses: [] as (string | undefined)[],
   }
@@ -233,4 +237,17 @@ test('a failing toast does not stop the polling', async ($, on) => {
   w.board = boardOf(session({ id: 'b', state: 'needs_input', question: 'first?' }), session({ id: 'c', state: 'needs_input', question: 'second?' }))
   await w.clock.advance(3000)
   expect(w.statuses.at(-1)).toBe(`${WAITING} 2 waiting`)
+})
+
+test('a duplicate copy of the mod polls nothing, toasts nothing and pins nothing', async ($, on) => {
+  const w = world(on, {}, false, true)
+  w.board = boardOf(session({ id: 'old', state: 'needs_input', question: 'already waiting' }))
+  await startTerminal($)
+  await w.clock.advance(3000)
+  w.board = boardOf(session({ id: 'new', state: 'needs_input', question: 'Run the tests?' }), session({ id: 'bad', state: 'error', title: 'Port failed' }))
+  await w.clock.advance(6000)
+  expect(w.fetched).toBe(0)
+  expect(w.storeReads).toBe(0)
+  expect(w.toasts).toEqual([])
+  expect(w.statuses.filter(s => s !== undefined)).toEqual([])
 })

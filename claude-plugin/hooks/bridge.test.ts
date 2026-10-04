@@ -189,6 +189,50 @@ test('duplicate copy: a copy elsewhere reports when there is no skills copy', as
   expect(w.calls.length).toBe(1)
 })
 
+test('isDuplicateCopy: true for a copy outside the skills folder when the skills manifest exists, false for the skills root', async () => {
+  const w = world({ files: { [SKILLS_MANIFEST]: '{}' } })
+  expect(await createBridge(w.io).isDuplicateCopy()).toBe(true)
+  const own = world({ root: SKILLS_ROOT, files: { [SKILLS_MANIFEST]: '{}' } })
+  expect(await createBridge(own.io).isDuplicateCopy()).toBe(false)
+  const alone = world()
+  expect(await createBridge(alone.io).isDuplicateCopy()).toBe(false)
+})
+
+test('isDuplicateCopy: the answer is cached for 60 s, then checked again', async () => {
+  const w = world({ files: { [SKILLS_MANIFEST]: '{}' } })
+  let checks = 0
+  const exists = w.io.exists
+  w.io.exists = async path => {
+    checks++
+    return exists(path)
+  }
+  const bridge = createBridge(w.io)
+  expect(await bridge.isDuplicateCopy()).toBe(true)
+  delete w.files[SKILLS_MANIFEST]
+  w.advance(59_000)
+  expect(await bridge.isDuplicateCopy()).toBe(true)
+  expect(checks).toBe(1)
+  w.advance(1_000)
+  expect(await bridge.isDuplicateCopy()).toBe(false)
+  expect(checks).toBe(2)
+  // and the other way: the skills copy appears while a session runs
+  w.files[SKILLS_MANIFEST] = '{}'
+  w.advance(60_000)
+  expect(await bridge.isDuplicateCopy()).toBe(true)
+})
+
+test('isDuplicateCopy never throws: a failing io counts as not a duplicate', async () => {
+  const w = world({ files: { [SKILLS_MANIFEST]: '{}' } })
+  w.io.exists = async () => {
+    throw new Error('EIO')
+  }
+  expect(await createBridge(w.io).isDuplicateCopy()).toBe(false)
+  w.io.now = async () => {
+    throw new Error('clock')
+  }
+  expect(await createBridge(w.io).isDuplicateCopy()).toBe(false)
+})
+
 test('sharedBridge hands every caller the first bridge made', () => {
   const first = sharedBridge(world().io)
   expect(sharedBridge(world().io)).toBe(first)

@@ -1,5 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Api, On } from 'claude-code'
+import { sharedBridge } from './bridge'
+import type { Bridge, BridgeIo } from './bridge'
 import { prefs } from './pane'
 import type { PrefsIo } from './pane'
 import { COLS, FRAMES, ROWS, encode } from './sprites'
@@ -56,6 +58,24 @@ export function step(state: PetState, ev: PetEvent, quietMs: number): PetState {
   }
 }
 
+// Mirrors report.ts's `ioOf`: the two must stay in step. The engine's `$` as the bridge's io. The validator follows `$` only into functions declared in this file,
+// and `$.env.get` takes a literal name: both are why this lives here and not in bridge.ts (report.ts, pane.tsx and nudge.ts have their own).
+function ioOf($: Api): BridgeIo {
+  return {
+    pluginRoot: $.plugin.root,
+    home: async () => (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')),
+    read: path => $.fs.read(path),
+    exists: path => $.fs.exists(path),
+    now: () => $.clock.now(),
+    fetch: (url, init) => $.http.fetch(url, init),
+  }
+}
+
+// The app's own copy has the pet: a second copy of the mod draws nothing (cached for a minute, never throws).
+function isDuplicate($: Api, bridge?: Bridge): Promise<boolean> {
+  return (bridge ?? sharedBridge(ioOf($))).isDuplicateCopy()
+}
+
 const storeOf = ($: Api): PrefsIo => ({ get: key => $.store.get(key) })
 
 // The engine's `$` stays in this file (the validator follows it only into functions declared here).
@@ -80,7 +100,7 @@ async function feed($: Api, event: PetEvent | (() => PetEvent)): Promise<void> {
  * A pixel Clawd above the prompt that mirrors what this session is doing, on interactive terminal sessions wide enough
  * for it and while `/pets` has Pet on. It watches the prompt, tool calls, permission asks and the end of each turn.
  */
-export function registerPet(on: On): void {
+export function registerPet(on: On, bridge?: Bridge): void {
   let timer: { cancel: () => void } | undefined
   // The band's request id and the animation's frame: the band draws frame `frame`, the timer blits the next. Losing them on a reload costs one frame.
   let band: string | undefined
@@ -100,6 +120,7 @@ export function registerPet(on: On): void {
         if (busy) return
         busy = true
         try {
+          if (await isDuplicate($, bridge)) return
           await feed($, 'tick')
           if (band === undefined) return
           const { state } = await read($, moodAtom)
@@ -132,13 +153,15 @@ export function registerPet(on: On): void {
     const own = e.agentId === undefined
     if (!own) return next(e)
     running++
-    await feed($, e.tool === 'AskUserQuestion' ? 'ask' : 'tool')
+    // The pet never holds a tool call up: the write starts now and is not waited for. `feed` swallows its own errors.
+    const started = feed($, e.tool === 'AskUserQuestion' ? 'ask' : 'tool').catch(() => {})
     try {
       return await next(e)
     } finally {
       running = Math.max(0, running - 1)
+      // After the start's write, so a call that ends at once cannot be undone by its own beginning; not waited for either.
       // Another call still running keeps the pet at work (and takes it off `waiting` once this call's question is settled).
-      await feed($, () => (running > 0 ? 'tool' : 'tool_done'))
+      void started.then(() => feed($, () => (running > 0 ? 'tool' : 'tool_done'))).catch(() => {})
     }
   })
 
@@ -158,6 +181,7 @@ export function registerPet(on: On): void {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (await isDuplicate($, bridge)) return next(e)
     if (e.surface !== 'terminal' || e.props.bodyColumns < BAND_MIN_COLUMNS || e.props.maxRows < ROWS || e.props.hasSurvey) return next(e)
     try {
       // The mirror is read for the redraw its change brings; the store is what decides.

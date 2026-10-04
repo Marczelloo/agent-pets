@@ -89,6 +89,12 @@ export function registerNudges(on: On, bridge?: Bridge): void {
         if (busy) return
         busy = true
         try {
+          if (await door.isDuplicateCopy()) {
+            // The app's own copy nudges: this one says nothing, and seeds again if it ever takes over.
+            seen = null
+            await pin(undefined)
+            return
+          }
           if (!(await prefs(storeOf($))).nudges) {
             // Off: forget what was seen, so turning it back on seeds again instead of bursting.
             seen = null

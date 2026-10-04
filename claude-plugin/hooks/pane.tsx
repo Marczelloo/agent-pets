@@ -148,12 +148,15 @@ export function registerPane(on: On, bridge?: Bridge): void {
   on('session.start', { surface: 'terminal', isInteractive: true }, async ($, e, next) => {
     const r = await next(e)
     try {
+      // The app's own copy has the command; a second /pets would only ever say "widget not running".
+      if (await (bridge ?? sharedBridge(ioOf($))).isDuplicateCopy()) return r
       await $.command.register({ name: 'pets', description: 'Agent Pets: sessions and limits' })
     } catch {}
     return r
   })
 
-  on('command.run', { command: 'pets' }, async $ => {
+  on('command.run', { command: 'pets' }, async ($, e, next) => {
+    if (await (bridge ?? sharedBridge(ioOf($))).isDuplicateCopy()) return next(e)
     try {
       // The mirrors may have gone stale since the last press (a restart resets them): line them up with the store.
       const p = await prefs(storeOf($))
@@ -164,7 +167,8 @@ export function registerPane(on: On, bridge?: Bridge): void {
     return {}
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (await (bridge ?? sharedBridge(ioOf($))).isDuplicateCopy()) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     // A pane that cannot gather its data still draws: switches default to on, no board means the widget-not-running view.
     try {

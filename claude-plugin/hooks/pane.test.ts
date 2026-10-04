@@ -33,7 +33,7 @@ const board: Board = {
 }
 
 // Everything beneath the plugin: the clock, the store, the endpoint file and the widget's answer (a board, or nothing).
-function world(on: On, answer: unknown, store: Record<string, unknown> = {}, fails: { store?: true; usage?: true } = {}) {
+function world(on: On, answer: unknown, store: Record<string, unknown> = {}, fails: { store?: true; usage?: true; duplicate?: true } = {}) {
   mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:\\Users\\tester' })
   // The store in a map the test can read back (the engine the test holds has no `$.store`).
@@ -43,7 +43,7 @@ function world(on: On, answer: unknown, store: Record<string, unknown> = {}, fai
     held[e.key] = e.value
     return { value: undefined }
   })
-  on('fs.exists', () => ({ value: false }))
+  on('fs.exists', ($$, e) => ({ value: fails.duplicate === true && e.path.split(String.fromCharCode(92)).join('/') === 'C:/Users/tester/.claude/skills/agent-pets/.claude-plugin/plugin.json' }))
   on('fs.read', ($$, e) => {
     const path = e.path.split('\\').join('/')
     if (path === 'C:/Users/tester/.agent-pets/endpoint.json') return { value: JSON.stringify({ port: 4711, token: 'tok' }) }
@@ -260,5 +260,31 @@ test('a limit with an unknown window and a NaN percentage draws, entries that ar
   expect(rows.length).toBe(2)
   expect(rows[0]?.text).toContain('mystery')
   expect(await ui.find({ type: 'Text', text: /No sessions/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a duplicate copy registers no /pets, draws no pane and does not open one', async ($, on) => {
+  world(on, board, {}, { duplicate: true })
+  const registered: string[] = []
+  const opened: unknown[] = []
+  on('session.start', ($$, e) => ({ cwd: e.cwd }))
+  on('command.run', () => ({ text: 'core' }))
+  on('ui.render', () => ({ type: 'Box', props: { key: 'core' }, children: [] }) as never)
+  on('command.register', ($$, e) => {
+    registered.push(e.name)
+    return { value: { command: e.name } }
+  })
+  on('ui.open', ($$, e) => {
+    opened.push(e)
+    return { value: { isPlaced: true } }
+  })
+  await $.session.start({ cwd: 'C:/w', surface: 'terminal', isInteractive: true })
+  expect(registered).toEqual([])
+  const out = await $.command.run({ command: 'pets', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } } as never)
+  expect(out.text).toBe('core')
+  expect(opened).toEqual([])
+  const ui = await mountPane($)
+  expect(await ui.find({ key: 'pet' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Sessions|widget not running/ })).toBeUndefined()
   await ui.unmount()
 })
