@@ -2,7 +2,7 @@ use crate::claude::progress_from_tool_use;
 use crate::model::*;
 use crate::time::rfc3339_ms;
 
-/// Context window from the model name. Exact value comes from statusline (phase 3);
+/// Context window from the model name. Exact value comes from the Claude mod's measure;
 /// Claude 5 models and `[1m]` variants have 1M (S3), older ones 200k.
 pub fn context_max(model: &str) -> u64 {
     let gen5 = ["claude-opus-5", "claude-sonnet-5", "claude-fable-5"].iter().any(|p| model.starts_with(p));

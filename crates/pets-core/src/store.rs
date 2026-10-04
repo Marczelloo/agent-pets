@@ -908,7 +908,7 @@ mod tests {
         let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Claude, "x", Kind::Limits, ts); e.data.limits = vec![l]; e };
         s.apply(&at(1_000, lim(30.0, Some(10_000))));
         s.apply(&at(2_000, lim(40.0, None)));
-        assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "same window: retain statusline reset");
+        assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "same window: retain the earlier reset");
         s.apply(&at(20_000, lim(5.0, None)));
         assert_eq!(s.limits(), &[lim(5.0, None)], "reset passed: next time unknown");
     }
