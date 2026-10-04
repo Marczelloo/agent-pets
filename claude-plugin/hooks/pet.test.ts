@@ -240,7 +240,7 @@ test('a prompt, a tool, a permission ask and an answer take the pet through its 
   release()
   await call
   expect(await says(ui)).toBe('thinking\u2026')
-  await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' } } as never)
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' }, tool_use_id: 'tu1' } as never)
   expect(await says(ui)).toBe('waiting for you')
   await complete($, 'answer')
   expect(await says(ui)).toBe('done')
@@ -254,6 +254,39 @@ test('an allowed tool does not make the pet wait', async ($, on) => {
   await submit($)
   await $.tool.check({ tool: 'Read', input: { file_path: 'a' } } as never)
   expect(await says(ui)).toBe('thinking\u2026')
+  await ui.unmount()
+})
+
+test('a plugin asking whether a tool would be allowed does not make the pet wait', async ($, on) => {
+  world(on, { verdict: 'ask' })
+  await startTerminal($)
+  const ui = await mountBand($)
+  await submit($)
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf x' } } as never)
+  expect(await says(ui)).toBe('thinking…')
+  await ui.unmount()
+})
+
+test('with tools in parallel the pet works until the last one ends', async ($, on) => {
+  const w = world(on)
+  await startTerminal($)
+  const ui = await mountBand($)
+  await submit($)
+  let releaseFirst: () => void = () => {}
+  let releaseSecond: () => void = () => {}
+  w.gate = new Promise<void>(resolve => (releaseFirst = resolve))
+  const first = $.tool.call({ tool: 'Read', file_path: 'a' } as never)
+  await w.clock.advance(0)
+  w.gate = new Promise<void>(resolve => (releaseSecond = resolve))
+  const second = $.tool.call({ tool: 'Read', file_path: 'b' } as never)
+  await w.clock.advance(0)
+  expect(await says(ui)).toBe('working…')
+  releaseFirst()
+  await first
+  expect(await says(ui)).toBe('working…')
+  releaseSecond()
+  await second
+  expect(await says(ui)).toBe('thinking…')
   await ui.unmount()
 })
 

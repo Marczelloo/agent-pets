@@ -59,16 +59,19 @@ export function step(state: PetState, ev: PetEvent, quietMs: number): PetState {
 const storeOf = ($: Api): PrefsIo => ({ get: key => $.store.get(key) })
 
 // The engine's `$` stays in this file (the validator follows it only into functions declared here).
-async function feed($: Api, ev: PetEvent): Promise<void> {
+// `ev` may be a function, asked when the write happens: what a call's end means depends on the calls still running then.
+async function feed($: Api, event: PetEvent | (() => PetEvent)): Promise<void> {
   try {
+    const ev = typeof event === 'function' ? event() : event
     const now = await $.clock.now()
     const { state, at } = await read($, moodAtom)
     const quiet = at === 0 ? 0 : now - at
     if (ev === 'tick' && step(state, ev, quiet) === state) return
     // The step is computed from the value the write finds, so two events at once cannot undo each other.
     await update($, moodAtom, cur => {
+      const at = typeof event === 'function' ? event() : ev
       const quietNow = cur.at === 0 ? 0 : now - cur.at
-      return { state: step(cur.state, ev, quietNow), at: ev === 'tick' ? cur.at : now }
+      return { state: step(cur.state, at, quietNow), at: at === 'tick' ? cur.at : now }
     })
   } catch {}
 }
@@ -82,6 +85,8 @@ export function registerPet(on: On): void {
   // The band's request id and the animation's frame: the band draws frame `frame`, the timer blits the next. Losing them on a reload costs one frame.
   let band: string | undefined
   let frame = 0
+  // This session's tool calls under way: with tools in parallel the turn goes back to the model only when the last one ends.
+  let running = 0
 
   // A matcher: the engine takes one unmatched hook per event and plugin, and report.ts has that one.
   on('session.start', { surface: 'terminal', isInteractive: true }, async ($, e, next) => {
@@ -115,29 +120,39 @@ export function registerPet(on: On): void {
 
   on('prompt.submit', async ($, e, next) => {
     const r = await next(e)
-    if (r.drop === undefined) await feed($, 'prompt')
+    if (r.drop === undefined) {
+      running = 0
+      await feed($, 'prompt')
+    }
     return r
   })
 
   // A tool that ends, or a question that is answered, takes the turn back to the model. Subagents' tools are the main turn's business.
   on('tool.call', async ($, e, next) => {
     const own = e.agentId === undefined
-    if (own) await feed($, e.tool === 'AskUserQuestion' ? 'ask' : 'tool')
-    const r = await next(e)
-    if (own) await feed($, 'tool_done')
-    return r
+    if (!own) return next(e)
+    running++
+    await feed($, e.tool === 'AskUserQuestion' ? 'ask' : 'tool')
+    try {
+      return await next(e)
+    } finally {
+      running = Math.max(0, running - 1)
+      // Another call still running keeps the pet at work (and takes it off `waiting` once this call's question is settled).
+      await feed($, () => (running > 0 ? 'tool' : 'tool_done'))
+    }
   })
 
-  // The engine's verdict `ask` is a permission prompt for the user.
+  // The engine's verdict `ask` on a real call is a permission prompt for the user; a call without `tool_use_id` is a plugin's query.
   on('tool.check', async ($, e, next) => {
     const r = await next(e)
-    if (r.decision === 'ask') await feed($, 'ask')
+    if (r.decision === 'ask' && e.tool_use_id !== undefined) await feed($, 'ask')
     return r
   })
 
   // A matcher naming every reason: see session.start above.
   on('turn.complete', { reason: ['answer', 'aborted', 'refusal', 'error'] }, async ($, e, next) => {
     const r = await next(e)
+    if (e.agentId === undefined) running = 0
     if (e.agentId === undefined) await feed($, e.reason === 'answer' ? 'answer' : e.reason === 'aborted' ? 'aborted' : 'error')
     return r
   })
