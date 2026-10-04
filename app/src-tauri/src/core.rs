@@ -147,7 +147,11 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     // claude account limits from the Anthropic server (exact reset times, independent of CLI sessions), only with consent
     let (usage_tx, usage) = std::sync::mpsc::channel();
     let a = app.clone();
-    let has_token = crate::usage::spawn(usage_tx, move || a.state::<crate::settings::SettingsState>().get().claude_plan_usage);
+    // quiet while the Claude mod reports the same limits from inside Claude Code
+    let has_token = crate::usage::spawn(usage_tx, move || {
+        a.state::<crate::settings::SettingsState>().get().claude_plan_usage
+            && !crate::usage::mod_reading_recent(&a.state::<crate::settings::LastSeen>().0.lock().unwrap(), now_ms())
+    });
     // antigravity limits from its local server when Antigravity is enabled in settings
     let (ag_tx, ag_usage) = std::sync::mpsc::channel();
     let a = app.clone();
@@ -178,9 +182,10 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
             publish(rt.store(), now, &mut hidden);
             publish_board(&board, rt.store(), now, &mut hidden);
             if let Err(e) = hidden.save_if_dirty(&hidden_path) { pets_core::app_log!("{}: {e}", hidden_path.display()); }
-            *app.state::<crate::settings::LastSeen>().0.lock().unwrap() =
-                rt.last_seen().into_iter().map(|(k, v)| (k.to_string(), v)).collect();
         }
+        // every pass, not only on change: a repeated mod reading with the same limits must keep oauth polling quiet
+        *app.state::<crate::settings::LastSeen>().0.lock().unwrap() =
+            rt.last_seen().into_iter().map(|(k, v)| (k.to_string(), v)).collect();
         std::thread::sleep(Duration::from_millis(250));
     }
 }

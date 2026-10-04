@@ -3,12 +3,21 @@
 //! only to `api.anthropic.com`, and never store or log it.
 use pets_core::claude::account_usage;
 use pets_core::model::Event;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 const EVERY: Duration = Duration::from_secs(5 * 60);
 const BACKOFF: Duration = Duration::from_secs(15 * 60);
+/// How long a limits reading from the Claude mod keeps the Anthropic polling quiet.
+const MOD_FRESH_MS: i64 = 10 * 60_000;
+
+/// Whether the Claude mod reported account limits recently (`last_seen` from the runtime): then it is the
+/// source and polling the Anthropic server would only spend the user's rate limit.
+pub fn mod_reading_recent(last_seen: &BTreeMap<String, i64>, now: i64) -> bool {
+    last_seen.get("claude_mod_usage").is_some_and(|&t| now - t <= MOD_FRESH_MS)
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Failure { Unauthorized, RateLimited, Other }
@@ -97,5 +106,15 @@ mod tests {
         assert_eq!(fetch(&url, "tok", 5), Err(Failure::Unauthorized));
         let (url, _) = serve(429, "{}");
         assert_eq!(fetch(&url, "tok", 5), Err(Failure::RateLimited));
+    }
+
+    #[test]
+    fn a_recent_mod_reading_pauses_polling() {
+        let now = 100 * 60_000;
+        let seen = |k: &str, ago_min: i64| BTreeMap::from([(k.to_string(), now - ago_min * 60_000)]);
+        assert!(!mod_reading_recent(&BTreeMap::new(), now));
+        assert!(mod_reading_recent(&seen("claude_mod_usage", 9), now));
+        assert!(!mod_reading_recent(&seen("claude_mod_usage", 11), now));
+        assert!(!mod_reading_recent(&seen("claude_usage", 1), now));
     }
 }

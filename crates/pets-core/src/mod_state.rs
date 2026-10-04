@@ -68,7 +68,7 @@ pub fn render(sessions: &[Session], limits: &[Limit], app_version: &str) -> Vec<
         limits: limits.iter().map(|l| BoardLimit {
             agent: l.agent,
             window: window_name(l.window),
-            used_pct: l.used_pct.clamp(0.0, 100.0),
+            used_pct: if l.used_pct.is_nan() { 0.0 } else { l.used_pct.clamp(0.0, 100.0) },
             resets_at: l.resets_at,
             stale_since: l.stale_since,
         }).collect(),
@@ -168,6 +168,9 @@ mod tests {
         assert_eq!((l[0]["agent"].as_str(), l[0]["window"].as_str(), l[0]["used_pct"].as_f64()), (Some("claude"), Some("five_hour"), Some(100.0)));
         assert_eq!((l[0]["resets_at"].as_i64(), l[0]["stale_since"].is_null()), (Some(9_000), true));
         assert_eq!((l[1]["window"].as_str(), l[1]["used_pct"].as_f64()), (Some("weekly"), Some(0.0)));
+        let nan = [Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: f32::NAN, resets_at: None, stale_since: None }];
+        let v: serde_json::Value = serde_json::from_slice(&render(&[], &nan, "0.16.0")).unwrap();
+        assert_eq!(v["limits"][0]["used_pct"].as_f64(), Some(0.0));
         assert_eq!((l[1]["resets_at"].is_null(), l[1]["stale_since"].as_i64()), (true, Some(8_000)));
     }
 
