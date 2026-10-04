@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Api, On } from 'claude-code'
 import { sharedBridge } from './bridge'
-import type { Board, Bridge, BridgeIo } from './bridge'
+import type { Bridge, BridgeIo } from './bridge'
 
 const PANE = 'agent-pets'
 const BAR_CELLS = 10
@@ -26,10 +26,16 @@ type LimitRow = { label: string; percent: number; resetsAt?: number | null; stal
 
 const WINDOW_LABEL: Record<string, string> = { five_hour: '5h', weekly: 'week', seven_day: 'week', spend_limit: 'spend' }
 
-// Titles and questions come from the widget and ultimately from the user's sessions: one tidy line each.
+// Everything the widget sends ends up in a Text, and ultimately comes from the user's sessions: one tidy line each.
+// Control characters and line breaks become a space; bidi marks and zero-width characters (which could reorder
+// or hide what is drawn) go. Cut by code point so a surrogate pair is never split.
 const tidy = (text: unknown, max = 160): string => {
-  const flat = String(text ?? '').replace(/[\u0000-\u001f\u007f\u0080-\u009f\s]+/g, ' ').trim()
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
+  const flat = String(text ?? '')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/g, '')
+    .replace(/[\u0000-\u001f\u007f\u0080-\u009f\s]+/g, ' ')
+    .trim()
+  const points = Array.from(flat)
+  return points.length > max ? `${points.slice(0, max - 1).join('')}\u2026` : flat
 }
 
 const clampPercent = (v: number) => Math.min(100, Math.max(0, Number.isFinite(v) ? v : 0))
@@ -54,25 +60,46 @@ export function resetText(resetsAt: number, now: number): string {
 
 /** `5h ██████░░░░ 23% · resets 18:00` */
 export function limitLine(row: LimitRow, now: number): string {
-  const parts = [`${row.label.padEnd(5)} ${bar(row.percent)} ${Math.round(clampPercent(row.percent))}%`]
+  const parts = [`${String(row.label ?? '').padEnd(5)} ${bar(row.percent)} ${Math.round(clampPercent(row.percent))}%`]
   const reset = typeof row.resetsAt === 'number' ? resetText(row.resetsAt, now) : ''
   if (reset) parts.push(`resets ${reset}`)
   if (row.stale) parts.push('stale')
   return parts.join(' · ')
 }
 
-// The agents in the order the board names them: sessions first, then agents that only have limits.
-function agentsOf(board: Board): string[] {
-  const names = new Set<string>()
-  for (const s of board.sessions) names.add(s.agent)
-  for (const l of board.limits) names.add(l.agent)
-  return [...names]
+type SessionRow = { agent: string; state: string; title: string; question: string }
+type BoardView = { sessions: SessionRow[]; limits: (LimitRow & { agent: string })[] }
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+
+/**
+ * The widget's board as rows that are safe to draw: arrays that are not arrays become empty, entries that are not
+ * objects are skipped, every string is tidied (agents are grouped by their tidied name) and a percentage that is not a number is 0.
+ */
+export function viewOf(board: unknown): BoardView | null {
+  if (!isObject(board)) return null
+  const view: BoardView = { sessions: [], limits: [] }
+  for (const raw of Array.isArray(board.sessions) ? board.sessions : []) {
+    if (!isObject(raw)) continue
+    view.sessions.push({ agent: tidy(raw.agent, 40), state: tidy(raw.state, 24), title: tidy(raw.title, 80), question: tidy(raw.question) })
+  }
+  for (const raw of Array.isArray(board.limits) ? board.limits : []) {
+    if (!isObject(raw)) continue
+    const window = tidy(raw.window, 12)
+    const percent = typeof raw.used_pct === 'number' && Number.isFinite(raw.used_pct) ? raw.used_pct : 0
+    view.limits.push({
+      agent: tidy(raw.agent, 40),
+      label: WINDOW_LABEL[window] ?? window,
+      percent,
+      resetsAt: typeof raw.resets_at === 'number' ? raw.resets_at : null,
+      stale: typeof raw.stale_since === 'number',
+    })
+  }
+  return view
 }
 
-const boardRows = (board: Board, agent: string): LimitRow[] =>
-  board.limits
-    .filter(l => l.agent === agent)
-    .map(l => ({ label: WINDOW_LABEL[l.window] ?? l.window, percent: l.used_pct, resetsAt: l.resets_at, stale: typeof l.stale_since === 'number' }))
+// The agents in the order the board names them: sessions first, then agents that only have limits.
+const agentsOf = (view: BoardView): string[] => [...new Set([...view.sessions.map(s => s.agent), ...view.limits.map(l => l.agent)])]
 
 // This session's own windows, from the engine; what the pane can still show without the widget.
 async function sessionLimits($: Api): Promise<LimitRow[]> {
@@ -80,14 +107,14 @@ async function sessionLimits($: Api): Promise<LimitRow[]> {
     const { rateLimits } = await $.session.usage()
     return rateLimits.map(l => {
       const at = l.resetsAt ? Date.parse(l.resetsAt) : NaN
-      return { label: WINDOW_LABEL[l.kind] ?? l.kind, percent: l.percentUsed, resetsAt: Number.isFinite(at) ? at : null, stale: false }
+      return { label: WINDOW_LABEL[l.kind] ?? tidy(l.kind, 12), percent: l.percentUsed, resetsAt: Number.isFinite(at) ? at : null, stale: false }
     })
   } catch {
     return []
   }
 }
 
-// The engine's `$` as the bridge's io. The validator follows `$` only into functions declared in this file,
+// Mirrors report.ts's `ioOf`: the two must stay in step. The engine's `$` as the bridge's io. The validator follows `$` only into functions declared in this file,
 // and `$.env.get` takes a literal name: both are why this lives here and not in bridge.ts (report.ts has its own).
 function ioOf($: Api): BridgeIo {
   return {
@@ -139,13 +166,26 @@ export function registerPane(on: On, bridge?: Bridge): void {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    // Reading the mirrors while drawing is what redraws the pane when a switch is pressed.
-    await read($, petAtom)
-    await read($, nudgesAtom)
-    const { pet, nudges } = await prefs(storeOf($))
-    const now = await $.clock.now()
-    const board = await (bridge ?? sharedBridge(ioOf($))).state()
-    const own = board ? [] : await sessionLimits($)
+    // A pane that cannot gather its data still draws: switches default to on, no board means the widget-not-running view.
+    try {
+      // Reading the mirrors while drawing is what redraws the pane when a switch is pressed.
+      await read($, petAtom)
+      await read($, nudgesAtom)
+    } catch {}
+    let pet = true
+    let nudges = true
+    try {
+      ;({ pet, nudges } = await prefs(storeOf($)))
+    } catch {}
+    let now = Date.now()
+    let view: BoardView | null = null
+    try {
+      now = await $.clock.now()
+      view = viewOf(await (bridge ?? sharedBridge(ioOf($))).state())
+    } catch {
+      view = null
+    }
+    const own = view ? [] : await sessionLimits($)
 
     const switches = (
       <Box gap={1}>
@@ -154,7 +194,7 @@ export function registerPane(on: On, bridge?: Bridge): void {
       </Box>
     )
 
-    if (!board) {
+    if (!view) {
       return (
         <Box flexDirection="column">
           <Text dimColor>Agent Pets widget not running</Text>
@@ -167,6 +207,7 @@ export function registerPane(on: On, bridge?: Bridge): void {
       )
     }
 
+    const board = view
     const agents = agentsOf(board)
     return (
       <Box flexDirection="column">
@@ -182,9 +223,9 @@ export function registerPane(on: On, bridge?: Bridge): void {
                 <Box flexDirection="column">
                   <Text>
                     {'  '}
-                    {tidy(s.state, 24).replace(/_/g, ' ')} {tidy(s.title, 80)}
+                    {s.state.replace(/_/g, ' ')} {s.title}
                   </Text>
-                  {s.state === 'needs_input' && s.question && <Text dimColor>{`    ? ${tidy(s.question)}`}</Text>}
+                  {s.state === 'needs_input' && s.question !== '' && <Text dimColor>{`    ? ${s.question}`}</Text>}
                 </Box>
               ))}
             </Box>
@@ -193,7 +234,7 @@ export function registerPane(on: On, bridge?: Bridge): void {
         <Text bold>Limits</Text>
         {board.limits.length === 0 && <Text dimColor>No limits reported yet</Text>}
         {agents.map(agent => {
-          const rows = boardRows(board, agent)
+          const rows = board.limits.filter(l => l.agent === agent)
           if (rows.length === 0) return null
           return (
             <Box flexDirection="column">

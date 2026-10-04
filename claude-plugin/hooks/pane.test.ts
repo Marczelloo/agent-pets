@@ -1,6 +1,6 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import { bar, limitLine, prefs, resetText } from './pane'
+import { bar, limitLine, prefs, resetText, viewOf } from './pane'
 import type { Board } from './bridge'
 
 const PANE = {
@@ -33,12 +33,12 @@ const board: Board = {
 }
 
 // Everything beneath the plugin: the clock, the store, the endpoint file and the widget's answer (a board, or nothing).
-function world(on: On, answer: Board | 'down', store: Record<string, unknown> = {}) {
+function world(on: On, answer: unknown, store: Record<string, unknown> = {}, fails: { store?: true; usage?: true } = {}) {
   mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:\\Users\\tester' })
   // The store in a map the test can read back (the engine the test holds has no `$.store`).
   const held: Record<string, unknown> = { ...store }
-  on('store.get', ($$, e) => ({ value: held[e.key] }))
+  on('store.get', ($$, e) => (fails.store ? { deny: 'EIO' } : { value: held[e.key] }))
   on('store.set', ($$, e) => {
     held[e.key] = e.value
     return { value: undefined }
@@ -53,9 +53,11 @@ function world(on: On, answer: Board | 'down', store: Record<string, unknown> = 
     if (answer === 'down') return { deny: 'ECONNREFUSED' }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(answer) } }
   })
-  on('session.usage', () => ({
-    value: { startedAt: 0, context: {}, rateLimits: [{ kind: 'five_hour', percentUsed: 41.5, resetsAt: new Date(RESET).toISOString() }] },
-  }))
+  on('session.usage', () =>
+    fails.usage
+      ? { deny: 'EIO' }
+      : { value: { startedAt: 0, context: {}, rateLimits: [{ kind: 'five_hour', percentUsed: 41.5, resetsAt: new Date(RESET).toISOString() }] } },
+  )
   return held
 }
 
@@ -168,4 +170,95 @@ test('a reset a day or more away names the weekday too', () => {
   const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(new Date(far))
   expect(resetText(far, NOW)).toBe(`${weekday} ${timeOf(far)}`)
   expect(resetText(RESET, NOW)).toBe(timeOf(RESET))
+})
+
+const mountPane = ($: Parameters<Parameters<typeof test>[1]>[0]) =>
+  $.ui.mount({ plugin: 'agent-pets', surface: 'terminal', component: 'Pane', requestId: 'agent-pets', props: PANE })
+
+test('hostile text from the widget is drawn without escapes, line breaks or bidi marks', async ($, on) => {
+  const ESC = String.fromCharCode(27)
+  const RLO = String.fromCharCode(0x202e)
+  const hostile = {
+    v: 1,
+    app_version: '0.16.0',
+    sessions: [
+      {
+        id: 'x',
+        agent: `co${ESC}[31mdex${RLO}`,
+        state: 'needs_input',
+        title: `Port${ESC}[31m\nthe${RLO} parser`,
+        question: `Overwrite${ESC}[2J\nlib.rs${RLO}?`,
+        cwd: 'C:/w',
+        since: 1,
+      },
+    ],
+    limits: [{ agent: `co${ESC}[31mdex${RLO}`, window: `five${ESC}hour`, used_pct: 10 }],
+  }
+  world(on, hostile)
+  const ui = await mountPane($)
+  const drawn = JSON.stringify(await ui.drawn())
+  expect(drawn).not.toContain(ESC)
+  expect(drawn).not.toContain('\u001b')
+  expect(drawn).not.toContain(RLO)
+  expect(drawn).not.toContain('\n')
+  expect(await ui.find({ type: 'Text', text: /Port \[31m the parser/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Overwrite \[2J lib\.rs\?/ })).toBeDefined()
+  // one agent heading in each section: the two spellings tidy to the same name
+  expect((await ui.findAll({ type: 'Text', text: /^co \[31mdex$/ })).length).toBe(2)
+  await ui.unmount()
+})
+
+test('a long title is cut, never in the middle of a surrogate pair', async ($, on) => {
+  const long = { ...board, sessions: [{ ...board.sessions[0]!, title: 'x'.repeat(300) }] }
+  world(on, long)
+  const ui = await mountPane($)
+  const row = await ui.find({ type: 'Text', text: /xxxx/ })
+  expect(row?.text).not.toContain('x'.repeat(100))
+  expect(row?.text).toContain('\u2026')
+  await ui.unmount()
+  const view = viewOf({ sessions: [{ agent: 'a', state: 's', title: 'a'.repeat(78) + '\u{1F600}\u{1F600}\u{1F600}' }], limits: [] })
+  const title = view!.sessions[0]!.title
+  expect(title.endsWith('\u2026')).toBe(true)
+  expect(Array.from(title).every(ch => ch.length === 2 || !/[\ud800-\udfff]/.test(ch))).toBe(true)
+})
+
+test('a store that cannot be read leaves both switches on, the pane still draws', async ($, on) => {
+  world(on, board, {}, { store: true })
+  const ui = await mountPane($)
+  expect((await ui.find({ key: 'pet' }))?.text).toContain('Pet: on')
+  expect((await ui.find({ key: 'nudges' }))?.text).toContain('Nudges: on')
+  expect(await ui.find({ type: 'Text', text: /Port the parser/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('widget down and session.usage failing: the not-running line still shows', async ($, on) => {
+  world(on, 'down', {}, { usage: true })
+  const ui = await mountPane($)
+  expect(await ui.find({ type: 'Text', text: /Agent Pets widget not running/ })).toBeDefined()
+  expect(await ui.find({ key: 'pet' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a board without sessions or limits arrays draws', async ($, on) => {
+  world(on, { v: 1, app_version: '0.16.0' })
+  const ui = await mountPane($)
+  expect(await ui.find({ type: 'Text', text: /No sessions/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /No limits reported yet/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /widget not running/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a limit with an unknown window and a NaN percentage draws, entries that are no objects are skipped', async ($, on) => {
+  world(on, {
+    v: 1,
+    app_version: '0.16.0',
+    sessions: [null, 7, 'text'],
+    limits: [{ agent: 'codex', window: 'mystery', used_pct: null }, { agent: 'codex', used_pct: 'NaN' }, null],
+  })
+  const ui = await mountPane($)
+  const rows = await ui.findAll({ type: 'Text', text: /0%/ })
+  expect(rows.length).toBe(2)
+  expect(rows[0]?.text).toContain('mystery')
+  expect(await ui.find({ type: 'Text', text: /No sessions/ })).toBeDefined()
+  await ui.unmount()
 })
