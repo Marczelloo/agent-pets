@@ -29,7 +29,7 @@ const WINDOW_LABEL: Record<string, string> = { five_hour: '5h', weekly: 'week', 
 // Everything the widget sends ends up in a Text, and ultimately comes from the user's sessions: one tidy line each.
 // Control characters and line breaks become a space; bidi marks and zero-width characters (which could reorder
 // or hide what is drawn) go. Cut by code point so a surrogate pair is never split.
-const tidy = (text: unknown, max = 160): string => {
+export const tidy = (text: unknown, max = 160): string => {
   const flat = String(text ?? '')
     .replace(/[\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/g, '')
     .replace(/[\u0000-\u001f\u007f\u0080-\u009f\s]+/g, ' ')
