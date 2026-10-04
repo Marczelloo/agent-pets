@@ -1,5 +1,5 @@
 import type { EngineInterface as Api, On } from 'claude-code'
-import { createBridge } from './bridge'
+import { sharedBridge } from './bridge'
 import type { Bridge, BridgeIo } from './bridge'
 
 export type ModPayload = {
@@ -81,29 +81,26 @@ function ioOf($: Api): BridgeIo {
   }
 }
 
-type Holder = { bridge?: Bridge }
-
-async function report($: Api, holder: Holder, kind: ModPayload['kind'], e: unknown, withModel: boolean, sessionId?: string) {
+async function report($: Api, bridge: Bridge | undefined, kind: ModPayload['kind'], e: unknown, withModel: boolean, sessionId?: string) {
   const payload = toPayload(kind, sessionId ?? (await $.session.id()), await $.clock.now(), e)
   if (withModel) {
     const model = await modelOf($)
     if (model) payload.model = model
   }
-  ;(holder.bridge ??= createBridge(ioOf($))).send(payload)
+  ;(bridge ?? sharedBridge(ioOf($))).send(payload)
 }
 
 /**
  * Reports the session's start, every measure (limits, context, cost), each turn's end and the session's end.
  * Each hook lets the engine finish first and never fails or delays the session on the widget's account.
- * Reports through `bridge`, or through one made from the first hook's `$` (`register` gets no `$`).
+ * Reports through `bridge`, or through the shared one made from the first hook's `$` (`register` gets no `$`).
  * `model` rides on `start` and on every `measure`: a start can reach the app before it knows the session.
  */
 export function registerReport(on: On, bridge?: Bridge): void {
-  const holder: Holder = { bridge }
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     try {
-      await report($, holder, 'start', e, true)
+      await report($, bridge, 'start', e, true)
     } catch {}
     return r
   })
@@ -111,7 +108,7 @@ export function registerReport(on: On, bridge?: Bridge): void {
   on('session.measure', async ($, e, next) => {
     const r = await next(e)
     try {
-      await report($, holder, 'measure', e, true)
+      await report($, bridge, 'measure', e, true)
     } catch {}
     return r
   })
@@ -119,7 +116,7 @@ export function registerReport(on: On, bridge?: Bridge): void {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     try {
-      await report($, holder, 'turn_end', e, false)
+      await report($, bridge, 'turn_end', e, false)
     } catch {}
     return r
   })
@@ -128,7 +125,7 @@ export function registerReport(on: On, bridge?: Bridge): void {
   on('session.end', async ($, e, next) => {
     const r = await next(e)
     try {
-      await report($, holder, 'end', e, false, e.sessionId)
+      await report($, bridge, 'end', e, false, e.sessionId)
     } catch {}
     return r
   })

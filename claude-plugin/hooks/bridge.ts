@@ -117,3 +117,13 @@ export function createBridge(io: BridgeIo) {
 }
 
 export type Bridge = ReturnType<typeof createBridge>
+
+let shared: Bridge | undefined
+
+/**
+ * The one bridge of this module instance, so the report hooks and the pane share one backoff and one stopped list.
+ * The first caller's `io` wins; later calls get the same bridge. Tests inject their own instead.
+ */
+export function sharedBridge(io: BridgeIo): Bridge {
+  return (shared ??= createBridge(io))
+}

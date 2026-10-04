@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { createBridge } from './bridge'
+import { createBridge, sharedBridge } from './bridge'
 import type { BridgeIo } from './bridge'
 import type { ModPayload } from './report'
 
@@ -187,4 +187,9 @@ test('duplicate copy: a copy elsewhere reports when there is no skills copy', as
   bridge.send(payload('s1'))
   await flush()
   expect(w.calls.length).toBe(1)
+})
+
+test('sharedBridge hands every caller the first bridge made', () => {
+  const first = sharedBridge(world().io)
+  expect(sharedBridge(world().io)).toBe(first)
 })
