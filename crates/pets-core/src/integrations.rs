@@ -97,7 +97,19 @@ fn engine_generated(rel: &str) -> bool { rel == "tsconfig.json" || rel.starts_wi
 
 enum PluginDir { Missing, Ours, Foreign }
 
+/// A symlink, or on Windows any reparse point (junction): never followed, so nothing outside our folder is touched.
+fn is_link(m: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    let reparse = { use std::os::windows::fs::MetadataExt; m.file_attributes() & 0x400 != 0 };
+    #[cfg(not(windows))]
+    let reparse = false;
+    m.file_type().is_symlink() || reparse
+}
+fn path_is_link(p: &Path) -> bool { std::fs::symlink_metadata(p).map(|m| is_link(&m)).unwrap_or(false) }
+
 fn plugin_dir_state(home: &Path) -> PluginDir {
+    // a link to someone's checkout is not our install, even when its plugin.json names agent-pets
+    if path_is_link(&claude_plugin_dir(home)) { return PluginDir::Foreign; }
     match std::fs::read(claude_plugin_dir(home).join(".claude-plugin").join("plugin.json")) {
         Ok(b) => match serde_json::from_slice::<serde_json::Value>(&b) {
             Ok(v) if v.get("name").and_then(|n| n.as_str()) == Some("agent-pets") => PluginDir::Ours,
@@ -114,12 +126,15 @@ fn foreign_plugin_dir(lang: Lang) -> String {
 }
 
 /// Files under `dir` that are not part of the mod; `rel` is the `/` path of `dir` inside the plugin folder.
+/// A link inside the folder is skipped: not descended into and not deleted.
 fn strays(dir: &Path, rel: &str, out: &mut Vec<PathBuf>) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
         let r = if rel.is_empty() { name } else { format!("{rel}/{name}") };
-        if e.path().is_dir() { strays(&e.path(), &r, out); }
+        let Ok(m) = e.metadata() else { continue };
+        if is_link(&m) { continue; }
+        if m.is_dir() { strays(&e.path(), &r, out); }
         else if !engine_generated(&r) && !PLUGIN_FILES.iter().any(|(p, _)| *p == r) { out.push(e.path()); }
     }
 }
@@ -131,6 +146,8 @@ pub fn place_plugin(home: &Path, lang: Lang) -> Result<(), String> {
     let ours = match plugin_dir_state(home) { PluginDir::Foreign => return Err(foreign_plugin_dir(lang)), PluginDir::Ours => true, PluginDir::Missing => false };
     for (rel, bytes) in PLUGIN_FILES {
         let f = dir.join(rel);
+        // a subfolder that is a link would send the write outside our folder
+        if f.parent().is_some_and(path_is_link) { return Err(foreign_plugin_dir(lang)); }
         if std::fs::read(&f).ok().as_deref() == Some(*bytes) { continue; }
         let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
         std::fs::create_dir_all(f.parent().expect("plugin file has a folder")).map_err(err)?;
@@ -917,6 +934,77 @@ mod tests {
                 assert_eq!(std::fs::read_to_string(&mine).unwrap(), "mine");
                 assert!(!claude_plugin_dir(h.path()).join("hooks").exists(), "nothing was written");
             }
+        }
+    }
+
+    /// Directory link at `link` to `target`: a symlink (`junction` false) or a Windows junction. False when it cannot be made here.
+    fn make_link(target: &Path, link: &Path, junction: bool) -> bool {
+        if junction {
+            return cfg!(windows) && std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(link).arg(target)
+                .output().map(|o| o.status.success()).unwrap_or(false);
+        }
+        #[cfg(windows)] { std::os::windows::fs::symlink_dir(target, link).is_ok() }
+        #[cfg(unix)] { std::os::unix::fs::symlink(target, link).is_ok() }
+        #[cfg(not(any(windows, unix)))] { false }
+    }
+    /// What a user's checkout of the mod looks like: ours by name, with files the app would call strays.
+    fn checkout(root: &Path) -> PathBuf {
+        let c = root.join("checkout");
+        for (rel, bytes) in PLUGIN_FILES { std::fs::create_dir_all(c.join(rel).parent().unwrap()).unwrap(); std::fs::write(c.join(rel), bytes).unwrap(); }
+        put(&c.join("hooks").join("bridge.test.ts"), "test");
+        put(&c.join("notes.md"), "notes");
+        c
+    }
+    fn snapshot(dir: &Path) -> Vec<(String, Vec<u8>)> {
+        fn walk(d: &Path, rel: &str, out: &mut Vec<(String, Vec<u8>)>) {
+            for e in std::fs::read_dir(d).unwrap().flatten() {
+                let r = format!("{rel}/{}", e.file_name().to_string_lossy());
+                if e.path().is_dir() { walk(&e.path(), &r, out); } else { out.push((r, std::fs::read(e.path()).unwrap())); }
+            }
+        }
+        let mut v = Vec::new();
+        walk(dir, "", &mut v);
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn a_link_to_a_checkout_is_never_followed() {
+        for junction in [false, true] {
+            let h = home();
+            let target = checkout(h.path());
+            let before = snapshot(&target);
+            let link = claude_plugin_dir(h.path());
+            std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+            if !make_link(&target, &link, junction) { eprintln!("cannot create a directory link (junction: {junction}) here; skipping"); continue; }
+            let err = place_plugin(h.path(), Lang::En).unwrap_err();
+            assert!(err.contains("is not ours"), "{err}");
+            assert!(!plugin_needs_repair(h.path()));
+            remove_plugin(h.path()).unwrap();
+            disable(AppId::ClaudeCode, h.path(), Lang::En).unwrap();
+            uninstall_all(h.path(), false, Lang::En);
+            assert_eq!(snapshot(&target), before, "junction: {junction}");
+            assert!(path_is_link(&link), "the link itself stays");
+        }
+    }
+
+    #[test]
+    fn a_link_inside_our_folder_is_neither_followed_nor_written_through() {
+        for junction in [false, true] {
+            let h = home();
+            place_plugin(h.path(), Lang::En).unwrap();
+            let dir = claude_plugin_dir(h.path());
+            let target = checkout(h.path());
+            let before = snapshot(&target);
+            // a stray link to a folder, and `hooks/` itself replaced by a link
+            if !make_link(&target, &dir.join("extra"), junction) { eprintln!("cannot create a directory link (junction: {junction}) here; skipping"); continue; }
+            place_plugin(h.path(), Lang::En).unwrap();
+            assert_eq!(snapshot(&target), before, "stray link, junction: {junction}");
+            std::fs::remove_dir_all(dir.join("hooks")).unwrap();
+            assert!(make_link(&target.join("hooks"), &dir.join("hooks"), junction));
+            let err = place_plugin(h.path(), Lang::En).unwrap_err();
+            assert!(err.contains("is not ours"), "{err}");
+            assert_eq!(snapshot(&target), before, "hooks link, junction: {junction}");
         }
     }
 

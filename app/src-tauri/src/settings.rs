@@ -196,10 +196,10 @@ pub fn claude_mod_set(app: AppHandle, on: bool) -> Result<String, String> {
     store(&app, s)?;
     if !claude { return Ok(i18n::tr(lang, "Zapisano. Mod zainstaluje się po włączeniu Claude Code.", "Saved. The mod is installed when Claude Code is turned on.").into()); }
     if on {
-        integrations::place_plugin(&home, lang)?;
+        integrations::place_plugin(&home, lang).map_err(|e| format!("{} {e}", i18n::tr(lang, "Mod nie został zainstalowany.", "The mod was not installed.")))?;
         Ok(i18n::tr(lang, "Mod zainstalowany. Zadziała w nowych sesjach Claude Code.", "Mod installed. It works in new Claude Code sessions.").into())
     } else {
-        integrations::remove_plugin(&home)?;
+        integrations::remove_plugin(&home).map_err(|e| format!("{} {e}", i18n::tr(lang, "Mod nie został usunięty.", "The mod was not removed.")))?;
         Ok(i18n::tr(lang, "Mod usunięty.", "Mod removed.").into())
     }
 }

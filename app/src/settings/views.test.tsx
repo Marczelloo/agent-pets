@@ -83,16 +83,18 @@ describe('settings shell and appearance', () => {
     expect(html).toMatch(/aria-current="page"[^>]*>(<svg[^>]*>.*?<\/svg>)?<span>Ogólne</);
   });
   it('apps tab: the Claude Code mod switch sits under Claude Code and follows the language', () => {
-    setLang('en');
-    const html = render('apps');
-    expect(html).toContain('aria-label="Claude Code mod"');
-    expect(html).toContain('Takes effect in new Claude Code sessions.');
-    expect(html.indexOf('Claude Code mod')).toBeGreaterThan(html.indexOf('C:/h/.claude'));
-    expect(html).toContain('aria-label="Claude Code mod" checked=""');
-    expect(render('apps', { ...defaultSettings(), claude_mod: false })).toContain('aria-label="Claude Code mod"/>');
-    setLang('pl');
-    expect(render('apps')).toContain('aria-label="Mod do Claude Code"');
-    expect(render('apps', { ...defaultSettings(), apps: { ...defaultSettings().apps, claude_code: false } })).not.toContain('Mod do Claude Code');
+    try {
+      setLang('en');
+      const html = render('apps');
+      expect(html).toContain('aria-label="Claude Code mod"');
+      expect(html).toContain('Takes effect in new Claude Code sessions.');
+      expect(html.indexOf('Claude Code mod')).toBeGreaterThan(html.indexOf('C:/h/.claude'));
+      expect(html).toContain('aria-label="Claude Code mod" checked=""');
+      expect(render('apps', { ...defaultSettings(), claude_mod: false })).toContain('aria-label="Claude Code mod"/>');
+      setLang('pl');
+      expect(render('apps')).toContain('aria-label="Mod do Claude Code"');
+      expect(render('apps', { ...defaultSettings(), apps: { ...defaultSettings().apps, claude_code: false } })).not.toContain('Mod do Claude Code');
+    } finally { setLang('pl'); }
   });
   it('general tab: theme is an icon-only radiogroup of system, light and dark with the current one checked', () => {
     const html = render('general', { ...defaultSettings(), theme: 'dark' });
