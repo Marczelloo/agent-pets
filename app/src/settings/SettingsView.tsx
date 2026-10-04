@@ -30,7 +30,6 @@ interface Props {
   onTab: (t: Tab) => void;
   onChange: (s: Settings) => void;
   onIntegration: (id: AppId, on: boolean) => Promise<string>;
-  onStatusline?: (on: boolean) => void;
   message: string | null;
   /** update state (result of "Check now") */
   update?: UpdateStatus;
@@ -56,7 +55,7 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onStatusline, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
 
@@ -102,9 +101,6 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
           <Toggle label={t().limits.fromAnthropic} checked={s.claude_plan_usage} onChange={on => set({ claude_plan_usage: on })}>
             {t().limits.usage}
           </Toggle>
-          {onStatusline && <Toggle label={t().limits.statusline} checked={s.claude_statusline} onChange={on => onStatusline(on)}>
-            {t().limits.statuslineDesc}
-          </Toggle>}
         </Section>}
 
         {tab === 'general' && <>

@@ -159,7 +159,6 @@ impl Runtime {
         while let Ok(msg) = self.hooks.try_recv() {
             changed |= match msg {
                 Incoming::ClaudeHook(env) => self.on_hook(env),
-                Incoming::ClaudeStatusline(s) => claude::statusline::to_events(&s).into_iter().fold(false, |c, e| self.apply(e) | c),
                 Incoming::ClaudeMod(p) => self.on_mod(p),
                 Incoming::Generic(e) => self.apply(e),
                 Incoming::Opencode(v) => self.on_opencode(&v),

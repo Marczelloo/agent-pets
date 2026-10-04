@@ -3,13 +3,12 @@ use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
-use crate::claude::{plugin::ModPayload, HookEnvelope, StatuslineEnvelope};
+use crate::claude::{plugin::ModPayload, HookEnvelope};
 use crate::endpoint::Endpoint;
 
 #[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 pub enum Incoming {
     ClaudeHook(HookEnvelope),
-    ClaudeStatusline(StatuslineEnvelope),
     /// Payload from the Claude Code mod (`claude::plugin::to_update`).
     ClaudeMod(ModPayload),
     /// Event from the door, already validated (`adapters::generic::to_event`).
@@ -94,7 +93,7 @@ impl Ingest {
     }
 }
 
-enum Route { Claude, Statusline, ClaudeMod, Opencode, Generic, Copilot, Antigravity, Cursor, Grok, Zcode }
+enum Route { Claude, ClaudeMod, Opencode, Generic, Copilot, Antigravity, Cursor, Grok, Zcode }
 
 fn authorized(req: &tiny_http::Request, expected: &str) -> bool {
     let auth = req.headers().iter().find(|h| h.field.equiv("Authorization")).map(|h| h.value.as_str().to_string());
@@ -115,7 +114,6 @@ fn handle_post(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incomin
         "/v1/events/claude" => Route::Claude,
         // not door-gated: the runtime checks `apps.claude_code`, as for hooks
         "/v1/events/claude-mod" => Route::ClaudeMod,
-        "/v1/events/claude-statusline" => Route::Statusline,
         "/v1/events/opencode" => Route::Opencode,
         // a disabled door or integration appears as a missing route
         "/v1/events/generic" if doors.generic.load(Ordering::Relaxed) => Route::Generic,
@@ -132,7 +130,6 @@ fn handle_post(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incomin
     if req.as_reader().take(MAX_BODY + 1).read_to_end(&mut body).is_err() { return 400; }
     if body.len() as u64 > MAX_BODY { return 413; }
     let msg = match route {
-        Route::Statusline => serde_json::from_slice::<StatuslineEnvelope>(&body).ok().map(Incoming::ClaudeStatusline),
         Route::ClaudeMod => serde_json::from_slice::<ModPayload>(&body).ok().filter(|p| p.v == 1).map(Incoming::ClaudeMod),
         Route::Claude => serde_json::from_slice::<HookEnvelope>(&body).ok().map(Incoming::ClaudeHook),
         Route::Opencode => serde_json::from_slice::<serde_json::Value>(&body).ok().filter(|v| v.is_object()).map(Incoming::Opencode),
@@ -264,17 +261,13 @@ mod tests {
     }
 
     #[test]
-    fn accepts_statusline_on_its_own_route() {
+    fn the_statusline_route_is_gone() {
         let (tx, rx) = channel();
         let ing = Ingest::start("secret".into(), tx, door(true), board()).unwrap();
         let port = ing.endpoint().port;
         let body = r#"{"ts":1,"payload":{"session_id":"s"}}"#;
-        assert_eq!(post(port, "/v1/events/claude-statusline", "secret", body), 204);
-        match rx.recv_timeout(Duration::from_secs(2)).unwrap() {
-            Incoming::ClaudeStatusline(s) => assert_eq!(s.payload["session_id"], "s"),
-            _ => panic!("wrong route"),
-        }
-        assert_eq!(post(port, "/v1/events/claude-statusline", "wrong", body), 401);
+        assert_eq!(post(port, "/v1/events/claude-statusline", "secret", body), 404);
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
         ing.stop();
     }
 

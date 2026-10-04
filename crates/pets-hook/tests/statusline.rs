@@ -50,3 +50,23 @@ fn prints_nothing_when_there_was_no_original_statusline() {
     assert!(out.status.success());
     assert!(out.stdout.is_empty());
 }
+
+#[test]
+fn sends_nothing_to_the_widget() {
+    let dir = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let ep = dir.path().join("endpoint.json");
+    std::fs::write(&ep, format!("{{\"port\":{},\"token\":\"t\"}}", listener.local_addr().unwrap().port())).unwrap();
+    let orig = dir.path().join("orig.json");
+    std::fs::write(&orig, r#"{"type":"command","command":"findstr ."}"#).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hook"))
+        .arg("--agent-pets-statusline")
+        .env("AGENT_PETS_ENDPOINT", &ep)
+        .env("AGENT_PETS_STATUSLINE_ORIGINAL", &orig)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(b"{\"session_id\":\"s\"}\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "{\"session_id\":\"s\"}");
+    assert!(listener.accept().is_err(), "the hook must not connect to the widget");
+}

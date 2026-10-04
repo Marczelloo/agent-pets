@@ -77,9 +77,6 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
           <Toggle label={t().limits.fromAnthropic} checked={draft.claude_plan_usage} onChange={on => set({ claude_plan_usage: on })}>
             {t().wizard.fetchLimits}
           </Toggle>
-          <Toggle label={t().limits.statusline} checked={draft.claude_statusline} onChange={on => set({ claude_statusline: on })}>
-            {t().limits.statuslineDesc}
-          </Toggle>
         </Section>
       </>}
 

@@ -130,6 +130,13 @@ pub fn sync_autostart(on: bool) {
     if let Some(v) = system::autostart_action(on, system::autostart_value(system::RUN_KEY).as_deref(), &cmd) { let _ = system::set_autostart(v); }
 }
 
+/// At startup: a `statusLine` still pointing at our retired pass-through gets the user's own statusline back
+/// (limits now come from the Claude mod). Idempotent.
+fn migrate_statusline(app: &tauri::AppHandle) {
+    let home = app.state::<settings::SettingsState>().home.clone();
+    if pets_core::integrations::migrate_statusline(&home) { pets_core::applog::write("restored the user's statusLine in ~/.claude/settings.json"); }
+}
+
 /// At startup: enabled Claude Code without hooks or with an old `hook.exe` (after an update) gets them again;
 /// enabled opencode gets this version's plugin; the open gate keeps `hook.exe report` at a fixed location.
 fn repair_integrations(app: &tauri::AppHandle) {
@@ -214,6 +221,7 @@ pub fn run() {
             app.manage(shell::menu::MenuTarget::default());
             app.on_menu_event(|app, e| shell::menu::on_event(app, e.id().as_ref()));
             updater::start(app.handle().clone());
+            migrate_statusline(app.handle());
             if !first_run {
                 sync_autostart(app.state::<settings::SettingsState>().get().autostart);
                 repair_integrations(app.handle());
@@ -225,7 +233,7 @@ pub fn run() {
             snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, stage_layout, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             bubbles::stage_pets, bubbles::bubbles_place, bubbles::bubbles_hide, bubbles::bubbles_hits,
-            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set, settings::statusline_set,
+            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
             notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
             updater::update_status, updater::update_check, updater::update_install,

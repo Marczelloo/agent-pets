@@ -140,8 +140,6 @@ export const en: Dict = {
     fromAnthropic: 'Anthropic limits',
     asOf: (ago: string) => `read ${ago}`,
     staleHint: 'Claude app data is out of date. For live limits, sign in to the Claude CLI (claude auth login) and turn on Anthropic limits in Settings.',
-    statusline: 'Claude Code statusline',
-    statuslineDesc: 'Passes the exact limits of Claude Code running in a terminal to Agent Pets and keeps your own statusline working. The Claude app does not run it.',
     cliNote: 'Limits while you use the Claude app need the Claude CLI signed in (claude auth login) and Anthropic limits turned on.',
     notification: 'When limit usage exceeds 90%',
     usage: 'Checks api.anthropic.com for Claude plan usage every 5 minutes using your Claude Code sign-in '

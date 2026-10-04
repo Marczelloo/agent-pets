@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 pub struct Settings {
     pub version: u32,
     pub apps: Apps,
-    pub claude_statusline: bool,
     /// Permission to fetch Claude limits from `api.anthropic.com` with the Claude Code token. Off by default.
     pub claude_plan_usage: bool,
     pub notifications: Notifications,
@@ -330,7 +329,7 @@ impl Default for Pets {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            version: 1, apps: Apps::default(), claude_statusline: false, claude_plan_usage: false,
+            version: 1, apps: Apps::default(), claude_plan_usage: false,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
             autostart: true, language: Language::Auto, theme: Theme::System, updates: Updates::Notify, stage: Stage::default(),
             extra: serde_json::Map::new(),
@@ -353,7 +352,11 @@ pub fn load(path: &Path) -> Loaded {
         Err(e) => return Loaded { settings: Settings::default(), first_run: false, error: Some(e.to_string()) },
     };
     match serde_json::from_slice::<Settings>(&bytes) {
-        Ok(mut s) => { s.stage = s.stage.clamped(); Loaded { settings: s, first_run: false, error: None } }
+        Ok(mut s) => {
+            s.stage = s.stage.clamped();
+            s.extra.remove("claude_statusline"); // retired switch (0.16)
+            Loaded { settings: s, first_run: false, error: None }
+        }
         Err(e) => Loaded { settings: Settings::default(), first_run: false,
             error: Some(format!("{}: {e}", path.display())) },
     }
@@ -383,9 +386,19 @@ mod tests {
     #[test]
     fn defaults_ask_nothing_of_the_network() {
         let s = Settings::default();
-        assert!(!s.claude_plan_usage && !s.claude_statusline);
+        assert!(!s.claude_plan_usage);
         assert!(s.apps.claude_code && s.apps.codex && s.apps.agent_router);
         assert_eq!((s.pets.style, s.pets.max_visible, s.power_saving, s.autostart), (Style::Sticker, 5, PowerSaving::Auto, true));
+    }
+
+    #[test]
+    fn the_retired_statusline_flag_in_an_old_file_is_dropped() {
+        let (_d, p) = tmp();
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, r#"{"claude_statusline": true, "claude_plan_usage": true}"#).unwrap();
+        let l = load(&p);
+        assert!(l.error.is_none() && l.settings.claude_plan_usage);
+        assert!(!l.settings.extra.contains_key("claude_statusline"));
     }
 
     #[test]

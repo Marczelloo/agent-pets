@@ -3,7 +3,6 @@ pub mod desktop_usage;
 pub mod hook;
 pub mod plugin;
 pub mod registry;
-pub mod statusline;
 pub mod subagent;
 pub mod transcript;
 
@@ -18,13 +17,6 @@ pub struct HookEnvelope {
     /// Host program running the agent (0.10); older `hook.exe` versions do not send it.
     #[serde(default)]
     pub host: Option<crate::host::Host>,
-}
-
-/// Claude Code (CLI) statusline data sent by `hook.exe --agent-pets-statusline`.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct StatuslineEnvelope {
-    pub ts: i64,
-    pub payload: serde_json::Value,
 }
 
 /// Progress from `TodoWrite` (older Claude Code versions). Newer versions: `hook::TaskTracker`.

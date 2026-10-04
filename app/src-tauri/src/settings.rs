@@ -142,7 +142,7 @@ pub fn update(app: &AppHandle, f: impl FnOnce(&mut Settings)) -> Result<(), Stri
 /// Exception: the open gate has no installation, so its toggle comes from the window.
 pub fn merge_user_settings(current: &Settings, incoming: Settings) -> Settings {
     let apps = core_settings::Apps { generic: incoming.apps.generic, ..current.apps };
-    Settings { apps, claude_statusline: current.claude_statusline, ..incoming }
+    Settings { apps, ..incoming }
 }
 
 #[tauri::command]
@@ -180,15 +180,6 @@ pub fn integration_set(app: AppHandle, id: AppId, on: bool) -> Result<String, St
     Ok(msg)
 }
 
-/// Statusline pass-through in `~/.claude/settings.json` (terminal Claude Code only); the setting follows the file.
-#[tauri::command]
-pub fn statusline_set(app: AppHandle, on: bool) -> Result<String, String> {
-    let st = app.state::<SettingsState>();
-    let msg = integrations::set_statusline(&st.home, pick_hook(&hook_candidates(&app)).as_deref(), on, st.lang())?;
-    update(&app, |s| s.claude_statusline = on)?;
-    Ok(msg)
-}
-
 /// Finish the wizard: save settings and enable or disable integrations. Return messages for the result screen.
 #[tauri::command]
 pub fn wizard_finish(app: AppHandle, settings: Settings) -> Vec<String> {
@@ -199,13 +190,6 @@ pub fn wizard_finish(app: AppHandle, settings: Settings) -> Vec<String> {
         match switch(&app, &mut s, id, on) {
             Ok(m) => out.push(m),
             Err(e) => { set_app(&mut s, id, false); out.push(e); }
-        }
-    }
-    if s.claude_statusline {
-        let st = app.state::<SettingsState>();
-        match integrations::set_statusline(&st.home, pick_hook(&hook_candidates(&app)).as_deref(), true, st.lang()) {
-            Ok(m) => out.push(m),
-            Err(e) => { s.claude_statusline = false; out.push(e); }
         }
     }
     let autostart = s.autostart;
@@ -346,12 +330,6 @@ mod tests {
         let merged = merge_user_settings(&current, incoming);
         assert!(!merged.apps.claude_code);
         assert!(!merged.autostart);
-    }
-
-    #[test]
-    fn the_statusline_flag_follows_its_own_switch_not_the_window() {
-        let current = Settings { claude_statusline: true, ..Settings::default() };
-        assert!(merge_user_settings(&current, Settings::default()).claude_statusline);
     }
 
     #[test]

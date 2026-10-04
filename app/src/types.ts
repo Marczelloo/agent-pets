@@ -77,7 +77,6 @@ export interface AppsSettings { claude_code: boolean; codex: boolean; agent_rout
 export interface Settings {
   version: number;
   apps: AppsSettings;
-  claude_statusline: boolean;
   claude_plan_usage: boolean;
   notifications: { needs_you: boolean; done: boolean; limits: boolean };
   pets: Pets;

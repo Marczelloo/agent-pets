@@ -597,18 +597,22 @@ pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf
     if dst.is_file() { Ok(dst) } else { Err(tr(lang, "Brak hook.exe w instalacji Agent Pets; zainstaluj aplikację ponownie.", "hook.exe is missing from the Agent Pets install; reinstall the app.").into()) }
 }
 
-/// Statusline pass-through of Claude Code in a terminal (exact limits); the previous `statusLine` is remembered and restored.
-pub fn set_statusline(home: &Path, hook_src: Option<&Path>, on: bool, lang: Lang) -> Result<String, String> {
+/// Restores the `statusLine` that was replaced by our former statusline pass-through (limits now come from the
+/// Claude mod); the saved original is deleted.
+pub fn remove_statusline(home: &Path, lang: Lang) -> Result<String, String> {
     let settings = claude_settings(home);
-    let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), settings.display());
-    if on {
-        let hook = place_hook(home, hook_src, lang)?;
-        crate::statusline_install::install_file_at(&settings, &hook.to_string_lossy(), &statusline_original(home)).map_err(err)?;
-        Ok(tr(lang, "Statusline włączony (działa w Claude Code w terminalu).", "Statusline enabled (works in Claude Code in a terminal).").into())
-    } else {
-        crate::statusline_install::uninstall_file_at(&settings, &statusline_original(home)).map_err(err)?;
-        let _ = std::fs::remove_file(statusline_original(home));
-        Ok(tr(lang, "Statusline wyłączony.", "Statusline disabled.").into())
+    crate::statusline_install::uninstall_file_at(&settings, &statusline_original(home))
+        .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), settings.display()))?;
+    let _ = std::fs::remove_file(statusline_original(home));
+    Ok(tr(lang, "Statusline wyłączony.", "Statusline disabled.").into())
+}
+
+/// Startup migration: settings still pointing at our statusline hook get the user's own statusline back.
+/// Idempotent, so no flag is stored. Returns whether it changed anything.
+pub fn migrate_statusline(home: &Path) -> bool {
+    match read_claude_settings(home, Lang::En) {
+        Ok(Some(v)) if crate::statusline_install::is_installed(&v) => remove_statusline(home, Lang::En).is_ok(),
+        _ => false,
     }
 }
 
@@ -1062,16 +1066,27 @@ mod tests {
         assert!(!pets_dir(h.path()).exists());
     }
     #[test]
-    fn the_statusline_switch_keeps_and_restores_the_previous_statusline() {
+    fn migrating_the_statusline_restores_the_original_once() {
         let h = home();
         std::fs::create_dir_all(h.path().join(".claude")).unwrap();
         std::fs::write(claude_settings(h.path()), json!({"statusLine": {"type": "command", "command": "mine.exe"}}).to_string()).unwrap();
-        set_statusline(h.path(), Some(&hook_src(h.path())), true, Lang::En).unwrap();
-        assert!(crate::statusline_install::is_installed(&claude_json(h.path())));
-        assert!(installed_hook(h.path()).is_file() && statusline_original(h.path()).is_file());
-        set_statusline(h.path(), None, false, Lang::En).unwrap();
+        crate::statusline_install::install_file_at(&claude_settings(h.path()), "h.exe", &statusline_original(h.path())).unwrap();
+        assert!(crate::statusline_install::is_installed(&claude_json(h.path())) && statusline_original(h.path()).is_file());
+        assert!(migrate_statusline(h.path()));
         assert_eq!(claude_json(h.path())["statusLine"]["command"].as_str(), Some("mine.exe"));
         assert!(!statusline_original(h.path()).exists());
+        assert!(!migrate_statusline(h.path()), "idempotent");
+    }
+
+    #[test]
+    fn migrating_without_our_statusline_touches_nothing() {
+        let h = home();
+        assert!(!migrate_statusline(h.path()), "no settings file");
+        std::fs::create_dir_all(h.path().join(".claude")).unwrap();
+        let theirs = json!({"statusLine": {"type": "command", "command": "mine.exe"}}).to_string();
+        std::fs::write(claude_settings(h.path()), &theirs).unwrap();
+        assert!(!migrate_statusline(h.path()));
+        assert_eq!(std::fs::read_to_string(claude_settings(h.path())).unwrap(), theirs);
     }
 
     #[test]
