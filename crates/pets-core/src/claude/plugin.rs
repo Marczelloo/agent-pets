@@ -72,9 +72,9 @@ fn limits_event(p: &ModPayload) -> Option<Event> {
 
 fn context_of(c: &ModContext) -> Option<Context> {
     match (c.tokens, c.window, c.percent) {
-        (Some(used), Some(max), _) => Some(Context { used, max }),
+        (Some(used), Some(max), _) => Some(Context { used: used.min(max), max }),
         (None, Some(max), Some(pct)) if pct.is_finite() && pct >= 0.0 =>
-            Some(Context { used: (pct / 100.0 * max as f64).round() as u64, max }),
+            Some(Context { used: (pct.min(100.0) / 100.0 * max as f64).round() as u64, max }),
         _ => None,
     }
 }
@@ -118,6 +118,13 @@ mod tests {
     use serde_json::json;
 
     fn p(v: serde_json::Value) -> ModPayload { serde_json::from_value(v).unwrap() }
+
+    #[test]
+    fn context_never_exceeds_the_window() {
+        let c = |v| to_update(&p(json!({"v":1,"kind":"measure","session_id":"s","ts":5,"context":v}))).events[0].data.context;
+        assert_eq!(c(json!({"tokens":300,"window":200})), Some(Context { used: 200, max: 200 }));
+        assert_eq!(c(json!({"percent":250,"window":200})), Some(Context { used: 200, max: 200 }));
+    }
 
     #[test]
     fn rate_limits_become_one_limits_event_on_the_usage_session() {
