@@ -61,7 +61,7 @@ export function createBridge(io: BridgeIo) {
     const text = await io.read(`${await home()}/.agent-pets/endpoint.json`)
     const parsed: unknown = JSON.parse(text)
     const { port, token } = (parsed ?? {}) as Partial<Endpoint>
-    if (typeof port !== 'number' || !Number.isInteger(port) || typeof token !== 'string' || token === '') {
+    if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535 || typeof token !== 'string' || token === '') {
       throw new Error('bad endpoint file')
     }
     return { port, token }

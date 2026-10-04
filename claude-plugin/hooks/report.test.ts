@@ -37,6 +37,8 @@ test('toPayload leaves out what the input lacks (never 0)', () => {
   expect('rate_limits' in p).toBe(false)
   const bare = toPayload('measure', 's1', 1, { rateLimits: [], changed: [] })
   expect('context' in bare).toBe(false)
+  const odd = toPayload('measure', 's1', 1, { context: { window: 1.5, tokens: -3, percent: 7 }, rateLimits: [], changed: ['context'] })
+  expect(odd.context).toEqual({ percent: 7 })
 })
 
 test('toPayload start, turn_end and end', () => {

@@ -50,6 +50,17 @@ const endpointFile = (port: number) => JSON.stringify({ port, token: TOKEN })
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve() }
 const payload = (sessionId: string): ModPayload => ({ v: 1, kind: 'measure', session_id: sessionId, ts: 1 })
 
+test('a malformed endpoint file sends nothing', async () => {
+  for (const port of ['80@evil.com', 0, 70000, 1.5]) {
+    const w = world({ files: { [ENDPOINT]: JSON.stringify({ port, token: TOKEN }) } })
+    const bridge = createBridge(w.io)
+    expect(await bridge.state()).toBe(null)
+    bridge.send(payload('s1'))
+    await flush()
+    expect(w.calls.length).toBe(0)
+  }
+})
+
 test('no endpoint file: state() is null and send does not throw', async () => {
   const w = world()
   const bridge = createBridge(w.io)

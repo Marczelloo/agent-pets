@@ -7,3 +7,4 @@ app/dist
 app/src-tauri/gen
 app/src-tauri/resources
 *.tsbuildinfo
+claude-plugin/tsconfig.json

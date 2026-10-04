@@ -18,6 +18,8 @@ export type ModPayload = {
 type Rec = Record<string, unknown>
 const rec = (v: unknown): Rec => (typeof v === 'object' && v !== null ? (v as Rec) : {})
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+// Token counts are u64 on the Rust side; a fraction or a negative would get the whole payload refused.
+const count = (v: unknown): number | undefined => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : undefined)
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined)
 
 /** A hook's input as the widget's payload. Fields the input lacks stay absent (never 0); `model` is added by the hook. */
@@ -32,7 +34,7 @@ export function toPayload(kind: ModPayload['kind'], sessionId: string, ts: numbe
     if (reason) p.reason = reason
   } else if (kind === 'measure') {
     const c = rec(input.context)
-    const context = { tokens: num(c.tokens), window: num(c.window), percent: num(c.percent) }
+    const context = { tokens: count(c.tokens), window: count(c.window), percent: num(c.percent) }
     if (Object.values(context).some(v => v !== undefined)) {
       p.context = {}
       if (context.tokens !== undefined) p.context.tokens = context.tokens
