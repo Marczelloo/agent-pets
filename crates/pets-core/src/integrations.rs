@@ -867,6 +867,13 @@ mod tests {
     fn put(f: &Path, text: &str) { std::fs::create_dir_all(f.parent().unwrap()).unwrap(); std::fs::write(f, text).unwrap(); }
 
     #[test]
+    fn the_embedded_mod_has_the_version_of_the_app() {
+        let (_, json) = PLUGIN_FILES.iter().find(|(rel, _)| *rel == ".claude-plugin/plugin.json").expect("plugin.json is embedded");
+        let v: Value = serde_json::from_slice(json).unwrap();
+        assert_eq!(v["version"], env!("CARGO_PKG_VERSION"), "bump claude-plugin/.claude-plugin/plugin.json together with the app");
+    }
+
+    #[test]
     fn the_plugin_folder_is_a_skills_dir_plugin() {
         assert_eq!(claude_plugin_dir(Path::new("h")), Path::new("h").join(".claude").join("skills").join("agent-pets"));
     }

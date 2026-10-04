@@ -10,8 +10,17 @@ $root = Split-Path -Parent $PSScriptRoot
 $v = (Get-Content "$root/app/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json).version
 $pkg = (Get-Content "$root/app/package.json" -Raw | ConvertFrom-Json).version
 $cargo = (Select-String -Path "$root/Cargo.toml" -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
-if ($pkg -ne $v -or $cargo -ne $v) { throw "Version mismatch: tauri.conf.json $v, package.json $pkg, Cargo.toml $cargo" }
+$mod = (Get-Content "$root/claude-plugin/.claude-plugin/plugin.json" -Raw | ConvertFrom-Json).version
+if ($pkg -ne $v -or $cargo -ne $v -or $mod -ne $v) { throw "Version mismatch: tauri.conf.json $v, package.json $pkg, Cargo.toml $cargo, claude-plugin plugin.json $mod" }
 if (-not (Test-Path $Notes)) { throw "Release notes file missing: $Notes" }
+
+# The Claude Code mod ships inside the installer: it must validate and pass its tests before anything is built.
+foreach ($cmd in 'validate', 'test') {
+  claude plugin $cmd "$root/claude-plugin"
+  if ($LASTEXITCODE -ne 0) { throw "claude plugin $cmd failed with code $LASTEXITCODE (the claude CLI must be installed)" }
+}
+claude plugin validate $root
+if ($LASTEXITCODE -ne 0) { throw "claude plugin validate failed for the marketplace (code $LASTEXITCODE)" }
 
 $keyFile = Join-Path $HOME '.tauri/agent-pets.key'
 if (-not (Test-Path $keyFile)) { throw "Signing key missing: $keyFile (docs/building.md)" }

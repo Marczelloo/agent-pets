@@ -102,7 +102,7 @@ impl Rules {
             let new_window = match (self.limits.get(&key), l.resets_at) {
                 (None, _) => true,
                 (Some(Some(known)), Some(r)) => (r - known).abs() > RESET_JITTER_MS,
-                // first reading with a reset time after one without it (Claude app → statusline): same window
+                // first reading with a reset time after one without it (Claude app → Claude Code mod): same window
                 (Some(None), Some(r)) => { self.limits.insert(key.clone(), Some(r)); false }
                 (Some(_), None) => false,
             };
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn learning_the_reset_time_of_the_same_window_does_not_toast_again() {
-        // claude app reports 91% without reset, then statusline reports 92% with reset: still the same window
+        // claude app reports 91% without reset, then the Claude Code mod reports 92% with reset: still the same window
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         let l = |pct: f32, reset: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: reset, stale_since: None };
