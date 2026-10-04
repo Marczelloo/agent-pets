@@ -40,6 +40,9 @@ describe('settings model', () => {
   it('asks nothing of the network by default', () => {
     expect(defaultSettings().claude_plan_usage).toBe(false);
   });
+  it('the Claude Code mod is on by default, like the core', () => {
+    expect(defaultSettings().claude_mod).toBe(true);
+  });
   it('changes one app without touching the others', () => {
     const s = withApp(defaultSettings(), 'codex', false);
     expect(s.apps).toEqual({ claude_code: true, codex: false, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false, cursor: false, grok: false, zcode: false });

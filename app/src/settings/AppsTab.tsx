@@ -1,7 +1,9 @@
+import { Fragment } from 'react';
 import type { AppId, AppRow, Settings } from '../types';
 import { t } from '../i18n';
 import { appHint, appLabel, doorOn, groupApps, withDoor } from './model';
 import { Row, Section, Switch } from './ui';
+import { Toggle } from './Toggle';
 
 /** Apps whose files receive hooks: the paragraph explains what and where. */
 const HOOK_FILES: AppId[] = ['copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
@@ -15,10 +17,12 @@ interface Props {
   rows: AppRow[];
   onChange: (s: Settings) => void;
   onIntegration: (id: AppId, on: boolean) => Promise<string>;
+  /** Switch of the Claude Code mod: the app saves the flag and places or removes the plugin. */
+  onClaudeMod: (on: boolean) => Promise<string>;
 }
 
 /** Apps tab: main agents, then the experimental ones, then the door for any other tool. */
-export function AppsTab({ settings: s, rows, onChange, onIntegration }: Props) {
+export function AppsTab({ settings: s, rows, onChange, onIntegration, onClaudeMod }: Props) {
   const { main, experimental } = groupApps(rows);
   const line = (r: AppRow) => r.detected.found ? `${t().settings.detected} · ${r.status.detail}` : r.detected.note;
   const appRow = (r: AppRow) => (
@@ -39,7 +43,14 @@ export function AppsTab({ settings: s, rows, onChange, onIntegration }: Props) {
     </Row>
   );
   return <>
-    {main.length > 0 && <Section title={t().settings.sections.main}>{main.map(appRow)}</Section>}
+    {main.length > 0 && <Section title={t().settings.sections.main}>{main.map(r => (
+      <Fragment key={r.id}>
+        {appRow(r)}
+        {r.id === 'claude_code' && s.apps.claude_code && (
+          <Toggle label={t().settings.claudeMod} checked={s.claude_mod !== false} onChange={on => void onClaudeMod(on)}>{t().settings.claudeModDesc}</Toggle>
+        )}
+      </Fragment>
+    ))}</Section>}
     {experimental.length > 0 && <Section title={t().settings.sections.experimental} note={t().settings.experimentalNote}>{experimental.map(appRow)}</Section>}
     <Section title={t().settings.sections.other}>
       <Row label={t().settings.door} hint={t().settings.doorDesc}

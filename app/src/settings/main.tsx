@@ -110,6 +110,19 @@ function Root() {
     // integration descriptions and diagnostics arrive from Rust in the new language
     void invoke('settings_set', { settings: s }).then(() => { if (relang) void reload(); }).catch(e => setMessage(String(e)));
   };
+  const onClaudeMod = async (on: boolean) => {
+    if (!inTauri) { setView({ ...view, settings: { ...view.settings, claude_mod: on } }); return ''; }
+    try {
+      const m = await invoke<string>('claude_mod_set', { on });
+      setMessage(m);
+      return m;
+    } catch (e) {
+      setMessage(String(e));
+      return String(e);
+    } finally {
+      await reload();
+    }
+  };
   const onIntegration = async (id: AppId, on: boolean) => {
     if (!inTauri) return '';
     try {
@@ -125,7 +138,7 @@ function Root() {
   };
 
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
-    onIntegration={onIntegration} message={message} update={update} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar}
+    onIntegration={onIntegration} onClaudeMod={onClaudeMod} message={message} update={update} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar}
     onMove={() => { if (inTauri) void invoke('stage_move'); }}
     onReport={inTauri ? () => void invoke('report_problem_open') : undefined}
     onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;

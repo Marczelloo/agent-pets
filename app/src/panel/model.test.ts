@@ -16,6 +16,12 @@ describe('opencode usage on its card', () => {
       .toBe('sesja: 950 tok. · dziś: 4,8 mln tok. · $0.42');
     expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0, account: null } }, undefined)).toBe('sesja: 950 tok.');
   });
+  it('leaves out the token part of a session that only has a cost (Claude)', () => {
+    const line = usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 1.42, account: 'claude' } }, undefined);
+    expect(line).toBe('$1.42');
+    expect(line).not.toMatch(/tok/);
+    expect(usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 0, account: 'claude' } }, undefined)).toBeNull();
+  });
   it('has no line without usage', () => {
     expect(usageLine(oc, today)).toBeNull();
     expect(usageLine({ ...s('c', 'working', 0), usage: null }, today)).toBeNull();

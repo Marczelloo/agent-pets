@@ -78,6 +78,90 @@ fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
     }
 }
 
+/// The Claude Code mod (`claude-plugin/`) is placed as a skills-dir plugin: Claude Code lists it as `agent-pets@skills-dir`.
+pub fn claude_plugin_dir(home: &Path) -> PathBuf { home.join(".claude").join("skills").join("agent-pets") }
+
+macro_rules! plugin_file {
+    ($rel:literal) => { ($rel, include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../claude-plugin/", $rel)) as &[u8]) };
+}
+/// Every file of the mod except tests and what the engine generates (`tsconfig.json`, `.claude-plugin/types/`);
+/// a test walks `claude-plugin/` so a new file cannot be forgotten. `plugin.json` goes last: the mod's duplicate
+/// guard treats the folder as present once it exists, so it must never exist next to a half-written `hooks/`.
+const PLUGIN_FILES: &[(&str, &[u8])] = &[
+    plugin_file!("hooks/hooks.json"), plugin_file!("hooks/bridge.ts"), plugin_file!("hooks/nudge.ts"), plugin_file!("hooks/pane.tsx"),
+    plugin_file!("hooks/pet.tsx"), plugin_file!("hooks/register.tsx"), plugin_file!("hooks/report.ts"), plugin_file!("hooks/sprites.ts"),
+    plugin_file!("types/index.d.ts"), plugin_file!(".claude-plugin/plugin.json"),
+];
+/// Written by the Claude Code engine into the plugin folder; never ours to delete.
+fn engine_generated(rel: &str) -> bool { rel == "tsconfig.json" || rel.starts_with(".claude-plugin/types/") }
+
+enum PluginDir { Missing, Ours, Foreign }
+
+fn plugin_dir_state(home: &Path) -> PluginDir {
+    match std::fs::read(claude_plugin_dir(home).join(".claude-plugin").join("plugin.json")) {
+        Ok(b) => match serde_json::from_slice::<serde_json::Value>(&b) {
+            Ok(v) if v.get("name").and_then(|n| n.as_str()) == Some("agent-pets") => PluginDir::Ours,
+            _ => PluginDir::Foreign,
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => PluginDir::Missing,
+        Err(_) => PluginDir::Foreign,
+    }
+}
+
+fn foreign_plugin_dir(lang: Lang) -> String {
+    tr(lang, "Folder ~/.claude/skills/agent-pets nie jest nasz, nie nadpisuję go.",
+        "~/.claude/skills/agent-pets is not ours; not overwriting it.").into()
+}
+
+/// Files under `dir` that are not part of the mod; `rel` is the `/` path of `dir` inside the plugin folder.
+fn strays(dir: &Path, rel: &str, out: &mut Vec<PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let r = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+        if e.path().is_dir() { strays(&e.path(), &r, out); }
+        else if !engine_generated(&r) && !PLUGIN_FILES.iter().any(|(p, _)| *p == r) { out.push(e.path()); }
+    }
+}
+
+/// Puts the mod in `~/.claude/skills/agent-pets`: files are rewritten only when they differ, and an old file of ours
+/// that this version no longer ships is removed. A folder whose `plugin.json` names another plugin is left alone.
+pub fn place_plugin(home: &Path, lang: Lang) -> Result<(), String> {
+    let dir = claude_plugin_dir(home);
+    let ours = match plugin_dir_state(home) { PluginDir::Foreign => return Err(foreign_plugin_dir(lang)), PluginDir::Ours => true, PluginDir::Missing => false };
+    for (rel, bytes) in PLUGIN_FILES {
+        let f = dir.join(rel);
+        if std::fs::read(&f).ok().as_deref() == Some(*bytes) { continue; }
+        let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
+        std::fs::create_dir_all(f.parent().expect("plugin file has a folder")).map_err(err)?;
+        // atomic write: the engine never reads half a file
+        let tmp = f.with_extension("agent-pets-tmp");
+        std::fs::write(&tmp, bytes).map_err(err)?;
+        std::fs::rename(&tmp, &f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e) })?;
+    }
+    if ours {
+        let mut old = Vec::new();
+        strays(&dir, "", &mut old);
+        for f in old { let _ = std::fs::remove_file(f); }
+    }
+    Ok(())
+}
+
+/// Removes the mod folder, but only when it is ours.
+pub fn remove_plugin(home: &Path) -> Result<(), String> {
+    match plugin_dir_state(home) {
+        PluginDir::Ours => std::fs::remove_dir_all(claude_plugin_dir(home)).map_err(|e| e.to_string()),
+        _ => Ok(()),
+    }
+}
+
+/// Whether an embedded file is missing or differs. A folder that is not ours is none of our business: not a repair.
+pub fn plugin_needs_repair(home: &Path) -> bool {
+    if matches!(plugin_dir_state(home), PluginDir::Foreign) { return false; }
+    let dir = claude_plugin_dir(home);
+    PLUGIN_FILES.iter().any(|(rel, bytes)| std::fs::read(dir.join(rel)).ok().as_deref() != Some(*bytes))
+}
+
 /// Hook command for cmd and bash: forward slashes (bash does not consume `\`), quotes for any character outside the safe
 /// set (space, apostrophe, `&`, parentheses…). An ordinary path stays unquoted, so it also works in PowerShell.
 pub fn hook_command(hook: &Path, agent: &str, event: &str) -> String {
@@ -640,13 +724,15 @@ pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, String> {
     if id == AppId::Grok { return disable_grok(home, lang); }
     if id == AppId::Zcode { return disable_zcode(home, lang); }
     if id != AppId::ClaudeCode { return nothing(); }
-    let Some(v) = read_claude_settings(home, lang)? else { return nothing() };
+    let plugin = remove_plugin(home);
+    let Some(v) = read_claude_settings(home, lang)? else { plugin?; return nothing() };
     let settings = claude_settings(home);
     if crate::statusline_install::is_installed(&v) {
         crate::statusline_install::uninstall_file_at(&settings, &statusline_original(home)).map_err(|e| e.to_string())?;
         let _ = std::fs::remove_file(statusline_original(home));
     }
     crate::hooks_install::uninstall_file(&settings).map_err(|e| e.to_string())?;
+    plugin?;
     Ok(tr(lang, "Hooki usunięte z ustawień Claude Code (kopia: settings.json.agent-pets.bak).",
         "Hooks removed from Claude Code settings (backup: settings.json.agent-pets.bak).").into())
 }
@@ -758,6 +844,123 @@ mod tests {
         disable(AppId::Opencode, h.path(), Lang::Pl).unwrap();
         assert!(!f.exists());
         assert!(!status(AppId::Opencode, h.path(), Lang::Pl).installed);
+    }
+
+    fn plugin_json(h: &Path) -> PathBuf { claude_plugin_dir(h).join(".claude-plugin").join("plugin.json") }
+    fn put(f: &Path, text: &str) { std::fs::create_dir_all(f.parent().unwrap()).unwrap(); std::fs::write(f, text).unwrap(); }
+
+    #[test]
+    fn the_plugin_folder_is_a_skills_dir_plugin() {
+        assert_eq!(claude_plugin_dir(Path::new("h")), Path::new("h").join(".claude").join("skills").join("agent-pets"));
+    }
+
+    #[test]
+    fn placing_the_plugin_writes_every_embedded_file_and_nothing_twice() {
+        let h = home();
+        place_plugin(h.path(), Lang::En).unwrap();
+        let dir = claude_plugin_dir(h.path());
+        for (rel, bytes) in PLUGIN_FILES { assert_eq!(std::fs::read(dir.join(rel)).unwrap(), *bytes, "{rel}"); }
+        let v: Value = serde_json::from_slice(&std::fs::read(plugin_json(h.path())).unwrap()).unwrap();
+        assert_eq!(v["name"], "agent-pets");
+        assert!(!plugin_needs_repair(h.path()));
+        // an old modification time shows a rewrite: nothing is written again
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        for (rel, _) in PLUGIN_FILES { std::fs::File::options().write(true).open(dir.join(rel)).unwrap().set_modified(old).unwrap(); }
+        place_plugin(h.path(), Lang::En).unwrap();
+        for (rel, _) in PLUGIN_FILES { assert_eq!(std::fs::metadata(dir.join(rel)).unwrap().modified().unwrap(), old, "{rel} was rewritten"); }
+    }
+
+    #[test]
+    fn placing_the_plugin_removes_files_we_no_longer_ship_but_not_the_engines() {
+        let h = home();
+        place_plugin(h.path(), Lang::En).unwrap();
+        let dir = claude_plugin_dir(h.path());
+        for f in ["hooks/old.tsx", "stray.txt", "extra/deep/x.json"] { put(&dir.join(f), "x"); }
+        for f in ["tsconfig.json", ".claude-plugin/types/claude-code/index.d.ts"] { put(&dir.join(f), "engine"); }
+        place_plugin(h.path(), Lang::En).unwrap();
+        for f in ["hooks/old.tsx", "stray.txt", "extra/deep/x.json"] { assert!(!dir.join(f).exists(), "{f}"); }
+        for f in ["tsconfig.json", ".claude-plugin/types/claude-code/index.d.ts"] { assert!(dir.join(f).is_file(), "{f}"); }
+        assert!(!plugin_needs_repair(h.path()));
+    }
+
+    #[test]
+    fn the_plugin_needs_repair_when_a_file_is_missing_or_edited() {
+        let h = home();
+        assert!(plugin_needs_repair(h.path()), "nothing placed yet");
+        place_plugin(h.path(), Lang::En).unwrap();
+        let f = claude_plugin_dir(h.path()).join("hooks").join("pet.tsx");
+        std::fs::write(&f, "edited").unwrap();
+        assert!(plugin_needs_repair(h.path()));
+        place_plugin(h.path(), Lang::En).unwrap();
+        assert!(!plugin_needs_repair(h.path()));
+        std::fs::remove_file(&f).unwrap();
+        assert!(plugin_needs_repair(h.path()));
+        place_plugin(h.path(), Lang::En).unwrap();
+        assert!(!plugin_needs_repair(h.path()) && f.is_file());
+    }
+
+    #[test]
+    fn a_skills_folder_that_is_not_ours_is_left_alone() {
+        for (lang, text) in [(Lang::En, "is not ours"), (Lang::Pl, "nie jest nasz")] {
+            for json in [r#"{"name":"someone-else"}"#, "not json", "{}"] {
+                let h = home();
+                put(&plugin_json(h.path()), json);
+                let mine = claude_plugin_dir(h.path()).join("notes.txt");
+                put(&mine, "mine");
+                let err = place_plugin(h.path(), lang).unwrap_err();
+                assert!(err.contains(text), "{err}");
+                assert!(!plugin_needs_repair(h.path()));
+                remove_plugin(h.path()).unwrap();
+                disable(AppId::ClaudeCode, h.path(), lang).unwrap();
+                uninstall_all(h.path(), false, lang);
+                assert_eq!(std::fs::read_to_string(plugin_json(h.path())).unwrap(), json);
+                assert_eq!(std::fs::read_to_string(&mine).unwrap(), "mine");
+                assert!(!claude_plugin_dir(h.path()).join("hooks").exists(), "nothing was written");
+            }
+        }
+    }
+
+    #[test]
+    fn removing_the_plugin_deletes_only_our_folder() {
+        let h = home();
+        remove_plugin(h.path()).unwrap();
+        place_plugin(h.path(), Lang::En).unwrap();
+        put(&claude_plugin_dir(h.path()).join("tsconfig.json"), "engine");
+        remove_plugin(h.path()).unwrap();
+        assert!(!claude_plugin_dir(h.path()).exists());
+    }
+
+    #[test]
+    fn disabling_claude_code_and_uninstalling_remove_the_plugin() {
+        let h = home();
+        place_plugin(h.path(), Lang::En).unwrap();
+        disable(AppId::ClaudeCode, h.path(), Lang::En).unwrap();
+        assert!(!claude_plugin_dir(h.path()).exists());
+        place_plugin(h.path(), Lang::En).unwrap();
+        uninstall_all(h.path(), false, Lang::En);
+        assert!(!claude_plugin_dir(h.path()).exists());
+        // also with Claude Code settings present
+        std::fs::create_dir_all(h.path().join(".claude")).unwrap();
+        std::fs::write(claude_settings(h.path()), "{}").unwrap();
+        place_plugin(h.path(), Lang::En).unwrap();
+        disable(AppId::ClaudeCode, h.path(), Lang::En).unwrap();
+        assert!(!claude_plugin_dir(h.path()).exists());
+    }
+
+    #[test]
+    fn every_file_of_the_mod_on_disk_is_embedded() {
+        fn walk(dir: &Path, rel: &str, out: &mut Vec<String>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                let r = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+                if e.path().is_dir() { if r != "node_modules" { walk(&e.path(), &r, out); } } else { out.push(r); }
+            }
+        }
+        let mut found = Vec::new();
+        walk(&Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("claude-plugin"), "", &mut found);
+        let wanted: Vec<&String> = found.iter().filter(|r| !r.ends_with(".test.ts") && !engine_generated(r)).collect();
+        for r in wanted { assert!(PLUGIN_FILES.iter().any(|(p, _)| p == r), "{r} is not in PLUGIN_FILES"); }
+        for (p, _) in PLUGIN_FILES { assert!(found.iter().any(|r| r == p), "{p} is embedded but not on disk"); }
     }
 
     #[test]

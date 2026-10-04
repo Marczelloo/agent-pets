@@ -147,6 +147,10 @@ fn repair_integrations(app: &tauri::AppHandle) {
     if apps.claude_code && integrations::claude_needs_repair(&st.home, src.as_deref()) {
         let _ = integrations::enable(AppId::ClaudeCode, &st.home, src.as_deref(), st.lang());
     }
+    // the mod: placed again after an update (new version) or when files vanished; a folder that is not ours stays
+    if apps.claude_code && st.get().claude_mod && integrations::plugin_needs_repair(&st.home) {
+        let _ = integrations::place_plugin(&st.home, st.lang());
+    }
     // only our file: another `agent-pets.js` stays, and enable returns an error without changes
     if apps.opencode { let _ = integrations::enable(AppId::Opencode, &st.home, None, st.lang()); }
     // refresh commands and `hook.exe` after an update; another file or key stays (enable returns an error without changes)
@@ -233,7 +237,7 @@ pub fn run() {
             snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, stage_layout, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             bubbles::stage_pets, bubbles::bubbles_place, bubbles::bubbles_hide, bubbles::bubbles_hits,
-            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
+            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set, settings::claude_mod_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
             notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
             updater::update_status, updater::update_check, updater::update_install,

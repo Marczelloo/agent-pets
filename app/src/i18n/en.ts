@@ -167,6 +167,8 @@ export const en: Dict = {
     door: 'Door for other agents',
     doorDesc: 'Any tool can report its state through a local address or the hook.exe report command (docs/door.md in the GitHub repository).',
     reinstall: 'Reinstall',
+    claudeMod: 'Claude Code mod',
+    claudeModDesc: 'Live limits, /pets, nudges and a pixel pet inside Claude Code. Takes effect in new Claude Code sessions.',
     maxVisible: 'Maximum pets in the taskbar',
     maxVisibleDesc: 'The rest go under “+N”; pets that need you stay visible',
     powerSaving: 'Power saving',

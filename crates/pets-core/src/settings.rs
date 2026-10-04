@@ -11,6 +11,9 @@ pub struct Settings {
     pub apps: Apps,
     /// Permission to fetch Claude limits from `api.anthropic.com` with the Claude Code token. Off by default.
     pub claude_plan_usage: bool,
+    /// The Claude Code mod placed in `~/.claude/skills/agent-pets` (live limits, `/pets`, nudges, pixel pet). On by default.
+    #[serde(default = "yes")]
+    pub claude_mod: bool,
     pub notifications: Notifications,
     pub pets: Pets,
     pub power_saving: PowerSaving,
@@ -329,13 +332,15 @@ impl Default for Pets {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            version: 1, apps: Apps::default(), claude_plan_usage: false,
+            version: 1, apps: Apps::default(), claude_plan_usage: false, claude_mod: true,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
             autostart: true, language: Language::Auto, theme: Theme::System, updates: Updates::Notify, stage: Stage::default(),
             extra: serde_json::Map::new(),
         }
     }
 }
+
+fn yes() -> bool { true }
 
 pub const MAX_VISIBLE: (u8, u8) = (1, 8);
 
@@ -389,6 +394,13 @@ mod tests {
         assert!(!s.claude_plan_usage);
         assert!(s.apps.claude_code && s.apps.codex && s.apps.agent_router);
         assert_eq!((s.pets.style, s.pets.max_visible, s.power_saving, s.autostart), (Style::Sticker, 5, PowerSaving::Auto, true));
+    }
+
+    #[test]
+    fn the_claude_mod_is_on_unless_a_file_says_otherwise() {
+        assert!(Settings::default().claude_mod);
+        assert!(load_str(r#"{"version":1,"apps":{"claude_code":true}}"#).settings.claude_mod);
+        assert!(!load_str(r#"{"version":1,"claude_mod":false}"#).settings.claude_mod);
     }
 
     #[test]

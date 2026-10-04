@@ -30,6 +30,7 @@ interface Props {
   onTab: (t: Tab) => void;
   onChange: (s: Settings) => void;
   onIntegration: (id: AppId, on: boolean) => Promise<string>;
+  onClaudeMod?: (on: boolean) => Promise<string>;
   message: string | null;
   /** update state (result of "Check now") */
   update?: UpdateStatus;
@@ -55,7 +56,7 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
 
@@ -80,7 +81,8 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         <h2>{t().settings.tabs[tab]}</h2>
         {message && <p className="notice" role="status">{message}</p>}
 
-        {tab === 'apps' && <AppsTab settings={s} rows={rows} onChange={onChange} onIntegration={onIntegration} />}
+        {tab === 'apps' && <AppsTab settings={s} rows={rows} onChange={onChange} onIntegration={onIntegration}
+          onClaudeMod={onClaudeMod ?? (async on => { onChange({ ...s, claude_mod: on }); return ''; })} />}
 
         {tab === 'look' && <LookTab pets={s.pets} onChange={p => set({ pets: p })} />}
         {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar} onChange={onChange} onMove={onMove} />}

@@ -78,6 +78,8 @@ export interface Settings {
   version: number;
   apps: AppsSettings;
   claude_plan_usage: boolean;
+  /** Claude Code mod in `~/.claude/skills/agent-pets` (since 0.16); on by default. */
+  claude_mod: boolean;
   notifications: { needs_you: boolean; done: boolean; limits: boolean };
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';

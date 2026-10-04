@@ -167,7 +167,11 @@ pub fn integrations_list(state: tauri::State<SettingsState>) -> Vec<AppRow> {
 fn switch(app: &AppHandle, s: &mut Settings, id: AppId, on: bool) -> Result<String, String> {
     let home = app.state::<SettingsState>().home.clone();
     let lang = i18n::current(s.language);
-    let msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), lang)? } else { integrations::disable(id, &home, lang)? };
+    let mut msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), lang)? } else { integrations::disable(id, &home, lang)? };
+    // the mod is extra: the classic hooks stay installed when it cannot be placed, the reason goes into the message
+    if on && id == AppId::ClaudeCode && s.claude_mod {
+        if let Err(e) = integrations::place_plugin(&home, lang) { msg = format!("{msg} {e}"); }
+    }
     set_app(s, id, on);
     Ok(msg)
 }
@@ -178,6 +182,26 @@ pub fn integration_set(app: AppHandle, id: AppId, on: bool) -> Result<String, St
     let msg = switch(&app, &mut s, id, on)?;
     store(&app, s)?;
     Ok(msg)
+}
+
+/// Switch for the Claude Code mod: saves the flag, then places or removes the plugin (only while Claude Code is enabled;
+/// otherwise the next enabling does it).
+#[tauri::command]
+pub fn claude_mod_set(app: AppHandle, on: bool) -> Result<String, String> {
+    let st = app.state::<SettingsState>();
+    let mut s = st.get();
+    let (lang, home) = (i18n::current(s.language), st.home.clone());
+    s.claude_mod = on;
+    let claude = s.apps.claude_code;
+    store(&app, s)?;
+    if !claude { return Ok(i18n::tr(lang, "Zapisano. Mod zainstaluje się po włączeniu Claude Code.", "Saved. The mod is installed when Claude Code is turned on.").into()); }
+    if on {
+        integrations::place_plugin(&home, lang)?;
+        Ok(i18n::tr(lang, "Mod zainstalowany. Zadziała w nowych sesjach Claude Code.", "Mod installed. It works in new Claude Code sessions.").into())
+    } else {
+        integrations::remove_plugin(&home)?;
+        Ok(i18n::tr(lang, "Mod usunięty.", "Mod removed.").into())
+    }
 }
 
 /// Finish the wizard: save settings and enable or disable integrations. Return messages for the result screen.
@@ -330,6 +354,12 @@ mod tests {
         let merged = merge_user_settings(&current, incoming);
         assert!(!merged.apps.claude_code);
         assert!(!merged.autostart);
+    }
+
+    #[test]
+    fn the_claude_mod_switch_from_the_window_is_kept() {
+        let incoming = Settings { claude_mod: false, ..Settings::default() };
+        assert!(!merge_user_settings(&Settings::default(), incoming).claude_mod);
     }
 
     #[test]

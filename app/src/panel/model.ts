@@ -63,10 +63,10 @@ export function updateBar(u: UpdateStatus | undefined): UpdateBar | null {
 export function usageLine(s: Session, today: AgentUsage | undefined): string | null {
   if (!s.usage) return null;
   const u = t().panel.usage;
-  const parts = [u.session(formatTokens(s.usage.tokens))];
+  const parts = s.usage.tokens > 0 ? [u.session(formatTokens(s.usage.tokens))] : [];
   if (today) parts.push(u.today(formatTokens(today.tokens_today)));
   if (s.usage.cost > 0) parts.push(`$${s.usage.cost.toFixed(2)}`);
-  return parts.join(' · ');
+  return parts.length ? parts.join(' · ') : null;
 }
 
 /** Bars for the account running the session (Claude or ChatGPT subscription); only those with data. */
