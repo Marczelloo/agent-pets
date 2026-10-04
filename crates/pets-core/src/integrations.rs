@@ -572,11 +572,14 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
     if id != AppId::ClaudeCode { return Status { installed: true, detail: tr(lang, "Nic do instalowania", "Nothing to install").into() }; }
     match read_claude_settings(home, lang) {
         Err(e) => Status { installed: false, detail: e },
-        Ok(v) => match v.as_ref().map(crate::hooks_install::installed_count).unwrap_or(0) {
-            9 => Status { installed: true, detail: tr(lang, "Hooki: zainstalowane", "Hooks: installed").into() },
-            0 => Status { installed: false, detail: tr(lang, "Hooki: brak", "Hooks: missing").into() },
-            n => Status { installed: false, detail: format!("{} ({n}/9)", tr(lang, "Hooki: niekompletne", "Hooks: incomplete")) },
-        },
+        Ok(v) => {
+            let total = crate::hooks_install::EVENTS.len();
+            match v.as_ref().map(crate::hooks_install::installed_count).unwrap_or(0) {
+                n if n == total => Status { installed: true, detail: tr(lang, "Hooki: zainstalowane", "Hooks: installed").into() },
+                0 => Status { installed: false, detail: tr(lang, "Hooki: brak", "Hooks: missing").into() },
+                n => Status { installed: false, detail: format!("{} ({n}/{total})", tr(lang, "Hooki: niekompletne", "Hooks: incomplete")) },
+            }
+        }
     }
 }
 
@@ -993,7 +996,7 @@ mod tests {
         let first = std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap();
         std::thread::sleep(std::time::Duration::from_millis(20));
         enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
-        assert_eq!(our_hooks(&claude_json(h.path())), 9);
+        assert_eq!(our_hooks(&claude_json(h.path())), crate::hooks_install::EVENTS.len());
         assert_eq!(std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap(), first, "same hook.exe is not copied again");
         assert!(status(AppId::ClaudeCode, h.path(), Lang::Pl).installed);
     }
