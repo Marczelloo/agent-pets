@@ -104,7 +104,7 @@ fn authorized(req: &tiny_http::Request, expected: &str) -> bool {
 fn handle_request(req: &mut tiny_http::Request, expected: &str, tx: &Sender<Incoming>, doors: &Doors, board: &StateBoard) -> (u16, Option<Vec<u8>>) {
     if *req.method() == tiny_http::Method::Get && req.url() == "/v1/state" {
         if !authorized(req, expected) { return (401, None); }
-        return (200, Some(board.read().map(|b| b.clone()).unwrap_or_default()));
+        return (200, Some(board.read().unwrap_or_else(|e| e.into_inner()).clone()));
     }
     (handle_post(req, expected, tx, doors), None)
 }

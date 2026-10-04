@@ -88,9 +88,11 @@ pub fn to_update(p: &ModPayload) -> ModUpdate {
     let session = |kind: Kind| Event::new(Source::Claude, p.session_id.as_str(), kind, p.ts);
     match p.kind.as_str() {
         "measure" => {
-            if let Some(ctx) = p.context.as_ref().and_then(context_of) {
+            let ctx = p.context.as_ref().and_then(context_of);
+            if ctx.is_some() || p.model.is_some() {
                 let mut e = session(Kind::Meta);
-                e.data.context = Some(ctx);
+                e.data.context = ctx;
+                e.data.model = p.model.clone();
                 events.push(e);
             }
         }
@@ -118,6 +120,12 @@ mod tests {
     use serde_json::json;
 
     fn p(v: serde_json::Value) -> ModPayload { serde_json::from_value(v).unwrap() }
+
+    #[test]
+    fn measure_carries_the_model_too() {
+        let u = to_update(&p(json!({"v":1,"kind":"measure","session_id":"s","ts":5,"model":"claude-opus-5-5"})));
+        assert_eq!(u.events[0].data.model.as_deref(), Some("claude-opus-5-5"));
+    }
 
     #[test]
     fn context_never_exceeds_the_window() {

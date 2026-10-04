@@ -966,7 +966,10 @@ mod tests {
             "rate_limits": [{"kind": "seven_day", "percent_used": 40.0}]}).to_string();
         assert_eq!(post_agent(&ep, "claude-mod", &body), 204);
         let deadline = Instant::now() + Duration::from_secs(10);
-        while rt.store().limits().is_empty() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        while rt.store().limits().is_empty() && Instant::now() < deadline {
+            rt.step(crate::time::now_ms());
+            std::thread::sleep(Duration::from_millis(20));
+        }
         assert_eq!(rt.store().limits().first().map(|l| l.used_pct), Some(40.0));
     }
 
