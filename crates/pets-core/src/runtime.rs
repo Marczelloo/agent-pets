@@ -84,8 +84,7 @@ impl Runtime {
         links.prune(crate::time::now_ms());
         let (tx, hooks) = channel();
         let doors = std::sync::Arc::new(crate::ingest::Doors::new(&cfg.apps));
-        // TODO(mod_state): start from `mod_state::empty(app_version)` once that module lands.
-        let board: StateBoard = std::sync::Arc::new(std::sync::RwLock::new(b"{\"v\":1,\"sessions\":[],\"limits\":[]}".to_vec()));
+        let board: StateBoard = std::sync::Arc::new(std::sync::RwLock::new(crate::mod_state::empty(env!("CARGO_PKG_VERSION"))));
         let ingest = Ingest::start(Endpoint::new_token(), tx, doors.clone(), board.clone())?;
         ingest.endpoint().write(&cfg.endpoint_path).context("writing endpoint.json")?;
         let mut rt = Runtime {
@@ -981,7 +980,8 @@ mod tests {
         let get = |token: &str| ureq::get(&format!("http://127.0.0.1:{}/v1/state", ep.port))
             .timeout(Duration::from_secs(10)).set("Authorization", &format!("Bearer {token}")).call()
             .map(|r| (r.status(), r.into_string().unwrap())).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => (c, String::new()), _ => (0, String::new()) });
-        assert_eq!(get(&ep.token), (200, r#"{"v":1,"sessions":[],"limits":[]}"#.to_string()));
+        let empty = format!(r#"{{"v":1,"app_version":"{}","sessions":[],"limits":[]}}"#, env!("CARGO_PKG_VERSION"));
+        assert_eq!(get(&ep.token), (200, empty));
         *rt.state_board().write().unwrap() = br#"{"v":1,"sessions":[1]}"#.to_vec();
         assert_eq!(get(&ep.token).1, r#"{"v":1,"sessions":[1]}"#);
         assert_eq!(get("wrong").0, 401);

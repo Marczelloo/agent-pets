@@ -1,6 +1,8 @@
 //! Core thread: events from `pets-core` → state snapshot for the UI (`pets://snapshot`).
 use pets_core::dismiss::{self, Dismissed};
 use pets_core::i18n::{tr, Lang};
+use pets_core::ingest::StateBoard;
+use pets_core::mod_state;
 use pets_core::model::{Limit, Session};
 use pets_core::replay::Replay;
 use pets_core::runtime::{Runtime, RuntimeConfig};
@@ -39,6 +41,18 @@ fn with_parents(mut v: Vec<Session>) -> Vec<Session> {
         v.retain(|s| s.parent.as_ref().map(|p| ids.contains(p)).unwrap_or(true));
         if v.len() == before { return v; }
     }
+}
+
+/// Board for the Claude mod: the same visible sessions and limits as the widget, reduced to the safe fields.
+fn board_of(store: &Store, now: i64, hidden: &mut Dismissed) -> Vec<u8> {
+    let snap = snapshot_of(store, now, hidden);
+    mod_state::render(&snap.sessions, &snap.limits, env!("CARGO_PKG_VERSION"))
+}
+
+fn publish_board(board: &StateBoard, store: &Store, now: i64, hidden: &mut Dismissed) {
+    let bytes = board_of(store, now, hidden);
+    // a poisoned lock still holds a whole board: the next write replaces it
+    *board.write().unwrap_or_else(|e| e.into_inner()) = bytes;
 }
 
 /// "Remove inactive": hides visible sessions in idle states and returns their IDs (for "Undo").
@@ -129,6 +143,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     cfg.apps = app.state::<crate::settings::SettingsState>().get().apps;
     cfg.lang = pets_core::i18n::current(app.state::<crate::settings::SettingsState>().get().language);
     let mut rt = Runtime::start(cfg)?;
+    let board = rt.state_board();
     // claude account limits from the Anthropic server (exact reset times, independent of CLI sessions), only with consent
     let (usage_tx, usage) = std::sync::mpsc::channel();
     let a = app.clone();
@@ -143,6 +158,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         if let Ok(e) = usage.recv_timeout(Duration::from_secs(3)) { rt.apply_external(e); }
     }
     publish(rt.store(), now_ms(), &mut hidden);
+    publish_board(&board, rt.store(), now_ms(), &mut hidden);
     loop {
         let now = now_ms();
         let mut changed = false;
@@ -160,6 +176,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         for u in ag_usage.try_iter() { changed |= rt.antigravity_usage(u); }
         if changed {
             publish(rt.store(), now, &mut hidden);
+            publish_board(&board, rt.store(), now, &mut hidden);
             if let Err(e) = hidden.save_if_dirty(&hidden_path) { pets_core::app_log!("{}: {e}", hidden_path.display()); }
             *app.state::<crate::settings::LastSeen>().0.lock().unwrap() =
                 rt.last_seen().into_iter().map(|(k, v)| (k.to_string(), v)).collect();
@@ -225,6 +242,35 @@ mod tests {
         assert_eq!(ids(&snapshot_of(&store, 1_600, &mut hidden)), vec!["s2"]);
         store.apply(&Event::new(Source::Claude, "s1", Kind::NeedsInput, 2_000));
         assert_eq!(ids(&snapshot_of(&store, 2_100, &mut hidden)).len(), 2);
+    }
+
+    #[test]
+    fn the_mod_board_lists_only_visible_sessions_and_only_safe_fields() {
+        let mut store = Store::new(Timing::default());
+        for id in ["s1", "s2"] {
+            let mut e = Event::new(Source::Claude, id, Kind::Prompt, 1_000);
+            e.data.pid = Some(424_242);
+            store.apply(&e);
+        }
+        child(&mut store, "s1/a", "s1", 1_000);
+        let mut hidden = Dismissed::default();
+        hidden.dismiss(&["s1".into()], 1_500);
+        let bytes = board_of(&store, 1_600, &mut hidden);
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let ids: Vec<&str> = v["sessions"].as_array().unwrap().iter().map(|s| s["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["s2"], "a dismissed session and its child stay off the board");
+        assert!(!String::from_utf8(bytes).unwrap().contains("424242"));
+    }
+
+    #[test]
+    fn publishing_the_board_replaces_what_the_endpoint_serves() {
+        let board: StateBoard = Arc::new(std::sync::RwLock::new(mod_state::empty("0.0.0")));
+        let mut store = Store::new(Timing::default());
+        store.apply(&Event::new(Source::Claude, "s1", Kind::Prompt, 1_000));
+        publish_board(&board, &store, 1_100, &mut Dismissed::default());
+        let v: serde_json::Value = serde_json::from_slice(&board.read().unwrap()).unwrap();
+        assert_eq!(v["sessions"].as_array().unwrap().len(), 1);
+        assert_eq!(v["app_version"], env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
