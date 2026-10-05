@@ -36,6 +36,10 @@ export interface Session {
   action?: string | null;
   /** question text, only in `needs_you` */
   question?: string | null;
+  /** pinned by the user: sorts right after the sessions that need you */
+  pinned?: boolean;
+  /** `title` is the user's own name (the menu offers to reset it) */
+  renamed?: boolean;
   /** model ID (e.g. `claude-opus-5-5`), since 0.10 */
   model?: string | null;
   /** `other` agent name (from the bridge), since 0.10 */

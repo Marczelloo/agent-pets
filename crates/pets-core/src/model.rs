@@ -83,6 +83,12 @@ pub struct Session {
     /// Session usage from the agent database (since 0.11, opencode only).
     #[serde(default)]
     pub usage: Option<Usage>,
+    /// Pinned by the user in the panel (set from `labels`, never by the store).
+    #[serde(default)]
+    pub pinned: bool,
+    /// `title` is the user's own name (set from `labels`); the panel offers to reset it.
+    #[serde(default)]
+    pub renamed: bool,
 }
 
 /// Tokens and cost for one session; `account` = account whose limits apply to it (Claude or ChatGPT subscription).

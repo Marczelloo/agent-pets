@@ -113,11 +113,16 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .pet{display:block;width:96px;height:72px}
 .info{min-width:0}
 .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-button.title.open{display:block;max-width:100%;padding:0;border:0;background:transparent;border-radius:0;text-align:left;font-size:13px;cursor:pointer}
+button.title.open{display:block;flex:0 1 auto;min-width:0;max-width:100%;padding:0;border:0;background:transparent;border-radius:0;text-align:left;font-size:13px;cursor:pointer}
 button.title.open:hover{background:transparent}
 button.title.open::after{content:"";position:absolute;inset:0}
 button.title.open:focus-visible{outline:none}
 button.title.open:focus-visible::after{outline:2px solid var(--txt);outline-offset:-2px;border-radius:6px}
+.titlerow{display:flex;align-items:center;gap:5px;min-width:0}
+.pin{flex:none;display:inline-flex;color:var(--mut)}
+.pin svg{width:12px;height:12px}
+input.rename{display:block;width:100%;box-sizing:border-box;margin:0;padding:1px 4px;font:inherit;font-size:13px;font-weight:600;color:var(--txt);background:var(--card);border:1px solid var(--edge);border-radius:4px;position:relative;z-index:2}
+input.rename:focus{outline:2px solid var(--txt);outline-offset:-1px}
 .sub{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .question{margin:2px 0;font-size:12px;color:var(--txt);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .sub .host-icon{vertical-align:-1px;margin-right:4px}

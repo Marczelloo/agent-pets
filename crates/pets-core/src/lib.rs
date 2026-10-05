@@ -9,6 +9,7 @@ pub mod hooks_install;
 pub mod host;
 pub mod i18n;
 pub mod ingest;
+pub mod labels;
 pub mod links;
 pub mod integrations;
 pub mod mod_state;

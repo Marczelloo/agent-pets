@@ -99,6 +99,8 @@ fn new_session(e: &Event) -> Session {
         // door session (`generic:<agent>:<session>`): show agent ID until a name is reported
         agent_name: (e.source == Source::Generic).then(|| e.session_id.split(':').nth(1).map(String::from)).flatten(),
         usage: None,
+        pinned: false,
+        renamed: false,
     }
 }
 

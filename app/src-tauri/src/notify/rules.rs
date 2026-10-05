@@ -225,7 +225,7 @@ mod tests {
         Session { id: id.into(), agent: Agent::Claude, origin: Origin::Cli, title: format!("T-{id}"), cwd: String::new(),
             state, tool: None, progress: None, context: None, started_at: 0, last_activity: since, state_since: since,
             turn_started_at: turn, jump: JumpTarget::default(), router_task: None,
-            parent: None, sub: None, action: None, question: None, waits_on_child: false, model: None, agent_name: None, usage: None }
+            parent: None, sub: None, action: None, question: None, waits_on_child: false, model: None, agent_name: None, usage: None, pinned: false, renamed: false }
     }
     fn snap(sessions: Vec<Session>, limits: Vec<Limit>) -> Snapshot { Snapshot { sessions, limits, ..Snapshot::default() } }
     use pets_core::pace::Forecast;

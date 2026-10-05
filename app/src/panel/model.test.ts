@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
 import { setLang } from '../i18n';
-import { CHILD_DONE_MS, activeCount, collapseChildren, contextPct, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
+import { CHILD_DONE_MS, activeCount, collapseChildren, contextPct, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, renameKey, renameResult, sessionSubtitle, usageLine } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: 'C:\\work\\' + id, state, tool: null, progress: null, context: null,
@@ -32,6 +32,27 @@ describe('opencode usage on its card', () => {
   it('has no line without usage', () => {
     expect(usageLine(oc, today)).toBeNull();
     expect(usageLine({ ...s('c', 'working', 0), usage: null }, today)).toBeNull();
+  });
+});
+
+describe('pinning and renaming', () => {
+  it('sorts pinned sessions after the ones that need you and before the rest', () => {
+    const pin = (x: Session): Session => ({ ...x, pinned: true });
+    const out = panelSessions([s('a', 'working', 50), pin(s('p', 'idle', 1)), s('n', 'needs_you', 2), pin(s('q', 'working', 9)), s('e', 'error', 1)]);
+    expect(out.map(x => x.id)).toEqual(['n', 'e', 'q', 'p', 'a']);
+  });
+  it('"clear inactive" does not count a pinned session', () => {
+    expect(hasInactive([{ ...s('a', 'idle', 0), pinned: true }])).toBe(false);
+    expect(hasInactive([{ ...s('a', 'idle', 0), pinned: true }, s('b', 'done', 0)])).toBe(true);
+  });
+  it('Enter saves, Escape cancels, other keys keep typing', () => {
+    expect([renameKey('Enter'), renameKey('Escape'), renameKey('a'), renameKey('Tab')]).toEqual(['save', 'cancel', null, null]);
+  });
+  it('sends the trimmed text, null for an empty field, and nothing when the title did not change', () => {
+    expect(renameResult('  My work  ', 'auto')).toBe('My work');
+    expect(renameResult('   ', 'auto')).toBeNull();
+    expect(renameResult('auto', 'auto')).toBeUndefined();
+    expect(renameResult(' auto ', 'auto')).toBeUndefined();
   });
 });
 

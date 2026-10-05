@@ -98,6 +98,18 @@ fn session_undismiss(app: tauri::AppHandle, ids: Vec<String>) {
     let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Undismiss(ids));
 }
 
+/// Own name for a session from the ⋯ menu; empty or none goes back to the automatic title.
+#[tauri::command]
+fn session_rename(app: tauri::AppHandle, id: String, name: Option<String>) {
+    let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Rename(id, name));
+}
+
+/// Pin a session to the top of the panel (and keep it through "Remove inactive").
+#[tauri::command]
+fn session_pin(app: tauri::AppHandle, id: String, pinned: bool) {
+    let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Pin(id, pinned));
+}
+
 /// The mod's two switches, as the board carries them.
 pub fn mod_prefs_of(s: &pets_core::settings::Settings) -> pets_core::mod_state::ModPrefs {
     pets_core::mod_state::ModPrefs { pet: s.claude_mod_pet, nudges: s.claude_mod_nudges }
@@ -249,7 +261,7 @@ pub fn run() {
             settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
             notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
             updater::update_status, updater::update_check, updater::update_install,
-            session_dismiss, sessions_dismiss_inactive, session_undismiss,
+            session_dismiss, sessions_dismiss_inactive, session_undismiss, session_rename, session_pin,
             stats::stats_open, stats::stats_view, stats::stats_progress
         ])
         .build(tauri::generate_context!())

@@ -8,15 +8,26 @@ import { agentLabel, hostLabel, modelLabel } from '../model-label';
 
 const URGENT = new Set(['needs_you', 'error']);
 
-/** Sessions waiting for you or in error first, then by latest activity. Children appear under their parent. */
+/** Sessions waiting for you or in error first, then pinned ones, then by latest activity. Children appear under their parent. */
 export function panelSessions(sessions: Session[]): Session[] {
   return sessions.filter(s => !s.parent).sort((a, b) =>
-    Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
+    Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || Number(!!b.pinned) - Number(!!a.pinned)
+    || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
+}
+
+/** What an inline rename does with a key: Enter saves, Escape cancels, anything else keeps typing. */
+export type RenameKey = 'save' | 'cancel' | null;
+export const renameKey = (key: string): RenameKey => key === 'Enter' ? 'save' : key === 'Escape' ? 'cancel' : null;
+
+/** Name to send after an inline rename: trimmed text, `null` (empty = back to the automatic title), or `undefined` when nothing changed. */
+export function renameResult(typed: string, current: string): string | null | undefined {
+  const name = typed.trim();
+  return name === current ? undefined : name || null;
 }
 
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
-/** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately). */
-export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
+/** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately; pinned stay). */
+export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && !s.pinned && INACTIVE.has(s.state));
 
 export type PanelTab = 'sessions' | 'limits';
 

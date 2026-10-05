@@ -3,9 +3,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, formatDuration, limitName, petTooltip } from '../tooltip/text';
 import type { Media, NotificationEntry, Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { activeCount, childLabels, childLine, childMark, childrenOf, clock, collapseChildren, contextPct, contextText, hasInactive, limitCards, limitsAlert, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine, type PanelTab } from './model';
+import { activeCount, childLabels, childLine, childMark, childrenOf, clock, collapseChildren, contextPct, contextText, hasInactive, limitCards, limitsAlert, notificationTime, panelSessions, progressText, renameKey, renameResult, sessionSubtitle, unreadCount, updateBar, usageLine, type PanelTab } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
-import { BellIcon, GearIcon, StatsIcon } from '../ui/icons';
+import { BellIcon, GearIcon, PinIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 import { resolveLang, setLang, setSystemLang, t } from '../i18n';
@@ -16,6 +16,22 @@ import { applyTheme } from '../theme';
 
 /** Stable ref callback: focuses the first menu item once, when the menu opens (not on every re-render). */
 const focusFirstItem = (el: HTMLElement | null) => { el?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(); };
+
+/** Inline rename on a card: the text starts selected; Enter or leaving the field saves, Escape cancels without closing the panel. */
+const selectAll = (el: HTMLInputElement | null) => { el?.focus(); el?.select(); };
+function RenameInput({ value, label, onDone }: { value: string; label: string; onDone: (name: string | null | undefined) => void }) {
+  const [text, setText] = useState(value);
+  const done = useRef(false);
+  const finish = (save: boolean) => { if (done.current) return; done.current = true; onDone(save ? renameResult(text, value) : undefined); };
+  return <input className="rename" type="text" value={text} maxLength={80} aria-label={label} ref={selectAll}
+    onChange={e => setText(e.target.value)} onBlur={() => finish(true)}
+    onKeyDown={e => {
+      const k = renameKey(e.key);
+      if (!k || e.nativeEvent.isComposing) return;
+      e.preventDefault(); e.stopPropagation(); // Escape must not reach the window handler that hides the panel
+      finish(k === 'save');
+    }} />;
+}
 
 const routerHot = (t: RouterTask, nowMs: number, seenAt: number) =>
   isLive(t) && ['stalled', 'blocked'].includes(routerHealth(t, nowMs, seenAt));
@@ -52,14 +68,21 @@ interface ViewProps {
   initialTab?: PanelTab;
   /** copy a session folder (defaults to the clipboard) */
   onCopyPath?: (path: string) => void;
+  /** own name for a session (`null` = back to the automatic one) and pinning; the ⋯ menu offers them when given */
+  onRename?: (id: string, name: string | null) => void;
+  onPin?: (id: string, pinned: boolean) => void;
+  /** open a card's menu / rename field right away (tests) */
+  initialMenu?: string | null;
+  initialRenaming?: string | null;
 }
 
 /** Pure panel view: text through JSX only (React escapes characters), without `innerHTML`. */
 export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null,
-  notifications = [], notificationsOpen = false, onNotificationsSeen, onNotificationOpen, onNotificationRemove, onNotificationsClear, muteUntil = null, onUnmute, initialTab = 'sessions', onCopyPath }: ViewProps) {
+  notifications = [], notificationsOpen = false, onNotificationsSeen, onNotificationOpen, onNotificationRemove, onNotificationsClear, muteUntil = null, onUnmute, initialTab = 'sessions', onCopyPath, onRename, onPin, initialMenu = null, initialRenaming = null }: ViewProps) {
   const [inbox, setInbox] = useState(notificationsOpen);
   const [tab, setTab] = useState<PanelTab>(initialTab);
-  const [menu, setMenu] = useState<string | null>(null);
+  const [menu, setMenu] = useState<string | null>(initialMenu);
+  const [renaming, setRenaming] = useState<string | null>(initialRenaming);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const unread = unreadCount(notifications);
   /** Arrow keys / Home / End move between the tabs and activate them (roving tabindex). */
@@ -189,7 +212,12 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           <article id={`s-${s.id}`} className={`session ${s.state}${focusId === s.id ? ' focus' : ''}`}>
             {animate ? <PetCanvas session={s} look={lookFor(pets, appFor(s))} music={!!media?.playing} /> : <div className="pet" />}
             <div className="info">
-              <button type="button" className="title open" aria-label={`${t().panel.open}: ${title}`} onClick={() => onJump(s.id)}>{title}</button>
+              {renaming === s.id && onRename
+                ? <RenameInput value={title} label={t().panel.renameField} onDone={name => { setRenaming(null); if (name !== undefined) onRename(s.id, name); }} />
+                : <div className="titlerow">
+                  <button type="button" className="title open" aria-label={`${t().panel.open}: ${title}`} onClick={() => onJump(s.id)}>{title}</button>
+                  {s.pinned && <span className="pin" role="img" aria-label={t().panel.pinned}><PinIcon /></span>}
+                </div>}
               <div className="sub">{s.jump.app && hostLabel(s) && <HostIcon app={s.jump.app} />}{sessionSubtitle(s)}</div>
               {s.state === 'needs_you' && s.question && <div className="question">{s.question}</div>}
               <div className="meta">
@@ -207,6 +235,9 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 onClick={() => setMenu(m => (m === s.id ? null : s.id))}>⋯</button>
               {menu === s.id && <div className="menu" role="menu" onKeyDown={menuKeys} ref={focusFirstItem}>
                 <button type="button" role="menuitem" onClick={() => { setMenu(null); onJump(s.id); }}>{t().panel.open}</button>
+                {onRename && <button type="button" role="menuitem" onClick={() => { setMenu(null); setRenaming(s.id); }}>{t().panel.rename}</button>}
+                {onRename && s.renamed && <button type="button" role="menuitem" onClick={() => { setMenu(null); onRename(s.id, null); }}>{t().panel.resetName}</button>}
+                {onPin && <button type="button" role="menuitem" onClick={() => { setMenu(null); onPin(s.id, !s.pinned); }}>{s.pinned ? t().panel.unpin : t().panel.pin}</button>}
                 {s.cwd && <button type="button" role="menuitem" onClick={() => { setMenu(null); copyPath(s.cwd); }}>{t().panel.copyPath}</button>}
                 {onDismiss && <button type="button" role="menuitem" onClick={() => { setMenu(null); onDismiss([s.id]); }}>
                   {t().panel.remove(title)}</button>}
@@ -321,6 +352,7 @@ export default function App() {
     onInstall={() => void invoke('update_install').catch(e => setStatus(String(e)))}
     onDismiss={ids => void invoke<string[]>('session_dismiss', { ids }).then(removed)}
     onDismissInactive={() => void invoke<string[]>('sessions_dismiss_inactive').then(removed)}
+    onRename={(id, name) => void invoke('session_rename', { id, name })} onPin={(id, pinned) => void invoke('session_pin', { id, pinned })}
     notifications={notes} onNotificationsSeen={() => void invoke('notifications_read')}
     onNotificationOpen={n => { if (n.session_id) void onJump(n.session_id); else if (n.kind === 'update') void invoke('update_install').catch(e => setStatus(String(e))); }}
     onNotificationRemove={id => void invoke('notification_remove', { id })} onNotificationsClear={() => void invoke('notifications_clear')}

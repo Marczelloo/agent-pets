@@ -111,6 +111,7 @@ mod tests {
             parent: None, sub: None, action: Some("secret action".into()), question: None, waits_on_child: false,
             model: Some("gpt-6-sol".into()), agent_name: None,
             usage: Some(Usage { tokens: 987_654, cost: 1.5, account: Some(Agent::Claude) }),
+            pinned: false, renamed: false,
         }
     }
 

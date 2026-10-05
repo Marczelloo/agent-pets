@@ -135,6 +135,48 @@ describe('PanelView', () => {
     expect(busy).not.toContain('Wyczyść nieaktywne');
     expect(view([{ ...sess, state: 'idle' }])).toContain('Wyczyść nieaktywne');
   });
+  describe('renaming and pinning', () => {
+    const view = (o: Partial<Parameters<typeof PanelView>[0]> & { s?: Partial<Session> } = {}) => renderToString(<PanelView snap={{ sessions: [{ ...sess, title: 'Refaktor', state: 'working', ...o.s }], limits: [], now: 0 }}
+      nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} onRename={() => {}} onPin={() => {}} {...o} />);
+    it('the menu offers Rename and Pin, and Reset name only for a renamed session', () => {
+      setLang('pl');
+      const open = view({ initialMenu: 'a' });
+      expect(open).toMatch(/role="menuitem"[^>]*>Zmień nazwę</);
+      expect(open).toMatch(/role="menuitem"[^>]*>Przypnij</);
+      expect(open).not.toContain('Przywróć nazwę');
+      const named = view({ initialMenu: 'a', s: { renamed: true, pinned: true } });
+      expect(named).toMatch(/role="menuitem"[^>]*>Przywróć nazwę</);
+      expect(named).toMatch(/role="menuitem"[^>]*>Odepnij</);
+      setLang('en');
+      try { expect(view({ initialMenu: 'a', s: { renamed: true } })).toMatch(/>Reset name</); } finally { setLang('pl'); }
+    });
+    it('offers neither without handlers', () => {
+      const html = view({ initialMenu: 'a', onRename: undefined, onPin: undefined });
+      expect(html).not.toContain('Zmień nazwę');
+      expect(html).not.toContain('Przypnij');
+    });
+    it('renaming turns the title into a field holding the current title, escaped', () => {
+      const html = view({ initialRenaming: 'a', s: { title: 'Ref"<b>' } });
+      expect(html).toMatch(/<input[^>]*class="rename"[^>]*value="Ref&quot;&lt;b&gt;"/);
+      expect(html).toMatch(/aria-label="Nazwa sesji"/);
+      expect(html).not.toContain('class="title open"');
+    });
+    it('a pinned card shows a pin mark, a plain one does not', () => {
+      expect(view({ s: { pinned: true } })).toMatch(/class="pin" role="img" aria-label="Przypięta"/);
+      expect(view()).not.toContain('class="pin"');
+    });
+    it('pinned cards come after waiting ones and before the rest', () => {
+      const snap = { sessions: [{ ...sess, id: 'x', title: 'Zwykla', state: 'working' as const, last_activity: 99 }, { ...sess, id: 'y', title: 'Przypieta', state: 'idle' as const, pinned: true }, { ...sess, id: 'z', title: 'Czeka' }], limits: [], now: 0 };
+      const html = renderToString(<PanelView snap={snap} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
+      const at = (t: string) => html.indexOf(`>${t}</button>`);
+      expect(at('Czeka')).toBeLessThan(at('Przypieta'));
+      expect(at('Przypieta')).toBeLessThan(at('Zwykla'));
+    });
+    it('"clear inactive" is not offered when the only inactive session is pinned', () => {
+      expect(view({ s: { state: 'idle' }, onDismissInactive: () => {} })).toContain('Wyczyść nieaktywne');
+      expect(view({ s: { state: 'idle', pinned: true }, onDismissInactive: () => {} })).not.toContain('Wyczyść nieaktywne');
+    });
+  });
   it('more than three subagents collapse behind a "+N" toggle', () => {
     const parent: Session = { ...sess, id: 'p', title: 'Rodzic', state: 'working' };
     const kids = Array.from({ length: 5 }, (_, i): Session => ({ ...sess, id: `p/${i}`, parent: 'p', title: `Kid${i}`, state: 'working', started_at: 0 }));

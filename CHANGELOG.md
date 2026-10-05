@@ -4,6 +4,7 @@
 
 ### Added
 
+- Rename a session or pin it from the card's ⋯ menu. The name shows in the panel, tooltips, toasts and the Claude mod; pinned sessions sit right after the ones waiting for you and survive "Clear inactive".
 - The Limits tab says when a limit will hit 100% at the current pace, and a toast warns once when a 5h or weekly limit will run out within the hour, well before it resets (needs the limit notifications on).
 - A toast when a limit that went past 90% resets (needs the limit notifications on). It also comes when the reading has gone stale or the usage simply drops.
 - Mute notifications for an hour, until 8:00 or until you turn them back on: from the tray menu or Settings → Notifications. Windows toasts stay quiet, the list in the panel keeps filling and says until when.
