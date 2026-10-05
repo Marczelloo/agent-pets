@@ -6,6 +6,12 @@
 
 - A toast when a limit that went past 90% resets (needs the limit notifications on). It also comes when the reading has gone stale or the usage simply drops.
 - Mute notifications for an hour, until 8:00 or until you turn them back on: from the tray menu or Settings → Notifications. Windows toasts stay quiet, the list in the panel keeps filling and says until when.
+- A second toast when an agent has been waiting for you for 10 minutes. The done toast says how long the turn took and how many tokens it used.
+- Settings → Notifications: switch the toast sound off; a question waiting for you has its own sound.
+
+### Changed
+
+- The stage draws fewer frames when nothing moves: 20 fps for resting pets, 10 when they all sleep, 4 for an empty stage. Anything that changes brings back the full rate for a few seconds.
 
 ### Fixed
 
