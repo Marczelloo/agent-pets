@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, formatDuration, limitName, petTooltip } from '../tooltip/text';
 import type { Media, NotificationEntry, Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { INACTIVE_STATES, accountRows, activeCount, childLabels, childLine, childMark, childrenOf, clock, collapseChildren, contextPct, contextText, hasInactive, limitCards, limitsAlert, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine, type PanelTab } from './model';
+import { accountRows, activeCount, childLabels, childLine, childMark, childrenOf, clock, collapseChildren, contextPct, contextText, hasInactive, limitCards, limitsAlert, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine, type PanelTab } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { BellIcon, GearIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
@@ -208,7 +208,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
               {menu === s.id && <div className="menu" role="menu" onKeyDown={menuKeys} ref={focusFirstItem}>
                 <button type="button" role="menuitem" onClick={() => { setMenu(null); onJump(s.id); }}>{t().panel.open}</button>
                 {s.cwd && <button type="button" role="menuitem" onClick={() => { setMenu(null); copyPath(s.cwd); }}>{t().panel.copyPath}</button>}
-                {onDismiss && INACTIVE_STATES.has(s.state) && <button type="button" role="menuitem" onClick={() => { setMenu(null); onDismiss([s.id]); }}>
+                {onDismiss && <button type="button" role="menuitem" onClick={() => { setMenu(null); onDismiss([s.id]); }}>
                   {t().panel.remove(title)}</button>}
               </div>}
             </div>

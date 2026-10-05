@@ -15,7 +15,6 @@ export function panelSessions(sessions: Session[]): Session[] {
 }
 
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
-export const INACTIVE_STATES: ReadonlySet<string> = INACTIVE;
 /** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately). */
 export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
 
