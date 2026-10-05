@@ -84,7 +84,8 @@ export interface Settings {
   claude_mod_pet: boolean;
   /** The mod's nudges about other agents (0.16.1); on by default. */
   claude_mod_nudges: boolean;
-  notifications: { needs_you: boolean; done: boolean; limits: boolean; sound: boolean };
+  /** `muted_until`: toasts are silenced until then (ms since epoch; a huge value = until turned back on); absent or null = not muted (0.17). */
+  notifications: { needs_you: boolean; done: boolean; limits: boolean; sound: boolean; muted_until?: number | null };
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;

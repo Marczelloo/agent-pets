@@ -140,6 +140,7 @@ function Root() {
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
     onIntegration={onIntegration} onClaudeMod={onClaudeMod} message={message} update={update} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar}
     onMove={() => { if (inTauri) void invoke('stage_move'); }}
+    onMute={choice => { if (inTauri) void invoke('notifications_mute', { choice }).catch(e => setMessage(String(e))); }}
     onReport={inTauri ? () => void invoke('report_problem_open') : undefined}
     onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;
 }

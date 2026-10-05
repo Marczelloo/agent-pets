@@ -10,7 +10,7 @@ import { appFor, defaultPets, lookFor } from '../look';
 import { isLive, routerHealth, routerLine } from '../stage/router';
 import { resolveLang, setLang, setSystemLang, t } from '../i18n';
 import { hostLabel } from '../model-label';
-import { appBadge } from '../settings/model';
+import { appBadge, clockText, FOREVER } from '../settings/model';
 import { HostIcon } from './HostIcon';
 import { applyTheme } from '../theme';
 
@@ -46,6 +46,9 @@ interface ViewProps {
   onNotificationOpen?: (n: NotificationEntry) => void;
   onNotificationRemove?: (id: number) => void;
   onNotificationsClear?: () => void;
+  /** toasts are muted until then (the inbox says so, with a way to turn them back on) */
+  muteUntil?: number | null;
+  onUnmute?: () => void;
   initialTab?: PanelTab;
   /** copy a session folder (defaults to the clipboard) */
   onCopyPath?: (path: string) => void;
@@ -53,7 +56,7 @@ interface ViewProps {
 
 /** Pure panel view: text through JSX only (React escapes characters), without `innerHTML`. */
 export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true, onSettings, onStats, pets = defaultPets(), update, onInstall, onDismiss, onDismissInactive, undo, onUndo, media = null,
-  notifications = [], notificationsOpen = false, onNotificationsSeen, onNotificationOpen, onNotificationRemove, onNotificationsClear, initialTab = 'sessions', onCopyPath }: ViewProps) {
+  notifications = [], notificationsOpen = false, onNotificationsSeen, onNotificationOpen, onNotificationRemove, onNotificationsClear, muteUntil = null, onUnmute, initialTab = 'sessions', onCopyPath }: ViewProps) {
   const [inbox, setInbox] = useState(notificationsOpen);
   const [tab, setTab] = useState<PanelTab>(initialTab);
   const [menu, setMenu] = useState<string | null>(null);
@@ -123,6 +126,9 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           <button type="button" className="quiet" onClick={toggleInbox}>← {t().panel.notifications.back}</button>
           {notifications.length > 0 && onNotificationsClear && <button type="button" className="quiet" onClick={onNotificationsClear}>{t().panel.notifications.clear}</button>}
         </div>
+        {muteUntil != null && muteUntil > nowMs && <p className="muted" role="status">
+          {muteUntil >= FOREVER ? t().panel.notifications.mutedForever : t().panel.notifications.mutedUntil(clockText(muteUntil))}{onUnmute && <> · <button type="button" className="quiet" onClick={onUnmute}>{t().panel.notifications.unmute}</button></>}
+        </p>}
         {notifications.length === 0 && <p className="empty">{t().panel.notifications.empty}</p>}
         <ul>
           {notifications.map(n => (
@@ -255,6 +261,7 @@ export default function App() {
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
   const [media, setMedia] = useState<Media>({ playing: false, app: null });
   const [notes, setNotes] = useState<NotificationEntry[]>([]);
+  const [muteUntil, setMuteUntil] = useState<number | null>(null);
   const [undo, setUndo] = useState<{ ids: string[] } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const removed = (ids: string[]) => {
@@ -271,7 +278,7 @@ export default function App() {
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
       listen<boolean>('panel://visible', e => setShown(e.payload)),
-      listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); applyTheme(e.payload.theme); setPets(e.payload.pets); }),
+      listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); applyTheme(e.payload.theme); setPets(e.payload.pets); setMuteUntil(e.payload.notifications?.muted_until ?? null); }),
       listen<boolean>('pets://power', e => setPetSaving(e.payload)),
       listen<UpdateStatus>('pets://update', e => setUpdate(e.payload)),
       listen<Media>('pets://media', e => setMedia(e.payload)),
@@ -290,6 +297,7 @@ export default function App() {
       setLang(resolveLang(v.settings.language ?? 'auto'));
       applyTheme(v.settings.theme);
       setPets(v.settings.pets);
+      setMuteUntil(v.settings.notifications?.muted_until ?? null);
     });
     void invoke<boolean>('power_get').then(saving => setPetSaving(saving));
     void invoke<UpdateStatus>('update_status').then(setUpdate);
@@ -315,5 +323,6 @@ export default function App() {
     notifications={notes} onNotificationsSeen={() => void invoke('notifications_read')}
     onNotificationOpen={n => { if (n.session_id) void onJump(n.session_id); else if (n.kind === 'update') void invoke('update_install').catch(e => setStatus(String(e))); }}
     onNotificationRemove={id => void invoke('notification_remove', { id })} onNotificationsClear={() => void invoke('notifications_clear')}
+    muteUntil={muteUntil} onUnmute={() => void invoke('notifications_mute', { choice: 'off' })}
     undo={undo} onUndo={() => { if (undo) void invoke('session_undismiss', { ids: undo.ids }); clearTimeout(undoTimer.current); setUndo(null); }} />;
 }

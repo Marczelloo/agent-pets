@@ -117,10 +117,11 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     if old.stage != new.stage { app.state::<shell::Shell>().settings_changed(); }
     if old.updates != new.updates { updater::mode_changed(app, new.updates); }
     if old.power_saving != new.power_saving { system::refresh_power(app); }
+    if old.notifications.muted_until != new.notifications.muted_until { tray::refresh(app); }
     if old.language != new.language {
         let lang = pets_core::i18n::current(new.language);
         let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Lang(lang));
-        tray::relabel(app, lang);
+        tray::refresh(app);
         if let Some(w) = app.get_webview_window("settings") { let _ = w.set_title(settings::window_title(lang)); }
     }
 }
@@ -216,7 +217,7 @@ pub fn run() {
             bubbles::build(app.handle())?;
             app.manage(panel::Panel::default());
             panel::build(app.handle())?;
-            tray::build(app.handle(), app.state::<settings::SettingsState>().lang())?;
+            tray::build(app.handle())?;
             app.manage(notify::center::Center::load(settings::home()));
             let snaps = notify::start(app.handle().clone());
             let (core_tx, core_rx) = std::sync::mpsc::channel();
@@ -244,7 +245,7 @@ pub fn run() {
             snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, stage_layout, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             bubbles::stage_pets, bubbles::bubbles_place, bubbles::bubbles_hide, bubbles::bubbles_hits,
-            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set, settings::claude_mod_set,
+            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set, settings::claude_mod_set, settings::notifications_mute,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
             notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
             updater::update_status, updater::update_check, updater::update_install,

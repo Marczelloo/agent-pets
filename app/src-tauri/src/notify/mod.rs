@@ -15,10 +15,11 @@ pub const AUMID: &str = "dev.agentpets.desktop";
 /// Toast identifier determined when the notification thread starts (AUMID or PowerShell fallback).
 static APP_ID: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
-/// Toast outside session rules (updates). `button`: label of the `install` action button.
+/// Toast outside session rules (updates), recorded in the center even while muted. `button`: label of the `install` action button.
 pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str>,
                    on: impl Fn(Option<String>) + Send + Sync + 'static) {
     center::record(app, center::Kind::Update, title, body, None);
+    if pets_core::mute::muted(&app.state::<crate::settings::SettingsState>().get().notifications, pets_core::time::now_ms()) { return; }
     let id = APP_ID.get().copied().unwrap_or(AUMID);
     let mut toast = Toast::new(id).title(title);
     if !body.is_empty() { toast = toast.text1(body); }
@@ -90,6 +91,7 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
         let mut rules = rules::Rules::new(rules::Settings::default());
         let mut last = Snapshot::default();
         let mut seen_first = false;
+        let mut was_muted = false;
         loop {
             // new snapshot or once per second: the 15 s threshold for `needs_you` passes without new events
             match rx.recv_timeout(std::time::Duration::from_secs(1)) {
@@ -104,6 +106,10 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
             rules.set_settings(rules::Settings { needs_you: n.needs_you, done: n.done, limits: n.limits });
             rules.set_lang(lang);
             let now = last.now.max(pets_core::time::now_ms());
+            // muted: the rules and the center go on (nothing piles up for later), only the Windows toast is skipped
+            let muted = pets_core::mute::muted(&n, now);
+            // the mute ran out on its own: the tray menu and tooltip follow
+            if muted != was_muted { was_muted = muted; crate::tray::refresh(&app); }
             // session window in foreground or visible question bubble: no toast needed (send later if the bubble disappears)
             let bubbles = app.state::<crate::bubbles::Bubbles>();
             for t in rules.observe(&last, now, &|s| focused(s) || bubbles.asking(&s.id)) {
@@ -112,6 +118,7 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
                     rules::ToastKind::Done => center::Kind::Done,
                     rules::ToastKind::Limit => center::Kind::Limit,
                 }, &t.title, &t.body, t.session_id.clone());
+                if muted { continue; }
                 let a = app.clone();
                 let sid = t.session_id.clone();
                 let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body).sound(sound_for(t.kind, n.sound));

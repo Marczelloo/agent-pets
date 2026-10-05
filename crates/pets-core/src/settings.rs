@@ -67,6 +67,9 @@ pub struct Notifications {
     pub needs_you: bool, pub done: bool, pub limits: bool,
     /// Toasts play a sound ("needs you" its own). Since 0.17.
     pub sound: bool,
+    /// Toasts are silenced until this time (ms since epoch; `i64::MAX` = until turned back on). `None` = not muted. Since 0.17.
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "ms_or_none")]
+    pub muted_until: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -130,6 +133,12 @@ fn or_default<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned +
 fn or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
     let v = serde_json::Value::deserialize(d)?;
     Ok(serde_json::from_value(v).ok())
+}
+
+/// Milliseconds as a JSON number, also when the webview round-tripped `i64::MAX` into the float 9223372036854776000
+/// (`as` saturates it back); anything else becomes `None`.
+fn ms_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+    Ok(serde_json::Value::deserialize(d)?.as_number().and_then(|n| n.as_i64().or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f as i64))))
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -333,7 +342,7 @@ impl Default for Apps {
     fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
         cursor: false, grok: false, zcode: false } }
 }
-impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true, sound: true } } }
+impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true, sound: true, muted_until: None } } }
 impl Default for Pets {
     fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5, react_to_media: true } }
 }
@@ -440,6 +449,22 @@ mod tests {
         let l = load(&p);
         assert!(l.error.is_none() && l.settings.claude_plan_usage);
         assert!(!l.settings.extra.contains_key("claude_statusline"));
+    }
+
+    #[test]
+    fn a_file_without_muted_until_is_not_muted_and_the_deadline_survives_a_save() {
+        let (_d, p) = tmp();
+        assert_eq!(load_str(r#"{"version":1,"notifications":{"needs_you":false}}"#).settings.notifications.muted_until, None);
+        let mut s = Settings::default();
+        save(&p, &s).unwrap();
+        assert!(serde_json::from_slice::<serde_json::Value>(&std::fs::read(&p).unwrap()).unwrap()["notifications"].get("muted_until").is_none());
+        s.notifications.muted_until = Some(i64::MAX);
+        save(&p, &s).unwrap();
+        assert_eq!(load(&p).settings.notifications.muted_until, Some(i64::MAX));
+        // the webview hands i64::MAX back as a float, which must not break saving the settings
+        let n: Notifications = serde_json::from_str(r#"{"muted_until":9223372036854776000}"#).unwrap();
+        assert_eq!(n.muted_until, Some(i64::MAX));
+        assert_eq!(serde_json::from_str::<Notifications>(r#"{"muted_until":"x"}"#).unwrap().muted_until, None);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { setLang } from '../i18n';
 import { PanelView } from './App';
 import type { NotificationEntry, Session, UpdateStatus } from '../types';
 
@@ -180,6 +181,22 @@ describe('PanelView', () => {
       expect(html).toContain('Aktualizacja');
       expect(html).toContain('Wyczyść wszystko');
       expect(html).not.toContain('class="limits"');
+    });
+    it('says in the inbox that notifications are muted, with a way to turn them on', () => {
+      const hhmm = (ts: number) => `${String(new Date(ts).getHours()).padStart(2, '0')}:${String(new Date(ts).getMinutes()).padStart(2, '0')}`;
+      const at = (muteUntil: number | null) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}
+        animate={false} notifications={[]} notificationsOpen onNotificationsSeen={() => {}} muteUntil={muteUntil} onUnmute={() => {}} />);
+      setLang('pl');
+      expect(at(null)).not.toContain('wyciszone');
+      expect(at(30_000)).not.toContain('wyciszone');
+      const html = at(60_000 + 3_600_000);
+      expect(html).toContain(`Powiadomienia wyciszone do ${hhmm(60_000 + 3_600_000)}`);
+      expect(html).toContain('>Włącz</button>');
+      expect(at(9223372036854776000)).toContain('wyciszone do odwołania');
+      setLang('en');
+      expect(at(60_000 + 3_600_000)).toContain(`Notifications muted until ${hhmm(60_000 + 3_600_000)}`);
+      expect(at(60_000 + 3_600_000)).toContain('>Turn on</button>');
+      setLang('pl');
     });
     it('has an empty state and no bell without a handler', () => {
       expect(view([], true)).toContain('Brak powiadomień');

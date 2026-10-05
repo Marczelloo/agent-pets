@@ -3,7 +3,7 @@ import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, UpdateStatus } 
 import { LookTab } from './look/LookTab';
 import { StageTab } from './StageTab';
 import { AppsTab } from './AppsTab';
-import { reportText } from './model';
+import { FOREVER, mutedText, mutedUntil, reportText } from './model';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
@@ -11,6 +11,8 @@ import { AppsIcon, BellIcon, DiagIcon, GeneralIcon, LimitsIcon, LookIcon, Monito
 import { LanguageSelect } from './LanguageSelect';
 import { Row, Section, Segmented, Switch } from './ui';
 
+/** Same words as `pets_core::mute::MuteChoice::parse`. */
+export type MuteChoice = 'off' | 'hour' | 'morning' | 'forever';
 export type Tab = 'apps' | 'look' | 'stage' | 'notify' | 'limits' | 'general' | 'diag';
 /** Sidebar groups, top to bottom. */
 export const TAB_GROUPS: { key: 'settings' | 'app'; tabs: Tab[] }[] = [
@@ -42,6 +44,10 @@ interface Props {
   leftFallback?: boolean;
   verticalBar?: boolean;
   onMove?: () => void;
+  /** Notifications tab: mute for a while (the deadline comes back through the settings) */
+  onMute?: (choice: MuteChoice) => void;
+  /** the clock, injectable for tests */
+  now?: number;
 }
 
 /** Manual check result beside the button. */
@@ -56,9 +62,10 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {}, onMute = () => {}, now = Date.now() }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
+  const muteUntil = mutedUntil(s.notifications, now);
 
   return (
     <div className="settings">
@@ -88,6 +95,13 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         {tab === 'stage' && <StageTab settings={s} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar} onChange={onChange} onMove={onMove} />}
 
         {tab === 'notify' && <>
+          <Section>
+            <Row label={t().settings.mute} hint={muteUntil != null ? mutedText(muteUntil) : t().settings.muteDesc} control={
+              <Segmented aria-label={t().settings.mute} value={(muteUntil == null ? 'off' : muteUntil >= FOREVER ? 'forever' : '') as MuteChoice} onChange={onMute} options={[
+                { value: 'off', label: t().settings.muteOff }, { value: 'hour', label: t().settings.muteHour },
+                { value: 'morning', label: t().settings.muteMorning }, { value: 'forever', label: t().settings.muteForever },
+              ]} />} />
+          </Section>
           <Section>
             <Toggle label={t().state.needs_you} checked={s.notifications.needs_you}
               onChange={on => set({ notifications: { ...s.notifications, needs_you: on } })}>{t().settings.notifyNeeds}</Toggle>

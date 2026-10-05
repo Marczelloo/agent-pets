@@ -281,6 +281,26 @@ describe('SettingsView', () => {
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
     expect(html).toMatch(new RegExp(`class="taskbar"[^>]*width="${SLOT * 9}"`));
   });
+  it('the notifications tab offers to mute, and says until when a mute lasts', () => {
+    const view = (muted_until: number | null, now = 1_000) => renderToString(<SettingsView settings={{ ...defaultSettings(), notifications: { ...defaultSettings().notifications, muted_until } }}
+      rows={rows} diag={diag} tab="notify" onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} now={now} />);
+    const off = view(null);
+    expect(off).toContain('Wyciszenie');
+    for (const l of ['Wyłączone', '1 godz.', 'Do 8:00', 'Do odwołania']) expect(off).toContain(l);
+    expect(off).toMatch(/aria-checked="true"[^>]*>Wyłączone/);
+    expect(off).not.toContain('Wyciszone do');
+    const hhmm = (ts: number) => `${String(new Date(ts).getHours()).padStart(2, '0')}:${String(new Date(ts).getMinutes()).padStart(2, '0')}`;
+    const until = 1_000 + 90 * 60_000;
+    expect(view(until)).toContain(`Wyciszone do ${hhmm(until)}`);
+    expect(view(until)).not.toMatch(/aria-checked="true"[^>]*>Wyłączone/);
+    expect(view(1_000 - 1, 1_000), 'an expired mute is no mute').toMatch(/aria-checked="true"[^>]*>Wyłączone/);
+    const forever = view(9223372036854776000);
+    expect(forever).toContain('Wyciszone do odwołania');
+    expect(forever).toMatch(/aria-checked="true"[^>]*>Do odwołania/);
+    setLang('en');
+    expect(view(until)).toContain(`Muted until ${hhmm(until)}`);
+    expect(view(null)).toContain('Until 8:00');
+  });
   it('the diagnostics tab offers to report a problem on GitHub, only when it can open it', () => {
     const view = (onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag"
       onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} onReport={onReport} />);

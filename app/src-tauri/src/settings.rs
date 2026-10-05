@@ -156,6 +156,22 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> Result<(), String> {
     store(&app, merged)
 }
 
+fn mute(app: &AppHandle, choice: pets_core::mute::MuteChoice) -> Result<(), String> {
+    let until = pets_core::mute::mute_until(choice, pets_core::time::now_ms(), pets_core::time::local_midnight);
+    update(app, |s| s.notifications.muted_until = until)
+}
+
+/// Tray menu: mute (or unmute) toasts, saved and broadcast like a change from the settings window so every view follows.
+pub fn set_mute(app: &AppHandle, choice: pets_core::mute::MuteChoice) {
+    if let Err(e) = mute(app, choice) { pets_core::app_log!("mute: {e}"); }
+}
+
+/// `choice`: `off`, `hour`, `morning` (next 8:00) or `forever`; the new deadline arrives in `pets://settings`.
+#[tauri::command]
+pub fn notifications_mute(app: AppHandle, choice: String) -> Result<(), String> {
+    mute(&app, pets_core::mute::MuteChoice::parse(&choice).ok_or_else(|| format!("unknown mute choice: {choice}"))?)
+}
+
 #[tauri::command]
 pub fn integrations_list(state: tauri::State<SettingsState>) -> Vec<AppRow> {
     let (s, lang) = (state.get(), state.lang());

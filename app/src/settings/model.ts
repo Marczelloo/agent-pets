@@ -35,10 +35,22 @@ export function defaultSettings(): Settings {
     version: 1, apps: { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
       cursor: false, grok: false, zcode: false }, claude_plan_usage: false, claude_mod: true,
     claude_mod_pet: false, claude_mod_nudges: true,
-    notifications: { needs_you: true, done: true, limits: true, sound: true }, pets: defaultPets(),
+    notifications: { needs_you: true, done: true, limits: true, sound: true, muted_until: null }, pets: defaultPets(),
     power_saving: 'auto', autostart: true, language: 'auto', theme: 'system', updates: 'notify', stage: defaultStage(),
   };
 }
+
+/** Deadline of an active mute, or `null` (not muted, or it ran out). */
+export const mutedUntil = (n: Settings['notifications'] | undefined, now: number): number | null => (n?.muted_until != null && now < n.muted_until ? n.muted_until : null);
+/** Past this a mute has no end (core uses `i64::MAX`, which the webview rounds to a float). */
+export const FOREVER = 1e15;
+/** Local `HH:MM`. */
+export const clockText = (ts: number): string => {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+/** "Muted until 15:40" / "until turned on", for the settings hint and the panel notice. */
+export const mutedText = (until: number): string => (until >= FOREVER ? t().settings.mutedForever : t().settings.mutedUntil(clockText(until)));
 
 export const withApp = (s: Settings, id: AppId, on: boolean): Settings => ({ ...s, apps: { ...s.apps, [id]: on } });
 

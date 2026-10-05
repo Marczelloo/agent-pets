@@ -13,6 +13,7 @@ pub mod links;
 pub mod integrations;
 pub mod mod_state;
 pub mod model;
+pub mod mute;
 #[cfg(feature = "opencode-db")]
 pub mod opencode_db;
 pub mod pid;

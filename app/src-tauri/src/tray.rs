@@ -1,34 +1,88 @@
-//! Tray icon: left click toggles the panel; right click shows the menu ("Statistics", "Settings", "Report a problem", "Quit").
-use tauri::menu::{Menu, MenuItem};
+//! Tray icon: left click toggles the panel; right click shows the menu ("Statistics", "Settings", "Mute notifications", "Report a problem", "Quit").
+use tauri::menu::{IsMenuItem, Menu, MenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use pets_core::i18n::{tr, Lang};
+use pets_core::mute::MuteChoice;
 use tauri::{AppHandle, Manager, Wry};
-
-/// Menu items, so changing language updates their text without rebuilding the icon.
-pub struct TrayItems { items: Vec<MenuItem<Wry>> }
 
 const STATS: (&str, &str) = ("Statystyki", "Statistics");
 const SETTINGS: (&str, &str) = ("Ustawienia", "Settings");
 const REPORT: (&str, &str) = ("Zgłoś problem", "Report a problem");
 const QUIT: (&str, &str) = ("Zakończ Agent Pets", "Quit Agent Pets");
+const MUTE: (&str, &str) = ("Wycisz powiadomienia", "Mute notifications");
+const MUTE_HOUR: (&str, &str) = ("Na godzinę", "For 1 hour");
+const MUTE_MORNING: (&str, &str) = ("Do 8:00", "Until 8:00");
+const MUTE_FOREVER: (&str, &str) = ("Do odwołania", "Until I turn them on");
+const UNMUTE: (&str, &str) = ("Włącz powiadomienia", "Turn notifications on");
 
 /// Menu items in order: ID and text in `lang`.
 pub fn tray_items(lang: Lang) -> Vec<(&'static str, &'static str)> {
     [("stats", STATS), ("settings", SETTINGS), ("report", REPORT), ("quit", QUIT)].iter().map(|(id, t)| (*id, tr(lang, t.0, t.1))).collect()
 }
 
-pub fn build(app: &AppHandle, lang: Lang) -> tauri::Result<()> {
-    let items = tray_items(lang).into_iter().map(|(id, label)| MenuItem::with_id(app, id, label, true, None::<&str>))
-        .collect::<tauri::Result<Vec<_>>>()?;
-    let refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = items.iter().map(|i| i as &dyn tauri::menu::IsMenuItem<Wry>).collect();
-    let menu = Menu::with_items(app, &refs)?;
-    let mut b = TrayIconBuilder::with_id("main").tooltip("Agent Pets").menu(&menu)
+/// One row of the tray menu: an item, or a submenu with its items.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Entry { Item(&'static str, &'static str), Sub(&'static str, &'static str, Vec<(&'static str, &'static str)>) }
+
+/// The whole menu: the mute submenu above "Report a problem"; while muted it gives way to one "turn on" item.
+pub fn menu_spec(lang: Lang, muted: bool) -> Vec<Entry> {
+    let l = |t: (&'static str, &'static str)| tr(lang, t.0, t.1);
+    let mute = if muted { Entry::Item("unmute", l(UNMUTE)) }
+        else { Entry::Sub("mute", l(MUTE), vec![("mute_hour", l(MUTE_HOUR)), ("mute_morning", l(MUTE_MORNING)), ("mute_forever", l(MUTE_FOREVER))]) };
+    let mut out = Vec::new();
+    for (id, label) in tray_items(lang) {
+        if id == "report" { out.push(mute.clone()); }
+        out.push(Entry::Item(id, label));
+    }
+    out
+}
+
+/// Tooltip of the icon: plain, or saying until when the toasts are silenced.
+pub fn tooltip(lang: Lang, muted_until: Option<i64>, now: i64, local_midnight: impl Fn(i64) -> i64) -> String {
+    match muted_until.filter(|u| now < *u) {
+        None => "Agent Pets".into(),
+        Some(i64::MAX) => format!("Agent Pets · {}", tr(lang, "powiadomienia wyciszone do odwołania", "notifications muted until turned on")),
+        Some(u) => format!("Agent Pets · {} {}", tr(lang, "powiadomienia wyciszone do", "notifications muted until"), pets_core::mute::clock(u, local_midnight)),
+    }
+}
+
+fn menu(app: &AppHandle, lang: Lang, muted: bool) -> tauri::Result<Menu<Wry>> {
+    let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
+    for e in menu_spec(lang, muted) {
+        match e {
+            Entry::Item(id, label) => items.push(Box::new(MenuItem::with_id(app, id, label, true, None::<&str>)?)),
+            Entry::Sub(id, label, subs) => {
+                let subs = subs.into_iter().map(|(id, label)| MenuItem::with_id(app, id, label, true, None::<&str>)).collect::<tauri::Result<Vec<_>>>()?;
+                let refs: Vec<&dyn IsMenuItem<Wry>> = subs.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+                items.push(Box::new(Submenu::with_id_and_items(app, id, label, true, &refs)?));
+            }
+        }
+    }
+    Menu::with_items(app, &items.iter().map(|b| b.as_ref()).collect::<Vec<_>>())
+}
+
+/// Language, mute deadline and the time, as the settings hold them now.
+fn state(app: &AppHandle) -> (Lang, Option<i64>, i64) {
+    let st = app.state::<crate::settings::SettingsState>();
+    (st.lang(), st.get().notifications.muted_until, pets_core::time::now_ms())
+}
+
+pub fn build(app: &AppHandle) -> tauri::Result<()> {
+    let (lang, until, now) = state(app);
+    let menu = menu(app, lang, until.is_some_and(|u| now < u))?;
+    let mut b = TrayIconBuilder::with_id("main").tooltip(tooltip(lang, until, now, pets_core::time::local_midnight)).menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, e| match e.id().as_ref() {
             "quit" => app.exit(0),
             "settings" => crate::settings::open(app),
             "stats" => crate::stats::open(app),
             "report" => crate::settings::report_problem(app),
+            // off the menu callback: saving swaps the tray menu, which must not happen while this one is still closing
+            id @ ("mute_hour" | "mute_morning" | "mute_forever" | "unmute") => {
+                let choice = match id { "mute_hour" => MuteChoice::Hour, "mute_morning" => MuteChoice::Morning, "mute_forever" => MuteChoice::Forever, _ => MuteChoice::Off };
+                let app = app.clone();
+                std::thread::spawn(move || crate::settings::set_mute(&app, choice));
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, e| {
@@ -38,15 +92,16 @@ pub fn build(app: &AppHandle, lang: Lang) -> tauri::Result<()> {
         });
     if let Some(icon) = app.default_window_icon() { b = b.icon(icon.clone()); }
     b.build(app)?;
-    app.manage(TrayItems { items });
     Ok(())
 }
 
-/// New menu language (changed in settings).
-pub fn relabel(app: &AppHandle, lang: Lang) {
-    if let Some(t) = app.try_state::<TrayItems>() {
-        for (item, (_, label)) in t.items.iter().zip(tray_items(lang)) { let _ = item.set_text(label); }
-    }
+/// Rebuild the menu and tooltip: the language or the mute changed, or the mute ran out.
+/// (Resets a data-core failure shown by `set_status`; that one is set again on the next failure.)
+pub fn refresh(app: &AppHandle) {
+    let (lang, until, now) = state(app);
+    let Some(t) = app.tray_by_id("main") else { return };
+    if let Ok(m) = menu(app, lang, until.is_some_and(|u| now < u)) { let _ = t.set_menu(Some(m)); }
+    let _ = t.set_tooltip(Some(tooltip(lang, until, now, pets_core::time::local_midnight)));
 }
 
 /// Change the icon tooltip (e.g. to describe a data-core failure).
@@ -65,5 +120,35 @@ mod tests {
         assert_eq!(tray_items(Lang::En)[2].1, "Report a problem");
         assert_eq!(tray_items(Lang::Pl)[0].1, "Statystyki");
         assert_eq!(tray_items(Lang::En)[0].1, "Statistics");
+    }
+
+    #[test]
+    fn the_mute_submenu_sits_above_report_a_problem() {
+        let spec = menu_spec(Lang::En, false);
+        let ids: Vec<_> = spec.iter().map(|e| match e { Entry::Item(i, _) | Entry::Sub(i, _, _) => *i }).collect();
+        assert_eq!(ids, ["stats", "settings", "mute", "report", "quit"]);
+        assert_eq!(spec[2], Entry::Sub("mute", "Mute notifications", vec![("mute_hour", "For 1 hour"), ("mute_morning", "Until 8:00"), ("mute_forever", "Until I turn them on")]));
+        assert_eq!(menu_spec(Lang::Pl, false)[2], Entry::Sub("mute", "Wycisz powiadomienia", vec![("mute_hour", "Na godzinę"), ("mute_morning", "Do 8:00"), ("mute_forever", "Do odwołania")]));
+    }
+
+    #[test]
+    fn while_muted_one_item_turns_notifications_back_on() {
+        assert_eq!(menu_spec(Lang::En, true)[2], Entry::Item("unmute", "Turn notifications on"));
+        assert_eq!(menu_spec(Lang::Pl, true)[2], Entry::Item("unmute", "Włącz powiadomienia"));
+        assert_eq!(menu_spec(Lang::En, true).len(), 5);
+    }
+
+    #[test]
+    fn the_tooltip_says_until_when() {
+        const DAY: i64 = 86_400_000;
+        let mid = |ts: i64| ts - ts.rem_euclid(DAY);
+        let now = 20_730 * DAY + 14 * 3_600_000;
+        let until = now + 100 * 60_000;
+        assert_eq!(tooltip(Lang::En, None, now, mid), "Agent Pets");
+        assert_eq!(tooltip(Lang::En, Some(now - 1), now, mid), "Agent Pets", "an expired mute is no mute");
+        assert_eq!(tooltip(Lang::En, Some(until), now, mid), "Agent Pets · notifications muted until 15:40");
+        assert_eq!(tooltip(Lang::Pl, Some(until), now, mid), "Agent Pets · powiadomienia wyciszone do 15:40");
+        assert_eq!(tooltip(Lang::Pl, Some(i64::MAX), now, mid), "Agent Pets · powiadomienia wyciszone do odwołania");
+        assert_eq!(tooltip(Lang::En, Some(i64::MAX), now, mid), "Agent Pets · notifications muted until turned on");
     }
 }
