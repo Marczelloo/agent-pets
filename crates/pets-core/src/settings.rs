@@ -645,7 +645,7 @@ mod tests {
         let bad: Stage = serde_json::from_str(r#"{"dock":"middle"}"#).unwrap();
         assert_eq!(bad.dock, None);
         assert!(serde_json::to_value(&bad).unwrap().get("dock").is_none());
-        assert!(!serde_json::to_value(&st).unwrap().get("extra").is_some(), "dock is a known field, not an extra one");
+        assert!(serde_json::to_value(&st).unwrap().get("extra").is_none(), "dock is a known field, not an extra one");
     }
 
     #[test]
