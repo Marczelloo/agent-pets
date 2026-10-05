@@ -1,6 +1,6 @@
 import { defaultPets, defaultStage } from '../look';
 import { formatAgo } from '../tooltip/text';
-import type { AppId, AppRow, Diagnostics, Settings } from '../types';
+import type { AppId, AppRow, Diagnostics, Hotkeys, Settings } from '../types';
 import { t } from '../i18n';
 
 export const APP_LABEL: Record<AppId, string> = { claude_code: 'Claude Code', codex: 'Codex', agent_router: 'Agent Router', opencode: 'opencode', copilot: 'GitHub Copilot', antigravity: 'Antigravity',
@@ -29,6 +29,9 @@ const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings
 export const WIZARD_STEPS = ['apps', 'limits', 'notify', 'look'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
+/** Like core `Hotkeys::default()`. */
+export const defaultHotkeys = (): Hotkeys => ({ jump: 'Super+Shift+J', panel: 'Super+Shift+K' });
+
 /** Like core `Settings::default()`; used when the app does not respond (browser preview). */
 export function defaultSettings(): Settings {
   return {
@@ -37,6 +40,7 @@ export function defaultSettings(): Settings {
     claude_mod_pet: false, claude_mod_nudges: true,
     notifications: { needs_you: true, done: true, limits: true, sound: true, muted_until: null }, pets: defaultPets(),
     power_saving: 'auto', autostart: true, language: 'auto', theme: 'system', updates: 'notify', stage: defaultStage(),
+    hotkeys: defaultHotkeys(),
   };
 }
 

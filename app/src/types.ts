@@ -99,8 +99,13 @@ export interface Settings {
   theme: Theme;
   updates: Updates;
   stage: StageSettings;
+  /** System-wide shortcuts (0.17), accelerator strings like `Super+Shift+J`; `null` = off. */
+  hotkeys: Hotkeys;
   [extra: string]: unknown;
 }
+export interface Hotkeys { jump: string | null; panel: string | null }
+/** Mirrors `hotkeys::HotkeyStatus` (command `hotkeys_status`, event `pets://hotkeys`): why a shortcut could not be registered, or `null`. */
+export interface HotkeyStatus { jump: string | null; panel: string | null }
 export type Theme = 'system' | 'light' | 'dark';
 export type Updates = 'notify' | 'auto' | 'off';
 /** Lustro `placement::MonitorInfo` (komenda `monitors_list`). */

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, SettingsView as View, StageLayout, UpdateStatus } from '../types';
+import type { AppId, AppRow, Diagnostics, HotkeyStatus, MonitorInfo, Settings, SettingsView as View, StageLayout, UpdateStatus } from '../types';
 import { defaultSettings } from './model';
 import { SettingsView, TABS, type Tab } from './SettingsView';
 import { Wizard } from './Wizard';
@@ -45,6 +45,7 @@ function Root() {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [leftFallback, setLeftFallback] = useState(false);
   const [verticalBar, setVerticalBar] = useState(false);
+  const [hotkeyStatus, setHotkeyStatus] = useState<HotkeyStatus>({ jump: null, panel: null });
 
   const reload = useCallback(async () => {
     if (!inTauri) {
@@ -82,7 +83,9 @@ function Root() {
     const unTab = listen<string>('settings://tab', e => { const t = tabFrom(e.payload); if (t) setTab(t); });
     const unLayout = listen<StageLayout>('pets://layout', e => { setLeftFallback(!!e.payload.left_fallback); setVerticalBar(!!e.payload.vertical_bar); });
     void invoke<StageLayout | null>('stage_layout').then(l => { setLeftFallback(!!l?.left_fallback); setVerticalBar(!!l?.vertical_bar); });
-    return () => [un, unPower, unUpdate, unTab, unLayout].forEach(p => void p.then(f => f()));
+    const unHotkeys = listen<HotkeyStatus>('pets://hotkeys', e => setHotkeyStatus(e.payload));
+    void invoke<HotkeyStatus>('hotkeys_status').then(setHotkeyStatus);
+    return () => [un, unPower, unUpdate, unTab, unLayout, unHotkeys].forEach(p => void p.then(f => f()));
   }, [reload]);
 
   useEffect(() => { if (tab === 'diag' && inTauri) void invoke<Diagnostics>('diagnostics').then(setDiag); }, [tab]);
@@ -138,7 +141,7 @@ function Root() {
   };
 
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
-    onIntegration={onIntegration} onClaudeMod={onClaudeMod} message={message} update={update} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar}
+    onIntegration={onIntegration} onClaudeMod={onClaudeMod} message={message} update={update} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar} hotkeyStatus={hotkeyStatus}
     onMove={() => { if (inTauri) void invoke('stage_move'); }}
     onMute={choice => { if (inTauri) void invoke('notifications_mute', { choice }).catch(e => setMessage(String(e))); }}
     onReport={inTauri ? () => void invoke('report_problem_open') : undefined}

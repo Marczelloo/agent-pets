@@ -448,3 +448,45 @@ describe('panel', () => {
     expect(html.indexOf('Znajdź testy')).toBeLessThan(html.indexOf('Newton'));
   });
 });
+
+describe('keyboard shortcuts in the general tab', () => {
+  const render = (s = defaultSettings(), hotkeyStatus?: { jump: string | null; panel: string | null }) => renderToString(<SettingsView settings={s} rows={rows} diag={diag}
+    tab="general" onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} hotkeyStatus={hotkeyStatus} />);
+  it('shows both shortcuts with their combos, in Polish and in English', () => {
+    const pl = render();
+    expect(pl).toContain('Skróty klawiszowe');
+    expect(pl).toContain('Przejdź do agenta, który czeka');
+    expect(pl).toContain('Pokaż/ukryj panel');
+    expect(pl).toContain('Win + Shift + J');
+    expect(pl).toContain('Win + Shift + K');
+    setLang('en');
+    const en = render();
+    expect(en).toContain('Keyboard shortcuts');
+    expect(en).toContain('Jump to the waiting agent');
+    expect(en).toContain('Show/hide the panel');
+  });
+  it('offers Default only for a changed shortcut and Off only for one that is on', () => {
+    setLang('en');
+    expect(render()).not.toContain('>Default<');
+    const changed = render({ ...defaultSettings(), hotkeys: { jump: 'Ctrl+Shift+F2', panel: null } });
+    expect(changed).toContain('Ctrl + Shift + F2');
+    expect(changed.match(/>Default</g)?.length).toBe(2);
+    const section = changed.slice(changed.indexOf('Keyboard shortcuts'), changed.indexOf('Checks GitHub'));
+    expect(section.match(/>Off</g)?.length).toBe(2); // the "Off" button of jump, the "Off" label of panel
+    expect(changed).toContain('aria-label="Show/hide the panel: Off"');
+  });
+  it('a settings file from before the shortcuts still renders the defaults', () => {
+    const { hotkeys: _gone, ...old } = defaultSettings();
+    expect(render(old as Settings)).toContain('Win + Shift + J');
+  });
+  it('shows a registration error under the row that failed, and nothing when all is well', () => {
+    setLang('en');
+    const ok = render(defaultSettings(), { jump: null, panel: null });
+    expect(ok).not.toContain('Couldn&#x27;t register');
+    const bad = render(defaultSettings(), { jump: null, panel: 'in use' });
+    expect(bad.match(/Couldn&#x27;t register/g)?.length).toBe(1);
+    expect(bad.indexOf('Couldn&#x27;t register')).toBeGreaterThan(bad.indexOf('Show/hide the panel'));
+    setLang('pl');
+    expect(render(defaultSettings(), { jump: 'taken', panel: null })).toContain('Nie udało się zarejestrować — skrót zajęty przez inny program?');
+  });
+});

@@ -2,6 +2,7 @@ mod antigravity_usage;
 mod appstate;
 mod bubbles;
 mod core;
+mod hotkeys;
 mod jump;
 mod media;
 mod notify;
@@ -128,6 +129,7 @@ pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings
     if old.autostart != new.autostart { sync_autostart(new.autostart); }
     if old.stage != new.stage { app.state::<shell::Shell>().settings_changed(); }
     if old.updates != new.updates { updater::mode_changed(app, new.updates); }
+    if old.hotkeys != new.hotkeys { hotkeys::apply(app); }
     if old.power_saving != new.power_saving { system::refresh_power(app); }
     if old.notifications.muted_until != new.notifications.muted_until { tray::refresh(app); }
     if old.language != new.language {
@@ -214,6 +216,8 @@ pub fn run() {
         // must be the first plugin: a second launch opens settings instead of starting another core
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| if second_launch_opens_settings(&args) { settings::open(app) }))
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // shortcuts are registered from Rust (`hotkeys`), so no webview permission is granted
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let prefs = settings::SettingsState::load(settings::home());
             let first_run = *prefs.first_run.lock().unwrap();
@@ -242,6 +246,8 @@ pub fn run() {
             app.manage(media::MediaState::default());
             media::watch_media(app.handle().clone());
             app.manage(updater::Updater::default());
+            app.manage(hotkeys::HotkeyState::default());
+            hotkeys::apply(app.handle());
             app.manage(shell::menu::MenuTarget::default());
             app.on_menu_event(|app, e| shell::menu::on_event(app, e.id().as_ref()));
             updater::start(app.handle().clone());
@@ -260,7 +266,7 @@ pub fn run() {
             settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set, settings::claude_mod_set, settings::notifications_mute,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
             notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
-            updater::update_status, updater::update_check, updater::update_install,
+            updater::update_status, updater::update_check, updater::update_install, hotkeys::hotkeys_status,
             session_dismiss, sessions_dismiss_inactive, session_undismiss, session_rename, session_pin,
             stats::stats_open, stats::stats_view, stats::stats_progress
         ])

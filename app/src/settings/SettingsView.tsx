@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, UpdateStatus } from '../types';
+import type { AppId, AppRow, Diagnostics, HotkeyStatus, MonitorInfo, Settings, UpdateStatus } from '../types';
 import { LookTab } from './look/LookTab';
 import { StageTab } from './StageTab';
 import { AppsTab } from './AppsTab';
-import { FOREVER, mutedText, mutedUntil, reportText } from './model';
+import { defaultHotkeys, FOREVER, mutedText, mutedUntil, reportText } from './model';
+import { HotkeyRow } from './HotkeyRow';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
@@ -46,6 +47,8 @@ interface Props {
   onMove?: () => void;
   /** Notifications tab: mute for a while (the deadline comes back through the settings) */
   onMute?: (choice: MuteChoice) => void;
+  /** General tab: why a shortcut could not be registered (from the core) */
+  hotkeyStatus?: HotkeyStatus;
   /** the clock, injectable for tests */
   now?: number;
 }
@@ -62,10 +65,12 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {}, onMute = () => {}, now = Date.now() }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {}, onMute = () => {}, hotkeyStatus, now = Date.now() }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
   const muteUntil = mutedUntil(s.notifications, now);
+  const hotkeys = s.hotkeys ?? defaultHotkeys();
+  const setHotkey = (k: 'jump' | 'panel', v: string | null) => set({ hotkeys: { ...hotkeys, [k]: v } });
 
   return (
     <div className="settings">
@@ -141,6 +146,12 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
               <Segmented aria-label={t().settings.powerSaving} value={s.power_saving} onChange={v => set({ power_saving: v })} options={[
                 { value: 'auto', label: t().settings.power.auto }, { value: 'always', label: t().settings.power.always }, { value: 'never', label: t().settings.power.never },
               ]} />} />
+          </Section>
+          <Section title={t().settings.hotkeys.title} note={t().settings.hotkeys.note}>
+            <HotkeyRow label={t().settings.hotkeys.jump} hint={t().settings.hotkeys.jumpDesc} value={hotkeys.jump} fallback={defaultHotkeys().jump!}
+              error={hotkeyStatus?.jump} onChange={v => setHotkey('jump', v)} />
+            <HotkeyRow label={t().settings.hotkeys.panel} value={hotkeys.panel} fallback={defaultHotkeys().panel!}
+              error={hotkeyStatus?.panel} onChange={v => setHotkey('panel', v)} />
           </Section>
           <Section>
             <Row label={t().settings.updates} hint={t().settings.updatesDesc} control={

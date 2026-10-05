@@ -34,6 +34,8 @@ pub struct Settings {
     pub updates: Updates,
     /// Scene window: position, monitor, background, size, and layout ("Taskbar" tab).
     pub stage: Stage,
+    /// System-wide shortcuts (Since 0.17).
+    pub hotkeys: Hotkeys,
     /// Fields from newer versions, preserved on save.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -59,6 +61,20 @@ pub struct Apps {
     pub grok: bool,
     /// Our hooks in `~/.zcode/cli/config.json`: only after explicit enabling.
     pub zcode: bool,
+}
+
+/// Global shortcuts as accelerator strings (`Super+Shift+J`); `None` = off. A file without the field gets the defaults.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct Hotkeys {
+    /// Jump to the agent that needs you (else the latest finished one, else open the panel).
+    pub jump: Option<String>,
+    /// Show or hide the panel.
+    pub panel: Option<String>,
+}
+
+impl Default for Hotkeys {
+    fn default() -> Self { Hotkeys { jump: Some("Super+Shift+J".into()), panel: Some("Super+Shift+K".into()) } }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -354,7 +370,7 @@ impl Default for Settings {
             claude_mod_pet: false, claude_mod_nudges: true,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
             autostart: true, language: Language::Auto, theme: Theme::System, updates: Updates::Notify, stage: Stage::default(),
-            extra: serde_json::Map::new(),
+            hotkeys: Hotkeys::default(), extra: serde_json::Map::new(),
         }
     }
 }
@@ -439,6 +455,24 @@ mod tests {
         save(&p, &s).unwrap();
         let back = load(&p).settings;
         assert!(back.claude_mod_pet && !back.claude_mod_nudges);
+    }
+
+    #[test]
+    fn the_hotkeys_default_on_and_an_old_file_gets_them() {
+        let d = Settings::default().hotkeys;
+        assert_eq!((d.jump.as_deref(), d.panel.as_deref()), (Some("Super+Shift+J"), Some("Super+Shift+K")));
+        assert_eq!(load_str(r#"{"version":1,"claude_mod":true}"#).settings.hotkeys, d);
+        // a half-written section keeps the default for the missing one; null turns one off
+        let l = load_str(r#"{"version":1,"hotkeys":{"jump":null}}"#).settings.hotkeys;
+        assert_eq!((l.jump, l.panel.as_deref()), (None, Some("Super+Shift+K")));
+    }
+
+    #[test]
+    fn a_changed_hotkey_survives_a_save() {
+        let (_d, p) = tmp();
+        let s = Settings { hotkeys: Hotkeys { jump: Some("Ctrl+Shift+F2".into()), panel: None }, ..Settings::default() };
+        save(&p, &s).unwrap();
+        assert_eq!(load(&p).settings.hotkeys, s.hotkeys);
     }
 
     #[test]
