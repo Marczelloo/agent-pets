@@ -64,7 +64,7 @@ export function usageLine(s: Session, today: AgentUsage | undefined): string | n
   const u = t().panel.usage;
   const parts = s.usage.tokens > 0 ? [u.session(formatTokens(s.usage.tokens))] : [];
   if (today) parts.push(u.today(formatTokens(today.tokens_today)));
-  if (s.usage.cost > 0) parts.push(`$${s.usage.cost.toFixed(2)}`);
+  if (s.usage.cost > 0) parts.push(u.cost(s.usage.cost));
   return parts.length ? parts.join(' · ') : null;
 }
 

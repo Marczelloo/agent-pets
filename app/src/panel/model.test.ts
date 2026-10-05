@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
+import { setLang } from '../i18n';
 import { CHILD_DONE_MS, activeCount, collapseChildren, contextPct, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
@@ -13,14 +14,20 @@ describe('opencode usage on its card', () => {
   it('shows session and day tokens, and the cost only when there is one', () => {
     expect(usageLine({ ...oc, usage: { tokens: 1_200_000, cost: 0, account: null } }, today)).toBe('sesja: 1,2 mln tok. · dziś: 4,8 mln tok.');
     expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0.42, account: null } }, { ...today, cost_today: 1.5 }))
-      .toBe('sesja: 950 tok. · dziś: 4,8 mln tok. · $0.42');
+      .toBe('sesja: 950 tok. · dziś: 4,8 mln tok. · 0,42 $');
     expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0, account: null } }, undefined)).toBe('sesja: 950 tok.');
   });
   it('leaves out the token part of a session that only has a cost (Claude)', () => {
     const line = usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 1.42, account: 'claude' } }, undefined);
-    expect(line).toBe('$1.42');
+    expect(line).toBe('1,42 $');
     expect(line).not.toMatch(/tok/);
     expect(usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 0, account: 'claude' } }, undefined)).toBeNull();
+  });
+  it('writes the cost the way the UI language does', () => {
+    setLang('en');
+    try {
+      expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0.42, account: null } }, undefined)).toBe('session: 950 tokens · $0.42');
+    } finally { setLang('pl'); }
   });
   it('has no line without usage', () => {
     expect(usageLine(oc, today)).toBeNull();

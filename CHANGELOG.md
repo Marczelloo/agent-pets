@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A toast when a limit that went past 90% resets (needs the limit notifications on). It also comes when the reading has gone stale or the usage simply drops.
+
+### Fixed
+
+- The session cost in the panel follows the UI language (0,42 $ in Polish, $0.42 in English).
+
 ## 0.16.1
 
 ### Changed
