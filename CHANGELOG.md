@@ -20,6 +20,12 @@
 - Permission prompts show their bubble immediately, and a failed tool no longer leaves the pet "working".
 - The release script and CI validate and test the mod; its version must equal the app's.
 
+### Fixed
+
+- The pet no longer keeps "thinking" after a finished turn when a later measure arrived before the Stop hook.
+- An error calms down to idle after two minutes, like a finished turn, instead of staying until the session ends.
+- Every card's ⋯ menu in the panel can remove the pet, not only cards of finished sessions.
+
 ### Removed
 
 - The statusline pass-through and its switch. On the first start of 0.16 the app restores your own statusline if the pass-through was installed. `pets-cli uninstall-statusline` remains for restoring one by hand.
