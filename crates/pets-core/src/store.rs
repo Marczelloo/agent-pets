@@ -34,6 +34,10 @@ pub struct Store {
     /// so minimum state duration starts when the core sees one, not at its file timestamp.
     clock: i64,
     shown_at: BTreeMap<String, i64>,
+    /// Time of each session's last state event (not `Meta`/`Limits`). State events are ordered against these alone:
+    /// metadata stamped later by another source (a mod measure, a transcript line) does not make the hook's `Stop`
+    /// "older" and drop it.
+    state_ts: BTreeMap<String, i64>,
     /// Children already gone: ID → end time. Older events (late file lines, the same entry
     /// in router status.json) do not revive them; newer ones (another turn) do.
     tombs: BTreeMap<String, i64>,
@@ -163,7 +167,7 @@ impl Store {
     pub fn new(timing: Timing) -> Self {
         Store { timing, sessions: BTreeMap::new(), pending: BTreeMap::new(),
                 ended_at: BTreeMap::new(), limits: Vec::new(), limits_ts: Vec::new(),
-                clock: i64::MIN, shown_at: BTreeMap::new(), tombs: BTreeMap::new(), agent_usage: Vec::new() }
+                clock: i64::MIN, shown_at: BTreeMap::new(), state_ts: BTreeMap::new(), tombs: BTreeMap::new(), agent_usage: Vec::new() }
     }
 
     pub fn session(&self, id: &str) -> Option<&Session> { self.sessions.get(id) }
@@ -273,12 +277,15 @@ impl Store {
         let s = self.sessions.entry(e.session_id.clone()).or_insert_with(|| new_session(e));
         merge(s, data);
         if parent_gone && sub_kind(s) == Some(SubKind::Router) { orphan(s); }
-        if e.ts < s.last_activity {
+        let meta = matches!(e.kind, Kind::Meta | Kind::Limits);
+        let order = if meta { s.last_activity } else { self.state_ts.get(&e.session_id).copied().unwrap_or(i64::MIN) };
+        if e.ts < order {
             out.push(Change::Upsert(s.clone()));
             return out;
         }
+        if !meta { self.state_ts.insert(e.session_id.clone(), e.ts); }
         let prev_activity = s.last_activity;
-        s.last_activity = e.ts;
+        s.last_activity = s.last_activity.max(e.ts);
         texts(s, e);
         let child = s.parent.is_some();
         if !child && !matches!(e.kind, Kind::Meta | Kind::Limits) {
@@ -473,7 +480,8 @@ impl Store {
                 // count "no events" thresholds from the later of state entry and last activity
                 let calm = now - s.state_since.max(s.last_activity);
                 match s.state {
-                    State::Done if calm >= t.done_to_idle_ms => set(s, State::Idle, None, now),
+                    // an error is an outcome like "done": the pet calms down instead of showing it until the session ends
+                    State::Done | State::Error if calm >= t.done_to_idle_ms => set(s, State::Idle, None, now),
                     State::Thinking | State::Working | State::Compacting
                         if quiet >= if s.agent == Agent::Antigravity { t.stale_to_idle_ms.min(ANTIGRAVITY_STALE_MS) } else { t.stale_to_idle_ms } =>
                         set(s, State::Idle, None, now),
@@ -493,6 +501,7 @@ impl Store {
             self.ended_at.remove(&id);
             self.pending.remove(&id);
             self.shown_at.remove(&id);
+            self.state_ts.remove(&id);
             out.push(Change::Removed(id));
         }
         out
@@ -694,6 +703,31 @@ mod tests {
         assert_eq!(st(&s).0, State::Idle);
         s.tick(720_000, &alive);
         assert_eq!(st(&s).0, State::Sleep);
+    }
+
+    #[test]
+    fn a_later_stamped_measure_does_not_drop_the_stop_hook() {
+        // the mod's measure is stamped after hook.exe stamped `Stop`, but reaches the core first
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.apply(&ev(Kind::Meta, 5_050));
+        s.apply(&ev(Kind::TurnEnd, 5_000));
+        assert_eq!(st(&s).0, State::Done);
+        // the order of state events still holds: a late tool event older than `Stop` does not revive the turn
+        s.apply(&ev(Kind::ToolStart, 4_000));
+        assert_eq!(st(&s).0, State::Done);
+        assert_eq!(s.session("s1").unwrap().last_activity, 5_050, "activity keeps the latest time");
+    }
+
+    #[test]
+    fn an_error_calms_down_like_done() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.apply(&ev(Kind::Error, 1_000));
+        s.tick(120_000, &alive);
+        assert_eq!(st(&s).0, State::Error);
+        s.tick(121_000, &alive);
+        assert_eq!(st(&s).0, State::Idle);
     }
 
     #[test]
