@@ -105,10 +105,8 @@ fn limit_early_toast(agent: Agent, window: Window, runs_out_at: i64, resets_at: 
     // a bare HH:MM for a reset days away (weekly windows) would read as today
     let far = resets_at - runs_out_at > EARLY_FAR_MS;
     let (title, body) = match lang {
-        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w} kończy się"),
-            if far { format!("W tym tempie skończy się ok. {out}, na długo przed resetem") } else { format!("W tym tempie skończy się ok. {out}, przed resetem o {reset}") }) }
-        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit running out"),
-            if far { format!("At this pace it runs out around {out}, long before the reset") } else { format!("At this pace it runs out around {out}, before the {reset} reset") }) }
+        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w} kończy się"), if far { format!("W tym tempie skończy się ok. {out}, na długo przed resetem") } else { format!("W tym tempie skończy się ok. {out}, przed resetem o {reset}") }) }
+        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit running out"), if far { format!("At this pace it runs out around {out}, long before the reset") } else { format!("At this pace it runs out around {out}, before the {reset} reset") }) }
     };
     Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }
