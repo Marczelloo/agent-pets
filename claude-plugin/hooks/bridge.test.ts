@@ -233,6 +233,55 @@ test('isDuplicateCopy never throws: a failing io counts as not a duplicate', asy
   expect(await createBridge(w.io).isDuplicateCopy()).toBe(false)
 })
 
+const boardText = (prefs?: unknown) => JSON.stringify({ v: 1, app_version: '0.16.1', ...(prefs === undefined ? {} : { prefs }), sessions: [], limits: [] })
+
+test('prefs() reads the switches off the board and keeps them for 30 s', async () => {
+  let prefs: unknown = { pet: true, nudges: false }
+  const w = world({ files: { [ENDPOINT]: endpointFile(4711) }, fetch: () => ({ status: 200, text: boardText(prefs) }) })
+  const bridge = createBridge(w.io)
+  expect(await bridge.prefs()).toEqual({ pet: true, nudges: false })
+  prefs = { pet: false, nudges: true }
+  w.advance(29_000)
+  expect(await bridge.prefs()).toEqual({ pet: true, nudges: false })
+  expect(w.calls.length).toBe(1)
+  w.advance(1_000)
+  expect(await bridge.prefs()).toEqual({ pet: false, nudges: true })
+  expect(w.calls.length).toBe(2)
+})
+
+test('a board read through state() refreshes the kept switches', async () => {
+  let prefs: unknown = { pet: false, nudges: true }
+  const w = world({ files: { [ENDPOINT]: endpointFile(4711) }, fetch: () => ({ status: 200, text: boardText(prefs) }) })
+  const bridge = createBridge(w.io)
+  expect((await bridge.prefs()).pet).toBe(false)
+  prefs = { pet: true, nudges: true }
+  await bridge.state()
+  expect((await bridge.prefs()).pet).toBe(true)
+  expect(w.calls.length).toBe(2)
+})
+
+test('prefs() falls back to the defaults: no widget, no prefs on the board, a value that is no boolean', async () => {
+  const down = world({ fetch: () => new Error('ECONNREFUSED') })
+  expect(await createBridge(down.io).prefs()).toEqual({ pet: false, nudges: true })
+  const older = world({ files: { [ENDPOINT]: endpointFile(4711) }, fetch: () => ({ status: 200, text: boardText() }) })
+  expect(await createBridge(older.io).prefs()).toEqual({ pet: false, nudges: true })
+  const odd = world({ files: { [ENDPOINT]: endpointFile(4711) }, fetch: () => ({ status: 200, text: boardText({ pet: 'yes', nudges: 0 }) }) })
+  expect(await createBridge(odd.io).prefs()).toEqual({ pet: false, nudges: true })
+  const half = world({ files: { [ENDPOINT]: endpointFile(4711) }, fetch: () => ({ status: 200, text: boardText({ pet: true }) }) })
+  expect(await createBridge(half.io).prefs()).toEqual({ pet: true, nudges: true })
+})
+
+test('prefs() is the defaults while the bridge backs off, and for a duplicate copy; never throws', async () => {
+  const dup = world({ files: { [SKILLS_MANIFEST]: '{}', [ENDPOINT]: endpointFile(4711) }, fetch: () => ({ status: 200, text: boardText({ pet: true, nudges: false }) }) })
+  expect(await createBridge(dup.io).prefs()).toEqual({ pet: false, nudges: true })
+  expect(dup.calls.length).toBe(0)
+  const w = world({ files: { [ENDPOINT]: endpointFile(4711) }, fetch: () => ({ status: 200, text: boardText({ pet: true, nudges: true }) }) })
+  w.io.now = async () => {
+    throw new Error('clock')
+  }
+  expect(await createBridge(w.io).prefs()).toEqual({ pet: false, nudges: true })
+})
+
 test('sharedBridge hands every caller the first bridge made', () => {
   const first = sharedBridge(world().io)
   expect(sharedBridge(world().io)).toBe(first)

@@ -1,5 +1,5 @@
-// Agent Pets plugin contract. `pet` and `nudges` mirror the `$.store` switches the /pets pane toggles
-// (the store is the truth, these redraw whatever reads them); `mood` is what the pixel pet is doing and when its last event was.
+// Agent Pets plugin contract. `pet` and `nudges` mirror the app's Settings → Apps switches, as the board
+// carries them (the app is the truth, these redraw whatever reads them); `mood` is what the pixel pet is doing and when its last event was.
 declare module 'claude-code' {
   interface PluginState {
     'agent-pets': {

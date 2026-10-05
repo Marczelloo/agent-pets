@@ -1,6 +1,6 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import { bar, limitLine, prefs, resetText, viewOf } from './pane'
+import { bar, limitLine, prefsLine, resetText, viewOf } from './pane'
 import type { Board } from './bridge'
 
 const PANE = {
@@ -21,6 +21,7 @@ const DOT = '\u00b7'
 const board: Board = {
   v: 1,
   app_version: '0.16.0',
+  prefs: { pet: true, nudges: true },
   sessions: [
     { id: 'a', agent: 'claude', state: 'working', title: 'Fix the build', cwd: 'C:/w', since: NOW },
     { id: 'b', agent: 'codex', state: 'needs_input', title: 'Port the parser', question: 'Overwrite lib.rs?', cwd: 'C:/w', since: NOW },
@@ -32,17 +33,10 @@ const board: Board = {
   ],
 }
 
-// Everything beneath the plugin: the clock, the store, the endpoint file and the widget's answer (a board, or nothing).
-function world(on: On, answer: unknown, store: Record<string, unknown> = {}, fails: { store?: true; usage?: true; duplicate?: true } = {}) {
+// Everything beneath the plugin: the clock, the endpoint file and the widget's answer (a board, or nothing).
+function world(on: On, answer: unknown, fails: { usage?: true; duplicate?: true } = {}) {
   mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:\\Users\\tester' })
-  // The store in a map the test can read back (the engine the test holds has no `$.store`).
-  const held: Record<string, unknown> = { ...store }
-  on('store.get', ($$, e) => (fails.store ? { deny: 'EIO' } : { value: held[e.key] }))
-  on('store.set', ($$, e) => {
-    held[e.key] = e.value
-    return { value: undefined }
-  })
   on('fs.exists', ($$, e) => ({ value: fails.duplicate === true && e.path.split(String.fromCharCode(92)).join('/') === 'C:/Users/tester/.claude/skills/agent-pets/.claude-plugin/plugin.json' }))
   on('fs.read', ($$, e) => {
     const path = e.path.split('\\').join('/')
@@ -58,7 +52,6 @@ function world(on: On, answer: unknown, store: Record<string, unknown> = {}, fai
       ? { deny: 'EIO' }
       : { value: { startedAt: 0, context: {}, rateLimits: [{ kind: 'five_hour', percentUsed: 41.5, resetsAt: new Date(RESET).toISOString() }] } },
   )
-  return held
 }
 
 const timeOf = (ms: number) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(ms))
@@ -99,27 +92,26 @@ test('without the widget the pane says so and shows this session own limits', as
   await ui.unmount()
 })
 
-test('pressing Pet turns it off in the store and in the pane, and Nudges likewise', async ($, on) => {
-  const held = world(on, board)
+test('the pane tells the two switches from the board and where to change them', async ($, on) => {
+  world(on, board)
   const ui = await $.ui.mount({ plugin: 'agent-pets', surface: 'terminal', component: 'Pane', requestId: 'agent-pets', props: PANE })
-  expect((await ui.find({ key: 'pet' }))?.text).toContain('Pet: on')
-  await ui.press({ key: 'pet' })
-  expect(held.pet).toBe(false)
-  expect((await ui.find({ key: 'pet' }))?.text).toContain('Pet: off')
-  expect('nudges' in held).toBe(false)
-  await ui.press({ key: 'nudges' })
-  expect(held.nudges).toBe(false)
-  expect((await ui.find({ key: 'nudges' }))?.text).toContain('Nudges: off')
-  await ui.press({ key: 'pet' })
-  expect(held.pet).toBe(true)
+  const line = await ui.find({ type: 'Text', text: /Pet: / })
+  expect(line?.text).toBe('Pet: on · Nudges: on — change in Agent Pets → Settings → Apps')
+  expect(await ui.find({ type: 'Button' })).toBeUndefined()
   await ui.unmount()
 })
 
-test('a switch kept in the store shows when the pane opens', async ($, on) => {
-  world(on, board, { pet: false })
+test('the switches the app sends are the ones the pane shows', async ($, on) => {
+  world(on, { ...board, prefs: { pet: false, nudges: true } })
   const ui = await $.ui.mount({ plugin: 'agent-pets', surface: 'terminal', component: 'Pane', requestId: 'agent-pets', props: PANE })
-  expect((await ui.find({ key: 'pet' }))?.text).toContain('Pet: off')
-  expect((await ui.find({ key: 'nudges' }))?.text).toContain('Nudges: on')
+  expect((await ui.find({ type: 'Text', text: /Pet: / }))?.text).toContain('Pet: off · Nudges: on')
+  await ui.unmount()
+})
+
+test('a board from an older app without prefs shows the defaults', async ($, on) => {
+  world(on, { v: 1, app_version: '0.16.0', sessions: [], limits: [] })
+  const ui = await $.ui.mount({ plugin: 'agent-pets', surface: 'terminal', component: 'Pane', requestId: 'agent-pets', props: PANE })
+  expect((await ui.find({ type: 'Text', text: /Pet: / }))?.text).toContain('Pet: off · Nudges: on')
   await ui.unmount()
 })
 
@@ -144,15 +136,9 @@ test('/pets opens the pane on a terminal session and registers the command', asy
   expect(opened).toEqual([{ id: 'agent-pets', title: 'Agent Pets', focus: true, closeOnEscape: true }])
 })
 
-test('prefs defaults both switches to on, and reads what the store holds', async () => {
-  const held: Record<string, unknown> = {}
-  const io = { get: async (key: string) => held[key] }
-  expect(await prefs(io)).toEqual({ pet: true, nudges: true })
-  held.pet = false
-  held.nudges = 'no'
-  expect(await prefs(io)).toEqual({ pet: false, nudges: true })
-  held.nudges = false
-  expect(await prefs(io)).toEqual({ pet: false, nudges: false })
+test('prefsLine spells each switch on or off', () => {
+  expect(prefsLine({ pet: true, nudges: false })).toMatch(/^Pet: on · Nudges: off /)
+  expect(prefsLine({ pet: false, nudges: true })).toMatch(/^Pet: off · Nudges: on /)
 })
 
 test('bar and limitLine format a percentage, clamped', () => {
@@ -222,20 +208,11 @@ test('a long title is cut, never in the middle of a surrogate pair', async ($, o
   expect(Array.from(title).every(ch => ch.length === 2 || !/[\ud800-\udfff]/.test(ch))).toBe(true)
 })
 
-test('a store that cannot be read leaves both switches on, the pane still draws', async ($, on) => {
-  world(on, board, {}, { store: true })
-  const ui = await mountPane($)
-  expect((await ui.find({ key: 'pet' }))?.text).toContain('Pet: on')
-  expect((await ui.find({ key: 'nudges' }))?.text).toContain('Nudges: on')
-  expect(await ui.find({ type: 'Text', text: /Port the parser/ })).toBeDefined()
-  await ui.unmount()
-})
-
 test('widget down and session.usage failing: the not-running line still shows', async ($, on) => {
-  world(on, 'down', {}, { usage: true })
+  world(on, 'down', { usage: true })
   const ui = await mountPane($)
   expect(await ui.find({ type: 'Text', text: /Agent Pets widget not running/ })).toBeDefined()
-  expect(await ui.find({ key: 'pet' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Pet: / })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -264,7 +241,7 @@ test('a limit with an unknown window and a NaN percentage draws, entries that ar
 })
 
 test('a duplicate copy registers no /pets, draws no pane and does not open one', async ($, on) => {
-  world(on, board, {}, { duplicate: true })
+  world(on, board, { duplicate: true })
   const registered: string[] = []
   const opened: unknown[] = []
   on('session.start', ($$, e) => ({ cwd: e.cwd }))
@@ -284,7 +261,7 @@ test('a duplicate copy registers no /pets, draws no pane and does not open one',
   expect(out.text).toBe('core')
   expect(opened).toEqual([])
   const ui = await mountPane($)
-  expect(await ui.find({ key: 'pet' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Pet: / })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Sessions|widget not running/ })).toBeUndefined()
   await ui.unmount()
 })

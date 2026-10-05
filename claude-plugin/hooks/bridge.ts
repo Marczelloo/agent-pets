@@ -1,7 +1,9 @@
 import type { ModPayload } from './report'
 
 export type Endpoint = { port: number; token: string }
-export type Board = { v: 1; app_version: string; sessions: BoardSession[]; limits: BoardLimit[] }
+/** The mod's two switches, set in the app's Settings → Apps and carried on the board. */
+export type Prefs = { pet: boolean; nudges: boolean }
+export type Board = { v: 1; app_version: string; prefs?: Prefs; sessions: BoardSession[]; limits: BoardLimit[] }
 export type BoardSession = { id: string; agent: string; state: string; title: string; question?: string | null; cwd: string; since: number }
 export type BoardLimit = { agent: string; window: 'five_hour' | 'weekly'; used_pct: number; resets_at?: number | null; stale_since?: number | null }
 
@@ -23,6 +25,7 @@ export type BridgeIo = {
 
 const BACKOFF_MS = 30_000
 const DUPLICATE_TTL_MS = 60_000
+const PREFS_TTL_MS = 30_000
 const EVENTS_PATH = '/v1/events/claude-mod'
 const STATE_PATH = '/v1/state'
 const SKILLS_COPY = '/.claude/skills/agent-pets'
@@ -31,6 +34,19 @@ const SKILLS_COPY = '/.claude/skills/agent-pets'
 const normalise = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '')
 
 type BridgeResponse = { status: number; ok: boolean; text: string }
+
+/** What counts when the board has no say: no widget, an older app without `prefs`, or a board that cannot be read. */
+export const DEFAULT_PREFS: Prefs = { pet: false, nudges: true }
+
+// A switch that is not a boolean falls back to its default, so one bad value cannot flip the other.
+const prefsOf = (board: Board): Prefs => {
+  const p: unknown = board.prefs
+  const raw = typeof p === 'object' && p !== null ? (p as Partial<Record<keyof Prefs, unknown>>) : {}
+  return {
+    pet: typeof raw.pet === 'boolean' ? raw.pet : DEFAULT_PREFS.pet,
+    nudges: typeof raw.nudges === 'boolean' ? raw.nudges : DEFAULT_PREFS.nudges,
+  }
+}
 
 /**
  * The only door to the widget: its endpoint file, a bearer token and three failure rules.
@@ -41,6 +57,7 @@ export function createBridge(io: BridgeIo) {
   let backoffUntil = 0
   const stoppedSessions = new Set<string>()
   let duplicate: { value: boolean; at: number } | undefined
+  let cached: { value: Prefs; at: number } | undefined
 
   const home = async () => normalise((await io.home()) ?? '')
 
@@ -93,6 +110,20 @@ export function createBridge(io: BridgeIo) {
     return null
   }
 
+  // The widget's board; null when it is unreachable or the bridge is backing off. A board refreshes the cached switches.
+  const state = async (): Promise<Board | null> => {
+    try {
+      const res = await request(STATE_PATH, { method: 'GET' })
+      if (!res?.ok) return null
+      const board = JSON.parse(res.text) as Board
+      if (!board || board.v !== 1) return null
+      cached = { value: prefsOf(board), at: await io.now() }
+      return board
+    } catch {
+      return null
+    }
+  }
+
   return {
     /** True when this is not the app's copy and the app's copy is installed: draw and report nothing. Cached for 60 s; never throws. */
     isDuplicateCopy,
@@ -108,14 +139,21 @@ export function createBridge(io: BridgeIo) {
     },
 
     /** The widget's board; null when it is unreachable or the bridge is backing off. */
-    async state(): Promise<Board | null> {
+    state,
+
+    /**
+     * The mod's switches from the latest board, looked up again when the last one is older than 30 s (a clock that went
+     * backwards counts as older). The defaults when there is no board to read. Never throws.
+     */
+    async prefs(): Promise<Prefs> {
       try {
-        const res = await request(STATE_PATH, { method: 'GET' })
-        if (!res?.ok) return null
-        const board = JSON.parse(res.text) as Board
-        return board && board.v === 1 ? board : null
+        const now = await io.now()
+        if (cached && now - cached.at >= 0 && now - cached.at < PREFS_TTL_MS) return cached.value
+        // `state` refreshes the cache itself; with no board the switches are the defaults, and nothing is cached.
+        if (!(await state())) return DEFAULT_PREFS
+        return cached?.value ?? DEFAULT_PREFS
       } catch {
-        return null
+        return DEFAULT_PREFS
       }
     },
 
