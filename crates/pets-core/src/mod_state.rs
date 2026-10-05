@@ -1,6 +1,7 @@
 //! State board for the Claude mod: the sessions and limits the widget shows, rendered as the JSON
 //! that `GET /v1/state` serves. The board is built from private structs holding only the safe
 //! fields, so nothing else (transcript paths, pids, tokens, usage, router tasks) can leak into it.
+//! Of the settings it carries only the mod's two switches, as plain booleans.
 use crate::model::{Agent, Limit, Session, State, Window};
 use serde::Serialize;
 
@@ -8,8 +9,22 @@ use serde::Serialize;
 struct Board<'a> {
     v: u32,
     app_version: &'a str,
+    prefs: ModPrefs,
     sessions: Vec<BoardSession<'a>>,
     limits: Vec<BoardLimit>,
+}
+
+/// The mod's two switches, set in the app's settings; the mod reads them off the board.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+pub struct ModPrefs {
+    /// The pixel pet above the Claude Code prompt.
+    pub pet: bool,
+    /// Nudges about other agents.
+    pub nudges: bool,
+}
+
+impl Default for ModPrefs {
+    fn default() -> Self { ModPrefs { pet: false, nudges: true } }
 }
 
 #[derive(Serialize)]
@@ -52,10 +67,11 @@ fn window_name(w: Window) -> &'static str {
     match w { Window::FiveHour => "five_hour", Window::Weekly => "weekly" }
 }
 
-pub fn render(sessions: &[Session], limits: &[Limit], app_version: &str) -> Vec<u8> {
+pub fn render(sessions: &[Session], limits: &[Limit], prefs: ModPrefs, app_version: &str) -> Vec<u8> {
     let board = Board {
         v: 1,
         app_version,
+        prefs,
         sessions: sessions.iter().filter_map(|s| Some(BoardSession {
             id: &s.id,
             agent: s.agent,
@@ -76,7 +92,7 @@ pub fn render(sessions: &[Session], limits: &[Limit], app_version: &str) -> Vec<
     serde_json::to_vec(&board).expect("the state board serializes")
 }
 
-pub fn empty(app_version: &str) -> Vec<u8> { render(&[], &[], app_version) }
+pub fn empty(app_version: &str) -> Vec<u8> { render(&[], &[], ModPrefs::default(), app_version) }
 
 #[cfg(test)]
 mod tests {
@@ -105,7 +121,7 @@ mod tests {
         let mut s = session("c1", State::Working);
         // A transcript path can reach a session only through the jump target; plant it there.
         s.jump.session_id = "C:/Users/me/.claude/projects/x/TRANSCRIPT-9.jsonl".into();
-        let bytes = render(&[s], &[], "0.16.0");
+        let bytes = render(&[s], &[], ModPrefs::default(), "0.16.0");
         let text = String::from_utf8(bytes.clone()).unwrap();
         assert!(!text.contains("TRANSCRIPT-9"), "{text}");
         assert!(!text.contains("424242") && !text.contains("777001"), "{text}");
@@ -123,7 +139,7 @@ mod tests {
     fn a_session_waiting_for_the_user_carries_its_question() {
         let mut s = session("c1", State::NeedsYou);
         s.question = Some("Run the migration?".into());
-        let v = parse(&render(&[s], &[], "0.16.0"));
+        let v = parse(&render(&[s], &[], ModPrefs::default(), "0.16.0"));
         let obj = v["sessions"][0].as_object().unwrap();
         assert_eq!(obj["state"], "needs_input");
         assert_eq!(obj["question"], "Run the migration?");
@@ -136,13 +152,13 @@ mod tests {
     fn a_stale_question_is_not_served_outside_needs_input() {
         let mut s = session("c1", State::Working);
         s.question = Some("old question".into());
-        let v = parse(&render(&[s], &[], "0.16.0"));
+        let v = parse(&render(&[s], &[], ModPrefs::default(), "0.16.0"));
         assert!(v["sessions"][0].get("question").is_none());
     }
 
     #[test]
     fn ended_sessions_are_left_out() {
-        let v = parse(&render(&[session("a", State::Ended), session("b", State::Idle)], &[], "0.16.0"));
+        let v = parse(&render(&[session("a", State::Ended), session("b", State::Idle)], &[], ModPrefs::default(), "0.16.0"));
         let ids: Vec<&str> = v["sessions"].as_array().unwrap().iter().map(|s| s["id"].as_str().unwrap()).collect();
         assert_eq!(ids, ["b"]);
     }
@@ -152,7 +168,7 @@ mod tests {
         for (st, name) in [(State::Thinking, "thinking"), (State::Working, "working"), (State::NeedsYou, "needs_input"),
             (State::Done, "done"), (State::Error, "error"), (State::Idle, "idle"), (State::Sleep, "sleeping"),
             (State::Compacting, "compacting")] {
-            let v = parse(&render(&[session("a", st)], &[], "0.16.0"));
+            let v = parse(&render(&[session("a", st)], &[], ModPrefs::default(), "0.16.0"));
             assert_eq!(v["sessions"][0]["state"], name);
         }
     }
@@ -163,13 +179,13 @@ mod tests {
             Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 130.0, resets_at: Some(9_000), stale_since: None },
             Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: -5.0, resets_at: None, stale_since: Some(8_000) },
         ];
-        let v = parse(&render(&[], &limits, "0.16.0"));
+        let v = parse(&render(&[], &limits, ModPrefs::default(), "0.16.0"));
         let l = v["limits"].as_array().unwrap();
         assert_eq!((l[0]["agent"].as_str(), l[0]["window"].as_str(), l[0]["used_pct"].as_f64()), (Some("claude"), Some("five_hour"), Some(100.0)));
         assert_eq!((l[0]["resets_at"].as_i64(), l[0]["stale_since"].is_null()), (Some(9_000), true));
         assert_eq!((l[1]["window"].as_str(), l[1]["used_pct"].as_f64()), (Some("weekly"), Some(0.0)));
         let nan = [Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: f32::NAN, resets_at: None, stale_since: None }];
-        let v: serde_json::Value = serde_json::from_slice(&render(&[], &nan, "0.16.0")).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&render(&[], &nan, ModPrefs::default(), "0.16.0")).unwrap();
         assert_eq!(v["limits"][0]["used_pct"].as_f64(), Some(0.0));
         assert_eq!((l[1]["resets_at"].is_null(), l[1]["stale_since"].as_i64()), (true, Some(8_000)));
     }
@@ -180,5 +196,12 @@ mod tests {
         assert_eq!(v["app_version"], "0.16.0");
         assert!(v["sessions"].as_array().unwrap().is_empty());
         assert!(v["limits"].as_array().unwrap().is_empty());
+        assert_eq!(v["prefs"], serde_json::json!({"pet": false, "nudges": true}));
+    }
+
+    #[test]
+    fn the_switches_ride_the_board_as_two_booleans() {
+        let v = parse(&render(&[], &[], ModPrefs { pet: true, nudges: false }, "0.16.0"));
+        assert_eq!(v["prefs"], serde_json::json!({"pet": true, "nudges": false}));
     }
 }
