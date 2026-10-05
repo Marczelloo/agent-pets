@@ -49,6 +49,12 @@ export function AppsTab({ settings: s, rows, onChange, onIntegration, onClaudeMo
         {r.id === 'claude_code' && s.apps.claude_code && (
           <Toggle label={t().settings.claudeMod} checked={s.claude_mod !== false} onChange={on => void onClaudeMod(on)}>{t().settings.claudeModDesc}</Toggle>
         )}
+        {r.id === 'claude_code' && s.apps.claude_code && s.claude_mod !== false && <>
+          <Toggle nested label={t().settings.claudeModPet} checked={s.claude_mod_pet === true}
+            onChange={on => onChange({ ...s, claude_mod_pet: on })}>{t().settings.claudeModPetDesc}</Toggle>
+          <Toggle nested label={t().settings.claudeModNudges} checked={s.claude_mod_nudges !== false}
+            onChange={on => onChange({ ...s, claude_mod_nudges: on })}>{t().settings.claudeModNudgesDesc}</Toggle>
+        </>}
       </Fragment>
     ))}</Section>}
     {experimental.length > 0 && <Section title={t().settings.sections.experimental} note={t().settings.experimentalNote}>{experimental.map(appRow)}</Section>}

@@ -43,6 +43,10 @@ describe('settings model', () => {
   it('the Claude Code mod is on by default, like the core', () => {
     expect(defaultSettings().claude_mod).toBe(true);
   });
+  it('the mod pet is off and its nudges on by default, like the core', () => {
+    expect(defaultSettings().claude_mod_pet).toBe(false);
+    expect(defaultSettings().claude_mod_nudges).toBe(true);
+  });
   it('changes one app without touching the others', () => {
     const s = withApp(defaultSettings(), 'codex', false);
     expect(s.apps).toEqual({ claude_code: true, codex: false, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false, cursor: false, grok: false, zcode: false });
