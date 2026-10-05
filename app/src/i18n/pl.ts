@@ -81,7 +81,7 @@ export const pl = {
     settings: 'Ustawienia',
     limits: 'Limity',
     noData: 'brak danych',
-    usage: { session: (v: string) => `sesja: ${v} tok.`, today: (v: string) => `dziś: ${v} tok.` },
+    usage: { session: (v: string) => `sesja: ${v} tok.`, today: (v: string) => `dziś: ${v} tok.`, cost: (usd: number) => `${usd.toFixed(2).replace('.', ',')} $` },
     sessions: 'Sesje',
     noSessions: 'Brak aktywnych sesji',
     tasks: 'Zadania',
@@ -152,7 +152,7 @@ export const pl = {
     asOf: (ago: string) => `odczyt: ${ago}`,
     staleHint: 'Dane z aplikacji Claude są nieświeże. Dla limitów na żywo zaloguj Claude CLI (claude auth login) i włącz limity z Anthropic w Ustawieniach.',
     cliNote: 'Limity w aplikacji Claude wymagają zalogowanego Claude CLI (claude auth login) i włączonych limitów z Anthropic.',
-    notification: 'Gdy zużycie limitu przekroczy 90%',
+    notification: 'Gdy zużycie limitu przekroczy 90% i gdy ten limit się odnowi',
     usage: 'Co 5 minut pyta api.anthropic.com o zużycie planu Claude, logowaniem Claude Code (~/.claude/.credentials.json). '
       + 'Token trafia tylko do api.anthropic.com i nigdzie nie jest zapisywany.',
   },
