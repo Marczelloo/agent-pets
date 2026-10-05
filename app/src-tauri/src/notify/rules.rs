@@ -23,6 +23,10 @@ pub struct Rules {
     sent: HashSet<String>,
     /// Limit windows over 90% (reported, or already over at startup) → that window's `resets_at`.
     limits: HashMap<(Agent, Window), Option<i64>>,
+    /// Windows already warned about running out early -> that window's `resets_at`.
+    early: HashMap<(Agent, Window), i64>,
+    /// Local `HH:MM` of a timestamp; tests swap in a UTC one.
+    clock: fn(i64) -> String,
 }
 
 const NEEDS_AFTER_MS: i64 = 15_000;
@@ -34,6 +38,12 @@ const LIMIT_PCT: f32 = 90.0;
 const LIMIT_REARM_PCT: f32 = 80.0;
 /// The same window's reset time fluctuates between readings; a larger shift indicates a new window.
 const RESET_JITTER_MS: i64 = 60_000;
+/// Early warning: at least this much used, running out within the hour, and at least this long before the reset.
+const EARLY_MIN_PCT: f32 = 50.0;
+const EARLY_WITHIN_MS: i64 = 3_600_000;
+const EARLY_GAP_MS: i64 = 900_000;
+
+fn local_clock(ts: i64) -> String { pets_core::mute::clock(ts, pets_core::time::local_midnight) }
 
 fn name(s: &Session, lang: Lang) -> String {
     if !s.title.is_empty() { return s.title.chars().take(60).collect(); }
@@ -85,6 +95,18 @@ fn limit_toast(l: &Limit, lang: Lang) -> Toast {
     Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }
 
+/// The window will be used up well before it resets, if the pace holds.
+fn limit_early_toast(agent: Agent, window: Window, runs_out_at: i64, resets_at: i64, lang: Lang, clock: fn(i64) -> String) -> Toast {
+    let who = who(agent);
+    let five = window == Window::FiveHour;
+    let (out, reset) = (clock(runs_out_at), clock(resets_at));
+    let (title, body) = match lang {
+        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w} kończy się"), format!("W tym tempie skończy się ok. {out}, przed resetem o {reset}")) }
+        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit running out"), format!("At this pace it runs out around {out}, before the {reset} reset")) }
+    };
+    Toast { kind: ToastKind::Limit, session_id: None, title, body }
+}
+
 /// The window that was nearly used up has reset.
 fn limit_back_toast(agent: Agent, window: Window, lang: Lang) -> Toast {
     let who = who(agent);
@@ -101,7 +123,7 @@ impl Rules {
     pub fn set_lang(&mut self, lang: Lang) { self.lang = lang; }
 
     pub fn new(settings: Settings) -> Rules {
-        Rules { settings, lang: Lang::Pl, primed: false, sent: HashSet::new(), limits: HashMap::new() }
+        Rules { settings, lang: Lang::Pl, primed: false, sent: HashSet::new(), limits: HashMap::new(), early: HashMap::new(), clock: local_clock }
     }
 
     /// First call only remembers state: nothing already present at app startup is reported.
@@ -165,7 +187,21 @@ impl Rules {
             self.limits.insert(key, l.resets_at);
             if !priming && self.settings.limits { out.push(limit_toast(l, self.lang)); }
         }
+        if !priming && self.settings.limits { self.early_warnings(snap, now, &mut out); }
         out
+    }
+
+    /// One toast per window that runs out within the hour, well before its reset; not when the 90% toast already said it.
+    fn early_warnings(&mut self, snap: &Snapshot, now: i64, out: &mut Vec<Toast>) {
+        for f in &snap.forecasts {
+            let key = (f.agent, f.window);
+            let Some(l) = snap.limits.iter().find(|l| (l.agent, l.window) == key && l.stale_since.is_none()) else { continue };
+            let Some(resets_at) = l.resets_at else { continue };
+            if l.used_pct < EARLY_MIN_PCT || f.runs_out_at - now > EARLY_WITHIN_MS || resets_at - f.runs_out_at < EARLY_GAP_MS || self.limits.contains_key(&key) { continue; }
+            if self.early.get(&key).is_some_and(|known| (resets_at - known).abs() <= RESET_JITTER_MS) { continue; }
+            self.early.insert(key, resets_at);
+            out.push(limit_early_toast(f.agent, f.window, f.runs_out_at, resets_at, self.lang, self.clock));
+        }
     }
 
     /// Forgets a window that was over 90% and says it is back; nothing for a window that never got there.
@@ -185,7 +221,17 @@ mod tests {
             turn_started_at: turn, jump: JumpTarget::default(), router_task: None,
             parent: None, sub: None, action: None, question: None, waits_on_child: false, model: None, agent_name: None, usage: None }
     }
-    fn snap(sessions: Vec<Session>, limits: Vec<Limit>) -> Snapshot { Snapshot { sessions, limits, agent_usage: vec![], now: 0 } }
+    fn snap(sessions: Vec<Session>, limits: Vec<Limit>) -> Snapshot { Snapshot { sessions, limits, ..Snapshot::default() } }
+    use pets_core::pace::Forecast;
+    fn utc_clock(ts: i64) -> String { pets_core::mute::clock(ts, |t| t - t.rem_euclid(86_400_000)) }
+    fn rules() -> Rules { let mut r = Rules::new(ALL); r.clock = utc_clock; r }
+    const MIN: i64 = 60_000;
+    /// 2026-10-05 00:00 UTC.
+    const DAY0: i64 = 20_730 * 86_400_000;
+    fn at(h: i64, m: i64) -> i64 { DAY0 + h * 3_600_000 + m * MIN }
+    fn lim5(pct: f32, reset: Option<i64>) -> Limit { Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: pct, resets_at: reset, stale_since: None } }
+    fn fc(runs_out_at: i64) -> Forecast { Forecast { agent: Agent::Claude, window: Window::FiveHour, runs_out_at } }
+    fn snap_fc(limits: Vec<Limit>, forecasts: Vec<Forecast>) -> Snapshot { Snapshot { limits, forecasts, ..Snapshot::default() } }
     const ALL: Settings = Settings { needs_you: true, done: true, limits: true };
 
     #[test]
@@ -393,5 +439,77 @@ mod tests {
         let mut n = sess("n", State::NeedsYou, 0, None);
         n.parent = Some("p".into());
         assert!(r.observe(&snap(vec![c, n], vec![]), 300_000, &|_| false).is_empty());
+    }
+
+    #[test]
+    fn running_out_early_warns_once_with_both_times() {
+        let mut r = rules();
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let now = at(14, 0);
+        let s = snap_fc(vec![lim5(70.0, Some(at(18, 0)))], vec![fc(at(14, 40))]);
+        let t = r.observe(&s, now, &|_| false);
+        assert_eq!(t.iter().map(|t| (t.kind, t.title.as_str(), t.body.as_str())).collect::<Vec<_>>(),
+            [(ToastKind::Limit, "Claude: limit 5h kończy się", "W tym tempie skończy się ok. 14:40, przed resetem o 18:00")]);
+        assert!(r.observe(&s, now + MIN, &|_| false).is_empty(), "once per window");
+        let jitter = snap_fc(vec![lim5(72.0, Some(at(18, 0) + 20_000))], vec![fc(at(14, 38))]);
+        assert!(r.observe(&jitter, now + 2 * MIN, &|_| false).is_empty(), "the reset time wobbles by seconds");
+    }
+
+    #[test]
+    fn the_early_warning_speaks_english() {
+        let mut r = rules();
+        r.set_lang(Lang::En);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let l = Limit { agent: Agent::Codex, window: Window::Weekly, ..lim5(60.0, Some(at(23, 0))) };
+        let f = Forecast { agent: Agent::Codex, window: Window::Weekly, runs_out_at: at(10, 30) };
+        let t = r.observe(&snap_fc(vec![l], vec![f]), at(10, 0), &|_| false);
+        assert_eq!((t[0].title.as_str(), t[0].body.as_str()), ("Codex: weekly limit running out", "At this pace it runs out around 10:30, before the 23:00 reset"));
+    }
+
+    #[test]
+    fn no_early_warning_at_startup_with_limits_off_or_when_the_conditions_fail() {
+        let now = at(14, 0);
+        let ok = |l: Limit, f: Forecast| snap_fc(vec![l], vec![f]);
+        let mut first = rules();
+        assert!(first.observe(&ok(lim5(70.0, Some(at(18, 0))), fc(at(14, 40))), now, &|_| false).is_empty(), "startup is quiet");
+        let mut off = Rules::new(Settings { needs_you: true, done: true, limits: false });
+        off.clock = utc_clock;
+        off.observe(&snap(vec![], vec![]), 0, &|_| false);
+        assert!(off.observe(&ok(lim5(70.0, Some(at(18, 0))), fc(at(14, 40))), now, &|_| false).is_empty(), "limits off");
+        for (name, l, f) in [
+            ("under 50%", lim5(49.0, Some(at(18, 0))), fc(at(14, 40))),
+            ("more than an hour away", lim5(70.0, Some(at(18, 0))), fc(at(15, 1))),
+            ("the reset comes first, or within 15 min of it", lim5(70.0, Some(at(14, 50))), fc(at(14, 40))),
+            ("no reset time", lim5(70.0, None), fc(at(14, 40))),
+            ("a stale reading", Limit { stale_since: Some(1), ..lim5(70.0, Some(at(18, 0))) }, fc(at(14, 40))),
+        ] {
+            let mut r = rules();
+            r.observe(&snap(vec![], vec![]), 0, &|_| false);
+            assert!(r.observe(&ok(l, f), now, &|_| false).is_empty(), "{name}");
+        }
+        let mut edge = rules();
+        edge.observe(&snap(vec![], vec![]), 0, &|_| false);
+        assert_eq!(edge.observe(&ok(lim5(50.0, Some(at(14, 55))), fc(at(14, 40))), now, &|_| false).len(), 1, "exactly 15 min before the reset still warns");
+    }
+
+    #[test]
+    fn no_early_warning_after_the_90_percent_toast() {
+        let mut r = rules();
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let now = at(14, 0);
+        let s = snap_fc(vec![lim5(92.0, Some(at(18, 0)))], vec![fc(at(14, 20))]);
+        let t = r.observe(&s, now, &|_| false);
+        assert_eq!(t.iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["Claude: limit 5h"], "only the 90% toast, in the same pass too");
+        assert!(r.observe(&s, now + MIN, &|_| false).is_empty());
+    }
+
+    #[test]
+    fn the_early_warning_is_rearmed_for_a_new_window() {
+        let mut r = rules();
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        assert_eq!(r.observe(&snap_fc(vec![lim5(70.0, Some(at(18, 0)))], vec![fc(at(14, 40))]), at(14, 0), &|_| false).len(), 1);
+        assert!(r.observe(&snap_fc(vec![lim5(3.0, Some(at(23, 0)))], vec![]), at(18, 5), &|_| false).is_empty());
+        let next = snap_fc(vec![lim5(70.0, Some(at(23, 0)))], vec![fc(at(20, 30))]);
+        assert_eq!(r.observe(&next, at(20, 0), &|_| false).len(), 1, "the next window warns again");
     }
 }

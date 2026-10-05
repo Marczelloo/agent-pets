@@ -155,7 +155,8 @@ export const pl = {
     asOf: (ago: string) => `odczyt: ${ago}`,
     staleHint: 'Dane z aplikacji Claude są nieświeże. Dla limitów na żywo zaloguj Claude CLI (claude auth login) i włącz limity z Anthropic w Ustawieniach.',
     cliNote: 'Limity w aplikacji Claude wymagają zalogowanego Claude CLI (claude auth login) i włączonych limitów z Anthropic.',
-    notification: 'Gdy zużycie limitu przekroczy 90% i gdy ten limit się odnowi',
+    pace: (when: string) => `W tym tempie: 100% ok. ${when}`,
+    notification: 'Gdy zużycie limitu przekroczy 90%, gdy ten limit się odnowi i gdy w obecnym tempie skończy się przed resetem',
     usage: 'Co 5 minut pyta api.anthropic.com o zużycie planu Claude, logowaniem Claude Code (~/.claude/.credentials.json). '
       + 'Token trafia tylko do api.anthropic.com i nigdzie nie jest zapisywany.',
   },

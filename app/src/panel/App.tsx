@@ -88,7 +88,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
   const alert = limitsAlert(snap.limits);
-  const cards = limitCards(snap.limits, nowMs);
+  const cards = limitCards(snap.limits, nowMs, snap.forecasts);
   const toggleExpanded = (id: string) => setExpanded(prev => { const n = new Set(prev); if (!n.delete(id)) n.add(id); return n; });
   const copyPath = onCopyPath ?? ((p: string) => void navigator.clipboard?.writeText(p));
 
@@ -170,6 +170,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                   <span className={`bar ${r.agent}`}><i style={{ width: `${r.pct}%` }} className={r.pct >= 90 ? 'hot' : ''} /></span>
                   <span className="pct">{Math.round(r.pct)}%</span>
                   <span className="reset">{r.reset}</span>
+                  {r.pace && <span className="pace">{r.pace}</span>}
                 </>}
               </div>
             ))}

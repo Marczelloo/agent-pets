@@ -53,7 +53,9 @@ export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct:
 export interface Usage { tokens: number; cost: number; account: Agent | null }
 /** Agent's daily total (since local midnight). */
 export interface AgentUsage { agent: Agent; tokens_today: number; cost_today: number }
-export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[] }
+/** A limit window that runs out at `runs_out_at` (ms) before it resets, if the pace holds. */
+export interface Forecast { agent: Agent; window: 'five_hour' | 'weekly'; runs_out_at: number }
+export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[]; forecasts?: Forecast[] }
 /** Layout from Rust; `mode` and `light` since 0.7 (absent = taskbar, dark). */
 export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean; left_fallback?: boolean; vertical_bar?: boolean }
 export type PointerMsg =

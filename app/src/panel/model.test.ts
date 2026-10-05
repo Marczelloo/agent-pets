@@ -59,6 +59,23 @@ describe('panel model', () => {
     const rows = limitRows([{ agent: 'claude', window: 'five_hour', used_pct: 40, resets_at: now + 2 * 3_600_000 }], now);
     expect(rows[0].reset).toBe('reset 14:00');
   });
+  it('says when a limit runs out at the current pace, in both languages, only for a fresh reading', () => {
+    const now = new Date(2026, 8, 24, 12, 0).getTime();
+    const l = { agent: 'claude' as const, window: 'five_hour' as const, used_pct: 60, resets_at: now + 5 * 3_600_000 };
+    const f = (ms: number) => [{ agent: 'claude' as const, window: 'five_hour' as const, runs_out_at: now + ms }];
+    setLang('pl');
+    expect(limitRows([l], now, f(3.5 * 3_600_000))[0].pace).toBe('W tym tempie: 100% ok. 15:30');
+    expect(limitRows([l], now, f(2 * 86_400_000))[0].pace).toBe('W tym tempie: 100% ok. sob 12:00');
+    setLang('en');
+    expect(limitRows([l], now, f(3.5 * 3_600_000))[0].pace).toMatch(/^At this pace: 100% around 3:30\sPM$/);
+    expect(limitRows([l], now, f(2 * 86_400_000))[0].pace).toMatch(/^At this pace: 100% around Sat 12:00\sPM$/);
+    setLang('pl');
+    expect(limitRows([l], now)[0].pace).toBeNull();
+    expect(limitRows([l], now, f(-1000))[0].pace).toBeNull();
+    expect(limitRows([{ ...l, stale_since: now - 1000 }], now, f(3_600_000))[0].pace).toBeNull();
+    expect(limitRows([l], now, [{ agent: 'codex', window: 'five_hour', runs_out_at: now + 3_600_000 }])[0].pace).toBeNull();
+    expect(limitCards([l], now, f(3_600_000))[0].rows[0].pace).not.toBeNull();
+  });
   it('describes a session', () => {
     const x = { ...s('a', 'working', 0), tool: 'bash' as const, origin: 'desktop' as const, progress: { done: 2, total: 5 }, context: { used: 50, max: 200 } };
     expect(sessionSubtitle(x)).toBe('Claude Code · aplikacja · a');

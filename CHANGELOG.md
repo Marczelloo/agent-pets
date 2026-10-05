@@ -4,6 +4,7 @@
 
 ### Added
 
+- The Limits tab says when a limit will hit 100% at the current pace, and a toast warns once when a 5h or weekly limit will run out within the hour, well before it resets (needs the limit notifications on).
 - A toast when a limit that went past 90% resets (needs the limit notifications on). It also comes when the reading has gone stale or the usage simply drops.
 - Mute notifications for an hour, until 8:00 or until you turn them back on: from the tray menu or Settings → Notifications. Windows toasts stay quiet, the list in the panel keeps filling and says until when.
 - A second toast when an agent has been waiting for you for 10 minutes. The done toast says how long the turn took and how many tokens it used.

@@ -144,7 +144,8 @@ export const en: Dict = {
     asOf: (ago: string) => `read ${ago}`,
     staleHint: 'Claude app data is out of date. For live limits, sign in to the Claude CLI (claude auth login) and turn on Anthropic limits in Settings.',
     cliNote: 'Limits while you use the Claude app need the Claude CLI signed in (claude auth login) and Anthropic limits turned on.',
-    notification: 'When limit usage exceeds 90%, and when that limit resets',
+    pace: (when: string) => `At this pace: 100% around ${when}`,
+    notification: 'When limit usage exceeds 90%, when that limit resets, and when it will run out before the reset at the current pace',
     usage: 'Checks api.anthropic.com for Claude plan usage every 5 minutes using your Claude Code sign-in '
       + '(~/.claude/.credentials.json). The token is sent only to api.anthropic.com and is never saved.',
   },

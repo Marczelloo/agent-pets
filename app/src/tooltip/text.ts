@@ -33,11 +33,23 @@ export function formatDuration(ms: number): string {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
+/** Local clock time: 15:40 in Polish, 3:40 PM in English. */
+export function formatHm(ms: number): string {
+  const d = new Date(ms);
+  return lang() === 'pl' ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(d);
+}
+
+/** "At this pace: 100% around 3:40 PM"; the weekday joins when it is a day or more away. */
+export function formatPace(runsOutAt: number, nowMs: number): string {
+  const hm = formatHm(runsOutAt);
+  return t().limits.pace(runsOutAt - nowMs < 86_400_000 ? hm : `${t().time.days[new Date(runsOutAt).getDay()]} ${hm}`);
+}
+
 export function formatReset(resetsAt: number | null, nowMs: number): string {
   if (resetsAt == null) return '';
   if (resetsAt <= nowMs) return t().time.resetSoon;
   const d = new Date(resetsAt);
-  const hm = lang() === 'pl' ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(d);
+  const hm = formatHm(resetsAt);
   return resetsAt - nowMs < 86_400_000 ? t().time.resetAt(hm) : t().time.resetDay(t().time.days[d.getDay()], hm);
 }
 

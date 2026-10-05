@@ -21,6 +21,9 @@ pub struct Snapshot {
     pub limits: Vec<Limit>,
     /// Daily totals for agents with their own database (opencode, spec 0.11 §4.2).
     pub agent_usage: Vec<pets_core::model::AgentUsage>,
+    /// Windows that run out before they reset at the current pace.
+    #[serde(default)]
+    pub forecasts: Vec<pets_core::pace::Forecast>,
     /// Core clock (ms); differs from wall clock in replay mode.
     pub now: i64,
 }
@@ -31,7 +34,7 @@ pub type Shared = Arc<Mutex<Snapshot>>;
 /// A child (subagent) is visible only with a visible parent: hiding the parent hides its children.
 pub fn snapshot_of(store: &Store, now: i64, hidden: &mut Dismissed) -> Snapshot {
     let sessions = with_parents(hidden.filter(store.sessions().into_iter().cloned().collect()));
-    Snapshot { sessions, limits: store.limits().to_vec(), agent_usage: store.agent_usage().to_vec(), now }
+    Snapshot { sessions, limits: store.limits().to_vec(), agent_usage: store.agent_usage().to_vec(), forecasts: Vec::new(), now }
 }
 
 fn with_parents(mut v: Vec<Session>) -> Vec<Session> {
@@ -103,8 +106,14 @@ pub fn ask(control: &Sender<CoreMsg>, make: impl FnOnce(Sender<Vec<String>>) -> 
 pub fn spawn(app: AppHandle, shared: Shared, mode: Mode, snaps: Option<Sender<Snapshot>>,
              msgs: std::sync::mpsc::Receiver<CoreMsg>) {
     std::thread::spawn(move || {
+        let pace = Mutex::new(pets_core::pace::Pace::default());
         let publish = |store: &Store, now: i64, hidden: &mut Dismissed| {
-            let s = snapshot_of(store, now, hidden);
+            let mut s = snapshot_of(store, now, hidden);
+            {
+                let mut pace = pace.lock().unwrap();
+                pace.observe(&s.limits, now);
+                s.forecasts = pace.forecasts(&s.limits, now);
+            }
             *shared.lock().unwrap() = s.clone();
             if let Some(tx) = &snaps { let _ = tx.send(s.clone()); }
             let _ = app.emit("pets://snapshot", s);

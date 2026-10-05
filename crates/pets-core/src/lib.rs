@@ -16,6 +16,7 @@ pub mod model;
 pub mod mute;
 #[cfg(feature = "opencode-db")]
 pub mod opencode_db;
+pub mod pace;
 pub mod pid;
 pub mod rehydrate;
 pub mod router;

@@ -63,6 +63,15 @@ describe('PanelView', () => {
     expect(limits).toMatch(/role="tab" aria-selected="true"[^>]*>Limity</);
     expect(limits).not.toContain('class="session ');
   });
+  it('shows the pace line under a limit that will run out, and nothing without a forecast', () => {
+    setLang('pl');
+    const now = new Date(2026, 8, 24, 12, 0).getTime();
+    const limits = [{ agent: 'claude' as const, window: 'five_hour' as const, used_pct: 70, resets_at: now + 5 * 3_600_000 }];
+    const view = (forecasts?: { agent: 'claude'; window: 'five_hour'; runs_out_at: number }[]) => renderToString(
+      <PanelView snap={{ sessions: [], limits, forecasts, now }} nowMs={now} status={null} focusId={null} onJump={() => {}} initialTab="limits" />);
+    expect(view([{ agent: 'claude', window: 'five_hour', runs_out_at: now + 3.5 * 3_600_000 }])).toMatch(/<span class="pace">W tym tempie: 100% ok\. 15:30<\/span>/);
+    expect(view()).not.toContain('class="pace"');
+  });
   it('shows an alert dot on the Limits tab when an account is nearly out', () => {
     const view = (pct: number) => renderToString(<PanelView snap={{ sessions: [], now: 0,
       limits: [{ agent: 'claude' as const, window: 'five_hour' as const, used_pct: pct, resets_at: 3_600_000 }] }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
