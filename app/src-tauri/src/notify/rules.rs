@@ -42,6 +42,8 @@ const RESET_JITTER_MS: i64 = 60_000;
 const EARLY_MIN_PCT: f32 = 50.0;
 const EARLY_WITHIN_MS: i64 = 3_600_000;
 const EARLY_GAP_MS: i64 = 900_000;
+/// A reset further than this after running out is named without its time.
+const EARLY_FAR_MS: i64 = 12 * 3_600_000;
 
 fn local_clock(ts: i64) -> String { pets_core::mute::clock(ts, pets_core::time::local_midnight) }
 
@@ -100,9 +102,13 @@ fn limit_early_toast(agent: Agent, window: Window, runs_out_at: i64, resets_at: 
     let who = who(agent);
     let five = window == Window::FiveHour;
     let (out, reset) = (clock(runs_out_at), clock(resets_at));
+    // a bare HH:MM for a reset days away (weekly windows) would read as today
+    let far = resets_at - runs_out_at > EARLY_FAR_MS;
     let (title, body) = match lang {
-        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w} kończy się"), format!("W tym tempie skończy się ok. {out}, przed resetem o {reset}")) }
-        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit running out"), format!("At this pace it runs out around {out}, before the {reset} reset")) }
+        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w} kończy się"),
+            if far { format!("W tym tempie skończy się ok. {out}, na długo przed resetem") } else { format!("W tym tempie skończy się ok. {out}, przed resetem o {reset}") }) }
+        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit running out"),
+            if far { format!("At this pace it runs out around {out}, long before the reset") } else { format!("At this pace it runs out around {out}, before the {reset} reset") }) }
     };
     Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }
@@ -460,10 +466,15 @@ mod tests {
         let mut r = rules();
         r.set_lang(Lang::En);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
-        let l = Limit { agent: Agent::Codex, window: Window::Weekly, ..lim5(60.0, Some(at(23, 0))) };
+        let l = Limit { agent: Agent::Codex, window: Window::Weekly, ..lim5(60.0, Some(at(20, 0))) };
         let f = Forecast { agent: Agent::Codex, window: Window::Weekly, runs_out_at: at(10, 30) };
         let t = r.observe(&snap_fc(vec![l], vec![f]), at(10, 0), &|_| false);
-        assert_eq!((t[0].title.as_str(), t[0].body.as_str()), ("Codex: weekly limit running out", "At this pace it runs out around 10:30, before the 23:00 reset"));
+        assert_eq!((t[0].title.as_str(), t[0].body.as_str()), ("Codex: weekly limit running out", "At this pace it runs out around 10:30, before the 20:00 reset"));
+        let mut far = rules();
+        far.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let l = Limit { agent: Agent::Codex, window: Window::Weekly, ..lim5(60.0, Some(at(72, 0))) };
+        let t = far.observe(&snap_fc(vec![l], vec![f]), at(10, 0), &|_| false);
+        assert_eq!(t[0].body, "W tym tempie skończy się ok. 10:30, na długo przed resetem", "a reset days away has no bare time");
     }
 
     #[test]
