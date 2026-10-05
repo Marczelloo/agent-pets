@@ -68,13 +68,6 @@ export function usageLine(s: Session, today: AgentUsage | undefined): string | n
   return parts.length ? parts.join(' · ') : null;
 }
 
-/** Bars for the account running the session (Claude or ChatGPT subscription); only those with data. */
-export function accountRows(s: Session, limits: Limit[], nowMs: number): LimitRow[] {
-  const acct = s.usage?.account;
-  if (acct !== 'claude' && acct !== 'codex') return [];
-  return limitRows(limits, nowMs).filter(r => r.agent === acct && r.pct != null);
-}
-
 export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string; stale: boolean }
 
 /** Always four Claude and Codex rows; missing data is `pct: null`, never 0%. Antigravity only with data. */
