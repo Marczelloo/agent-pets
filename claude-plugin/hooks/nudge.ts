@@ -1,8 +1,11 @@
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Api, On } from 'claude-code'
 import { sharedBridge } from './bridge'
 import type { Bridge, BridgeIo, Board } from './bridge'
-import { prefs, tidy } from './pane'
-import type { PrefsIo } from './pane'
+import { tidy } from './pane'
+
+// Mirrors the app's switch from the board, like the pet's in pet.tsx.
+const nudgesAtom = atom({ plugin: 'agent-pets', key: 'nudges' } as const, true)
 
 const POLL_MS = 3000
 const QUESTION_MAX = 80
@@ -58,8 +61,6 @@ function ioOf($: Api): BridgeIo {
   }
 }
 
-const storeOf = ($: Api): PrefsIo => ({ get: key => $.store.get(key) })
-
 /**
  * Toasts when another agent's session needs the user or fails, and pins `⏳ N waiting` under the prompt, while a person is at the prompt.
  * Polls the widget's board every 3 s, through `bridge` or the shared one. The first look only learns what already waits, so Claude
@@ -95,7 +96,9 @@ export function registerNudges(on: On, bridge?: Bridge): void {
             await pin(undefined)
             return
           }
-          if (!(await prefs(storeOf($))).nudges) {
+          const { nudges } = await door.prefs()
+          if (nudges !== (await read($, nudgesAtom))) await update($, nudgesAtom, () => nudges)
+          if (!nudges) {
             // Off: forget what was seen, so turning it back on seeds again instead of bursting.
             seen = null
             await pin(undefined)
@@ -103,6 +106,12 @@ export function registerNudges(on: On, bridge?: Bridge): void {
           }
           const board = await door.state()
           if (!board) {
+            await pin(undefined)
+            return
+          }
+          // The board just read carries the latest switch: a nudge turned off in the app is not toasted once more.
+          if (!(await door.prefs()).nudges) {
+            seen = null
             await pin(undefined)
             return
           }

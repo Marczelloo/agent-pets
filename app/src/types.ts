@@ -80,6 +80,10 @@ export interface Settings {
   claude_plan_usage: boolean;
   /** Claude Code mod in `~/.claude/skills/agent-pets` (since 0.16); on by default. */
   claude_mod: boolean;
+  /** The mod's pixel pet above the Claude Code prompt (0.16.1); off by default. */
+  claude_mod_pet: boolean;
+  /** The mod's nudges about other agents (0.16.1); on by default. */
+  claude_mod_nudges: boolean;
   notifications: { needs_you: boolean; done: boolean; limits: boolean };
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';

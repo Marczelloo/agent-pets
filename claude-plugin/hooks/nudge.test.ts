@@ -15,6 +15,8 @@ const session = (over: Partial<BoardSession> & { id: string }): BoardSession => 
   ...over,
 })
 const boardOf = (...sessions: BoardSession[]): Board => ({ v: 1, app_version: '0.16.0', sessions, limits: [] })
+// The same board with the app's switches on it (the nudges are on when the board says nothing).
+const withPrefs = (board: Board, prefs: { pet: boolean; nudges: boolean }): Board => ({ ...board, prefs })
 
 test('a session that needs input toasts once, with its question', () => {
   const board = boardOf(session({ id: 'b', state: 'needs_input', question: 'Overwrite lib.rs?' }))
@@ -105,19 +107,10 @@ test('entries that are not sessions are skipped and a board without sessions is 
   expect(diff(new Set(), none, 'me')).toEqual({ toasts: [], seen: new Set(), waiting: 0 })
 })
 
-// Everything beneath the plugin: clock, store, endpoint file, the widget's board, and what the plugin shows.
-function world(on: On, store: Record<string, unknown> = {}, toastFails = false, duplicate = false) {
+// Everything beneath the plugin: clock, endpoint file, the widget's board, and what the plugin shows.
+function world(on: On, toastFails = false, duplicate = false) {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:\\Users\\tester' })
-  const held: Record<string, unknown> = { ...store }
-  on('store.get', ($$, e) => {
-    w.storeReads++
-    return { value: held[e.key] }
-  })
-  on('store.set', ($$, e) => {
-    held[e.key] = e.value
-    return { value: undefined }
-  })
   on('fs.exists', ($$, e) => ({ value: duplicate && e.path.split('\\').join('/') === 'C:/Users/tester/.claude/skills/agent-pets/.claude-plugin/plugin.json' }))
   on('fs.read', ($$, e) => {
     const path = e.path.split('\\').join('/')
@@ -127,10 +120,8 @@ function world(on: On, store: Record<string, unknown> = {}, toastFails = false, 
   on('session.id', () => ({ value: 'me' }))
   const w = {
     clock,
-    held,
     board: boardOf() as Board | 'down',
     fetched: 0,
-    storeReads: 0,
     toasts: [] as string[],
     statuses: [] as (string | undefined)[],
   }
@@ -191,20 +182,43 @@ test('this session waiting for the user is not announced to itself', async ($, o
 })
 
 test('with nudges off nothing toasts; turning them on seeds again instead of bursting', async ($, on) => {
-  const w = world(on, { nudges: false })
+  const w = world(on)
+  const off = { pet: false, nudges: false }
+  w.board = withPrefs(boardOf(), off)
+  await startTerminal($)
+  await w.clock.advance(3000)
+  w.board = withPrefs(boardOf(session({ id: 'b', state: 'needs_input', question: 'Overwrite?' })), off)
+  await w.clock.advance(3000)
+  expect(w.toasts).toEqual([])
+  expect(w.statuses.filter(s => s !== undefined)).toEqual([])
+  // switched on in the app: noticed within 30 s
+  w.board = withPrefs(boardOf(session({ id: 'b', state: 'needs_input', question: 'Overwrite?' })), { pet: false, nudges: true })
+  await w.clock.advance(31_000)
+  expect(w.toasts).toEqual([])
+  expect(w.statuses.at(-1)).toBe(`${WAITING} 1 waiting`)
+  w.board = withPrefs(
+    boardOf(session({ id: 'b', state: 'needs_input', question: 'Overwrite?' }), session({ id: 'c', state: 'error', title: 'Boom' })),
+    { pet: false, nudges: true },
+  )
+  await w.clock.advance(3000)
+  expect(w.toasts).toEqual(['Codex hit an error: Boom'])
+  // and switched off again: the pin goes and nothing more toasts
+  w.board = withPrefs(
+    boardOf(session({ id: 'b', state: 'needs_input', question: 'Overwrite?' }), session({ id: 'd', state: 'error', title: 'Crash' })),
+    off,
+  )
+  await w.clock.advance(31_000)
+  expect(w.toasts).toEqual(['Codex hit an error: Boom'])
+  expect(w.statuses.at(-1)).toBeUndefined()
+})
+
+test('a board from an older app without prefs keeps the nudges on', async ($, on) => {
+  const w = world(on)
   await startTerminal($)
   await w.clock.advance(3000)
   w.board = boardOf(session({ id: 'b', state: 'needs_input', question: 'Overwrite?' }))
   await w.clock.advance(3000)
-  expect(w.toasts).toEqual([])
-  expect(w.statuses.filter(s => s !== undefined)).toEqual([])
-  w.held.nudges = true
-  await w.clock.advance(3000)
-  expect(w.toasts).toEqual([])
-  expect(w.statuses.at(-1)).toBe(`${WAITING} 1 waiting`)
-  w.board = boardOf(session({ id: 'b', state: 'needs_input', question: 'Overwrite?' }), session({ id: 'c', state: 'error', title: 'Boom' }))
-  await w.clock.advance(3000)
-  expect(w.toasts).toEqual(['Codex hit an error: Boom'])
+  expect(w.toasts).toEqual(['Codex waits: Overwrite?'])
 })
 
 test('an unreachable widget leaves the status clear, toasts nothing, and recovers', async ($, on) => {
@@ -229,7 +243,7 @@ test('a session that is not interactive starts no polling', async ($, on) => {
 })
 
 test('a failing toast does not stop the polling', async ($, on) => {
-  const w = world(on, {}, true)
+  const w = world(on, true)
   await startTerminal($)
   await w.clock.advance(3000)
   w.board = boardOf(session({ id: 'b', state: 'needs_input', question: 'first?' }))
@@ -240,14 +254,13 @@ test('a failing toast does not stop the polling', async ($, on) => {
 })
 
 test('a duplicate copy of the mod polls nothing, toasts nothing and pins nothing', async ($, on) => {
-  const w = world(on, {}, false, true)
+  const w = world(on, false, true)
   w.board = boardOf(session({ id: 'old', state: 'needs_input', question: 'already waiting' }))
   await startTerminal($)
   await w.clock.advance(3000)
   w.board = boardOf(session({ id: 'new', state: 'needs_input', question: 'Run the tests?' }), session({ id: 'bad', state: 'error', title: 'Port failed' }))
   await w.clock.advance(6000)
   expect(w.fetched).toBe(0)
-  expect(w.storeReads).toBe(0)
   expect(w.toasts).toEqual([])
   expect(w.statuses.filter(s => s !== undefined)).toEqual([])
 })

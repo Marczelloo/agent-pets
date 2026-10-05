@@ -14,6 +14,11 @@ pub struct Settings {
     /// The Claude Code mod placed in `~/.claude/skills/agent-pets` (live limits, `/pets`, nudges, pixel pet). On by default.
     #[serde(default = "yes")]
     pub claude_mod: bool,
+    /// The mod's pixel pet above the Claude Code prompt. Off by default.
+    pub claude_mod_pet: bool,
+    /// The mod's nudges about other agents (toasts in Claude Code). On by default.
+    #[serde(default = "yes")]
+    pub claude_mod_nudges: bool,
     pub notifications: Notifications,
     pub pets: Pets,
     pub power_saving: PowerSaving,
@@ -333,6 +338,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             version: 1, apps: Apps::default(), claude_plan_usage: false, claude_mod: true,
+            claude_mod_pet: false, claude_mod_nudges: true,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
             autostart: true, language: Language::Auto, theme: Theme::System, updates: Updates::Notify, stage: Stage::default(),
             extra: serde_json::Map::new(),
@@ -401,6 +407,25 @@ mod tests {
         assert!(Settings::default().claude_mod);
         assert!(load_str(r#"{"version":1,"apps":{"claude_code":true}}"#).settings.claude_mod);
         assert!(!load_str(r#"{"version":1,"claude_mod":false}"#).settings.claude_mod);
+    }
+
+    #[test]
+    fn the_mod_pet_is_off_and_the_nudges_are_on_unless_a_file_says_otherwise() {
+        let d = Settings::default();
+        assert!(!d.claude_mod_pet && d.claude_mod_nudges);
+        let l = load_str(r#"{"version":1,"claude_mod":true}"#).settings;
+        assert!(!l.claude_mod_pet && l.claude_mod_nudges);
+        let l = load_str(r#"{"version":1,"claude_mod_pet":true,"claude_mod_nudges":false}"#).settings;
+        assert!(l.claude_mod_pet && !l.claude_mod_nudges);
+    }
+
+    #[test]
+    fn the_mod_switches_survive_a_save() {
+        let (_d, p) = tmp();
+        let s = Settings { claude_mod_pet: true, claude_mod_nudges: false, ..Settings::default() };
+        save(&p, &s).unwrap();
+        let back = load(&p).settings;
+        assert!(back.claude_mod_pet && !back.claude_mod_nudges);
     }
 
     #[test]

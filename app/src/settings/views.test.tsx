@@ -5,6 +5,7 @@ import { PanelView } from '../panel/App';
 import type { AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
 import { SLOT } from '../stage/layout';
 import { defaultSettings } from './model';
+import { AppsTab } from './AppsTab';
 import { SettingsView, type Tab } from './SettingsView';
 import { resetStage, withBubbles } from './StageTab';
 import { Wizard } from './Wizard';
@@ -94,6 +95,43 @@ describe('settings shell and appearance', () => {
       setLang('pl');
       expect(render('apps')).toContain('aria-label="Mod do Claude Code"');
       expect(render('apps', { ...defaultSettings(), apps: { ...defaultSettings().apps, claude_code: false } })).not.toContain('Mod do Claude Code');
+    } finally { setLang('pl'); }
+  });
+  it('apps tab: the pet and nudges switches show only while Claude Code and its mod are on, and flip their own field', () => {
+    try {
+      setLang('en');
+      const pet = 'aria-label="Pixel pet in the terminal"', nudges = 'aria-label="Nudges about other agents"';
+      const html = render('apps');
+      expect(html).toContain(pet);
+      expect(html).toContain(nudges);
+      expect(html.indexOf(pet)).toBeGreaterThan(html.indexOf('aria-label="Claude Code mod"'));
+      expect(html).toMatch(/aria-label="Nudges about other agents" checked=""/);
+      expect(html).not.toMatch(/aria-label="Pixel pet in the terminal" checked=""/);
+      const on = { ...defaultSettings(), claude_mod_pet: true, claude_mod_nudges: false };
+      expect(render('apps', on)).toMatch(/aria-label="Pixel pet in the terminal" checked=""/);
+      expect(render('apps', on)).not.toMatch(/aria-label="Nudges about other agents" checked=""/);
+      for (const s of [{ ...defaultSettings(), claude_mod: false },
+        { ...defaultSettings(), apps: { ...defaultSettings().apps, claude_code: false } }]) {
+        expect(render('apps', s)).not.toContain(pet);
+        expect(render('apps', s)).not.toContain(nudges);
+      }
+      const seen: Settings[] = [];
+      const toggles = (n: unknown, out: { label: string; onChange: (on: boolean) => void }[] = []): typeof out => {
+        if (Array.isArray(n)) n.forEach(c => toggles(c, out));
+        else if (n && typeof n === 'object' && 'props' in n) {
+          const p = (n as { props: Record<string, unknown> }).props;
+          if (typeof p.label === 'string' && typeof p.onChange === 'function') out.push({ label: p.label, onChange: p.onChange as (on: boolean) => void });
+          toggles(p.children, out);
+          toggles(p.control, out);
+        }
+        return out;
+      };
+      const tree = AppsTab({ settings: defaultSettings(), rows, onChange: s => seen.push(s), onIntegration: async () => '', onClaudeMod: async () => '' });
+      const by = (label: string) => toggles(tree).find(x => x.label === label)!;
+      by('Pixel pet in the terminal').onChange(true);
+      by('Nudges about other agents').onChange(false);
+      expect(seen[0]).toEqual({ ...defaultSettings(), claude_mod_pet: true });
+      expect(seen[1]).toEqual({ ...defaultSettings(), claude_mod_nudges: false });
     } finally { setLang('pl'); }
   });
   it('general tab: theme is an icon-only radiogroup of system, light and dark with the current one checked', () => {

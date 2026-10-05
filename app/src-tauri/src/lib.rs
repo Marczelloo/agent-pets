@@ -98,9 +98,16 @@ fn session_undismiss(app: tauri::AppHandle, ids: Vec<String>) {
     let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Undismiss(ids));
 }
 
+/// The mod's two switches, as the board carries them.
+pub fn mod_prefs_of(s: &pets_core::settings::Settings) -> pets_core::mod_state::ModPrefs {
+    pets_core::mod_state::ModPrefs { pet: s.claude_mod_pet, nudges: s.claude_mod_nudges }
+}
+
 /// Effects of changing settings. Notifications and Anthropic-limit consent are read continuously in their threads.
 pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings, new: &pets_core::settings::Settings) {
     if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Apps(new.apps)); }
+    let (old_prefs, new_prefs) = (mod_prefs_of(old), mod_prefs_of(new));
+    if old_prefs != new_prefs { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::ModPrefs(new_prefs)); }
     // open gate: `hook.exe report` at the fixed path `~/.agent-pets/hook.exe` (spec 8)
     if new.apps.generic && !old.apps.generic {
         let st = app.state::<settings::SettingsState>();

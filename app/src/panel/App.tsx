@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { actionLabel, formatAgo, formatDuration, limitName, petTooltip } from '../tooltip/text';
 import type { Media, NotificationEntry, Pets, RouterTask, Session, Settings, SettingsView, Snapshot, UpdateStatus } from '../types';
-import { accountRows, activeCount, childLabels, childLine, childMark, childrenOf, clock, collapseChildren, contextPct, contextText, hasInactive, limitCards, limitsAlert, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine, type PanelTab } from './model';
+import { activeCount, childLabels, childLine, childMark, childrenOf, clock, collapseChildren, contextPct, contextText, hasInactive, limitCards, limitsAlert, notificationTime, panelSessions, progressText, sessionSubtitle, unreadCount, updateBar, usageLine, type PanelTab } from './model';
 import { PetCanvas, setPetSaving } from './PetCanvas';
 import { BellIcon, GearIcon, StatsIcon } from '../ui/icons';
 import { appFor, defaultPets, lookFor } from '../look';
@@ -194,13 +194,6 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 <span>{formatAgo(nowMs - s.last_activity)}</span>
               </div>
               {usage && <div className="usage">{usage}</div>}
-              {accountRows(s, snap.limits, nowMs).map(r => (
-                <div className="account" key={`${r.agent}-${r.window}`}>
-                  <span className="label">{r.label}</span>
-                  <span className={`bar ${r.agent}`}><i style={{ width: `${r.pct}%` }} className={(r.pct ?? 0) >= 90 ? 'hot' : ''} /></span>
-                  <span className="pct">{Math.round(r.pct ?? 0)}%</span>
-                </div>
-              ))}
             </div>
             <div className="menu-wrap">
               <button type="button" className="icon-btn more" aria-label={`${t().panel.menu}: ${title}`} aria-haspopup="menu" aria-expanded={menu === s.id}

@@ -15,21 +15,28 @@ const BAND = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
 
 type Dollar = Engine
-type Opts = { store?: Record<string, unknown>; verdict?: 'allow' | 'ask' | 'deny'; drop?: boolean; storeFails?: boolean; duplicate?: boolean }
+type Opts = { prefs?: { pet?: boolean; nudges?: boolean }; board?: unknown; verdict?: 'allow' | 'ask' | 'deny'; drop?: boolean; duplicate?: boolean }
 type Found = { type: string; key: string | undefined; props: Record<string, unknown>; text: string }
 type Band = { find: (q: object) => Promise<Found | undefined>; redraw: () => Promise<void>; unmount: () => Promise<void> }
 
-// Everything beneath the plugin: the clock, the store, what the engine answers to the events the pet watches, core's own band
+// The widget's board with the app's switches on it: the pet is on unless a test says otherwise.
+const boardWith = (prefs: { pet?: boolean; nudges?: boolean } = {}) => ({
+  v: 1,
+  app_version: '0.16.0',
+  prefs: { pet: true, nudges: true, ...prefs },
+  sessions: [],
+  limits: [],
+})
+
+// Everything beneath the plugin: the clock, the widget's board (and its endpoint file), what the engine answers to the events the pet watches, core's own band
 // (an empty Box keyed `core`) and the blits. The test steers what a blit answers through `w.blit`, and holds a tool open with `w.gate`.
 function world(on: On, opts: Opts = {}) {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:\\Users\\tester' })
   on('fs.exists', ($$, e) => ({ value: opts.duplicate === true && e.path.split(String.fromCharCode(92)).join('/') === 'C:/Users/tester/.claude/skills/agent-pets/.claude-plugin/plugin.json' }))
-  const held: Record<string, unknown> = { ...opts.store }
-  on('store.get', ($$, e) => (opts.storeFails ? { deny: 'EIO' } : { value: held[e.key] }))
-  on('store.set', ($$, e) => {
-    held[e.key] = e.value
-    return { value: undefined }
+  on('fs.read', ($$, e) => {
+    if (e.path.split(String.fromCharCode(92)).join('/') === 'C:/Users/tester/.agent-pets/endpoint.json') return { value: JSON.stringify({ port: 4711, token: 'tok' }) }
+    return { deny: 'ENOENT' }
   })
   on('session.start', ($$, e) => ({ cwd: e.cwd }))
   on('prompt.submit', ($$, e) => ({ text: e.text, ...(opts.drop ? { drop: 'no' } : {}) }) as never)
@@ -37,7 +44,9 @@ function world(on: On, opts: Opts = {}) {
   on('tool.check', () => ({ decision: opts.verdict ?? 'allow' }))
   const w = {
     clock,
-    held,
+    // What the widget answers to `GET /v1/state`: a board, or 'down' for no widget. A test changes it between ticks.
+    board: ('board' in opts ? opts.board : boardWith(opts.prefs)) as unknown,
+    fetches: 0,
     blits: [] as { requestId: string; key: string; cells: string }[],
     attempts: 0,
     blit: 'ok' as 'ok' | 'deny' | 'throw',
@@ -54,6 +63,11 @@ function world(on: On, opts: Opts = {}) {
   on('tool.call', async () => {
     await w.gate
     return { result: 'ok' } as never
+  })
+  on('http.fetch', () => {
+    w.fetches++
+    if (w.board === 'down') return { deny: 'ECONNREFUSED' }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(w.board) } }
   })
   on('ui.render', () => ({ type: 'Box', props: { key: 'core' }, children: [] }) as never)
   on('ui.blit', ($$, e) => {
@@ -216,22 +230,56 @@ test('a survey, or too few rows, leaves the band to the engine', async ($, on) =
   await short.unmount()
 })
 
-test('Pet off in the store draws nothing, and turning it back on draws again', async ($, on) => {
-  const w = world(on, { store: { pet: false } })
+test('a board with the pet on draws it', async ($, on) => {
+  world(on, { prefs: { pet: true } })
   const ui = await mountBand($)
-  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
-  expect(await ui.find({ type: 'Box', key: 'core' })).toBeDefined()
-  w.held.pet = true
-  await ui.redraw()
   expect(await ui.find({ type: 'Raster' })).toBeDefined()
+  expect(await ui.find({ type: 'Box', key: 'core' })).toBeUndefined()
   await ui.unmount()
 })
 
-test('a store that cannot be read leaves the band to the engine, and never throws', async ($, on) => {
-  world(on, { storeFails: true })
+// Each draws nothing and leaves the band to the engine: the pet is off, there is no widget, or an older app sends no prefs.
+const WITHOUT_PET: [string, Opts][] = [
+  ['the pet off on the board', { prefs: { pet: false } }],
+  ['no widget', { board: 'down' }],
+  ['a board from an older app without prefs', { board: { v: 1, app_version: '0.16.0', sessions: [], limits: [] } }],
+  ['a board whose pet is not a boolean', { board: { ...boardWith(), prefs: { pet: 'yes' } } }],
+]
+for (const [name, opts] of WITHOUT_PET) {
+  test(`${name} draws no pet, and never throws`, async ($, on) => {
+    world(on, opts)
+    const ui = await mountBand($)
+    expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+    expect(await ui.find({ type: 'Box', key: 'core' })).toBeDefined()
+    await ui.unmount()
+  })
+}
+
+test('a switch changed in the app while the session runs brings the band, and takes it away', async ($, on) => {
+  const w = world(on, { prefs: { pet: false } })
+  await startTerminal($)
   const ui = await mountBand($)
   expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  // the timer has no band to blit to yet: the switch must still be noticed (the board is read at most every 30 s)
+  w.board = boardWith({ pet: true })
+  await w.clock.advance(31_000)
+  expect(await ui.find({ type: 'Raster' })).toBeDefined()
+  w.board = boardWith({ pet: false })
+  await w.clock.advance(31_000)
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
   expect(await ui.find({ type: 'Box', key: 'core' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the board is read at most every 30 s for the pet, not on every 200 ms tick', async ($, on) => {
+  // nudges off: they poll the board on their own and would be counted too
+  const w = world(on, { prefs: { nudges: false } })
+  await startTerminal($)
+  const ui = await mountBand($)
+  await w.clock.advance(10_000)
+  expect(w.fetches).toBe(1)
+  await w.clock.advance(21_000)
+  expect(w.fetches).toBe(2)
   await ui.unmount()
 })
 

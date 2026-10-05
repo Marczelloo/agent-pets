@@ -1,26 +1,14 @@
-import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Api, On } from 'claude-code'
 import { sharedBridge } from './bridge'
-import type { Bridge, BridgeIo } from './bridge'
+import type { Bridge, BridgeIo, Prefs } from './bridge'
 
 const PANE = 'agent-pets'
 const BAR_CELLS = 10
 const DAY_MS = 24 * 60 * 60 * 1000
 
-// The store holds the switches (they outlive the session); these mirror them so a press redraws the pane,
-// and so the band and the nudges can read them as state. Opening the pane fills them from the store.
-const petAtom = atom({ plugin: 'agent-pets', key: 'pet' } as const, true)
-const nudgesAtom = atom({ plugin: 'agent-pets', key: 'nudges' } as const, true)
-
-/** What a hook file reads the switches through; each file builds it from its own `$` (the validator will not follow `$` across an import). */
-export type PrefsIo = { get(key: string): Promise<unknown> }
-export type Prefs = { pet: boolean; nudges: boolean }
-
-/** The two switches; a key that is missing or not a boolean counts as on. */
-export async function prefs(io: PrefsIo): Promise<Prefs> {
-  const on = async (key: string) => (await io.get(key)) !== false
-  return { pet: await on('pet'), nudges: await on('nudges') }
-}
+/** `Pet: off · Nudges: on`; the switches live in the app's settings, the pane only tells them. */
+export const prefsLine = (p: Prefs): string =>
+  `Pet: ${p.pet ? 'on' : 'off'} · Nudges: ${p.nudges ? 'on' : 'off'} — change in Agent Pets → Settings → Apps`
 
 type LimitRow = { label: string; percent: number; resetsAt?: number | null; stale: boolean }
 
@@ -127,20 +115,8 @@ function ioOf($: Api): BridgeIo {
   }
 }
 
-const storeOf = ($: Api): PrefsIo => ({ get: key => $.store.get(key) })
-
-async function toggle($: Api, key: 'pet' | 'nudges'): Promise<void> {
-  try {
-    const next = !(await prefs(storeOf($)))[key]
-    await $.store.set(key, next)
-    // Written out: the validator reads the source of `update` only when it is spelled there.
-    if (key === 'pet') await update($, petAtom, () => next)
-    else await update($, nudgesAtom, () => next)
-  } catch {}
-}
-
 /**
- * `/pets` (terminal, interactive sessions): a pane with the widget's sessions and limits and two switches.
+ * `/pets` (terminal, interactive sessions): a pane with the widget's sessions and limits, and where the pet and nudges are switched.
  * Without the widget it shows this session's own limits and says so. Reads through `bridge`, or the shared one.
  */
 export function registerPane(on: On, bridge?: Bridge): void {
@@ -158,10 +134,6 @@ export function registerPane(on: On, bridge?: Bridge): void {
   on('command.run', { command: 'pets' }, async ($, e, next) => {
     if (await (bridge ?? sharedBridge(ioOf($))).isDuplicateCopy()) return next(e)
     try {
-      // The mirrors may have gone stale since the last press (a restart resets them): line them up with the store.
-      const p = await prefs(storeOf($))
-      await update($, petAtom, () => p.pet)
-      await update($, nudgesAtom, () => p.nudges)
       await $.ui.open({ id: PANE, title: 'Agent Pets', focus: true, closeOnEscape: true })
     } catch {}
     return {}
@@ -169,18 +141,8 @@ export function registerPane(on: On, bridge?: Bridge): void {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if (await (bridge ?? sharedBridge(ioOf($))).isDuplicateCopy()) return next(e)
-    const { Box, Button, Text } = $.ui.resolve(e)
-    // A pane that cannot gather its data still draws: switches default to on, no board means the widget-not-running view.
-    try {
-      // Reading the mirrors while drawing is what redraws the pane when a switch is pressed.
-      await read($, petAtom)
-      await read($, nudgesAtom)
-    } catch {}
-    let pet = true
-    let nudges = true
-    try {
-      ;({ pet, nudges } = await prefs(storeOf($)))
-    } catch {}
+    const { Box, Text } = $.ui.resolve(e)
+    // A pane that cannot gather its data still draws: no board means the widget-not-running view.
     let now = Date.now()
     let view: BoardView | null = null
     try {
@@ -190,13 +152,8 @@ export function registerPane(on: On, bridge?: Bridge): void {
       view = null
     }
     const own = view ? [] : await sessionLimits($)
-
-    const switches = (
-      <Box gap={1}>
-        <Button key="pet" label={`Pet: ${pet ? 'on' : 'off'}`} onPress={() => toggle($, 'pet')} />
-        <Button key="nudges" label={`Nudges: ${nudges ? 'on' : 'off'}`} onPress={() => toggle($, 'nudges')} />
-      </Box>
-    )
+    // The board that was just read refreshed the bridge's switches; without a board there is nothing to tell.
+    const settings = view ? await (bridge ?? sharedBridge(ioOf($))).prefs() : undefined
 
     if (!view) {
       return (
@@ -206,7 +163,6 @@ export function registerPane(on: On, bridge?: Bridge): void {
           {own.map(row => (
             <Text>{limitLine(row, now)}</Text>
           ))}
-          {switches}
         </Box>
       )
     }
@@ -249,7 +205,11 @@ export function registerPane(on: On, bridge?: Bridge): void {
             </Box>
           )
         })}
-        {switches}
+        {settings && (
+          <Text key="prefs" dimColor>
+            {prefsLine(settings)}
+          </Text>
+        )}
       </Box>
     )
   })

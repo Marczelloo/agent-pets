@@ -366,6 +366,13 @@ mod tests {
     }
 
     #[test]
+    fn the_mod_pet_and_nudges_switches_from_the_window_are_kept() {
+        let incoming = Settings { claude_mod_pet: true, claude_mod_nudges: false, ..Settings::default() };
+        let merged = merge_user_settings(&Settings::default(), incoming);
+        assert!(merged.claude_mod_pet && !merged.claude_mod_nudges);
+    }
+
+    #[test]
     fn the_door_switch_from_the_window_is_kept() {
         // the open gate has no installation: its window toggle is the only way to close it
         let mut current = Settings::default();

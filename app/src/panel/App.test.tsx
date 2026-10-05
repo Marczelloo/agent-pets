@@ -24,7 +24,7 @@ describe('PanelView', () => {
     expect(asking).toContain('Allow &lt;b&gt;Bash&lt;/b&gt;?');
     expect(view({ ...sess, state: 'working', question: 'stale' })).not.toContain('class="question"');
   });
-  it('an opencode card shows its tokens and the bars of its account; a Claude card has neither', () => {
+  it('an opencode card shows its tokens, a Claude card none; limit bars stay on the Limits tab', () => {
     const oc: Session = { ...sess, id: 'opencode:o', agent: 'opencode', state: 'working', title: 'oc',
       usage: { tokens: 1_200_000, cost: 0, account: 'codex' } };
     const snap = { sessions: [oc, { ...sess, id: 'c', title: 'cl' }], now: 0,
@@ -33,8 +33,8 @@ describe('PanelView', () => {
     const html = renderToString(<PanelView snap={snap} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
     expect(html).toContain('sesja: 1,2 mln tok. · dziś: 4,8 mln tok.');
     expect(html.match(/class="usage"/g)?.length).toBe(1);
-    expect(html).toMatch(/class="account"[\s\S]*64%/);
-    expect(html.match(/class="account"/g)?.length).toBe(1);
+    expect(html).not.toContain('class="account"');
+    expect(html).not.toContain('64%');
   });
   it('marks cards of experimental agents, not the others', () => {
     const cp: Session = { ...sess, id: 'copilot:p', agent: 'copilot', title: 'cp' };

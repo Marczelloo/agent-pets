@@ -2,7 +2,7 @@
 use pets_core::dismiss::{self, Dismissed};
 use pets_core::i18n::{tr, Lang};
 use pets_core::ingest::StateBoard;
-use pets_core::mod_state;
+use pets_core::mod_state::{self, ModPrefs};
 use pets_core::model::{Limit, Session};
 use pets_core::replay::Replay;
 use pets_core::runtime::{Runtime, RuntimeConfig};
@@ -44,13 +44,13 @@ fn with_parents(mut v: Vec<Session>) -> Vec<Session> {
 }
 
 /// Board for the Claude mod: the same visible sessions and limits as the widget, reduced to the safe fields.
-fn board_of(store: &Store, now: i64, hidden: &mut Dismissed) -> Vec<u8> {
+fn board_of(store: &Store, now: i64, hidden: &mut Dismissed, prefs: ModPrefs) -> Vec<u8> {
     let snap = snapshot_of(store, now, hidden);
-    mod_state::render(&snap.sessions, &snap.limits, env!("CARGO_PKG_VERSION"))
+    mod_state::render(&snap.sessions, &snap.limits, prefs, env!("CARGO_PKG_VERSION"))
 }
 
-fn publish_board(board: &StateBoard, store: &Store, now: i64, hidden: &mut Dismissed) {
-    let bytes = board_of(store, now, hidden);
+fn publish_board(board: &StateBoard, store: &Store, now: i64, hidden: &mut Dismissed, prefs: ModPrefs) {
+    let bytes = board_of(store, now, hidden, prefs);
     // a poisoned lock still holds a whole board: the next write replaces it
     *board.write().unwrap_or_else(|e| e.into_inner()) = bytes;
 }
@@ -83,6 +83,8 @@ impl Mode {
 pub enum CoreMsg {
     Apps(pets_core::settings::Apps),
     Lang(Lang),
+    /// The mod's switches from settings; they ride the board.
+    ModPrefs(ModPrefs),
     Dismiss(Vec<String>, Sender<Vec<String>>),
     DismissInactive(Sender<Vec<String>>),
     Undismiss(Vec<String>),
@@ -142,6 +144,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
     let mut cfg = RuntimeConfig::from_env()?;
     cfg.apps = app.state::<crate::settings::SettingsState>().get().apps;
     cfg.lang = pets_core::i18n::current(app.state::<crate::settings::SettingsState>().get().language);
+    let mut prefs = crate::mod_prefs_of(&app.state::<crate::settings::SettingsState>().get());
     let mut rt = Runtime::start(cfg)?;
     let board = rt.state_board();
     // claude account limits from the Anthropic server (exact reset times, independent of CLI sessions), only with consent
@@ -162,7 +165,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         if let Ok(e) = usage.recv_timeout(Duration::from_secs(3)) { rt.apply_external(e); }
     }
     publish(rt.store(), now_ms(), &mut hidden);
-    publish_board(&board, rt.store(), now_ms(), &mut hidden);
+    publish_board(&board, rt.store(), now_ms(), &mut hidden, prefs);
     loop {
         let now = now_ms();
         let mut changed = false;
@@ -170,6 +173,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
             match m {
                 CoreMsg::Apps(a) => changed |= rt.set_apps(a),
                 CoreMsg::Lang(l) => rt.set_lang(l),
+                CoreMsg::ModPrefs(p) => { prefs = p; changed = true; }
                 CoreMsg::Dismiss(ids, reply) => { hidden.dismiss(&ids, now); let _ = reply.send(ids); changed = true; }
                 CoreMsg::DismissInactive(reply) => { let _ = reply.send(dismiss_inactive(rt.store(), &mut hidden, now)); changed = true; }
                 CoreMsg::Undismiss(ids) => { hidden.undismiss(&ids); changed = true; }
@@ -180,7 +184,7 @@ fn live(app: &AppHandle, msgs: std::sync::mpsc::Receiver<CoreMsg>, publish: &dyn
         for u in ag_usage.try_iter() { changed |= rt.antigravity_usage(u); }
         if changed {
             publish(rt.store(), now, &mut hidden);
-            publish_board(&board, rt.store(), now, &mut hidden);
+            publish_board(&board, rt.store(), now, &mut hidden, prefs);
             if let Err(e) = hidden.save_if_dirty(&hidden_path) { pets_core::app_log!("{}: {e}", hidden_path.display()); }
         }
         // every pass, not only on change: a repeated mod reading with the same limits must keep oauth polling quiet
@@ -260,11 +264,14 @@ mod tests {
         child(&mut store, "s1/a", "s1", 1_000);
         let mut hidden = Dismissed::default();
         hidden.dismiss(&["s1".into()], 1_500);
-        let bytes = board_of(&store, 1_600, &mut hidden);
+        let bytes = board_of(&store, 1_600, &mut hidden, ModPrefs::default());
         let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let ids: Vec<&str> = v["sessions"].as_array().unwrap().iter().map(|s| s["id"].as_str().unwrap()).collect();
         assert_eq!(ids, ["s2"], "a dismissed session and its child stay off the board");
         assert!(!String::from_utf8(bytes).unwrap().contains("424242"));
+        let on = board_of(&store, 1_600, &mut hidden, ModPrefs { pet: true, nudges: false });
+        let v: serde_json::Value = serde_json::from_slice(&on).unwrap();
+        assert_eq!(v["prefs"], serde_json::json!({"pet": true, "nudges": false}));
     }
 
     #[test]
@@ -272,10 +279,14 @@ mod tests {
         let board: StateBoard = Arc::new(std::sync::RwLock::new(mod_state::empty("0.0.0")));
         let mut store = Store::new(Timing::default());
         store.apply(&Event::new(Source::Claude, "s1", Kind::Prompt, 1_000));
-        publish_board(&board, &store, 1_100, &mut Dismissed::default());
+        publish_board(&board, &store, 1_100, &mut Dismissed::default(), ModPrefs { pet: true, nudges: true });
         let v: serde_json::Value = serde_json::from_slice(&board.read().unwrap()).unwrap();
         assert_eq!(v["sessions"].as_array().unwrap().len(), 1);
         assert_eq!(v["app_version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(v["prefs"], serde_json::json!({"pet": true, "nudges": true}));
+        publish_board(&board, &store, 1_200, &mut Dismissed::default(), ModPrefs { pet: false, nudges: true });
+        let v: serde_json::Value = serde_json::from_slice(&board.read().unwrap()).unwrap();
+        assert_eq!(v["prefs"]["pet"], false, "a republish carries the new switches");
     }
 
     #[test]

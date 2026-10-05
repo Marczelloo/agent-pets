@@ -22,9 +22,9 @@ The wizard installs hooks in `~/.claude/settings.json` and keeps a backup as `se
 Claude Code can load small plugins called mods. Agent Pets ships one and, with Claude Code on, places it in `~/.claude/skills/agent-pets` (Claude Code lists it as `agent-pets@skills-dir`). It adds what hooks cannot see and draws a little UI inside Claude Code. It is an enhancer: the hooks stay the source of each session's state, so with the mod off or broken everything the hooks do keeps working.
 
 - **Live limits.** After every turn the mod sends the 5-hour and weekly limits of your plan, with exact reset times, plus the context size, the cost and the model. This works in the terminal and in sessions hosted by the Claude app, and it never reads your login.
-- **`/pets`.** Opens a read-only pane with every visible session of every agent (state, title, the question when one waits), the limit bars of each agent and two switches, **Pet** and **Nudges**. Esc closes it. Without the widget it shows the current session and its limits, with the line "Agent Pets widget not running".
-- **Nudges.** A toast when another session (never the current one) needs you or fails, once per question, and a "N waiting" note in the status line while anything waits.
-- **Pet above the prompt.** A pixel Clawd with a one-line status that follows the session: idle, thinking, working, waiting for you, done, error and asleep. It needs a terminal at least 60 columns wide and draws nothing in the Claude app, VS Code or `claude -p`.
+- **`/pets`.** Opens a read-only pane with every visible session of every agent (state, title, the question when one waits), the limit bars of each agent and a line saying whether the pet and the nudges are on (they are switched in Settings → Apps, under Claude Code mod). Esc closes it. Without the widget it shows the current session and its limits, with the line "Agent Pets widget not running".
+- **Nudges.** On by default; switch them in Settings → Apps. A toast when another session (never the current one) needs you or fails, once per question, and a "N waiting" note in the status line while anything waits.
+- **Pet above the prompt.** Off by default; switch it in Settings → Apps. A pixel Clawd with a one-line status that follows the session: idle, thinking, working, waiting for you, done, error and asleep. It needs a terminal at least 60 columns wide and draws nothing in the Claude app, VS Code or `claude -p`.
 - **Faster states.** A turn you interrupt, a refusal or a failed turn ends the pet's animation at once, without reading the transcript.
 
 Turn it off or on with **Claude Code mod** in Settings → Apps, under Claude Code (on by default). The change takes effect in new Claude Code sessions. Turning Claude Code off or uninstalling Agent Pets removes the mod too; the app only touches the folder when it is its own.
@@ -38,7 +38,7 @@ The mod is early-access technology. A Claude Code update that breaks it can take
 /plugin install agent-pets@agent-pets
 ```
 
-You get the pet above the prompt and `/pets` for the current session. If the app's copy is installed as well, the mod's duplicate guard keeps only one active, so you still get one pet and one stream of reports.
+You get `/pets` for the current session. The pet and the nudges are switched in the app's settings, so without the app the pet stays off. If the app's copy is installed as well, the mod's duplicate guard keeps only one active, so you still get one pet and one stream of reports.
 
 ### Claude rate limits
 

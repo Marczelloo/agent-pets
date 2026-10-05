@@ -2,8 +2,6 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Api, On } from 'claude-code'
 import { sharedBridge } from './bridge'
 import type { Bridge, BridgeIo } from './bridge'
-import { prefs } from './pane'
-import type { PrefsIo } from './pane'
 import { COLS, FRAMES, ROWS, encode } from './sprites'
 import type { PetState } from './sprites'
 
@@ -15,9 +13,9 @@ const SLEEP_MS = 5 * 60 * 1000
 const BAND_MIN_COLUMNS = 60
 
 // What the pet is doing, and when the last event (anything but a tick) happened. It lives in `$.state`, not in a variable:
-// a hot reload loses variables. `pet` mirrors the switch in the store (see pane.tsx); the band reads it so a press redraws it.
+// a hot reload loses variables. `pet` mirrors the app's switch from the board; the band reads it, so a change made in the app redraws it.
 const moodAtom = atom({ plugin: 'agent-pets', key: 'mood' } as const, { state: 'idle', at: 0 })
-const petAtom = atom({ plugin: 'agent-pets', key: 'pet' } as const, true)
+const petAtom = atom({ plugin: 'agent-pets', key: 'pet' } as const, false)
 
 const STATUS: Record<PetState, string> = {
   idle: '',
@@ -76,8 +74,6 @@ function isDuplicate($: Api, bridge?: Bridge): Promise<boolean> {
   return (bridge ?? sharedBridge(ioOf($))).isDuplicateCopy()
 }
 
-const storeOf = ($: Api): PrefsIo => ({ get: key => $.store.get(key) })
-
 // The engine's `$` stays in this file (the validator follows it only into functions declared here).
 // `ev` may be a function, asked when the write happens: what a call's end means depends on the calls still running then.
 async function feed($: Api, event: PetEvent | (() => PetEvent)): Promise<void> {
@@ -98,7 +94,7 @@ async function feed($: Api, event: PetEvent | (() => PetEvent)): Promise<void> {
 
 /**
  * A pixel Clawd above the prompt that mirrors what this session is doing, on interactive terminal sessions wide enough
- * for it and while `/pets` has Pet on. It watches the prompt, tool calls, permission asks and the end of each turn.
+ * for it and while the app's Settings → Apps has the terminal pet on. It watches the prompt, tool calls, permission asks and the end of each turn.
  */
 export function registerPet(on: On, bridge?: Bridge): void {
   let timer: { cancel: () => void } | undefined
@@ -121,6 +117,10 @@ export function registerPet(on: On, bridge?: Bridge): void {
         busy = true
         try {
           if (await isDuplicate($, bridge)) return
+          // The switch is the app's: a change made while this session runs lands here (cached 30 s) and redraws the band.
+          // Before the band check: a band that is not drawn yet is how a pet that was off gets drawn.
+          const { pet } = await (bridge ?? sharedBridge(ioOf($))).prefs()
+          if (pet !== (await read($, petAtom))) await update($, petAtom, () => pet)
           await feed($, 'tick')
           if (band === undefined) return
           const { state } = await read($, moodAtom)
@@ -184,9 +184,9 @@ export function registerPet(on: On, bridge?: Bridge): void {
     if (await isDuplicate($, bridge)) return next(e)
     if (e.surface !== 'terminal' || e.props.bodyColumns < BAND_MIN_COLUMNS || e.props.maxRows < ROWS || e.props.hasSurvey) return next(e)
     try {
-      // The mirror is read for the redraw its change brings; the store is what decides.
+      // The mirror is read for the redraw its change brings; the board's switch is what decides.
       await read($, petAtom)
-      if (!(await prefs(storeOf($))).pet) return next(e)
+      if (!(await (bridge ?? sharedBridge(ioOf($))).prefs()).pet) return next(e)
       const { state } = await read($, moodAtom)
       const frames = FRAMES[state]
       const cells = encode(frames[frame % frames.length]!)

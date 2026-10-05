@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.1
+
+### Changed
+
+- The terminal pet and the nudges are switched in Settings → Apps, under Claude Code mod, instead of in `/pets`. The terminal pet is now off by default.
+- Session cards in the panel no longer repeat the limit bars; they stay on the Limits tab.
+- CI fails when the mod does not validate or its tests fail.
+
 ## 0.16.0
 
 ### Added
