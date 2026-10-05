@@ -84,7 +84,7 @@ export interface Settings {
   claude_mod_pet: boolean;
   /** The mod's nudges about other agents (0.16.1); on by default. */
   claude_mod_nudges: boolean;
-  notifications: { needs_you: boolean; done: boolean; limits: boolean };
+  notifications: { needs_you: boolean; done: boolean; limits: boolean; sound: boolean };
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;

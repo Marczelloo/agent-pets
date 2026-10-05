@@ -26,6 +26,8 @@ pub struct Rules {
 }
 
 const NEEDS_AFTER_MS: i64 = 15_000;
+/// One more toast for an episode still waiting this long (the first one is easy to miss).
+const REMIND_AFTER_MS: i64 = 600_000;
 const LONG_TURN_MS: i64 = 120_000;
 const LIMIT_PCT: f32 = 90.0;
 /// Below this usage, treat the limit window as new (for limits without reset times and fluctuations around 90%).
@@ -36,6 +38,27 @@ const RESET_JITTER_MS: i64 = 60_000;
 fn name(s: &Session, lang: Lang) -> String {
     if !s.title.is_empty() { return s.title.chars().take(60).collect(); }
     s.cwd.rsplit(['\\', '/']).find(|p| !p.is_empty()).unwrap_or(tr(lang, "Sesja", "Session")).to_string()
+}
+
+/// 950, 12,4 tys., 4,8 mln (en: 12.4K, 4.8M), like `formatTokens` in the UI.
+fn compact(n: u64, lang: Lang) -> String {
+    let (units, dec, space) = match lang { Lang::Pl => (["tys.", "mln", "mld"], ",", " "), Lang::En => (["K", "M", "B"], ".", "") };
+    for (base, unit) in [(1e9, units[2]), (1e6, units[1]), (1e3, units[0])] {
+        if n as f64 >= base {
+            let r = (n as f64 / base * 10.0).round() / 10.0;
+            let v = if r.fract() == 0.0 { format!("{r:.0}") } else { format!("{r:.1}").replace('.', dec) };
+            return format!("{v}{space}{unit}");
+        }
+    }
+    n.to_string()
+}
+
+/// " · sesja: 2,3 mln tok." / " · 1,42 $": what the session used so far, when the agent reports it.
+fn usage_tail(s: &Session, lang: Lang) -> String {
+    let Some(u) = s.usage else { return String::new() };
+    if u.tokens > 0 { return format!(" · {}", match lang { Lang::Pl => format!("sesja: {} tok.", compact(u.tokens, lang)), Lang::En => format!("session: {} tokens", compact(u.tokens, lang)) }); }
+    if u.cost > 0.0 { return format!(" · {}", match lang { Lang::Pl => format!("{:.2} $", u.cost).replace('.', ","), Lang::En => format!("${:.2}", u.cost) }); }
+    String::new()
 }
 
 fn who(agent: Agent) -> &'static str {
@@ -91,12 +114,23 @@ impl Rules {
             match s.state {
                 State::NeedsYou => {
                     let key = format!("needs:{}:{}", s.id, s.state_since);
-                    if priming { self.sent.insert(key); continue; }
-                    if self.settings.needs_you && now - s.state_since > NEEDS_AFTER_MS && !self.sent.contains(&key) && !focused(s) {
+                    let remind = format!("remind:{}:{}", s.id, s.state_since);
+                    if priming { self.sent.insert(key); self.sent.insert(remind); continue; }
+                    let waited = now - s.state_since;
+                    if !self.settings.needs_you || focused(s) { continue; }
+                    if waited > NEEDS_AFTER_MS && !self.sent.contains(&key) {
                         self.sent.insert(key);
                         out.push(Toast { kind: ToastKind::NeedsYou, session_id: Some(s.id.clone()),
                             title: tr(self.lang, "Agent czeka na Ciebie", "Agent needs you").into(),
                             body: format!("{} {}", name(s, self.lang), tr(self.lang, "czeka na Ciebie", "is waiting for you")) });
+                    } else if waited > REMIND_AFTER_MS && self.sent.insert(remind) {
+                        let min = waited / 60_000;
+                        out.push(Toast { kind: ToastKind::NeedsYou, session_id: Some(s.id.clone()),
+                            title: tr(self.lang, "Agent wciąż czeka", "Agent is still waiting").into(),
+                            body: match self.lang {
+                                Lang::Pl => format!("{} czeka na Ciebie od {min} min", name(s, self.lang)),
+                                Lang::En => format!("{} has been waiting for you for {min} min", name(s, self.lang)),
+                            } });
                     }
                 }
                 State::Done => if let Some(t) = s.turn_started_at {
@@ -104,7 +138,7 @@ impl Rules {
                     if priming { self.sent.insert(key); continue; }
                     if self.settings.done && s.state_since - t > LONG_TURN_MS && self.sent.insert(key) {
                         out.push(Toast { kind: ToastKind::Done, session_id: Some(s.id.clone()), title: tr(self.lang, "Agent skończył", "Agent finished").into(),
-                            body: format!("{} {} ({} min)", name(s, self.lang), tr(self.lang, "skończył", "finished"), (s.state_since - t) / 60_000) });
+                            body: format!("{} {} {} min{}", name(s, self.lang), tr(self.lang, "skończył po", "finished after"), (s.state_since - t) / 60_000, usage_tail(s, self.lang)) });
                     }
                 },
                 _ => {}
@@ -179,13 +213,50 @@ mod tests {
     }
 
     #[test]
+    fn a_long_wait_gets_one_reminder() {
+        let mut r = Rules::new(ALL);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let s = snap(vec![sess("a", State::NeedsYou, 1_000, None)], vec![]);
+        assert_eq!(r.observe(&s, 20_000, &|_| false).len(), 1);
+        assert!(r.observe(&s, 300_000, &|_| false).is_empty(), "five minutes: nothing yet");
+        assert!(r.observe(&s, 620_000, &|_| true).is_empty(), "the window has focus: no reminder");
+        let t = r.observe(&s, 722_000, &|_| false);
+        assert_eq!(t.iter().map(|t| (t.title.as_str(), t.body.as_str())).collect::<Vec<_>>(), [("Agent wciąż czeka", "T-a czeka na Ciebie od 12 min")]);
+        assert!(r.observe(&s, 2_000_000, &|_| false).is_empty(), "only one reminder per episode");
+        r.set_lang(Lang::En);
+        let again = snap(vec![sess("a", State::NeedsYou, 3_000_000, None)], vec![]);
+        r.observe(&again, 3_020_000, &|_| false);
+        assert_eq!(r.observe(&again, 3_700_000, &|_| false)[0].body, "T-a has been waiting for you for 11 min");
+    }
+
+    #[test]
+    fn no_reminder_for_an_episode_already_waiting_at_startup() {
+        let mut r = Rules::new(ALL);
+        let s = snap(vec![sess("a", State::NeedsYou, 0, None)], vec![]);
+        r.observe(&s, 5_000, &|_| false);
+        assert!(r.observe(&s, 900_000, &|_| false).is_empty());
+    }
+
+    #[test]
+    fn tokens_read_compact_in_both_languages() {
+        assert_eq!((compact(950, Lang::Pl), compact(12_400, Lang::Pl), compact(3_000_000, Lang::Pl)), ("950".into(), "12,4 tys.".into(), "3 mln".into()));
+        assert_eq!((compact(12_400, Lang::En), compact(1_250_000_000, Lang::En)), ("12.4K".into(), "1.3B".into()));
+    }
+
+    #[test]
     fn done_only_after_long_turns() {
         let mut r = Rules::new(ALL);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         assert!(r.observe(&snap(vec![sess("a", State::Done, 60_000, Some(0))], vec![]), 61_000, &|_| false).is_empty());
         let t = r.observe(&snap(vec![sess("b", State::Done, 200_000, Some(0))], vec![]), 201_000, &|_| false);
         assert_eq!((t.len(), t[0].kind), (1, ToastKind::Done));
-        assert_eq!(t[0].body, "T-b skończył (3 min)");
+        assert_eq!(t[0].body, "T-b skończył po 3 min");
+        let mut c = sess("c", State::Done, 400_000, Some(0));
+        c.usage = Some(Usage { tokens: 2_340_000, cost: 0.0, account: None });
+        assert_eq!(r.observe(&snap(vec![c.clone()], vec![]), 401_000, &|_| false)[0].body, "T-c skończył po 6 min · sesja: 2,3 mln tok.");
+        let mut d = sess("d", State::Done, 400_000, Some(0));
+        d.usage = Some(Usage { tokens: 0, cost: 1.416, account: Some(Agent::Claude) });
+        assert_eq!(r.observe(&snap(vec![d], vec![]), 401_000, &|_| false)[0].body, "T-d skończył po 6 min · 1,42 $");
     }
 
     #[test]
@@ -194,7 +265,7 @@ mod tests {
         r.set_lang(Lang::En);
         r.observe(&snap(vec![], vec![]), 0, &|_| false);
         let t = r.observe(&snap(vec![sess("b", State::Done, 200_000, Some(0))], vec![]), 201_000, &|_| false);
-        assert_eq!((t[0].title.as_str(), t[0].body.as_str()), ("Agent finished", "T-b finished (3 min)"));
+        assert_eq!((t[0].title.as_str(), t[0].body.as_str()), ("Agent finished", "T-b finished after 3 min"));
         let l = r.observe(&snap(vec![], vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 95.0, resets_at: Some(9_000_000), stale_since: None }]), 202_000, &|_| false);
         assert_eq!((l[0].title.as_str(), l[0].body.as_str()), ("Codex: weekly limit", "95% of the weekly limit used"));
     }

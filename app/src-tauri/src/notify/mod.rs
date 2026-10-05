@@ -7,7 +7,7 @@ use crate::core::Snapshot;
 use pets_core::model::Session;
 use std::sync::mpsc::{channel, Sender};
 use tauri::{AppHandle, Manager};
-use tauri_winrt_notification::Toast;
+use tauri_winrt_notification::{Sound, Toast};
 
 /// A fresh id on purpose: Windows keeps the (blank) header icon it first saw for `dev.agentpets.app` forever.
 pub const AUMID: &str = "dev.agentpets.desktop";
@@ -68,6 +68,15 @@ fn focused(s: &Session) -> bool {
     unsafe { GetAncestor(GetForegroundWindow(), GA_ROOTOWNER) == win }
 }
 
+/// "Needs you" stands out by ear; `on: false` mutes every toast of ours.
+fn sound_for(kind: rules::ToastKind, on: bool) -> Option<Sound> {
+    match (on, kind) {
+        (false, _) => None,
+        (true, rules::ToastKind::NeedsYou) => Some(Sound::Reminder),
+        (true, _) => Some(Sound::Default),
+    }
+}
+
 pub fn start(app: AppHandle) -> Sender<Snapshot> {
     let (tx, rx) = channel::<Snapshot>();
     std::thread::spawn(move || {
@@ -105,7 +114,7 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
                 }, &t.title, &t.body, t.session_id.clone());
                 let a = app.clone();
                 let sid = t.session_id.clone();
-                let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body);
+                let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body).sound(sound_for(t.kind, n.sound));
                 if sid.is_some() { toast = toast.add_button(pets_core::i18n::tr(lang, "Przejdź", "Open"), "jump"); }
                 let _ = toast.on_activated(move |action| {
                     match (action.as_deref(), &sid) {
@@ -126,7 +135,15 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
 
 #[cfg(test)]
 mod tests {
-    use super::toast_icon_path;
+    use super::{rules::ToastKind, sound_for, toast_icon_path};
+    use tauri_winrt_notification::Sound;
+
+    #[test]
+    fn needs_you_sounds_different_and_the_switch_mutes_all() {
+        assert_eq!(sound_for(ToastKind::NeedsYou, true), Some(Sound::Reminder));
+        assert_eq!(sound_for(ToastKind::Done, true), Some(Sound::Default));
+        assert_eq!(sound_for(ToastKind::NeedsYou, false), None);
+    }
     use std::path::Path;
 
     #[test]

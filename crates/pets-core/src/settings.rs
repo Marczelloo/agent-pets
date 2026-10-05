@@ -63,7 +63,11 @@ pub struct Apps {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
-pub struct Notifications { pub needs_you: bool, pub done: bool, pub limits: bool }
+pub struct Notifications {
+    pub needs_you: bool, pub done: bool, pub limits: bool,
+    /// Toasts play a sound ("needs you" its own). Since 0.17.
+    pub sound: bool,
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
@@ -329,7 +333,7 @@ impl Default for Apps {
     fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
         cursor: false, grok: false, zcode: false } }
 }
-impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
+impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true, sound: true } } }
 impl Default for Pets {
     fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5, react_to_media: true } }
 }

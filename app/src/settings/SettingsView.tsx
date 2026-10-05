@@ -96,6 +96,10 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
             <Toggle label={t().limits.label} checked={s.notifications.limits}
               onChange={on => set({ notifications: { ...s.notifications, limits: on } })}>{t().limits.notification}</Toggle>
           </Section>
+          <Section>
+            <Toggle label={t().settings.notifySound} checked={s.notifications.sound ?? true}
+              onChange={on => set({ notifications: { ...s.notifications, sound: on } })}>{t().settings.notifySoundDesc}</Toggle>
+          </Section>
           <p className="ui-note">{t().settings.notifyWindows}</p>
         </>}
 
