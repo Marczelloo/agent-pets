@@ -1,6 +1,5 @@
 // The showcase: a calm intro on the taskbar, then a beat-cut tour of the app (what the pets show, "needs you", the panel and limits,
 // the seven looks, stats, the Claude Code mod, the crew) and the banner as the end card. A pure function of time, rendered in order.
-import { throwPhones } from '@app/renderer';
 import type { Limit, StyleId } from '@app/types';
 import { blank, CREW, makeCrew, type Actor, type Who } from '../actors';
 import { fit, mixCam, worldToScreen, type Cam } from '../camera';
@@ -9,7 +8,7 @@ import { drawBubble, drawBurst, drawCaption, drawTag, setInk, type Burst, type T
 import { CREAM, type Theme } from '../themes';
 import { clamp, easeIn, easeInOut, easeOut, easeOutBack, hash, lerp, TAU } from '../util';
 import { drawBackdrop, drawCursor, drawTaskbar, FONT, PAL, UI_FONT } from '../world';
-import { BEAT, BUILD, DROP, DURATION, lofiBeat, T_CREW, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, bar, beat } from './time';
+import { BEAT, BUILD, DROP, DURATION, lofiBeat, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, bar, beat } from './time';
 import { drawWindow, frame, frameAt, loadMeta, need, type Seq } from './ui';
 
 export { DURATION };
@@ -33,6 +32,19 @@ const NAMES: Record<Who, { name: string; agent: string; color: string }> = {
 /** What the intro shows them doing (the app's own scenes). */
 const CALM: Partial<Record<Who, string>> = { copilot: 'read', opencode: 'thinking', kodek: 'edit', clawd: 'edit', android: 'thinking', grok: 'read', cursor: 'grep', zcode: 'sleep' };
 
+/** How each friend turns up in the intro, on the lofi beats; Clawd is already there, working. */
+const ARRIVE: Record<Who, { t: number; how: 'here' | 'run' | 'drop' | 'float' | 'hop' | 'slide'; dir: number }> = {
+  clawd: { t: -1, how: 'here', dir: 0 },
+  kodek: { t: lofiBeat(1), how: 'run', dir: -1 },
+  android: { t: lofiBeat(2) - 0.3, how: 'float', dir: 0 },
+  opencode: { t: lofiBeat(3) - 0.42, how: 'drop', dir: 0 },
+  grok: { t: lofiBeat(4) - 0.65, how: 'run', dir: 1 },
+  copilot: { t: lofiBeat(5) - 0.55, how: 'hop', dir: -1 },
+  cursor: { t: lofiBeat(6) - 0.42, how: 'drop', dir: 0 },
+  zcode: { t: lofiBeat(6) + 0.2, how: 'slide', dir: 1 },
+  kilo: { t: 99, how: 'here', dir: 0 },
+};
+
 /** One pet per beat, each in a different state: the states a session can be in. */
 const STATES: { who: Who; scene: string; label: string }[] = [
   { who: 'clawd', scene: 'edit', label: 'Writing code' },
@@ -45,7 +57,7 @@ const STATES: { who: Who; scene: string; label: string }[] = [
   { who: 'zcode', scene: 'done', label: 'Done!' },
 ];
 
-/** The seven looks, one per half beat; light backdrops in the banner's family (Neon keeps its night). */
+/** The seven looks, one per beat over two bars, then Clean again; light backdrops in the banner's family (Neon keeps its night). */
 const LOOKS: { style: StyleId; name: string; theme: Theme }[] = [
   { style: 'sticker', name: 'Sticker', theme: { ...CREAM, bg: '#FFE9D8', glow: '#FFD1B0' } },
   { style: 'sketch', name: 'Sketch', theme: { ...CREAM, bg: '#F6F1E6', glow: '#EBE2CF', text: '#3B3A38' } },
@@ -113,12 +125,11 @@ export class Show {
     else if (T < T_STYLES) this.taskbar(x, T, dt);
     else if (T < T_STATS) this.looks(x, T, dt);
     else if (T < T_MOD) this.stats(x, T, dt);
-    else if (T < T_CREW) this.mod(x, T, dt);
+    else if (T < T_END) this.mod(x, T, dt);
     else this.finale(x, T, dt);
     // the bands that carry us from one section to the next
     drawBand(x, this.fmt, T, T_NEEDS, 0.34, 1);
     drawBand(x, this.fmt, T, T_STYLES, 0.34, -1);
-    drawBand(x, this.fmt, T, T_CREW, 0.34, 1);
     // fade to cream at the very end so the loop starts clean
     const f = clamp((T - (DURATION - 0.35)) / 0.35);
     if (f > 0) { x.save(); x.globalAlpha = f; x.fillStyle = CREAM.bg; x.fillRect(0, 0, this.fmt.W, this.fmt.H); x.restore(); }
@@ -128,37 +139,52 @@ export class Show {
 
   private rowCam(ground = 880): Cam { return fit({ x0: -455, x1: 455, y0: -300, y1: 70 }, this.fmt, { ground }); }
 
-  /** 0 - 7.9 s: the crew arrives on the lofi beats and gets to work; the build bar names them, then we dive into Clawd. */
+  /** 0 - 7.9 s: Clawd works alone in close-up; on the lofi beats his friends turn up, each in their own way, and the camera backs off
+   *  to let them in. The build bar names them, then we dive into Clawd for the drop. */
   private intro(x: CanvasRenderingContext2D, T: number, dt: number): void {
-    const { fmt } = this, base = this.rowCam();
-    const drift: Cam = { ...base, z: base.z * (1 + 0.04 * clamp(T / BUILD)) };
-    // the dive: from the row into Clawd, faster and faster, on the last beat of the build bar
+    const { fmt } = this, row = this.rowCam();
+    const close: Cam = fit({ x0: rowX('clawd') - 150, x1: rowX('clawd') + 140, y0: -150, y1: 40 }, fmt, { ground: 880 });
+    const reveal = easeInOut(clamp((T - 0.5) / 4.9));
+    const back = mixCam(close, row, reveal);
     const dive = easeIn(clamp((T - beat(3)) / (DROP - beat(3))));
-    const close: Cam = { x: rowX('clawd') + 4, y: -48, z: base.z * 9 };
-    const cam = mixCam(drift, close, dive);
+    const cam = mixCam(back, { x: rowX('clawd') + 4, y: -48, z: row.z * 9 }, dive);
     drawBackdrop(x, fmt, cam, T, CREAM, undefined, 0);
-    drawTaskbar(x, fmt, cam, T, { limits: LIMITS, bars: T > BUILD ? ROW.map(w => ({ x: rowX(w), session: { agent: w === 'clawd' ? 'claude' : 'codex', state: 'working', progress: { done: 1 + (hash(ROW.indexOf(w)) * 4 | 0), total: 6 } } })) : [] });
-    const barTop = worldToScreen(cam, fmt, 0, 0)[1];
+    drawTaskbar(x, fmt, cam, T, { limits: LIMITS, bars: ROW.filter(w => T >= ARRIVE[w].t + 0.6).map(w => ({ x: rowX(w), session: { agent: w === 'clawd' ? 'claude' : 'codex', state: 'working', progress: { done: 1 + (hash(ROW.indexOf(w)) * 4 | 0), total: 6 } } })) });
     ROW.forEach((w, i) => {
-      const t0 = lofiBeat(i), age = T - t0;
+      const a = ARRIVE[w], age = T - a.t, slot = rowX(w);
       if (age < 0) return;
-      const rise = easeOutBack(clamp(age / 0.5), 1.4);
-      // on the build bar they stop and wave at you, two at a time, as their names pop up
       const wave = T >= beat(i / 2);
-      this.put(w, { x: rowX(w), y: (1 - rise) * 80, z: i, scene: wave ? 'puppet' : (CALM[w] ?? 'idle'), drive: wave ? { armR: 2.5, oscR: 0.6, _f: 10, happy: 0.9, look: -0.2, ex: 0 } : {} });
-      const a = this.crew[w];
-      x.save(); x.beginPath(); x.rect(0, 0, fmt.W, barTop); x.clip(); a.draw(x, cam, fmt, dt, T); x.restore();
-      a.spec.hidden = true;
-      if (T >= beat(i / 2) && T < DROP) {
-        const [tx, ty] = a.pt(0, -100);
-        drawTag(x, T, tx, ty, { name: NAMES[w].name, sub: NAMES[w].agent !== NAMES[w].name ? NAMES[w].agent : undefined, color: NAMES[w].color, t: beat(i / 2), out: beat(3.6), h: 44, tilt: (hash(i) - 0.5) * 0.1 });
+      const settled = { x: slot, y: 0, z: i, scene: wave ? 'puppet' : (CALM[w] ?? 'idle'), drive: wave ? { armR: 2.5, oscR: 0.6, _f: 10, happy: 0.9, look: -0.2, ex: 0 } : {} };
+      const land = (t: number) => { const l = age - t; return l < 0 ? {} : { sx: 1 + 0.12 * Math.exp(-l * 10) * Math.cos(l * 22), sy: 1 - 0.18 * Math.exp(-l * 10) * Math.cos(l * 22) }; };
+      if (a.how === 'here') this.put(w, settled);
+      else if (a.how === 'run') {
+        const u = clamp(age / 0.65);
+        this.put(w, u < 1 ? { x: slot + a.dir * (1 - easeOut(u)) * 380, y: -Math.abs(Math.sin(age * 16)) * 6, z: i, scene: 'puppet', drive: { walkW: 1, hopW: 0.3, th: -a.dir * 0.9, look: 0.1, armL: 1.2, armR: 1.2, oscL: 0.6, oscR: 0.6, _f: 16 } } : { ...settled, ...land(0.65) });
+      } else if (a.how === 'drop') {
+        const u = clamp(age / 0.42);
+        this.put(w, u < 1 ? { x: slot, y: -460 * (1 - u) * (1 - u), z: i, sy: 1.1, sx: 0.94, scene: 'puppet', drive: { armL: 2.7, armR: 2.7, oscL: 0.5, oscR: 0.5, _f: 14 } } : { ...settled, ...land(0.42) });
+      } else if (a.how === 'float') {
+        const u = clamp(age / 1.1);
+        this.put(w, u < 1 ? { x: slot, y: -380 * (1 - easeOut(u)), z: i, scene: 'puppet', drive: { armL: 2.2, armR: 2.2, oscL: 0.3, oscR: 0.3, _f: 6, happy: 0.8 } } : settled);
+      } else if (a.how === 'hop') {
+        const u = clamp(age / 0.55), k = easeInOut(u);
+        this.put(w, u < 1 ? { x: slot + a.dir * (1 - k) * 300, y: -150 * 4 * u * (1 - u), z: i, rot: a.dir * -0.3 * Math.sin(Math.PI * u), scene: 'puppet', drive: { armL: 2.6, armR: 2.6, happy: 0.9 } } : { ...settled, ...land(0.55) });
+      } else if (a.how === 'slide') {
+        // the panda sleeps through its own arrival, carried in on its pillow
+        const u = clamp(age / 0.9);
+        this.put(w, { ...settled, x: slot + a.dir * (1 - easeOut(u)) * 420, scene: wave ? settled.scene : 'sleep' });
       }
     });
-    // the words: calm, on the lofi bars
-    drawCaption(x, T, [[tk('Your', 0.45, 2.75), tk('coding', 0.55, 2.75), tk('agents,', 0.65, 2.75, CLAY)]], { size: 104, cx: fmt.W / 2, cy: 400 });
-    drawCaption(x, T, [[tk('now', 2.95, BUILD - 0.05), tk('living', 3.05, BUILD - 0.05), tk('on', 3.15, BUILD - 0.05), tk('your', 3.25, BUILD - 0.05), tk('taskbar.', 3.35, BUILD - 0.05, CLAY)]], { size: 104, cx: fmt.W / 2, cy: 400 });
-    drawCaption(x, T, [[tk('Meet', BUILD + 0.02, beat(3.5)), tk('the', BUILD + 0.12, beat(3.5)), tk('crew.', BUILD + 0.22, beat(3.5), CLAY)]], { size: 104, cx: fmt.W / 2, cy: 400 });
-    // a soft white flash as we go through Clawd
+    this.draw(x, cam, dt, T);
+    ROW.forEach((w, i) => {
+      if (T < beat(i / 2) || T >= DROP) return;
+      const [tx, ty] = this.crew[w].pt(0, -100);
+      drawTag(x, T, tx, ty, { name: NAMES[w].name, sub: NAMES[w].agent !== NAMES[w].name ? NAMES[w].agent : undefined, color: NAMES[w].color, t: beat(i / 2), out: beat(3.6), h: 44, tilt: (hash(i) - 0.5) * 0.1 });
+    });
+    // the words: calm, on the lofi bars, above the action
+    drawCaption(x, T, [[tk('Your', 0.45, 2.75), tk('coding', 0.55, 2.75), tk('agents,', 0.65, 2.75, CLAY)]], { size: 92, cx: fmt.W / 2, cy: 150 });
+    drawCaption(x, T, [[tk('now', 2.95, BUILD - 0.05), tk('living', 3.05, BUILD - 0.05), tk('on', 3.15, BUILD - 0.05), tk('your', 3.25, BUILD - 0.05), tk('taskbar.', 3.35, BUILD - 0.05, CLAY)]], { size: 92, cx: fmt.W / 2, cy: 150 });
+    drawCaption(x, T, [[tk('Meet', BUILD + 0.02, beat(3.5)), tk('the', BUILD + 0.12, beat(3.5)), tk('crew.', BUILD + 0.22, beat(3.5), CLAY)]], { size: 92, cx: fmt.W / 2, cy: 150 });
     if (dive > 0.75) { x.save(); x.globalAlpha = (dive - 0.75) / 0.25 * 0.85; x.fillStyle = '#FFF8F1'; x.fillRect(0, 0, fmt.W, fmt.H); x.restore(); }
   }
 
@@ -257,22 +283,22 @@ export class Show {
 
   /* ------------------------------------------------------------ the seven looks ------------------------------------------------------------ */
 
-  /** 16.9 - 19.2 s: Clawd and Kodek (the two that have every look) flip through all seven, one per half beat. */
+  /** 16.9 - 21.5 s: Clawd and Kodek (the two that have every look) flip through all seven, one per beat. */
   private looks(x: CanvasRenderingContext2D, T: number, dt: number): void {
     const { fmt } = this, W = fmt.W, H = fmt.H;
-    const i = clamp(Math.floor((T - T_STYLES) / (BEAT / 2)), 0, LOOKS.length - 1), L = LOOKS[i], prev = LOOKS[Math.max(0, i - 1)], since = T - (T_STYLES + i * BEAT / 2);
+    const i = clamp(Math.floor((T - T_STYLES) / BEAT), 0, LOOKS.length - 1), L = LOOKS[i], prev = LOOKS[Math.max(0, i - 1)], since = T - (T_STYLES + i * BEAT);
     const cam: Cam = { x: 0, y: -60, z: 4.0 };
-    drawBackdrop(x, fmt, cam, T, L.theme, i > 0 ? { prev: prev.theme, k: clamp(since / 0.14), cx: W / 2, cy: H * 0.6 } : undefined, 0);
+    drawBackdrop(x, fmt, cam, T, L.theme, i > 0 ? { prev: prev.theme, k: clamp(since / 0.2), cx: W / 2, cy: H * 0.6 } : undefined, 0);
     setInk(L.theme.text);
     // a slice of taskbar
     const [gx, gy] = worldToScreen(cam, fmt, 0, 0);
     x.fillStyle = PAL.bar; x.beginPath(); x.roundRect(gx - 520, gy, 1040, 64 * cam.z * 0.35, 24); x.fill();
-    const hop = (t: number) => { const ph = ((t - T_STYLES) / BEAT) % 1; return -14 * Math.max(0, Math.sin(ph * Math.PI)); };
+    const hop = (t: number) => { const ph = (((t - T_STYLES) / BEAT) % 1 + 1) % 1; return -18 * Math.max(0, Math.sin(ph * Math.PI)) * (ph < 0.5 ? 1 : 0.4); };
     this.put('clawd', { x: -78, y: hop(T), z: 1, look: { style: L.style, motion: 'calm' }, drive: { happy: 0.9, armL: 2.3, armR: 2.3, oscL: 0.4, oscR: 0.4, _f: 10, look: -0.1 } });
-    this.put('kodek', { x: 78, y: hop(T + BEAT / 2), z: 2, look: { style: L.style, motion: 'calm' }, drive: { happy: 0.9, armL: 2.3, armR: 2.3, oscL: 0.4, oscR: 0.4, _f: 10, look: -0.1 } });
+    this.put('kodek', { x: 78, y: hop(T - 0.06), z: 2, look: { style: L.style, motion: 'calm' }, drive: { happy: 0.9, armL: 2.3, armR: 2.3, oscL: 0.4, oscR: 0.4, _f: 10, look: -0.1 } });
     this.draw(x, cam, dt, T, ['clawd', 'kodek']);
     // the name of the look, big and centred, popping on its half beat
-    const sc = easeOutBack(clamp(since / 0.12), 1.6);
+    const sc = easeOutBack(clamp(since / 0.2), 1.6);
     x.save(); x.translate(W / 2, H * 0.3); x.scale(sc, sc); x.textAlign = 'center'; x.textBaseline = 'middle';
     x.font = `700 120px ${FONT}`; x.fillStyle = L.theme.text; x.fillText(L.name, 0, 0); x.restore();
     headline(x, fmt, T, [['7', true], ['styles.', true], ['Pick', false], ['your', false], ['vibe.', false]], T_STYLES + 0.05, T_STATS - 0.15, 56);
@@ -325,32 +351,25 @@ export class Show {
     cam.x = -(px - W / 2) / cam.z; cam.y = -(py - fmt.H / 2) / cam.z;
     this.put('clawd', { x: 0, y: 0, z: 1, look: { style: 'pixel', motion: 'calm' }, scene: a < BEAT * 1.6 ? 'thinking' : 'done' });
     this.draw(x, cam, dt, T, ['clawd']);
-    headline(x, fmt, T, [['Now', false], ['inside', false], ['Claude', true], ['Code', true], ['too.', false]], T_MOD + 0.08, T_CREW - 0.12);
+    headline(x, fmt, T, [['Now', false], ['inside', false], ['Claude', true], ['Code', true], ['too.', false]], T_MOD + 0.08, T_END - 0.1);
   }
 
   /* ------------------------------------------------------------ the crew and the end card ------------------------------------------------------------ */
 
   private finale(x: CanvasRenderingContext2D, T: number, dt: number): void {
     const { fmt } = this, W = fmt.W, H = fmt.H;
-    const base = this.rowCam(), end = easeInOut(clamp((T - T_END) / 0.8));
-    // the end card frames them like the banner: the crew to the right, the name to the left
-    const zc = 2.35, card: Cam = { x: 0, y: (this.fmt.H / 2 - 990) / zc, z: zc };
-    const cam = mixCam(base, card, end);
+    const cam: Cam = { x: 0, y: (H / 2 - 990) / 2.35, z: 2.35 };
     drawBackdrop(x, fmt, cam, T, CREAM, undefined, 0);
-    const party = T < T_END;
-    drawTaskbar(x, fmt, cam, T, { limits: LIMITS, bars: ROW.map(w => party ? { x: rowX(w), session: { agent: 'codex', state: 'idle', progress: null }, music: 'dance' as const } : { x: rowX(w), session: { agent: 'claude', state: 'working', progress: { done: 3, total: 6 } } }) });
-    const hud = easeInOut(clamp((T - T_END) / 0.6));
+    drawTaskbar(x, fmt, cam, T, { limits: LIMITS, bars: ROW.map((_, i) => ({ x: (i - 3.5) * 74, session: { agent: 'claude', state: 'working', progress: { done: 3, total: 6 } } })) });
+    // on the final hit the whole crew drops in for the group photo, a frame or two apart, and waves
     ROW.forEach((w, i) => {
-      const hx = lerp(rowX(w), (i - 3.5) * 74, hud);
-      const bob = party ? 0 : -6 * Math.max(0, Math.sin((T - T_END) * TAU / (BEAT * 2) - i * 0.4));
-      this.put(w, { x: hx, y: bob, z: i, scene: party ? 'vibe' : 'puppet', drive: party ? {} : { happy: 1, armR: 2.4, oscR: 0.5, _f: 8 + i, armL: 0.4, look: -0.1, ex: 0 } });
+      const t0 = T_END + i * 0.035, u = clamp((T - t0) / 0.28), land = T - (t0 + 0.28);
+      if (T < t0) return;
+      const sq = land > 0 ? 0.2 * Math.exp(-land * 9) * Math.cos(land * 24) : -0.08;
+      const bob = land > 0.4 ? -6 * Math.max(0, Math.sin((T - T_END) * TAU / (BEAT * 2) - i * 0.4)) : 0;
+      this.put(w, { x: (i - 3.5) * 74, y: -360 * (1 - u) * (1 - u) + bob, z: i, sx: 1 + sq * 0.6, sy: 1 - sq, drive: land < 0 ? { armL: 2.7, armR: 2.7, look: -0.2 } : { happy: 1, armR: 2.4, oscR: 0.5, _f: 8 + i, armL: 0.4, look: -0.1, ex: 0 } });
     });
     this.draw(x, cam, dt, T);
-    if (T >= T_END && T < T_END + 1 / 60 + 1e-6) for (const w of ROW) throwPhones(this.crew[w].pet as never);
-    if (party) {
-      headline(x, fmt, T, [['Your', false], ['agents.', false], ['Your', false], ['crew.', true]], T_CREW + 0.08, T_END - 0.1, 76);
-      return;
-    }
     // flash on the final hit, then the card
     const a = T - T_END;
     if (a < 0.3) { x.save(); x.globalAlpha = (1 - a / 0.3) * 0.75; x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, W, H); x.restore(); }

@@ -25,9 +25,9 @@ export const T_STATES = bar(0);
 export const T_NEEDS = bar(2);
 export const T_PANEL = bar(3);
 export const T_STYLES = bar(4);
-export const T_STATS = bar(5);
-export const T_MOD = bar(6);
-export const T_CREW = bar(7);
+/** two bars of looks, one per beat */
+export const T_STATS = bar(6);
+export const T_MOD = bar(7);
 /** The track's final hit: the end card. */
 export const T_END = bar(8);
 export const DURATION = T_END + 2.35;

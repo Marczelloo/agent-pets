@@ -15,6 +15,11 @@ MUSIC = 'music'
 LOFI, RUN = f'{MUSIC}/lofi-vlog.mp3', f'{MUSIC}/running-night.mp3'
 # (file, from s, to s, at s in the video, gain dB). Running Night's beat grid: 0.392 + k * 60/106.01; every cut is on a bar line.
 CUTS = [(LOFI, 0.0, 5.620, 0.0, 3.0), (RUN, 69.443, 80.763, 5.620, 0.0), (RUN, 98.874, 111.0, 16.940, 0.0)]
+# The lofi to Running Night hand-over (87 -> 106 BPM, so the two never play together in time): the lofi winds down like a tape
+# being stopped, a reversed-cymbal swell rises under it, and Running Night's build bar opens up from behind a low-pass filter.
+TAPE_STOP = 5.30          # where the lofi starts slowing down
+TAPE_LEN = 0.55           # how long it takes to stop
+OPEN_LEN = 1.6            # Running Night's filter opens over this many seconds from 5.62
 
 
 def load(path):
@@ -22,17 +27,49 @@ def load(path):
     return np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).T.astype(float)
 
 
+def tape_stop(y, at, length):
+    """The slice of `y` starting at `at` s, played at a speed that falls from 1 to 0 over `length` s (pitch falls with it)."""
+    m = int(length * S.SR); t = np.arange(m) / S.SR
+    pos = at + t - t * t / (2 * length)                      # integral of the speed 1 - t/length
+    idx = pos * S.SR; i0 = np.floor(idx).astype(int); f = idx - i0
+    seg = y[:, i0] * (1 - f) + y[:, i0 + 1] * f
+    return seg * (1 - t / length) ** 0.6
+
+
+def open_filter(seg, length):
+    """Low-pass that opens from 600 Hz to 18 kHz over `length` s (exponential), in short blocks."""
+    out = seg.copy(); m = int(length * S.SR); blocks = 40; edges = np.linspace(0, m, blocks + 1).astype(int)
+    for b in range(blocks):
+        k = (edges[b] + edges[b + 1]) / 2 / m; c = 600 * (18000 / 600) ** (k ** 1.3)
+        f = np.stack([S.lp(ch[:edges[b + 1] + 2048], min(c, 20000), 2) for ch in seg])
+        out[:, edges[b]:edges[b + 1]] = f[:, edges[b]:edges[b + 1]]
+    return out
+
+
 def music_bed(n):
     out = np.zeros((2, n)); files = {}
     for i, (path, a, b, at, gain) in enumerate(CUTS):
         y = files.setdefault(path, load(path))
-        seg = y[:, int(a * S.SR):int(b * S.SR)] * 10 ** (gain / 20)
-        # short equal-power crossfades at every splice so nothing clicks; the lofi tail gets a little longer to breathe out
-        fin = int(0.012 * S.SR); fout = int((0.08 if path == LOFI else 0.012) * S.SR)
-        if i > 0: seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
-        if i < len(CUTS) - 1: seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
+        g = 10 ** (gain / 20)
+        if i == 0:
+            # the lofi up to the tape stop, then the stop itself
+            seg = y[:, :int(TAPE_STOP * S.SR)] * g
+            out[:, :seg.shape[1]] += seg
+            ts = tape_stop(y, TAPE_STOP, TAPE_LEN) * g
+            s0 = int(TAPE_STOP * S.SR); out[:, s0:s0 + ts.shape[1]] += ts
+            continue
+        seg = y[:, int(a * S.SR):int(b * S.SR)] * g
+        fin = int(0.012 * S.SR)
+        if i == 1:
+            seg = open_filter(seg, OPEN_LEN)
+            ramp = int(0.08 * S.SR); seg[:, :ramp] *= np.linspace(0, 1, ramp)
+        else: seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
+        if i < len(CUTS) - 1:
+            fout = int(0.012 * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
+    # a reversed-cymbal swell into the build bar
+    r = S.riser(0.9, 1.0); s = int((5.62 - 0.9) * S.SR); out[:, s:s + len(r)] += np.stack([r, r]) * 0.35
     return out
 
 

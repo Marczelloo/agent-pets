@@ -1,5 +1,5 @@
 // The showcase's sound effects as data, timed from the same constants as the picture. audio/make_show_audio.py lays them over the music.
-import { BEAT, BUILD, DROP, lofiBeat, T_CREW, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, bar, beat } from './time';
+import { BEAT, BUILD, DROP, lofiBeat, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, bar, beat } from './time';
 
 export interface Cue { t: number; name: string; v?: number; p?: number }
 
@@ -17,13 +17,13 @@ export function buildCues(): Cue[] {
   add(T_PANEL, 'click', 0.9); add(T_PANEL + 0.05, 'pop', 0.6, 3);
   add(T_PANEL + 1.25, 'tick', 0.7);                                                     // the Limits tab
   add(T_STYLES - 0.17, 'band', 0.7);
-  for (let i = 1; i < 8; i++) add(T_STYLES + i * BEAT / 2, 'snap', 0.55, i);
+  for (let i = 1; i < 8; i++) add(T_STYLES + i * BEAT, 'snap', 0.55, i);
   add(T_STATS, 'whoosh', 0.6); add(T_STATS + BEAT, 'confetti', 0.6);
   add(T_MOD, 'whoosh', 0.5);
   for (let i = 0; i < 5; i++) add(T_MOD + BEAT * 0.6 + i * 0.06, 'key', 0.5, i);
   for (let i = 0; i < 7; i++) if (i !== 4) add(T_MOD + BEAT * 1.6 + i * BEAT * 0.25, 'tick', 0.35, i);
-  add(T_CREW - 0.17, 'band', 0.7);
-  add(T_END, 'phones', 0.6); add(T_END + 0.05, 'shutter', 0.5);
+  for (let i = 0; i < 8; i++) add(T_END + i * 0.035 + 0.28, 'pop', 0.35, i);   // the crew lands for the group photo
+  add(T_END + 0.05, 'shutter', 0.5);
   void BUILD;
   return c.sort((a, b) => a.t - b.t);
 }
