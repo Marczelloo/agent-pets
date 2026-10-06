@@ -1,7 +1,7 @@
 // A Windows 11 taskbar drawn on a canvas (as in the README banner), with the app's own HUD on it.
 import { drawBadge, drawLimits, drawProgress, limitBars } from '@app/stage/hud';
 import type { Limit, Session } from '@app/types';
-import { BODY } from './engine';
+import { BODY, tone } from './engine';
 
 const ICONS = ['#3A7BD5', '#D97757', '#5DCAA5', '#EF9F27'];
 
@@ -11,7 +11,9 @@ export interface BarOpts { icons?: number; clock?: boolean; limits?: Limit[]; z?
 export function drawBar(x: CanvasRenderingContext2D, X: number, y: number, W: number, H: number, o: BarOpts = {}): number {
   const z = o.z ?? 1, ink = o.ink ?? '#E9E2DA';
   x.save();
-  x.fillStyle = o.fill ?? '#1F1C1A'; x.beginPath(); x.roundRect(X, y, W, H, Math.min(14, H * .32)); x.fill();
+  x.fillStyle = o.fill ?? tone['stage-bar']; x.beginPath(); x.roundRect(X, y, W, H, Math.min(14, H * .32)); x.fill();
+  // a thin light edge on top, like Windows draws it
+  x.strokeStyle = 'rgba(255,255,255,.09)'; x.lineWidth = 1; x.beginPath(); x.roundRect(X + .5, y + .5, W - 1, H - 1, Math.min(14, H * .32)); x.stroke();
   const mid = y + H / 2, s = Math.min(26, H * .56);
   for (let i = 0; i < (o.icons ?? 4); i++) {
     x.fillStyle = ICONS[i % ICONS.length]; x.beginPath(); x.roundRect(X + H * .45 + i * (s + s * .7), mid - s / 2, s, s, s * .27); x.fill();

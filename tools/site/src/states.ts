@@ -25,9 +25,9 @@ export function states(): void {
   const who = document.querySelector<HTMLDivElement>('.who')!;
   list.innerHTML = EVENTS.map((e, i) => `<li><button type="button" data-i="${i}" style="--dur:${DUR}s"><span class="sym" aria-hidden="true">${e.sym}</span><span class="ev">${e.event}</span><span class="st">${e.label}</span></button></li>`).join('');
   const buttons = [...list.querySelectorAll<HTMLButtonElement>('button')];
-  // pets that act every state well: the core three and the Android
-  const CAST = [0, 1, 2, 4, 7];
-  who.innerHTML = CAST.map((k, i) => `<button type="button" data-k="${k}" aria-pressed="${i === 0}">${CREW[k].pet === 'cyclops' ? 'opencode' : CREW[k].pet}</button>`).join('');
+  // every pet can act every state
+  const NAMES = ['Clawd', 'Kodek', 'opencode', 'Copilot', 'Android', 'Cursor', 'Grok', 'ZCode', 'blob'];
+  who.innerHTML = CREW.map((c, k) => `<button type="button" data-k="${k}" aria-pressed="${k === 0}" title="${c.label}">${NAMES[k]}</button>`).join('');
   const whoBtns = [...who.querySelectorAll<HTMLButtonElement>('button')];
 
   let cur = 0, timer = 0, auto = !REDUCED, seen = false, since = 0;
@@ -52,22 +52,29 @@ export function states(): void {
     whoBtns.forEach(o => o.setAttribute('aria-pressed', String(o === b)));
     const c = CREW[Number(b.dataset.k)];
     const old = pet;
-    pet = new Actor(c.agent, EVENTS[cur].scene);
+    pet = new Actor(c.agent, EVENTS[cur].scene, c.name ?? null);
     pet.x = old.x; pet.y = old.y; pet.u = old.u; pet.drop(160);
-    minis.forEach((m, k) => { const n = new Actor(c.agent, k ? 'grep' : 'read'); n.hidden = m.hidden; minis[k] = n; });
+    minis.forEach((m, k) => { const n = new Actor(c.agent, k ? 'grep' : 'read', c.name ?? null); n.hidden = m.hidden; minis[k] = n; });
   }));
 
   const stage = new Stage(document.querySelector('.state-stage')!, (s, dt, T) => {
     const x = s.x, barH = 46, barY = s.h - barH - 18;
-    if (auto && seen) { timer += dt; if (timer > DUR) pick((cur + 1) % EVENTS.length, false); }
+    // start playing from the first state once it comes on screen
+    if (!seen) { seen = true; pick(0, false); }
+    if (auto) { timer += dt; if (timer > DUR) pick((cur + 1) % EVENTS.length, false); }
     since += dt;
     const lim = limitsAt(T);
     drawBar(x, 18, barY, s.w - 36, barH, { limits: lim, z: 1.1 });
     const u = Math.max(.9, Math.min(1.75, s.w / 420));
-    pet.u = u; pet.x = s.w * (s.w < 520 ? .36 : .4); pet.y = barY;
+    // while delegating, the parent slides right to make room for its subagents
+    const narrow = s.w < 520, room = EVENTS[cur].scene === 'agent';
+    const tx = s.w * (room ? (narrow ? .64 : .58) : (narrow ? .36 : .4));
+    pet.u = u; pet.x = pet.x ? pet.x + (tx - pet.x) * Math.min(1, dt * 6) : tx; pet.y = barY;
     pet.step(dt); pet.draw(x, dt, T, s.dpr);
+    // subagents stand to the parent's left, clear of its arms and of each other
     minis.forEach((m, k) => {
-      m.u = u * .55; m.x = pet.x - pet.width * .62 - k * 46 * u * .55; m.y = barY;
+      m.u = u * .55;
+      m.x = pet.x - pet.width / 2 - 26 * u - m.width / 2 - k * (m.width + 18 * u); m.y = barY;
       if (!m.hidden) { m.step(dt); m.draw(x, dt, T, s.dpr); }
     });
     const e = EVENTS[cur];
@@ -76,8 +83,6 @@ export function states(): void {
     if (e.ask) bubble(x, pet, e.ask, 'question', zoom, s.dpr, s.w);
     else if (e.say && since < 3) bubble(x, pet, e.say, 'action', zoom, s.dpr, s.w);
   });
-  // start playing once it is on screen
-  new IntersectionObserver(es => { if (es[0].isIntersecting && !seen) { seen = true; pick(0, false); } }, { threshold: .4 }).observe(stage.canvas);
   stage.onClick = (px, py) => { if (pet.hit(px, py, 20)) pet.poke('cheer', 1.4); };
   pick(0, false);
 }

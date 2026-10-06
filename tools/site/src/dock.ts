@@ -25,7 +25,7 @@ export function dock(): void {
   let current = '', guide: Actor | null = null, leaving: Actor | null = null, said = 0, text = '';
 
   const anchorX = (key: string, s: Stage) => {
-    const el = links.get(key) ?? (getComputedStyle(start).display !== 'none' ? start : links.get('crew')!);
+    const el = links.get(key) ?? start;
     const r = el.getBoundingClientRect(), cr = s.canvas.getBoundingClientRect();
     return Math.max(30, Math.min(s.w - 30, r.left + r.width / 2 - cr.left));
   };
@@ -34,8 +34,12 @@ export function dock(): void {
     if (key === current) return;
     current = key;
     links.forEach((a, k) => a.setAttribute('aria-current', String(k === key)));
-    // keep the current icon in view on a phone, where the icons scroll
-    links.get(key)?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: REDUCED ? 'auto' : 'smooth' });
+    // keep the current icon in view on a phone, where the icons scroll (never scrolls the page itself)
+    const link = links.get(key), apps = link?.parentElement;
+    if (link && apps && apps.scrollWidth > apps.clientWidth) {
+      const l = link.offsetLeft - apps.offsetLeft, r = l + link.offsetWidth;
+      if (l < apps.scrollLeft || r > apps.scrollLeft + apps.clientWidth) apps.scrollTo({ left: l - apps.clientWidth / 2 + link.offsetWidth / 2, behavior: REDUCED ? 'auto' : 'smooth' });
+    }
     const g = GUIDES[key] ?? GUIDES.top, c = crewOf(g.who);
     if (guide) { leaving = guide; leaving.vy = -260; }
     guide = new Actor(c.agent, g.scene, c.name ?? null);
@@ -72,18 +76,47 @@ export function dock(): void {
     if (guide.hit(e.clientX - r.left, e.clientY - r.top, 10)) { guide.poke('cheer', 1.4); said = 0; }
   });
 
-  // which section is in the middle of the screen
-  const secs = [...document.querySelectorAll<HTMLElement>('[data-guide]')];
-  const io = new IntersectionObserver(es => {
-    const hit = es.filter(e => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-    if (hit) show(hit.target.getAttribute('data-guide')!);
-  }, { rootMargin: '-45% 0px -45% 0px', threshold: [0, .01] });
-  secs.forEach(s => io.observe(s));
-  const heroIo = new IntersectionObserver(es => { if (es[0].isIntersecting) show('top'); }, { rootMargin: '-45% 0px -45% 0px' });
-  heroIo.observe(document.querySelector('.hero')!);
-  show('top');
+  // The section that fills most of the window wins, so the guide never runs ahead to a section that only just
+  // peeks in (a tall 2K window shows a lot of two sections at once). A newcomer must lead by a margin, so it
+  // doesn't flicker at the border. Measured by hand on scroll, not with an IntersectionObserver, whose rootMargin
+  // a cross-origin iframe (a preview) may ignore.
+  const hero = document.querySelector<HTMLElement>('.hero')!;
+  const secs: [HTMLElement, string][] = [[hero, 'top'], ...[...document.querySelectorAll<HTMLElement>('[data-guide]')].map(e => [e, e.dataset.guide!] as [HTMLElement, string])];
+  let queued = false;
+  const pick = () => {
+    queued = false;
+    const vh = window.innerHeight - bar.offsetHeight;
+    const seen = secs.map(([e, key]) => { const r = e.getBoundingClientRect(); return { key, px: Math.max(0, Math.min(vh, r.bottom) - Math.max(0, r.top)) }; });
+    const best = seen.reduce((a, b) => (b.px > a.px ? b : a));
+    const now = seen.find(v => v.key === current)?.px ?? 0;
+    if (best.px > 0 && (best.key === current || best.px > now + vh * .08 || now === 0)) show(best.key);
+  };
+  const later = () => { if (!queued) { queued = true; requestAnimationFrame(pick); } };
+  window.addEventListener('scroll', later, { passive: true });
+  window.addEventListener('resize', later);
+  pick();
+
+  startMenu(links);
 
   tray();
+}
+
+/** The Start button opens a Start menu: every section with its name, the downloads and the links. */
+function startMenu(links: Map<string, HTMLAnchorElement>): void {
+  const btn = document.querySelector<HTMLButtonElement>('.taskbar .start')!;
+  const menu = document.getElementById('start-menu')!;
+  const pinned = menu.querySelector<HTMLElement>('.sm-pinned')!;
+  pinned.innerHTML = [...links.values()].map(a =>
+    `<a href="${a.getAttribute('href')}" style="${a.getAttribute('style')}">${a.querySelector('i')!.outerHTML}<span>${a.querySelector('span')!.textContent}</span></a>`).join('');
+  const open = (on: boolean) => {
+    menu.hidden = !on;
+    btn.setAttribute('aria-expanded', String(on));
+    if (on) (menu.querySelector('a') as HTMLElement | null)?.focus({ preventScroll: true });
+  };
+  btn.addEventListener('click', e => { e.stopPropagation(); open(menu.hidden); });
+  menu.addEventListener('click', e => { if ((e.target as HTMLElement).closest('a')) open(false); });
+  document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target as Node)) open(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { open(false); btn.focus(); } });
 }
 
 function tray(): void {

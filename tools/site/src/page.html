@@ -21,7 +21,6 @@
   <div class="hero-glow" aria-hidden="true"></div>
   <canvas class="hero-stage" aria-hidden="true"></canvas>
   <div class="wrap hero-inner">
-    <p class="kicker"><span class="dot" aria-hidden="true"></span> For Windows 11 · free and open source</p>
     <h1 class="mark" aria-label="Agent Pets"><span class="w">Agent</span> <span class="w">Pets</span></h1>
     <div class="hero-copy">
       <p class="lede">Every session of your coding agent gets its own pet on the taskbar. It codes at a desk, types commands, reads files, catches web pages with a butterfly net, waves when it needs you and naps when it's idle.</p>
@@ -35,12 +34,16 @@
           <span>Source on GitHub</span>
         </a>
       </div>
-      <p class="fine">Installs for your user, no administrator rights. <a href="#releases" class="news" data-news>New in <b data-version>0.17.0</b>: shortcuts, pinned sessions, limit forecasts →</a></p>
+      <ul class="facts" aria-label="At a glance">
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5 10.5 3.5v8H3zM12 3.3 21 2v9.5h-9zM3 12.5h7.5v8L3 19.5zM12 12.5h9V22l-9-1.3z"/></svg>Windows 11 only</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>Free and open source, GPL-3.0</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4 4 0 0 1 4 4v1H8V7a4 4 0 0 1 4-4ZM6 8h12v13H6z"/></svg>Installs for your user, no admin rights</li>
+      </ul>
+      <p class="fine"><a href="#releases" class="news" data-news>New in <b data-version>0.17.0</b>: global shortcuts, pinned sessions, limit forecasts →</a></p>
     </div>
   </div>
 </header>
 
-<div class="ticker" aria-hidden="true"><div class="ticker-track"></div></div>
 
 <main>
 
@@ -204,7 +207,7 @@
       <p class="sub">An agent without its own integration still gets a pet: send its state with <code>hook.exe report</code> or one HTTP call to <code>127.0.0.1</code>. Type a name and see who answers.</p>
       <div class="door-form">
         <label for="door-name">Agent name</label>
-        <input id="door-name" type="text" value="Kilo CLI" maxlength="40" autocomplete="off" spellcheck="false">
+        <input id="door-name" type="text" value="My Agent" maxlength="40" autocomplete="off" spellcheck="false">
         <div class="seg small" role="radiogroup" aria-label="State">
           <button type="button" role="radio" aria-checked="true" data-state="working">working</button>
           <button type="button" role="radio" aria-checked="false" data-state="needs_you">needs_you</button>
@@ -293,18 +296,55 @@
 </main>
 
 <footer class="foot">
-  <canvas class="foot-stage" aria-hidden="true"></canvas>
-  <div class="wrap foot-inner">
-    <p><b>Agent Pets</b> © 2026 <a href="https://github.com/Marczelloo">Marczelloo</a>, licensed under the <a href="https://github.com/Marczelloo/agent-pets/blob/main/LICENSE">GNU GPL v3.0 or later</a>.</p>
-    <p>Not affiliated with Anthropic, OpenAI, GitHub, Google, Cursor, xAI, Z.ai or opencode. The Antigravity pet is based on the Android robot, reproduced or modified from work created and shared by Google and used according to terms described in the <a href="https://creativecommons.org/licenses/by/3.0/">Creative Commons 3.0 Attribution License</a>.</p>
-    <p class="pets-note">Every pet on this page is drawn live by the app's own renderer.</p>
+  <div class="wrap">
+    <canvas class="foot-stage" aria-label="The crew asleep in Neon; the one under the cursor wakes up"></canvas>
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <p class="foot-name">Agent Pets</p>
+        <p>Animated pets for your coding agents, on the Windows 11 taskbar. Free and open source.</p>
+        <p>© 2026 <a href="https://github.com/Marczelloo">Marczelloo</a> · <a href="https://github.com/Marczelloo/agent-pets/blob/main/LICENSE">GPL-3.0-or-later</a></p>
+      </div>
+      <nav class="foot-links" aria-label="Project">
+        <p class="foot-h">Project</p>
+        <a href="https://github.com/Marczelloo/agent-pets">Source on GitHub</a>
+        <a href="https://github.com/Marczelloo/agent-pets/releases">All releases</a>
+        <a href="https://github.com/Marczelloo/agent-pets/tree/main/docs">Documentation</a>
+        <a href="https://github.com/Marczelloo/agent-pets/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://github.com/Marczelloo/agent-pets/issues/new/choose">Report a problem</a>
+      </nav>
+      <div class="foot-legal">
+        <p class="foot-h">Credits</p>
+        <p>Not affiliated with Anthropic, OpenAI, GitHub, Google, Cursor, xAI, Z.ai or opencode.</p>
+        <p>The Antigravity pet is based on the Android robot, reproduced or modified from work created and shared by Google and used according to terms described in the <a href="https://creativecommons.org/licenses/by/3.0/">Creative Commons 3.0 Attribution License</a>.</p>
+        <p class="pets-note">Every pet on this page is drawn live by the app's own renderer.</p>
+      </div>
+    </div>
   </div>
 </footer>
 
 <div class="dock">
   <canvas class="dock-stage" aria-hidden="true"></canvas>
+  <div class="startmenu" id="start-menu" hidden>
+    <div class="sm-head">
+      <span class="sm-logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <div><p class="sm-title">Agent Pets</p><p class="sm-sub">Version <b data-version>0.17.0</b> · Windows 11</p></div>
+    </div>
+    <p class="sm-h">Pinned</p>
+    <nav class="sm-pinned" aria-label="Sections"></nav>
+    <p class="sm-h">Recommended</p>
+    <div class="sm-rec">
+      <a data-download href="https://github.com/Marczelloo/agent-pets/releases/latest"><i style="--c: var(--clay)">↓</i><span><b>Download the installer</b><small data-asset>Agent.Pets_0.17.0_x64-setup.exe</small></span></a>
+      <a href="https://github.com/Marczelloo/agent-pets"><i style="--c: var(--ink-2)">‹›</i><span><b>Source on GitHub</b><small>Marczelloo/agent-pets</small></span></a>
+      <a href="https://github.com/Marczelloo/agent-pets/releases"><i style="--c: var(--teal)">↻</i><span><b>All releases</b><small>notes and installers</small></span></a>
+      <a href="https://github.com/Marczelloo/agent-pets/tree/main/docs"><i style="--c: var(--sky)">¶</i><span><b>Documentation</b><small>features, agents, door, privacy</small></span></a>
+    </div>
+    <div class="sm-foot">
+      <span class="sm-user"><span class="sm-avatar" aria-hidden="true">M</span>Marczelloo</span>
+      <a class="sm-power" href="#top" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0"/></svg></a>
+    </div>
+  </div>
   <nav class="taskbar" aria-label="Sections">
-    <a class="start" href="#top" aria-label="Back to top"><span class="start-logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span></a>
+    <button class="start" type="button" aria-label="Start" aria-expanded="false" aria-controls="start-menu"><span class="start-logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
     <div class="apps">
       <a href="#crew" data-nav="crew" style="--c: var(--clay)"><i aria-hidden="true">◆</i><span>Crew</span></a>
       <a href="#states" data-nav="states" style="--c: var(--teal)"><i aria-hidden="true">◐</i><span>States</span></a>

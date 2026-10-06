@@ -21,7 +21,7 @@ export const CREW: { who: Who; agent: Agent; label: string; pet: string; name?: 
   { who: 'cursor', agent: 'cursor', label: 'Cursor', pet: 'block' },
   { who: 'grok', agent: 'grok', label: 'Grok Build', pet: 'robot' },
   { who: 'zcode', agent: 'zcode', label: 'ZCode', pet: 'panda' },
-  { who: 'blob', agent: 'other', label: 'Any agent', pet: 'blob', name: 'Kilo' },
+  { who: 'blob', agent: 'other', label: 'Any agent', pet: 'blob', name: 'Any agent' },
 ];
 export const crewOf = (who: Who) => CREW.find(c => c.who === who)!;
 
@@ -120,17 +120,18 @@ export class Stage {
   readonly x: CanvasRenderingContext2D;
   w = 0; h = 0; dpr = 1;
   visible = false;
+  readonly always: boolean;
   pointer: Pointer = { x: -1, y: -1, in: false };
   onClick?: (px: number, py: number) => void;
   onResize?: () => void;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly paint: (s: Stage, dt: number, T: number) => void, opts: { always?: boolean; interactive?: boolean } = {}) {
     this.x = canvas.getContext('2d')!;
+    this.always = !!opts.always;
+    this.visible = this.always;
     STAGES.push(this);
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
-    if (opts.always) this.visible = true;
-    else new IntersectionObserver(es => { this.visible = es[es.length - 1].isIntersecting; }, { rootMargin: '120px' }).observe(canvas);
     if (opts.interactive !== false) {
       const local = (e: PointerEvent | MouseEvent) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
       canvas.addEventListener('pointermove', e => { const [px, py] = local(e); this.pointer = { x: px, y: py, in: true }; });
@@ -145,9 +146,13 @@ export class Stage {
     const r = this.canvas.getBoundingClientRect();
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.w = r.width; this.h = r.height;
-    this.canvas.width = Math.max(1, Math.round(r.width * this.dpr));
-    this.canvas.height = Math.max(1, Math.round(r.height * this.dpr));
+    // assigning a canvas size clears it, even to the same value: only when it really changes
+    const W = Math.max(1, Math.round(r.width * this.dpr)), H = Math.max(1, Math.round(r.height * this.dpr));
+    if (this.canvas.width !== W) this.canvas.width = W;
+    if (this.canvas.height !== H) this.canvas.height = H;
     this.onResize?.();
+    // a ResizeObserver runs after this frame was drawn: draw it again, or a growing canvas stays blank
+    if (this.visible && this.w > 0) this.frame(0, T);
   }
 
   frame(dt: number, T: number): void {
@@ -170,14 +175,20 @@ export function run(): void {
     // reduced motion: a still picture, refreshed only now and then for scene changes
     if (REDUCED && last && now - last < 250) return;
     last = now; T += dt;
-    for (const s of STAGES) if (s.visible && s.w > 0) s.frame(dt, T);
+    // Draw only what is on screen. Measured every frame rather than with an IntersectionObserver, which can stay
+    // silent inside a cross-origin iframe (a preview) for a canvas added after load.
+    const vh = window.innerHeight;
+    for (const s of STAGES) {
+      if (!s.always) { const r = s.canvas.getBoundingClientRect(); s.visible = r.bottom > -100 && r.top < vh + 100 && r.width > 0; }
+      if (s.visible && s.w > 0) s.frame(dt, T);
+    }
   };
   requestAnimationFrame(loop);
 }
 
 /** The page's colour tokens as the canvases see them, refreshed when the theme changes. */
 export const tone: Record<string, string> = {};
-const TOKENS = ['paper', 'paper-2', 'ink', 'ink-2', 'line', 'card', 'bar', 'bar-ink', 'bar-2', 'clay', 'teal', 'sky', 'amber', 'leaf', 'mute'];
+const TOKENS = ['paper', 'paper-2', 'ink', 'ink-2', 'line', 'card', 'bar', 'bar-ink', 'bar-2', 'stage-bar', 'clay', 'teal', 'sky', 'amber', 'leaf', 'mute'];
 function readTone() { const cs = getComputedStyle(document.documentElement); TOKENS.forEach(t => { tone[t] = cs.getPropertyValue(`--${t}`).trim(); }); }
 readTone();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readTone);

@@ -1,5 +1,6 @@
 // Releases: the snapshot baked in at build time, replaced by the live list from the GitHub API when it loads.
-import { Actor, Stage } from './engine';
+import { Actor, REDUCED, Stage } from './engine';
+import type { Agent } from '@app/types';
 
 export interface Asset { name: string; size: number; browser_download_url: string }
 export interface Release { tag_name: string; name: string; body: string; html_url: string; published_at: string; prerelease: boolean; assets: Asset[] }
@@ -8,6 +9,8 @@ interface SiteData { releases: Release[]; builtAt: string; repo: string }
 const DATA = (window as unknown as { __SITE__: SiteData }).__SITE__;
 const API = `https://api.github.com/repos/${DATA.repo}/releases?per_page=100`;
 const CACHE = 'agent-pets-releases';
+/** height of the latest notes while folded */
+const FOLDED = 380;
 // a hand-written one-liner for releases whose notes start straight with a list
 const SUMMARY: Record<string, string> = {
   'v0.17.0': 'global shortcuts, pinned sessions, limit forecasts and quieter notifications',
@@ -57,9 +60,9 @@ const isPatch = (r: Release) => !/\.0$/.test(version(r));
 function lead(r: Release): string {
   const lines = r.body.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean);
   const first = lines[0] ?? '';
-  if (first && !first.startsWith('#') && !first.startsWith('-')) return first;
+  if (first && !first.startsWith('#') && !first.startsWith('-')) return first.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
   const b = lines.find(l => l.startsWith('- '));
-  return (b ?? '').replace(/^-\s+/, '').replace(/\*\*/g, '').replace(/`/g, '');
+  return (b ?? '').replace(/^-\s+/, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*/g, '').replace(/`/g, '');
 }
 
 function counts(body: string): [string, number][] {
@@ -91,7 +94,6 @@ async function live(): Promise<Release[] | null> {
 }
 
 // ───────── page ─────────
-let celebrate: Actor[] = [];
 
 function render(list: Release[], source: 'live' | 'snapshot'): void {
   const sorted = [...list].filter(r => !r.prerelease).sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
@@ -122,11 +124,10 @@ function render(list: Release[], source: 'live' | 'snapshot'): void {
         <span class="latest-date">${fmtDate(latest.published_at)} · ${daysAgo(latest.published_at)}</span>
       </div>
       ${c.length ? `<div class="counts">${c.map(([k, n]) => `<span><b>${n}</b> ${esc(k.toLowerCase())}</span>`).join('')}</div>` : ''}
-      <div class="notes clip" id="latest-notes">${markdown(latest.body)}</div>
+      <div class="notes fold clip" id="latest-notes" style="max-height: ${FOLDED}px">${markdown(latest.body)}</div>
       <button type="button" class="more" aria-controls="latest-notes" aria-expanded="false">Show all notes</button>
     </div>
     <div class="latest-side">
-      <canvas class="party-stage" aria-hidden="true"></canvas>
       <div class="btns">
         <a class="btn primary" href="${exe ? exe.browser_download_url : latest.html_url}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
@@ -134,13 +135,29 @@ function render(list: Release[], source: 'live' | 'snapshot'): void {
         </a>
         <a class="btn ghost" href="${latest.html_url}"><span>Release on GitHub</span></a>
       </div>
+      <canvas class="party-stage" aria-hidden="true"></canvas>
     </div>`;
   const more = document.querySelector<HTMLButtonElement>('.latest .more')!, notes = document.getElementById('latest-notes')!;
-  if (notes.scrollHeight <= notes.clientHeight + 4) { notes.classList.remove('clip'); more.hidden = true; }
+  if (notes.scrollHeight <= FOLDED + 4) { notes.classList.remove('clip'); notes.style.maxHeight = 'none'; more.hidden = true; }
   more.addEventListener('click', () => {
-    const open = notes.classList.toggle('clip');
-    more.setAttribute('aria-expanded', String(!open));
-    more.textContent = open ? 'Show all notes' : 'Show fewer';
+    const opening = notes.classList.contains('clip'), full = notes.scrollHeight;
+    more.setAttribute('aria-expanded', String(opening));
+    more.textContent = opening ? 'Show fewer' : 'Show all notes';
+    if (opening) {
+      notes.classList.remove('clip');
+      notes.style.maxHeight = `${full}px`;
+      // free the height once open, so a narrower window can still show it all
+      const done = () => { if (!notes.classList.contains('clip')) notes.style.maxHeight = 'none'; };
+      notes.addEventListener('transitionend', done, { once: true });
+      if (REDUCED) done();
+    } else {
+      notes.style.maxHeight = `${full}px`;
+      void notes.offsetHeight;
+      notes.classList.add('clip');
+      notes.style.maxHeight = `${FOLDED}px`;
+      // the page shrinks as the notes fold: follow it, so the button stays where you clicked it
+      if (more.getBoundingClientRect().top < window.innerHeight) window.scrollBy({ top: -(full - FOLDED), behavior: REDUCED ? 'auto' : 'smooth' });
+    }
   });
   party(document.querySelector('.party-stage')!);
 
@@ -152,6 +169,7 @@ function render(list: Release[], source: 'live' | 'snapshot'): void {
         <p class="links"><a href="${r.html_url}">Release page →</a>${e ? `<a href="${e.browser_download_url}">${esc(e.name)}</a>` : ''}</p></div>
     </details></li>`;
   }).join('');
+  document.querySelectorAll<HTMLDetailsElement>('[data-rels] details').forEach(slide);
 
   src.className = `src${source === 'live' ? ' live' : ''}`;
   const legend = '<span style="color:var(--teal)">◆</span> feature · <span style="color:var(--mute)">◆</span> patch';
@@ -160,21 +178,58 @@ function render(list: Release[], source: 'live' | 'snapshot'): void {
     : `<i></i>snapshot from ${fmtDate(DATA.builtAt)} · ${legend} · <a href="https://github.com/${DATA.repo}/releases">all on GitHub</a>`;
 }
 
-/** three pets cheering the latest release */
+/** <details> that slide open and shut */
+function slide(d: HTMLDetailsElement): void {
+  const sum = d.querySelector('summary')!, body = d.querySelector<HTMLElement>('.body')!;
+  let anim: Animation | null = null;
+  sum.addEventListener('click', e => {
+    if (REDUCED) return;
+    e.preventDefault();
+    anim?.cancel();
+    const opening = !d.open;
+    if (opening) d.open = true;
+    const h = body.scrollHeight;
+    anim = body.animate(
+      opening ? [{ height: '0px', opacity: 0 }, { height: `${h}px`, opacity: 1 }] : [{ height: `${h}px`, opacity: 1 }, { height: '0px', opacity: 0 }],
+      { duration: Math.min(650, 260 + h * .35), easing: 'cubic-bezier(.3, .9, .3, 1)' });
+    anim.onfinish = () => { anim = null; if (!opening) d.open = false; };
+  });
+}
+
+// The pets beside the latest release: a cheering row first, and one more busy row for every bit the panel grows
+// (open the notes and the rest of the crew gets to work).
+type Spot = [agent: Agent, scene: string];
+const ROWS: Spot[][] = [
+  [['codex', 'clap'], ['claude', 'done'], ['antigravity', 'cheer']],
+  [['copilot', 'web'], ['opencode', 'bash']],
+  [['zcode', 'vibe'], ['grok', 'wave'], ['cursor', 'clap']],
+  [['other', 'edit'], ['codex', 'read']],
+  [['claude', 'compact'], ['antigravity', 'thinking'], ['zcode', 'done']],
+  [['cursor', 'grep'], ['grok', 'agent']],
+  [['opencode', 'needs'], ['copilot', 'thinking'], ['claude', 'vibe']],
+];
+const FIRST = 150, ROW_H = 170;
 let partyStage: Stage | null = null;
 function party(canvas: HTMLCanvasElement): void {
   partyStage?.dispose();
-  celebrate = [new Actor('codex', 'clap'), new Actor('claude', 'done'), new Actor('antigravity', 'cheer')];
-  celebrate.forEach((a, i) => a.drop(200 + i * 60));
+  const rows: (Actor[] | null)[] = ROWS.map(() => null);
   partyStage = new Stage(canvas, (s, dt, T) => {
-    const u = Math.max(.7, Math.min(1.15, s.w / 400)), floor = s.h * .62;
-    s.x.fillStyle = 'rgba(255,255,255,.08)'; s.x.fillRect(0, floor, s.w, 2);
-    celebrate.forEach((a, i) => {
-      a.u = u; a.x = s.w * (.22 + i * .28); a.y = floor;
-      a.step(dt); a.draw(s.x, dt, T, s.dpr);
+    const u = Math.max(.6, Math.min(1, s.w / 520));
+    ROWS.forEach((spots, r) => {
+      const floor = FIRST + r * ROW_H, fits = floor + 24 <= s.h;
+      if (!fits) { rows[r] = null; return; }
+      // a row that just found room drops in
+      if (!rows[r]) rows[r] = spots.map(([agent, scene], i) => { const a = new Actor(agent, scene, agent === 'other' ? 'Any agent' : null); a.drop(220 + i * 70); return a; });
+      s.x.fillStyle = 'rgba(255,255,255,.08)'; s.x.fillRect(0, floor, s.w, 2);
+      // two pets with props leave room on the right; three without spread out
+      const xs = spots.length === 2 ? [.24, .66] : [.2, .5, .8];
+      rows[r]!.forEach((a, i) => {
+        a.u = u; a.x = s.w * xs[i]; a.y = floor;
+        a.step(dt); a.draw(s.x, dt, T, s.dpr);
+      });
     });
   });
-  partyStage.onClick = (px, py) => { const a = celebrate.find(a => a.hit(px, py, 16)); if (a) a.hop(320); };
+  partyStage.onClick = (px, py) => { const a = rows.flatMap(r => r ?? []).find(a => a.hit(px, py, 16)); if (a) a.hop(320); };
 }
 
 export function releases(): void {
