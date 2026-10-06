@@ -1,8 +1,8 @@
-// The showcase's clock, read off the licensed track it is cut to (Running Night, 106.01 BPM; see audio/make_show_audio.py for the cut):
-//   0     - 5.62 s  59.30 - 64.92 s: its quiet breakdown, no drums, the calm intro; the drums come back on its last beat (5.05 s)
-//   5.62  - 7.88 s  69.44 - 71.71 s: the last bar before the drop ("Meet the crew.")
-//   7.88  - 16.94 s 71.71 - 80.76 s: the drop, as the tour starts, and its first four bars
-//   16.94 - end     98.87 s to its final hit
+// The showcase's clock, read off the licensed track it is cut to (Running Night, 106.01 BPM; see audio/make_show_audio.py for the cut).
+// The track loops four chords, one per bar: A, F#, G#, C#. Its drop is an A bar (73.97 s), where the bass comes in.
+//   0     - 3.36 s  57.03 - 60.39 s: its quiet breakdown, no drums (A, F#)
+//   3.36  - end     69.44 s on, uncut: the drums come in (G#), the last bar before the drop (C#, "Meet the crew."),
+//                   the drop on the tour (A, 7.88 s), and on through the styles (A, 16.94 s) to the end card (A, 26.0 s)
 // Every scene change lands on one of its bar lines.
 
 export const FPS = 60;
@@ -11,8 +11,8 @@ export const FPS = 60;
 export const HIT = 5.62;
 export const BEAT = 60 / 106.01;
 export const BAR = 4 * BEAT;
-/** The drums come back one beat before the bar: the crew notices, and jumps on the bar. */
-export const NOTICE = HIT - BEAT;
+/** The drums come in a bar before the hit: the crew notices, nods along, and jumps on the hit. */
+export const NOTICE = HIT - BAR;
 /** Beat k counted from the hit (k = 0 .. 3 is "Meet the crew."). */
 export const beat = (k: number): number => HIT + k * BEAT;
 /** The tour of the app starts one bar after the hit, on the drop. */

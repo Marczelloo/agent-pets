@@ -13,16 +13,20 @@ import synth as S
 
 MUSIC = 'music'
 RUN = f'{MUSIC}/running-night.mp3'
-# Running Night's beat grid: 0.392 + k * 60/106.01 s; its drop is at 71.707 s. Its attacks start ~15-20 ms before the grid lines, so every
-# junction is a short equal-power cross-fade placed LEAD before the bar line and none of the attack is lost.
+# Running Night's beat grid: 0.392 + k * 60/106.01 s. It loops four chords, one per bar (A, F#, G#, C#); the quiet breakdown runs the same
+# loop, so any bar of it can hand over to the bar with the next chord in the loud part. Its attacks start ~15-20 ms before the grid lines,
+# so the hand-over is a short equal-power cross-fade placed LEAD before the bar line and none of the attack is lost.
+RBAR = 4 * 60 / 106.01
+HIT = 5.620                        # time.ts HIT
 LEAD = 0.030
 XF = 0.012
 FADE_IN = 0.25                     # the breakdown fades in over the first moment of the video
-# (from s, to s, at s in the video): source bar lines and where they land.
-#   0 - 5.62 s    the quiet breakdown, no drums; its last beat is the drums coming back (5.05 s in the video)
-#   5.62 - 16.94  the last bar before the drop, the drop itself as the tour starts (7.88 s), and its first four bars, as in the track
-#   16.94 - end   bar 12 of the drop section (98.87 s): it follows bar 3 as seamlessly as bar 4 would, then on uncut to the final hit
-CUTS = [(59.295, 64.915, 0.0), (69.443, 80.763, 5.620), (98.874, 111.0, 16.940)]
+# (from s, to s, at s in the video):
+#   0 - 3.36 s   the breakdown, no drums: the end of its A bar and its F# bar
+#   3.36 - end   from the G# bar where the drums come in (69.44 s), uncut: C# for the hit, the drop (A) on the tour, through to the end
+CUTS = [(60.387 - (HIT - RBAR), 60.387, 0.0), (69.443, 111.0, HIT - RBAR)]
+T_END = HIT + 9 * RBAR             # time.ts T_END: the end card, on an A bar; the music plays on under it and fades out
+FADE_AT = T_END + 0.5
 
 
 def load(path):
@@ -40,6 +44,9 @@ def music_bed(n):
         if i < last: fout = int(XF * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
+    # under the end card the music fades out with the picture
+    f0 = int(FADE_AT * S.SR); k = n - f0
+    if k > 0: out[:, f0:] *= np.cos(np.linspace(0, np.pi / 2, k)) ** 1.5
     return out
 
 

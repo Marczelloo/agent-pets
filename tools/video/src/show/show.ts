@@ -130,8 +130,8 @@ export class Show {
   /** The row framed a little wider (s > 1) or tighter (s < 1), the taskbar top kept at `ground` px. */
   private rowAt(s: number, ground = 880): Cam { return fit({ x0: -455 * s, x1: 455 * s, y0: -300 * s, y1: 70 * s }, this.fmt, { ground }); }
 
-  /** 0 - 7.9 s: the crew chills on the taskbar over the breakdown. Two beats before the drums come back everyone freezes and turns to us,
-   *  crouches, and jumps as the drums come in: "Meet the crew." Then we dive into Clawd for the tour. */
+  /** 0 - 7.9 s: the crew chills on the taskbar over the breakdown. When the drums come in everyone freezes and turns to us, nods along,
+   *  crouches, and jumps on the next bar: "Meet the crew." Then we dive into Clawd for the tour. */
   private intro(x: CanvasRenderingContext2D, T: number, dt: number): void {
     const { fmt } = this, W = fmt.W, H = fmt.H;
     const frozen = T >= NOTICE, hit = T >= HIT, sinceHit = T - HIT;
@@ -155,11 +155,13 @@ export class Show {
       const slot = rowX(w), stagger = i * 0.025;
       if (!frozen) { this.put(w, { x: slot, y: 0, z: i, scene: CALM[w] ?? 'idle' }); return; }
       if (!hit) {
-        // frozen: face us, arms up in surprise with a little jump, then sink into a crouch for the jump
+        // the drums are in: face us, arms up in surprise with a little jump, then nod along on the beats, then crouch for the jump
         const k = T - NOTICE - stagger, jump = k > 0 ? Math.max(0, Math.sin(Math.min(1, k / 0.22) * Math.PI)) * 22 : 0;
-        const crouch = easeInOut(clamp((T - (HIT - 0.42)) / 0.4));
-        this.put(w, { x: slot, y: -jump, z: i, sx: 1 + 0.08 * crouch, sy: 1 - 0.13 * crouch, scene: 'puppet',
-          drive: { th: 0, look: 0, ex: 0, lx: 0, armL: lerp(1.7, 0.5, crouch), armR: lerp(1.7, 0.5, crouch), oscL: 0, oscR: 0, happy: 0, _f: 30 } });
+        const crouch = easeInOut(clamp((T - (HIT - 0.42)) / 0.4)), into = easeInOut(clamp((T - NOTICE - BEAT * 0.8) / 0.4));
+        const nod = into * (1 - crouch) * Math.abs(Math.sin(Math.PI * (T - NOTICE) / BEAT)) * 10;
+        const arms = lerp(lerp(1.7, 1.0, into), 0.5, crouch);
+        this.put(w, { x: slot, y: -jump - nod, z: i, sx: 1 + 0.08 * crouch, sy: 1 - 0.13 * crouch, scene: 'puppet',
+          drive: { th: 0, look: 0, ex: 0, lx: 0, armL: arms, armR: arms, oscL: 0.25 * into * (1 - crouch), oscR: 0.25 * into * (1 - crouch), _f: 8, happy: 0.7 * into * (1 - crouch) } });
         return;
       }
       // the hit: everyone jumps, lands with a squash, then bounces and waves on the beat
@@ -176,9 +178,9 @@ export class Show {
       }
     });
     this.draw(x, cam, dt, T);
-    // "!" over every head when they notice, until just before the drums
+    // "!" over every head as the drums come in
     if (frozen && !hit) ROW.forEach((w, i) => {
-      const t0 = NOTICE + i * 0.025, age = T - t0, out = clamp((T - (HIT - 0.16)) / 0.12);
+      const t0 = NOTICE + i * 0.025, age = T - t0, out = clamp((T - (NOTICE + 0.9)) / 0.15);
       if (age < 0 || out >= 1) return;
       const [px, py] = this.crew[w].pt(0, -112), sc = (age < 0.18 ? easeOutBack(age / 0.18, 2.4) : 1) * (1 - out), r = 34 * sc;
       x.save(); x.translate(px, py); x.rotate((hash(i + 3) - 0.5) * 0.4);
@@ -199,9 +201,9 @@ export class Show {
       drawTag(x, T, tx, ty, { name: NAMES[w].name, sub: NAMES[w].agent !== NAMES[w].name ? NAMES[w].agent : undefined, color: NAMES[w].color, t: t0, out: TOUR - 0.42, h: 44, tilt: (hash(i) - 0.5) * 0.1 });
     });
     x.restore();
-    // the words: calm over the breakdown; the second line is knocked off when they notice; the hit brings the third
-    drawCaption(x, T, [[tk('Your', 0.35, 2.15), tk('coding', 0.45, 2.15), tk('agents,', 0.55, 2.15, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
-    drawCaption(x, T, [[tk('now', 2.3, NOTICE + 0.04), tk('living', 2.4, NOTICE + 0.06), tk('on', 2.5, NOTICE + 0.08), tk('your', 2.6, NOTICE + 0.1), tk('taskbar.', 2.7, NOTICE + 0.12, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
+    // the words: the first two over the calm and the drums coming in; the hit brings the third
+    drawCaption(x, T, [[tk('Your', 0.2, 1.6), tk('coding', 0.3, 1.6), tk('agents,', 0.4, 1.6, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
+    drawCaption(x, T, [[tk('now', 1.7, HIT - 0.2), tk('living', 1.8, HIT - 0.18), tk('on', 1.9, HIT - 0.16), tk('your', 2.0, HIT - 0.14), tk('taskbar.', 2.1, HIT - 0.12, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
     drawCaption(x, T, [[tk('Meet', HIT, TOUR - 0.4), tk('the', HIT + 0.08, TOUR - 0.4), tk('crew.', HIT + 0.16, TOUR - 0.4, CLAY)]], { size: 112, cx: W / 2, cy: 160 });
     // a white flash on the hit, and into Clawd for the tour
     const flash = hit ? 0.8 * Math.exp(-sinceHit * 9) : 0;
