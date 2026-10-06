@@ -1,5 +1,6 @@
-# Agent Pets release: checks versions, builds a signed installer, and assembles latest.json for the updater
-# prints the `gh release create` command without publishing anything. Instructions: docs/building.md.
+# Agent Pets release built locally: checks versions, builds a signed installer, and assembles latest.json for the updater
+# prints the `gh release create` command without publishing anything. The release workflow does the same in CI
+# (.github/workflows/release.yml). Instructions: docs/building.md.
 param(
   # release notes file (the first nonempty line also appears in the "Version available" toast)
   [Parameter(Mandatory = $true)][string]$Notes
@@ -7,11 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
-$v = (Get-Content "$root/app/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json).version
-$pkg = (Get-Content "$root/app/package.json" -Raw | ConvertFrom-Json).version
-$cargo = (Select-String -Path "$root/Cargo.toml" -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
-$mod = (Get-Content "$root/claude-plugin/.claude-plugin/plugin.json" -Raw | ConvertFrom-Json).version
-if ($pkg -ne $v -or $cargo -ne $v -or $mod -ne $v) { throw "Version mismatch: tauri.conf.json $v, package.json $pkg, Cargo.toml $cargo, claude-plugin plugin.json $mod" }
+$v = & "$PSScriptRoot/version.ps1"
 if (-not (Test-Path $Notes)) { throw "Release notes file missing: $Notes" }
 
 # The Claude Code mod ships inside the installer: it must validate and pass its tests before anything is built.
@@ -47,19 +44,7 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $name = $exe.Name -replace ' ', '.'
 Copy-Item $exe.FullName "$out/$name" -Force
 
-$first = (Get-Content $Notes | Where-Object { $_.Trim() -ne '' -and -not $_.StartsWith('#') } | Select-Object -First 1)
-$latest = [ordered]@{
-  version   = $v
-  notes     = if ($first) { $first.Trim() } else { "Agent Pets $v" }
-  pub_date  = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-  platforms = [ordered]@{
-    'windows-x86_64' = [ordered]@{
-      signature = (Get-Content $sig -Raw).Trim()
-      url       = "https://github.com/Marczelloo/agent-pets/releases/download/v$v/$name"
-    }
-  }
-}
-$latest | ConvertTo-Json -Depth 5 | Set-Content "$out/latest.json" -Encoding utf8NoBOM
+& "$PSScriptRoot/latest-json.ps1" -Version $v -Installer "$out/$name" -Signature $sig -Notes $Notes -Out "$out/latest.json"
 
 Write-Host "Ready: $out/$name and $out/latest.json"
 Write-Host 'After approval to publish:'
