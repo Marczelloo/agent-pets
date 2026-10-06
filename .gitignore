@@ -8,3 +8,4 @@ app/src-tauri/gen
 app/src-tauri/resources
 *.tsbuildinfo
 claude-plugin/tsconfig.json
+tools/site/node_modules
