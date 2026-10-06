@@ -119,7 +119,8 @@ prototype/          the original visual prototype of the pets (canvas 2D)
 scripts/            release script
 claude-plugin/      the Claude Code mod (function-hook plugin, embedded in the app)
 .claude-plugin/     marketplace for manual mod installs
-tools/              fixture anonymizer, CPU measurement, README media recorder (showcase/)
+tools/              fixture anonymizer, CPU measurement, README media recorder (showcase/), landing page (site/)
+site/               the landing page, one self-contained file built by tools/site
 docs/               documentation and README images
 ```
 
