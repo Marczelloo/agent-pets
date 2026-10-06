@@ -217,6 +217,13 @@ export const en: Dict = {
       failed: "Couldn't register — is another program using it?",
       note: 'Click a shortcut and press a new combination with Ctrl, Alt, Shift or Win. Esc cancels, Backspace turns it off.',
     },
+    backup: {
+      title: 'Settings backup',
+      hint: 'Look, notifications, taskbar and limits. Agent integrations stay as they are.',
+      export: 'Export', import: 'Import…', reveal: 'Show in folder',
+      saved: name => `Saved: ${name}`,
+      imported: 'Settings imported.',
+    },
     autostart: 'Start with Windows',
     autostartDesc: 'Pets appear when you sign in',
     updates: 'Updates',

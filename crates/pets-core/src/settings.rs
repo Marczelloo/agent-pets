@@ -384,6 +384,14 @@ pub fn path(home: &Path) -> PathBuf { home.join(".agent-pets").join("settings.js
 #[derive(Debug, PartialEq)]
 pub struct Loaded { pub settings: Settings, pub first_run: bool, pub error: Option<String> }
 
+/// Parse settings with the same cleanup used for the on-disk file.
+pub fn from_json(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
+    let mut s: Settings = serde_json::from_slice(bytes)?;
+    s.stage = s.stage.clamped();
+    s.extra.remove("claude_statusline");
+    Ok(s)
+}
+
 pub fn load(path: &Path) -> Loaded {
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
@@ -391,12 +399,8 @@ pub fn load(path: &Path) -> Loaded {
             return Loaded { settings: Settings::default(), first_run: true, error: None },
         Err(e) => return Loaded { settings: Settings::default(), first_run: false, error: Some(e.to_string()) },
     };
-    match serde_json::from_slice::<Settings>(&bytes) {
-        Ok(mut s) => {
-            s.stage = s.stage.clamped();
-            s.extra.remove("claude_statusline"); // retired switch (0.16)
-            Loaded { settings: s, first_run: false, error: None }
-        }
+    match from_json(&bytes) {
+        Ok(s) => Loaded { settings: s, first_run: false, error: None },
         Err(e) => Loaded { settings: Settings::default(), first_run: false,
             error: Some(format!("{}: {e}", path.display())) },
     }

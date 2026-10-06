@@ -145,6 +145,9 @@ function Root() {
     onMove={() => { if (inTauri) void invoke('stage_move'); }}
     onMute={choice => { if (inTauri) void invoke('notifications_mute', { choice }).catch(e => setMessage(String(e))); }}
     onReport={inTauri ? () => void invoke('report_problem_open') : undefined}
+    onExport={inTauri ? () => invoke<string>('settings_export') : undefined}
+    onImport={inTauri ? text => invoke<void>('settings_import', { text }) : undefined}
+    onReveal={inTauri ? path => invoke<void>('settings_reveal', { path }) : undefined}
     onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;
 }
 

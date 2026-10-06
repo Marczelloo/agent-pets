@@ -3,9 +3,11 @@
 use pets_core::i18n::{self, Lang};
 use pets_core::integrations::{self, AppId, Detected, Status};
 use pets_core::settings::{self as core_settings, Settings};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Mutex, RwLock};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -154,6 +156,113 @@ pub fn settings_get(state: tauri::State<SettingsState>) -> SettingsView {
 pub fn settings_set(app: AppHandle, settings: Settings) -> Result<(), String> {
     let merged = merge_user_settings(&app.state::<SettingsState>().get(), settings);
     store(&app, merged)
+}
+
+const MAX_BACKUP_BYTES: usize = 256 * 1024;
+
+#[derive(Serialize)]
+struct Backup<'a> { agent_pets_settings: u8, version: &'a str, settings: &'a Settings }
+
+#[derive(Deserialize)]
+struct BackupInput { agent_pets_settings: u8, settings: serde_json::Value }
+
+fn backup_json(settings: &Settings, version: &str) -> Result<Vec<u8>, serde_json::Error> {
+    let mut portable = settings.clone();
+    portable.notifications.muted_until = None;
+    serde_json::to_vec_pretty(&Backup { agent_pets_settings: 1, version, settings: &portable })
+}
+
+fn backup_name(date: &str, exists: impl Fn(&str) -> bool) -> String {
+    let base = format!("agent-pets-settings-{date}");
+    let mut name = format!("{base}.json");
+    let mut n = 2;
+    while exists(&name) { name = format!("{base}-{n}.json"); n += 1; }
+    name
+}
+
+#[cfg(windows)]
+fn local_date() -> String {
+    unsafe extern "system" { fn GetLocalTime(now: *mut windows::Win32::Foundation::SYSTEMTIME); }
+    let mut now = windows::Win32::Foundation::SYSTEMTIME::default();
+    unsafe { GetLocalTime(&mut now); }
+    format!("{:04}-{:02}-{:02}", now.wYear, now.wMonth, now.wDay)
+}
+
+#[cfg(not(windows))]
+fn local_date() -> String { pets_core::time::rfc3339(pets_core::time::now_ms())[..10].to_string() }
+
+fn backup_dir(app: &AppHandle) -> PathBuf {
+    app.path().download_dir().unwrap_or_else(|_| app.state::<SettingsState>().home.clone())
+}
+
+#[tauri::command]
+pub fn settings_export(app: AppHandle) -> Result<String, String> {
+    let st = app.state::<SettingsState>();
+    let lang = st.lang();
+    let dir = backup_dir(&app);
+    let bytes = backup_json(&st.get(), env!("CARGO_PKG_VERSION")).map_err(|e| e.to_string())?;
+    let date = local_date();
+    for _ in 0..1000 {
+        let name = backup_name(&date, |name| dir.join(name).exists());
+        let path = dir.join(name);
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                use std::io::Write;
+                if let Err(e) = file.write_all(&bytes) { let _ = std::fs::remove_file(&path); return Err(e.to_string()); }
+                return Ok(path.to_string_lossy().into_owned());
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{}: {e}", i18n::tr(lang, "Nie udało się wyeksportować ustawień", "Could not export settings"))),
+        }
+    }
+    Err(i18n::tr(lang, "Nie udało się wyeksportować ustawień", "Could not export settings").into())
+}
+
+fn reveal_allowed(path: &Path, dir: &Path, home: &Path) -> bool {
+    if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) { return false; }
+    let Ok(file) = path.canonicalize() else { return false; };
+    [dir, home].into_iter().filter_map(|p| p.canonicalize().ok()).any(|root| file.starts_with(root))
+}
+
+#[tauri::command]
+pub fn settings_reveal(app: AppHandle, path: String) -> Result<(), String> {
+    let st = app.state::<SettingsState>();
+    let lang = st.lang();
+    let file = Path::new(&path);
+    if !file.is_file() || !reveal_allowed(file, &backup_dir(&app), &st.home) {
+        return Err(i18n::tr(lang, "Nieprawidłowa ścieżka pliku", "Invalid file path").into());
+    }
+    Command::new("explorer.exe").arg(format!("/select,{}", file.display())).spawn()
+        .map(|_| ()).map_err(|e| e.to_string())
+}
+
+fn import_settings(text: &str, current: &Settings, lang: Lang) -> Result<Settings, String> {
+    if text.len() > MAX_BACKUP_BYTES { return Err(i18n::tr(lang, "Plik jest za duży.", "The file is too large.").into()); }
+    let invalid = || i18n::tr(lang, "To nie jest plik ustawień Agent Pets.", "This is not an Agent Pets settings file.").to_string();
+    let value: serde_json::Value = serde_json::from_str(text).map_err(|_| invalid())?;
+    let object = value.as_object().ok_or_else(invalid)?;
+    let inner = if object.contains_key("agent_pets_settings") {
+        let backup: BackupInput = serde_json::from_value(value).map_err(|_| invalid())?;
+        if backup.agent_pets_settings != 1 || !backup.settings.is_object() { return Err(invalid()); }
+        backup.settings
+    } else {
+        if !object.keys().any(|k| ["version", "apps", "claude_plan_usage", "claude_mod", "claude_mod_pet", "claude_mod_nudges", "notifications", "pets", "power_saving", "autostart", "language", "theme", "updates", "stage", "hotkeys"].contains(&k.as_str())) { return Err(invalid()); }
+        value
+    };
+    let mut incoming = core_settings::from_json(&serde_json::to_vec(&inner).map_err(|_| invalid())?).map_err(|_| invalid())?;
+    incoming.apps = current.apps;
+    incoming.claude_mod = current.claude_mod;
+    incoming.claude_plan_usage = current.claude_plan_usage;
+    incoming.notifications.muted_until = current.notifications.muted_until;
+    Ok(incoming)
+}
+
+#[tauri::command]
+pub fn settings_import(app: AppHandle, text: String) -> Result<(), String> {
+    let st = app.state::<SettingsState>();
+    let current = st.get();
+    let imported = import_settings(&text, &current, st.lang())?;
+    store(&app, imported)
 }
 
 fn mute(app: &AppHandle, choice: pets_core::mute::MuteChoice) -> Result<(), String> {
@@ -340,6 +449,72 @@ pub fn settings_open(app: AppHandle) { crate::panel::hide(&app); open(&app); }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backup_wraps_settings_and_drops_the_mute_deadline() {
+        let mut s = Settings::default();
+        s.notifications.muted_until = Some(i64::MAX);
+        s.hotkeys.jump = Some("Ctrl+Alt+J".into());
+        let v: serde_json::Value = serde_json::from_slice(&backup_json(&s, "0.17.0").unwrap()).unwrap();
+        assert_eq!(v["agent_pets_settings"], 1);
+        assert_eq!(v["version"], "0.17.0");
+        assert!(v["settings"]["notifications"].get("muted_until").is_none());
+        assert_eq!(v["settings"]["hotkeys"]["jump"], "Ctrl+Alt+J");
+        assert_eq!(s.notifications.muted_until, Some(i64::MAX));
+    }
+
+    #[test]
+    fn import_keeps_machine_specific_settings_and_accepts_bare_files() {
+        let mut current = Settings::default();
+        current.apps.codex = false;
+        current.claude_mod = false;
+        current.claude_plan_usage = true;
+        current.notifications.muted_until = Some(123);
+        let text = r#"{"agent_pets_settings":1,"version":"0.17.0","settings":{"theme":"dark","apps":{"codex":true},"claude_mod":true,"claude_plan_usage":false,"notifications":{"needs_you":false,"muted_until":999},"hotkeys":{"jump":null},"future_field":17}}"#;
+        let s = import_settings(text, &current, Lang::En).unwrap();
+        assert_eq!(s.theme, core_settings::Theme::Dark);
+        assert!(!s.apps.codex && !s.claude_mod && s.claude_plan_usage);
+        assert_eq!(s.notifications.muted_until, Some(123));
+        assert!(!s.notifications.needs_you);
+        assert_eq!(s.hotkeys.jump, None);
+        assert_eq!(s.extra["future_field"], 17);
+        let bare = import_settings(r#"{"theme":"light","unknown":true}"#, &current, Lang::En).unwrap();
+        assert_eq!(bare.theme, core_settings::Theme::Light);
+        assert_eq!(bare.notifications, core_settings::Notifications { muted_until: Some(123), ..core_settings::Notifications::default() });
+        assert_eq!(bare.hotkeys, core_settings::Hotkeys::default());
+    }
+
+    #[test]
+    fn bad_imports_report_localized_errors() {
+        let current = Settings::default();
+        for bad in ["garbage", "[]", "{}", r#"{"agent_pets_settings":2,"settings":{}}"#, r#"{"agent_pets_settings":1,"settings":[]}"#] {
+            assert_eq!(import_settings(bad, &current, Lang::En).unwrap_err(), "This is not an Agent Pets settings file.");
+        }
+        assert_eq!(import_settings(&"x".repeat(MAX_BACKUP_BYTES + 1), &current, Lang::Pl).unwrap_err(), "Plik jest za duży.");
+    }
+
+    #[test]
+    fn export_name_never_reuses_an_existing_file() {
+        let used = ["agent-pets-settings-2026-10-06.json", "agent-pets-settings-2026-10-06-2.json"];
+        assert_eq!(backup_name("2026-10-06", |name| used.contains(&name)), "agent-pets-settings-2026-10-06-3.json");
+    }
+
+    #[test]
+    fn reveal_only_accepts_json_inside_the_export_roots() {
+        let d = tempfile::tempdir().unwrap();
+        let home = d.path().join("home");
+        let downloads = home.join("Downloads");
+        let outside = d.path().join("elsewhere");
+        std::fs::create_dir_all(&downloads).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let good = downloads.join("backup.json");
+        let bad = outside.join("backup.json");
+        std::fs::write(&good, "{}").unwrap();
+        std::fs::write(&bad, "{}").unwrap();
+        assert!(reveal_allowed(&good, &downloads, &home));
+        assert!(!reveal_allowed(&bad, &downloads, &home));
+        assert!(!reveal_allowed(&good.with_extension("txt"), &downloads, &home));
+    }
 
     #[test]
     fn the_theme_setting_maps_to_the_native_window_theme() {

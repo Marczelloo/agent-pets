@@ -5,6 +5,7 @@ import { StageTab } from './StageTab';
 import { AppsTab } from './AppsTab';
 import { defaultHotkeys, FOREVER, mutedText, mutedUntil, reportText } from './model';
 import { HotkeyRow } from './HotkeyRow';
+import { BackupSection } from './BackupSection';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
@@ -40,6 +41,9 @@ interface Props {
   onCheck?: () => void;
   /** Diagnostics tab: open the bug form on GitHub */
   onReport?: () => void;
+  onExport?: () => Promise<string>;
+  onImport?: (text: string) => Promise<void>;
+  onReveal?: (path: string) => Promise<void>;
   /** Taskbar tab */
   monitors?: MonitorInfo[];
   leftFallback?: boolean;
@@ -65,7 +69,7 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {}, onMute = () => {}, hotkeyStatus, now = Date.now() }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, onExport, onImport, onReveal, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {}, onMute = () => {}, hotkeyStatus, now = Date.now() }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
   const muteUntil = mutedUntil(s.notifications, now);
@@ -153,6 +157,7 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
             <HotkeyRow label={t().settings.hotkeys.panel} value={hotkeys.panel} fallback={defaultHotkeys().panel!}
               error={hotkeyStatus?.panel} onChange={v => setHotkey('panel', v)} />
           </Section>
+          <BackupSection onExport={onExport} onImport={onImport} onReveal={onReveal} />
           <Section>
             <Row label={t().settings.updates} hint={t().settings.updatesDesc} control={
               <Segmented aria-label={t().settings.updates} value={s.updates ?? 'notify'} onChange={v => set({ updates: v })} options={[

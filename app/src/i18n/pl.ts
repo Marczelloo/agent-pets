@@ -228,6 +228,13 @@ export const pl = {
       failed: 'Nie udało się zarejestrować — skrót zajęty przez inny program?',
       note: 'Kliknij skrót i naciśnij nową kombinację z Ctrl, Alt, Shift lub Win. Esc anuluje, Backspace wyłącza.',
     },
+    backup: {
+      title: 'Kopia ustawień',
+      hint: 'Wygląd, powiadomienia, pasek zadań i limity. Integracje z agentami zostają jak są.',
+      export: 'Eksportuj', import: 'Importuj…', reveal: 'Pokaż w folderze',
+      saved: (name: string) => `Zapisano: ${name}`,
+      imported: 'Zaimportowano ustawienia.',
+    },
     autostart: 'Uruchamiaj z Windows',
     autostartDesc: 'Zwierzaki pojawią się po zalogowaniu',
     updates: 'Aktualizacje',

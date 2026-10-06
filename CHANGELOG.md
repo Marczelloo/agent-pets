@@ -4,6 +4,7 @@
 
 ### Added
 
+- Export settings to a dated JSON file and import them on another PC; installed agent integrations, Claude token consent and notification mute state stay local.
 - Two global shortcuts: Win+Shift+J jumps to the agent that needs you (the one waiting longest, else the latest one that finished in the last 30 minutes, else opens the panel) and Win+Shift+K shows or hides the panel. Change or turn them off in Settings → General.
 - Rename a session or pin it from the card's ⋯ menu. The name shows in the panel, tooltips, toasts and the Claude mod; pinned sessions sit right after the ones waiting for you and survive "Clear inactive".
 - The Limits tab says when a limit will hit 100% at the current pace, and a toast warns once when a 5h or weekly limit will run out within the hour, well before it resets (needs the limit notifications on).
