@@ -122,9 +122,7 @@ export class Show {
     drawBand(x, this.fmt, T, T_NEEDS, 0.34, 1);
     drawBand(x, this.fmt, T, T_STYLES, 0.34, -1);
     this.prevT = T;
-    // fade to cream at the very end so the loop starts clean
-    const f = clamp((T - (DURATION - 0.35)) / 0.35);
-    if (f > 0) { x.save(); x.globalAlpha = f; x.fillStyle = CREAM.bg; x.fillRect(0, 0, this.fmt.W, this.fmt.H); x.restore(); }
+    // no fade at the end: a player stops on the last frame, so the end card stays readable
   }
 
   /* ------------------------------------------------------------ the row on the taskbar ------------------------------------------------------------ */
