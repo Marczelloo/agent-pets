@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0
 
 ### Added
 
@@ -18,7 +18,7 @@
 
 ### Changed
 
-- Releases are built, signed and drafted on GitHub Actions from a version tag, and the installer is ready for winget (`Marczelloo.AgentPets`). Code signing through SignPath Foundation is being requested.
+- Releases are built and drafted on GitHub Actions from a version tag.
 - The stage draws fewer frames when nothing moves: 20 fps for resting pets, 10 when they all sleep, 4 for an empty stage. Anything that changes brings back the full rate for a few seconds.
 
 ### Fixed
