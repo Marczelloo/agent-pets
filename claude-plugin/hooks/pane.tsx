@@ -12,7 +12,7 @@ export const prefsLine = (p: Prefs): string =>
 
 type LimitRow = { label: string; percent: number; resetsAt?: number | null; stale: boolean }
 
-const WINDOW_LABEL: Record<string, string> = { five_hour: '5h', weekly: 'week', seven_day: 'week', spend_limit: 'spend' }
+const WINDOW_LABEL: Record<string, string> = { five_hour: '5h', weekly: 'week', seven_day: 'week', spend: 'spend', spend_limit: 'spend' }
 
 // Everything the widget sends ends up in a Text, and ultimately comes from the user's sessions: one tidy line each.
 // Control characters and line breaks become a space; bidi marks and zero-width characters (which could reorder

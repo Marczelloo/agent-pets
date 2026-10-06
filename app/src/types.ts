@@ -52,13 +52,13 @@ export interface SubInfo { kind: SubKind; agent_type: string | null; description
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
 /** `stale_since`: time of the last real reading when the value is old (the Claude app stopped polling). */
-export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null; stale_since?: number | null }
+export interface Limit { agent: Agent; window: 'five_hour' | 'weekly' | 'spend'; used_pct: number; resets_at: number | null; stale_since?: number | null }
 /** Session tokens and cost from the agent database (opencode only since 0.11); `account` = account whose limits apply. */
 export interface Usage { tokens: number; cost: number; account: Agent | null }
 /** Agent's daily total (since local midnight). */
 export interface AgentUsage { agent: Agent; tokens_today: number; cost_today: number }
 /** A limit window that runs out at `runs_out_at` (ms) before it resets, if the pace holds. */
-export interface Forecast { agent: Agent; window: 'five_hour' | 'weekly'; runs_out_at: number }
+export interface Forecast { agent: Agent; window: Limit['window']; runs_out_at: number }
 export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[]; forecasts?: Forecast[] }
 /** Layout from Rust; `mode` and `light` since 0.7 (absent = taskbar, dark). */
 export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean; left_fallback?: boolean; vertical_bar?: boolean }

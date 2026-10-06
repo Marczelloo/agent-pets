@@ -23,6 +23,7 @@ pub struct Rules {
     sent: HashSet<String>,
     /// Limit windows over 90% (reported, or already over at startup) → that window's `resets_at`.
     limits: HashMap<(Agent, Window), Option<i64>>,
+    spend_hit: HashSet<(Agent, Window)>,
     /// Windows already warned about running out early -> that window's `resets_at`.
     early: HashMap<(Agent, Window), i64>,
     /// Local `HH:MM` of a timestamp; tests swap in a UTC one.
@@ -89,10 +90,16 @@ fn who(agent: Agent) -> &'static str {
 
 fn limit_toast(l: &Limit, lang: Lang) -> Toast {
     let who = who(l.agent);
-    let five = l.window == Window::FiveHour;
+    if l.window == Window::Spend && l.used_pct >= 100.0 {
+        let (title, body) = match lang {
+            Lang::Pl => (format!("{who}: limit wydatków osiągnięty"), format!("Wykorzystano {:.0}% limitu wydatków", l.used_pct)),
+            Lang::En => (format!("{who}: spend limit hit"), format!("{:.0}% of the spend limit used", l.used_pct)),
+        };
+        return Toast { kind: ToastKind::Limit, session_id: None, title, body };
+    }
     let (title, body) = match lang {
-        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w}"), format!("Zużyto {:.0}% limitu {w}", l.used_pct)) }
-        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit"), format!("{:.0}% of the {w} limit used", l.used_pct)) }
+        Lang::Pl => { let w = match l.window { Window::FiveHour => "5h", Window::Weekly => "tygodniowy", Window::Spend => "wydatków" }; (format!("{who}: limit {w}"), format!("Zużyto {:.0}% limitu {w}", l.used_pct)) }
+        Lang::En => { let w = match l.window { Window::FiveHour => "5h", Window::Weekly => "weekly", Window::Spend => "spend" }; (format!("{who}: {w} limit"), format!("{:.0}% of the {w} limit used", l.used_pct)) }
     };
     Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }
@@ -100,13 +107,12 @@ fn limit_toast(l: &Limit, lang: Lang) -> Toast {
 /// The window will be used up well before it resets, if the pace holds.
 fn limit_early_toast(agent: Agent, window: Window, runs_out_at: i64, resets_at: i64, lang: Lang, clock: fn(i64) -> String) -> Toast {
     let who = who(agent);
-    let five = window == Window::FiveHour;
     let (out, reset) = (clock(runs_out_at), clock(resets_at));
     // a bare HH:MM for a reset days away (weekly windows) would read as today
     let far = resets_at - runs_out_at > EARLY_FAR_MS;
     let (title, body) = match lang {
-        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w} kończy się"), if far { format!("W tym tempie skończy się ok. {out}, na długo przed resetem") } else { format!("W tym tempie skończy się ok. {out}, przed resetem o {reset}") }) }
-        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit running out"), if far { format!("At this pace it runs out around {out}, long before the reset") } else { format!("At this pace it runs out around {out}, before the {reset} reset") }) }
+        Lang::Pl => { let w = match window { Window::FiveHour => "5h", Window::Weekly => "tygodniowy", Window::Spend => "wydatków" }; (format!("{who}: limit {w} kończy się"), if far { format!("W tym tempie skończy się ok. {out}, na długo przed resetem") } else { format!("W tym tempie skończy się ok. {out}, przed resetem o {reset}") }) }
+        Lang::En => { let w = match window { Window::FiveHour => "5h", Window::Weekly => "weekly", Window::Spend => "spend" }; (format!("{who}: {w} limit running out"), if far { format!("At this pace it runs out around {out}, long before the reset") } else { format!("At this pace it runs out around {out}, before the {reset} reset") }) }
     };
     Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }
@@ -114,10 +120,9 @@ fn limit_early_toast(agent: Agent, window: Window, runs_out_at: i64, resets_at: 
 /// The window that was nearly used up has reset.
 fn limit_back_toast(agent: Agent, window: Window, lang: Lang) -> Toast {
     let who = who(agent);
-    let five = window == Window::FiveHour;
     let (title, body) = match lang {
-        Lang::Pl => { let w = if five { "5h" } else { "tygodniowy" }; (format!("{who}: limit {w} odnowiony"), format!("Limit {w} znów jest dostępny")) }
-        Lang::En => { let w = if five { "5h" } else { "weekly" }; (format!("{who}: {w} limit reset"), format!("The {w} limit is available again")) }
+        Lang::Pl => { let w = match window { Window::FiveHour => "5h", Window::Weekly => "tygodniowy", Window::Spend => "wydatków" }; (format!("{who}: limit {w} odnowiony"), format!("Limit {w} znów jest dostępny")) }
+        Lang::En => { let w = match window { Window::FiveHour => "5h", Window::Weekly => "weekly", Window::Spend => "spend" }; (format!("{who}: {w} limit reset"), format!("The {w} limit is available again")) }
     };
     Toast { kind: ToastKind::Limit, session_id: None, title, body }
 }
@@ -127,7 +132,7 @@ impl Rules {
     pub fn set_lang(&mut self, lang: Lang) { self.lang = lang; }
 
     pub fn new(settings: Settings) -> Rules {
-        Rules { settings, lang: Lang::Pl, primed: false, sent: HashSet::new(), limits: HashMap::new(), early: HashMap::new(), clock: local_clock }
+        Rules { settings, lang: Lang::Pl, primed: false, sent: HashSet::new(), limits: HashMap::new(), spend_hit: HashSet::new(), early: HashMap::new(), clock: local_clock }
     }
 
     /// First call only remembers state: nothing already present at app startup is reported.
@@ -179,7 +184,7 @@ impl Rules {
             // usage dropping well below 90% is a new window too (limits without reset times)
             if l.used_pct < LIMIT_REARM_PCT { self.limit_back(key, priming, &mut out); continue; }
             // a reading of a window that has already reset says nothing about the new one
-            if l.used_pct <= LIMIT_PCT || l.resets_at.is_some_and(|r| now >= r) { continue; }
+            if l.used_pct < LIMIT_PCT || l.resets_at.is_some_and(|r| now >= r) { continue; }
             let new_window = match (self.limits.get(&key), l.resets_at) {
                 (None, _) => true,
                 (Some(Some(known)), Some(r)) => (r - known).abs() > RESET_JITTER_MS,
@@ -187,8 +192,15 @@ impl Rules {
                 (Some(None), Some(r)) => { self.limits.insert(key, Some(r)); false }
                 (Some(_), None) => false,
             };
-            if !new_window { continue; }
+            if !new_window {
+                if l.window == Window::Spend && l.used_pct >= 100.0 && self.spend_hit.insert(key) && !priming && self.settings.limits {
+                    out.push(limit_toast(l, self.lang));
+                }
+                continue;
+            }
+            self.spend_hit.remove(&key);
             self.limits.insert(key, l.resets_at);
+            if l.window == Window::Spend && l.used_pct >= 100.0 { self.spend_hit.insert(key); }
             if !priming && self.settings.limits { out.push(limit_toast(l, self.lang)); }
         }
         if !priming && self.settings.limits { self.early_warnings(snap, now, &mut out); }
@@ -210,7 +222,11 @@ impl Rules {
 
     /// Forgets a window that was over 90% and says it is back; nothing for a window that never got there.
     fn limit_back(&mut self, key: (Agent, Window), priming: bool, out: &mut Vec<Toast>) {
-        if self.limits.remove(&key).is_some() && !priming && self.settings.limits { out.push(limit_back_toast(key.0, key.1, self.lang)); }
+        self.spend_hit.remove(&key);
+        let was = self.limits.remove(&key);
+        // a spend limit has no window: usage dropping means the limit was raised, not that a window reset
+        let back = if key.1 == Window::Spend { was.flatten().is_some() } else { was.is_some() };
+        if back && !priming && self.settings.limits { out.push(limit_back_toast(key.0, key.1, self.lang)); }
     }
 }
 
@@ -366,6 +382,29 @@ mod tests {
         assert!(r.observe(&snap(vec![], vec![l(92.0, Some(18_000_000))]), 2, &|_| false).is_empty());
         assert!(r.observe(&snap(vec![], vec![l(93.0, Some(18_030_000))]), 3, &|_| false).is_empty(), "reset time fluctuates by seconds");
         assert_eq!(r.observe(&snap(vec![], vec![l(95.0, Some(36_000_000))]), 4, &|_| false).len(), 1, "next window");
+    }
+
+    #[test]
+    fn spend_limit_warning_and_hit_use_spend_wording_in_both_languages() {
+        for (lang, pct, title, body) in [
+            (Lang::Pl, 90.0, "Claude: limit wydatków", "Zużyto 90% limitu wydatków"),
+            (Lang::En, 112.0, "Claude: spend limit hit", "112% of the spend limit used"),
+        ] {
+            let mut r = Rules::new(ALL);
+            r.set_lang(lang);
+            r.observe(&snap(vec![], vec![]), 0, &|_| false);
+            let l = Limit { agent: Agent::Claude, window: Window::Spend, used_pct: pct, resets_at: None, stale_since: None };
+            let t = r.observe(&snap(vec![], vec![l]), 1, &|_| false);
+            assert_eq!((t[0].title.as_str(), t[0].body.as_str()), (title, body));
+            assert!(r.observe(&snap(vec![], vec![Limit { used_pct: 2.0, ..l }]), 2, &|_| false).is_empty(), "no reset toast for a spend limit without a reset time");
+        }
+        let mut r = Rules::new(ALL);
+        r.set_lang(Lang::En);
+        r.observe(&snap(vec![], vec![]), 0, &|_| false);
+        let l = Limit { agent: Agent::Claude, window: Window::Spend, used_pct: 91.0, resets_at: None, stale_since: None };
+        assert_eq!(r.observe(&snap(vec![], vec![l]), 1, &|_| false)[0].title, "Claude: spend limit");
+        assert_eq!(r.observe(&snap(vec![], vec![Limit { used_pct: 112.0, ..l }]), 2, &|_| false)[0].title, "Claude: spend limit hit");
+        assert!(r.observe(&snap(vec![], vec![Limit { used_pct: 113.0, ..l }]), 3, &|_| false).is_empty());
     }
 
     #[test]

@@ -79,19 +79,19 @@ export function usageLine(s: Session, today: AgentUsage | undefined): string | n
   return parts.length ? parts.join(' · ') : null;
 }
 
-export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string; stale: boolean; pace: string | null }
+export interface LimitRow { agent: LimitAgent; window: Limit['window']; label: string; pct: number | null; reset: string; stale: boolean; pace: string | null }
 
-/** Always four Claude and Codex rows; missing data is `pct: null`, never 0%. Antigravity only with data. */
+/** Claude and Codex keep their 5h and weekly rows; spend and Antigravity need readings. */
 export function limitRows(limits: Limit[], nowMs: number, forecasts: Forecast[] = []): LimitRow[] {
   const rows: LimitRow[] = [];
-  for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly'] as const) {
+  for (const agent of LIMIT_AGENTS) for (const window of (agent === 'claude' ? ['five_hour', 'weekly', 'spend'] : ['five_hour', 'weekly']) as Limit['window'][]) {
     const l = limits.find(v => v.agent === agent && v.window === window);
     const ok = l != null && Number.isFinite(l.used_pct);
-    if (!ok && agent === 'antigravity') continue;
-    const f = ok && l!.stale_since == null ? forecasts.find(v => v.agent === agent && v.window === window) : undefined;
+    if (!ok && (agent === 'antigravity' || window === 'spend')) continue;
+    const f = ok && l!.stale_since == null && (window !== 'spend' || l!.resets_at != null) ? forecasts.find(v => v.agent === agent && v.window === window) : undefined;
     rows.push({
       agent, window, label: `${limitName(agent)} · ${t().window[window]}`,
-      pct: ok ? clampPct(l!.used_pct) : null,
+      pct: ok ? window === 'spend' ? Math.max(0, l!.used_pct) : clampPct(l!.used_pct) : null,
       reset: !ok ? '' : l!.stale_since != null ? t().limits.asOf(formatAgo(nowMs - l!.stale_since)) : formatReset(l!.resets_at, nowMs),
       stale: ok && l!.stale_since != null,
       pace: f && f.runs_out_at > nowMs ? formatPace(f.runs_out_at, nowMs) : null,

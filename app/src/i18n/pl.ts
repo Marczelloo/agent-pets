@@ -76,6 +76,7 @@ export const pl = {
   window: {
     five_hour: '5h',
     weekly: 'tydzień',
+    spend: 'limit wydatków',
   },
   panel: {
     settings: 'Ustawienia',

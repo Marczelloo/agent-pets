@@ -64,7 +64,7 @@ fn state_name(s: State) -> Option<&'static str> {
 }
 
 fn window_name(w: Window) -> &'static str {
-    match w { Window::FiveHour => "five_hour", Window::Weekly => "weekly" }
+    match w { Window::FiveHour => "five_hour", Window::Weekly => "weekly", Window::Spend => "spend" }
 }
 
 pub fn render(sessions: &[Session], limits: &[Limit], prefs: ModPrefs, app_version: &str) -> Vec<u8> {
@@ -84,7 +84,7 @@ pub fn render(sessions: &[Session], limits: &[Limit], prefs: ModPrefs, app_versi
         limits: limits.iter().map(|l| BoardLimit {
             agent: l.agent,
             window: window_name(l.window),
-            used_pct: if l.used_pct.is_nan() { 0.0 } else { l.used_pct.clamp(0.0, 100.0) },
+            used_pct: if l.used_pct.is_nan() { 0.0 } else if l.window == Window::Spend { l.used_pct.max(0.0) } else { l.used_pct.clamp(0.0, 100.0) },
             resets_at: l.resets_at,
             stale_since: l.stale_since,
         }).collect(),
@@ -179,12 +179,14 @@ mod tests {
         let limits = [
             Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 130.0, resets_at: Some(9_000), stale_since: None },
             Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: -5.0, resets_at: None, stale_since: Some(8_000) },
+            Limit { agent: Agent::Claude, window: Window::Spend, used_pct: 112.0, resets_at: None, stale_since: None },
         ];
         let v = parse(&render(&[], &limits, ModPrefs::default(), "0.16.0"));
         let l = v["limits"].as_array().unwrap();
         assert_eq!((l[0]["agent"].as_str(), l[0]["window"].as_str(), l[0]["used_pct"].as_f64()), (Some("claude"), Some("five_hour"), Some(100.0)));
         assert_eq!((l[0]["resets_at"].as_i64(), l[0]["stale_since"].is_null()), (Some(9_000), true));
         assert_eq!((l[1]["window"].as_str(), l[1]["used_pct"].as_f64()), (Some("weekly"), Some(0.0)));
+        assert_eq!((l[2]["window"].as_str(), l[2]["used_pct"].as_f64()), (Some("spend"), Some(112.0)));
         let nan = [Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: f32::NAN, resets_at: None, stale_since: None }];
         let v: serde_json::Value = serde_json::from_slice(&render(&[], &nan, ModPrefs::default(), "0.16.0")).unwrap();
         assert_eq!(v["limits"][0]["used_pct"].as_f64(), Some(0.0));

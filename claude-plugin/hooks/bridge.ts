@@ -5,7 +5,7 @@ export type Endpoint = { port: number; token: string }
 export type Prefs = { pet: boolean; nudges: boolean }
 export type Board = { v: 1; app_version: string; prefs?: Prefs; sessions: BoardSession[]; limits: BoardLimit[] }
 export type BoardSession = { id: string; agent: string; state: string; title: string; question?: string | null; cwd: string; since: number }
-export type BoardLimit = { agent: string; window: 'five_hour' | 'weekly'; used_pct: number; resets_at?: number | null; stale_since?: number | null }
+export type BoardLimit = { agent: string; window: 'five_hour' | 'weekly' | 'spend'; used_pct: number; resets_at?: number | null; stale_since?: number | null }
 
 /**
  * What the bridge needs from the engine. The plugin validator follows `$` only inside the file that
