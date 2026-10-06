@@ -65,7 +65,14 @@ pub fn app_of_exe(exe: &str) -> Option<App> {
     })
 }
 
-/// Nearest known program above `pid`. A terminal yields to a program above it (a VS Code terminal is VS Code).
+/// A reported PID may steer focus only to a live process running in a known terminal or IDE, never to this app.
+pub fn focusable_pid(t: &ProcTable, pid: u32, self_pid: u32) -> bool {
+    if pid == 0 || pid == self_pid { return false; }
+    let Some(p) = t.get(pid) else { return false };
+    app_of_exe(&p.exe).is_some() || host_of(t, pid).is_some()
+}
+
+/// Nearest known program above `pid`: a standalone terminal keeps its identity even when an IDE launched it.
 /// Among same-named program processes, take the highest one: only the main process has a window to jump to.
 pub fn host_of(t: &ProcTable, pid: u32) -> Option<Host> {
     let mut chain: Vec<u32> = Vec::new();
@@ -81,7 +88,7 @@ pub fn host_of(t: &ProcTable, pid: u32) -> Option<Host> {
     }
     let found: Vec<(usize, App)> = chain.iter().enumerate()
         .filter_map(|(i, p)| t.get(*p).and_then(|x| app_of_exe(&x.exe)).map(|a| (i, a))).collect();
-    let (i, app) = found.iter().find(|(_, a)| *a != App::Terminal).or(found.first()).copied()?;
+    let (i, app) = found.first().copied()?;
     let exe = t.get(chain[i])?.exe.to_ascii_lowercase();
     let mut top = i;
     while top + 1 < chain.len() && t.get(chain[top + 1]).map(|x| x.exe.to_ascii_lowercase() == exe).unwrap_or(false) { top += 1; }
@@ -108,9 +115,17 @@ mod tests {
     }
 
     #[test]
-    fn a_program_above_the_terminal_wins() {
+    fn a_terminal_launched_from_an_ide_owns_its_window() {
         let t = ProcTable::from_procs(vec![p(1, 2, "pwsh.exe", 50), p(2, 3, "WindowsTerminal.exe", 40), p(3, 0, "Code.exe", 30)]);
-        assert_eq!(host_of(&t, 1).map(|h| h.app), Some(App::Vscode));
+        assert_eq!(host_of(&t, 1).map(|h| (h.app, h.pid)), Some((App::Terminal, 2)));
+    }
+
+    #[test]
+    fn an_integrated_shell_belongs_to_its_ide() {
+        for exe in ["Cursor.exe", "idea64.exe"] {
+            let t = ProcTable::from_procs(vec![p(1, 2, "pwsh.exe", 50), p(2, 3, "conhost.exe", 40), p(3, 0, exe, 30)]);
+            assert_eq!(host_of(&t, 1).map(|h| h.pid), Some(3), "{exe}");
+        }
     }
 
     #[test]
@@ -141,6 +156,16 @@ mod tests {
                            ("windowsterminal.exe", App::Terminal), ("ZCode.exe", App::Zcode)] {
             assert_eq!(app_of_exe(exe), Some(app), "{exe}");
         }
+    }
+
+    #[test]
+    fn a_door_pid_must_name_a_live_session_process_other_than_this_app() {
+        let t = ProcTable::from_procs(vec![p(1, 0, "Agent Pets.exe", 1), p(2, 3, "pwsh.exe", 5),
+            p(3, 0, "WindowsTerminal.exe", 1), p(4, 2, "node.exe", 9), p(7, 0, "Cursor.exe", 1),
+            p(5, 0, "explorer.exe", 1), p(6, 0, "svchost.exe", 1), p(8, 5, "notepad.exe", 9)]);
+        for pid in [2, 3, 4, 7] { assert!(focusable_pid(&t, pid, 1), "{pid}"); }
+        for pid in [0, 1, 5, 6, 8, 99] { assert!(!focusable_pid(&t, pid, 1), "{pid}"); }
+        assert!(!focusable_pid(&t, 4, 4), "never this app");
     }
 
     #[test]

@@ -144,6 +144,7 @@ impl Runtime {
         self.doors.set(&apps);
         let removed = self.store.retain_sessions(|s| session_on(apps, s))
             | (!apps.opencode && self.store.set_agent_usage(Vec::new()));
+        self.prune_opencode_hosts();
         removed | self.store.retain_limits(|l| agent_on(apps, l.agent))
     }
 
@@ -181,7 +182,12 @@ impl Runtime {
         let usage = self.usage.poll(now);
         changed |= self.desktop_usage(usage);
         changed |= !self.store.tick(now, &pid::is_alive).is_empty();
+        self.prune_opencode_hosts();
         changed
+    }
+
+    fn prune_opencode_hosts(&mut self) {
+        self.opencode_hosts.retain(|id, _| self.store.session(id).is_some());
     }
 
     /// Claude app limits. An older "as of" reading is replaced by the next report, so a window that ran out disappears.
@@ -588,6 +594,25 @@ mod tests {
         assert_eq!(ids, vec!["c1"]);
         assert!(!rt.apply_external(event(Source::Generic, "generic:kilo:b", Kind::Prompt)));
         assert!(!rt.apply_external(event(Source::Opencode, "opencode:b", Kind::Prompt)));
+    }
+
+    #[test]
+    fn opencode_host_cache_follows_session_removal() {
+        use crate::model::{Kind, Source};
+        let h = home();
+        let mut c = cfg(&h);
+        c.apps.opencode = true;
+        let mut rt = Runtime::start(c).unwrap();
+        rt.apply_external(event(Source::Opencode, "opencode:keep", Kind::Prompt));
+        rt.apply_external(event(Source::Opencode, "opencode:gone", Kind::Prompt));
+        rt.opencode_hosts.insert("opencode:keep".into(), None);
+        rt.opencode_hosts.insert("opencode:gone".into(), None);
+        rt.store.retain_sessions(|s| s.id != "opencode:gone");
+        rt.step(crate::time::now_ms());
+        assert!(rt.opencode_hosts.contains_key("opencode:keep"));
+        assert!(!rt.opencode_hosts.contains_key("opencode:gone"));
+        rt.set_apps(crate::settings::Apps { opencode: false, ..Default::default() });
+        assert!(rt.opencode_hosts.is_empty());
     }
 
     #[test]

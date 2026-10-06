@@ -76,10 +76,11 @@ pub fn slim(payload: &mut serde_json::Value) {
     if let Some(o) = payload.as_object_mut() { for k in SLIM { o.remove(k); } }
 }
 
-/// External text: replace control characters with spaces, trim, and cap at `max` characters.
+/// External text: remove display-direction controls, collapse whitespace, and cap by characters.
 pub fn clean_text(s: &str, max: usize) -> String {
-    let t: String = s.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
-    t.trim().chars().take(max).collect::<String>().trim_end().to_string()
+    let t: String = s.chars().filter(|c| !matches!(*c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
+        .map(|c| if c.is_control() { ' ' } else { c }).collect();
+    t.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(max).collect::<String>().trim_end().to_string()
 }
 
 /// External session ID: `^[A-Za-z0-9_.:-]{1,128}$`, without `..` (used in session IDs and resume commands).
@@ -167,6 +168,7 @@ mod tests {
         assert_eq!(clean_text("  a\u{0007}b\nc\t ", 80), "a b c");
         assert_eq!(clean_text(&"ż".repeat(200), 80).chars().count(), 80);
         assert_eq!(clean_text("\u{001b}[31m", 10), "[31m");
+        assert_eq!(clean_text("a\u{202e}\u{2066}\u{200e}\u{061c}b\u{0085}\u{0000} c", 80), "ab c");
     }
 
     #[test]

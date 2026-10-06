@@ -198,4 +198,19 @@ mod tests {
         assert!(d.title.unwrap().starts_with("a x"));
         assert!(!d.agent_name.unwrap().contains('\n'));
     }
+
+    #[test]
+    fn door_display_fields_cannot_carry_direction_or_control_marks() {
+        let mark = "\u{202e}\u{2066}\u{2069}\u{200e}\u{200f}\u{061c}";
+        let e = to_event(g(json!({"agent": "kilo", "session": "abc", "state": "needs_you",
+            "name": format!("Ki{mark}lo\u{0000} CLI"), "title": format!("My{mark} project"),
+            "cwd": format!("C:\\My{mark} project"), "model": format!("GLM{mark} 5"),
+            "question": format!("Delete{mark}\u{0085} file?")})), 1).unwrap();
+        let d = e.data;
+        assert_eq!(d.agent_name.as_deref(), Some("Kilo CLI"));
+        assert_eq!(d.title.as_deref(), Some("My project"));
+        assert_eq!(d.cwd.as_deref(), Some("C:\\My project"));
+        assert_eq!(d.model.as_deref(), Some("GLM 5"));
+        assert_eq!(d.question.as_deref(), Some("Delete file?"));
+    }
 }

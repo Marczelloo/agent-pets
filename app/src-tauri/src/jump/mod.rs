@@ -20,11 +20,15 @@ pub struct Target {
 
 impl Target {
     pub fn from(s: &Session, reg: Option<&registry::Entry>) -> Target {
+        let reported_pid = if s.agent == Agent::Other {
+            let table = pets_core::host::ProcTable::snapshot();
+            s.jump.pid.filter(|p| pets_core::host::focusable_pid(&table, *p, std::process::id()))
+        } else { s.jump.pid };
         Target {
             agent: s.agent,
             session_id: s.id.clone(),
             cwd: if s.cwd.is_empty() { s.jump.cwd.clone() } else { s.cwd.clone() },
-            pid: s.jump.pid.or(reg.map(|r| r.pid)),
+            pid: reported_pid.or(reg.map(|r| r.pid)),
             host_pid: s.jump.host_pid,
             host_session_id: reg.and_then(|r| r.host_session_id.clone()),
             // the session lives in the agent app (Claude or Codex): only then can the deep link work
@@ -84,7 +88,7 @@ fn resume(t: &Target) -> Option<(String, Vec<String>)> {
 /// Resume command for the clipboard (or just `cd` if the agent cannot resume). IDs outside the safe alphabet are filtered.
 pub fn resume_command(t: &Target) -> String {
     let id: String = agent_id(t).chars().filter(|c| id_char(*c)).collect();
-    let cd = (!t.cwd.is_empty()).then(|| format!("cd \"{}\"", t.cwd.replace('"', "")));
+    let cd = (!t.cwd.is_empty()).then(|| format!("Set-Location -LiteralPath '{}'", t.cwd.replace('\'', "''")));
     let base = resume(t).map(|(p, a)| {
         let args: Vec<&str> = a[..a.len() - 1].iter().map(String::as_str).collect();
         format!("{p} {} {id}", args.join(" "))
@@ -224,7 +228,7 @@ mod tests {
         let p = plan(&x);
         assert_eq!(p[0], Step::FocusProcess(42));
         assert!(p.iter().all(|s| !matches!(s, Step::OpenTerminal { .. } | Step::DeepLink(_))), "{p:?}");
-        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("cd \"") && !c.contains(';')), "{p:?}");
+        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("Set-Location -LiteralPath '") && !c.contains(';')), "{p:?}");
     }
 
     #[test]
@@ -236,7 +240,7 @@ mod tests {
             let p = plan(&x);
             assert_eq!(p[0], Step::FocusProcess(42), "{a:?}");
             assert!(p.iter().all(|s| !matches!(s, Step::OpenTerminal { .. } | Step::DeepLink(_))), "{p:?}");
-            assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("cd \"") && !c.contains(';')), "{p:?}");
+            assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("Set-Location -LiteralPath '") && !c.contains(';')), "{p:?}");
         }
     }
 
@@ -245,5 +249,12 @@ mod tests {
         let mut x = t(Agent::Codex, false);
         x.cwd = r"C:\this\path\does\not\exist".into();
         assert!(plan(&x).iter().all(|s| !matches!(s, Step::OpenTerminal { .. })));
+    }
+
+    #[test]
+    fn clipboard_path_is_a_powershell_literal() {
+        let mut x = t(Agent::Other, false);
+        x.cwd = "C:\\a b\\O'Brien\\$cash`tick&name;end".into();
+        assert_eq!(resume_command(&x), "Set-Location -LiteralPath 'C:\\a b\\O''Brien\\$cash`tick&name;end'");
     }
 }
