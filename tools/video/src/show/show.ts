@@ -46,13 +46,14 @@ const ARRIVE: Record<Who, { t: number; how: 'here' | 'run' | 'drop' | 'float' | 
 };
 
 /** One pet per beat, each in a different state: the states a session can be in. */
-const STATES: { who: Who; scene: string; label: string }[] = [
-  { who: 'clawd', scene: 'edit', label: 'Writing code' },
-  { who: 'kodek', scene: 'bash', label: 'Running commands' },
+/** `dx` moves a pet with a wide prop to the left (as a fraction of the width), so the prop never runs into the label. */
+const STATES: { who: Who; scene: string; label: string; dx?: number }[] = [
+  { who: 'clawd', scene: 'edit', label: 'Writing code', dx: -0.035 },
+  { who: 'kodek', scene: 'bash', label: 'Running commands', dx: -0.075 },
   { who: 'opencode', scene: 'thinking', label: 'Thinking' },
   { who: 'copilot', scene: 'read', label: 'Reading files' },
-  { who: 'cursor', scene: 'grep', label: 'Searching' },
-  { who: 'grok', scene: 'web', label: 'Browsing the web' },
+  { who: 'cursor', scene: 'grep', label: 'Searching', dx: -0.035 },
+  { who: 'grok', scene: 'web', label: 'Browsing the web', dx: -0.02 },
   { who: 'android', scene: 'agent', label: 'Delegating' },
   { who: 'zcode', scene: 'done', label: 'Done!' },
 ];
@@ -198,7 +199,7 @@ export class Show {
     drawBackdrop(x, fmt, { x: 0, y: -40, z: 2 }, T, CREAM, undefined, 0);
     const show = (k: number, slide: number, alpha: number) => {
       const s = STATES[k], col = NAMES[s.who].color;
-      const cx = W * 0.3 + slide;
+      const cx = W * (0.3 + (s.dx ?? 0)) + slide;
       // a disc in the pet's colour behind it, and a slice of taskbar to stand on
       x.save(); x.globalAlpha = 0.16 * alpha; x.fillStyle = col; x.beginPath(); x.arc(cx, H * 0.55, 300, 0, TAU); x.fill(); x.restore();
       x.save(); x.globalAlpha = alpha; x.fillStyle = PAL.bar; x.beginPath(); x.roundRect(cx - 300, H * 0.75, 600, 70, 22); x.fill(); x.restore();
