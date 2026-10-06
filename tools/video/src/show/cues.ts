@@ -7,9 +7,9 @@ export function buildCues(): Cue[] {
   const c: Cue[] = [];
   const add = (t: number, name: string, v = 1, p?: number) => c.push({ t: +t.toFixed(4), name, v, p });
   for (let i = 0; i < 8; i++) add(NOTICE + i * 0.025 + 0.02, 'pop', 0.3, i + 4);     // "!" over every head
-  add(HIT, 'impact', 0.55); add(HIT + 0.02, 'confetti', 0.5);                           // Running Night drops in, the crew jumps
+  add(HIT + 0.02, 'confetti', 0.4);                                                     // the crew jumps
   for (let i = 0; i < 8; i++) add(HIT + 0.55 + i * 0.09, 'tag', 0.4, i);              // name tags, left to right
-  add(TOUR - 0.3, 'whoosh', 0.8);                                                       // the dive into Clawd
+  add(TOUR - 0.3, 'whoosh', 0.45);                                                       // the dive into Clawd
   for (let i = 1; i < 8; i++) add(T_STATES + i * BEAT, 'swish', 0.5, i);               // each new state slides in
   add(T_NEEDS - 0.17, 'band', 0.7);
   add(T_NEEDS + 0.15, 'bubble', 0.7);

@@ -1,12 +1,13 @@
 // The showcase's clock, read off the licensed track it is cut to (Running Night, 106.01 BPM; see audio/make_show_audio.py for the cut):
-//   0     - 5.62 s  Running Night 59.30 - 64.92 s: its quiet breakdown, no drums, the calm intro
-//   5.62  - 7.88 s  64.92 - 67.18 s: the drums are back (they come in a beat before, at 5.05 s), the crew's jump ("Meet the crew.")
-//   7.88  - end     from 89.82 s, the start of the drop's second phrase, uncut to its final hit
+//   0     - 5.62 s  59.30 - 64.92 s: its quiet breakdown, no drums, the calm intro; the drums come back on its last beat (5.05 s)
+//   5.62  - 7.88 s  69.44 - 71.71 s: the last bar before the drop ("Meet the crew.")
+//   7.88  - 16.94 s 71.71 - 80.76 s: the drop, as the tour starts, and its first four bars
+//   16.94 - end     98.87 s to its final hit
 // Every scene change lands on one of its bar lines.
 
 export const FPS = 60;
 
-/** The first full bar with the drums back. */
+/** The last bar before the drop. */
 export const HIT = 5.62;
 export const BEAT = 60 / 106.01;
 export const BAR = 4 * BEAT;
@@ -14,7 +15,7 @@ export const BAR = 4 * BEAT;
 export const NOTICE = HIT - BEAT;
 /** Beat k counted from the hit (k = 0 .. 3 is "Meet the crew."). */
 export const beat = (k: number): number => HIT + k * BEAT;
-/** The tour of the app starts one bar after the hit. */
+/** The tour of the app starts one bar after the hit, on the drop. */
 export const TOUR = beat(4);
 /** Bar n of the tour. */
 export const bar = (n: number, b = 0): number => TOUR + n * BAR + b * BEAT;

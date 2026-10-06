@@ -13,16 +13,16 @@ import synth as S
 
 MUSIC = 'music'
 RUN = f'{MUSIC}/running-night.mp3'
-# Running Night's beat grid: 0.392 + k * 60/106.01 s; bar lines used here: 64.915 (drums back after the breakdown), 89.818 (the drop's
-# second phrase). Its attacks start ~15-20 ms before the grid lines, so cuts are made LEAD earlier and none is lost.
-HIT = 5.620                        # time.ts HIT: the drums come back in
-TOUR = HIT + 4 * 60 / 106.01       # time.ts TOUR
+# Running Night's beat grid: 0.392 + k * 60/106.01 s; its drop is at 71.707 s. Its attacks start ~15-20 ms before the grid lines, so every
+# junction is a short equal-power cross-fade placed LEAD before the bar line and none of the attack is lost.
 LEAD = 0.030
-# (from s, to s, at s in the video). The breakdown plays straight on into the drums' return, as in the track; as the tour starts it
-# hands over to the drop's second phrase, from where it runs on uncut to its final hit, so the styles keep landing on its beats.
-CUTS = [(64.915 - HIT, 67.179 - LEAD, 0.0), (89.818 - LEAD, 111.0, TOUR - LEAD)]
-XF = 0.012                         # the hand-over at the tour is a short equal-power cross-fade just before the downbeat
+XF = 0.012
 FADE_IN = 0.25                     # the breakdown fades in over the first moment of the video
+# (from s, to s, at s in the video): source bar lines and where they land.
+#   0 - 5.62 s    the quiet breakdown, no drums; its last beat is the drums coming back (5.05 s in the video)
+#   5.62 - 16.94  the last bar before the drop, the drop itself as the tour starts (7.88 s), and its first four bars, as in the track
+#   16.94 - end   bar 12 of the drop section (98.87 s): it follows bar 3 as seamlessly as bar 4 would, then on uncut to the final hit
+CUTS = [(59.295, 64.915, 0.0), (69.443, 80.763, 5.620), (98.874, 111.0, 16.940)]
 
 
 def load(path):
@@ -31,13 +31,13 @@ def load(path):
 
 
 def music_bed(n):
-    out = np.zeros((2, n)); y = load(RUN)
+    out = np.zeros((2, n)); y = load(RUN); last = len(CUTS) - 1
     for i, (a, b, at) in enumerate(CUTS):
-        if i == 0: b += XF / 2
-        else: a -= XF / 2; at -= XF / 2
+        if i > 0: a -= LEAD + XF / 2; at -= LEAD + XF / 2         # start just before the bar line, inside the cross-fade
+        if i < last: b -= LEAD - XF / 2                             # and end just after the next piece starts
         seg = y[:, int(a * S.SR):int(b * S.SR)].copy()
         fin = int((FADE_IN if i == 0 else XF) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin)) ** (2 if i == 0 else 1)
-        if i == 0: fout = int(XF * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
+        if i < last: fout = int(XF * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
     return out

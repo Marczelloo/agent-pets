@@ -11,16 +11,16 @@ The picture is timed to one track, Running Night, cut on its bar lines (`src/sho
 | Video | Music | Scene |
 |---|---|---|
 | 0 – 5.6 s | Running Night's quiet breakdown (59.3 s), no drums | The whole crew chilling on the taskbar, the camera panning along: *Your coding agents, now living on your taskbar.* When the drums come back (5.05 s) everyone freezes, turns to us (!) and crouches |
-| 5.6 – 7.9 s | the drums are back | *Meet the crew.* Everyone jumps on the bar, confetti, name tags; then a dive into Clawd |
-| 7.9 – 12.4 s | Running Night from 89.8 s, uncut to its end | One pet per beat, each in a different state: *See what every agent is doing.* |
+| 5.6 – 7.9 s | the last bar before the drop (69.4 s) | *Meet the crew.* Everyone jumps, confetti, name tags; then a dive into Clawd |
+| 7.9 – 12.4 s | the drop (71.7 s), as in the track | One pet per beat, each in a different state: *See what every agent is doing.* |
 | 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
 | 14.7 – 16.9 s | | Click Clawd: the real panel opens, then the Limits tab |
-| 16.9 – 21.5 s | | *7 styles.* Clawd and Kodek (the two with every look) change look on every beat for two bars |
+| 16.9 – 21.5 s | from 98.9 s, uncut to the final hit | *7 styles.* Clawd and Kodek (the two with every look) change look on every beat for two bars |
 | 21.5 – 23.7 s | | The real statistics window |
 | 23.7 – 26.0 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
 | 26.0 – 28.3 s | the final hit | The crew drops onto the end card |
 
-The music plays straight on from the breakdown into the drums' return, as in the track; as the tour starts it hands over to the start of the drop's second phrase (89.8 s), from where it plays on uncut to its final hit.
+The music has two junctions, both on bar lines and both short cross-fades: from the breakdown (as the drums come back) to the last bar before the drop, which then drops exactly as in the track when the tour starts; and from the drop's fourth bar to bar 12, the most alike pair of bars in the track, as the styles start.
 
 ## How it works
 
