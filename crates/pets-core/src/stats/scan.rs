@@ -56,7 +56,7 @@ impl Scanner {
             let offset = e.map(|e| e.cursor.offset).filter(|&o| o <= len).unwrap_or(0);
             changed.then_some((mtime, len - offset, p))
         }).collect();
-        q.sort_by(|a, b| b.0.cmp(&a.0));
+        q.sort_by_key(|a| std::cmp::Reverse(a.0));
         self.total = q.iter().map(|x| x.1).sum();
         self.scanned = 0;
         self.queue = q.into_iter().map(|x| x.2).collect();

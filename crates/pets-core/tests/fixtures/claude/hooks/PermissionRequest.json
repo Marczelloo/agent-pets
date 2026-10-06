@@ -1,0 +1,26 @@
+{
+  "session_id": "s",
+  "transcript_path": "C:/p/s.jsonl",
+  "cwd": "C:/p",
+  "prompt_id": "p1",
+  "permission_mode": "default",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cargo test",
+    "description": "Run tests"
+  },
+  "permission_suggestions": [
+    {
+      "type": "addRules",
+      "rules": [
+        {
+          "toolName": "Bash",
+          "ruleContent": "cargo test:*"
+        }
+      ],
+      "behavior": "allow",
+      "destination": "localSettings"
+    }
+  ]
+}

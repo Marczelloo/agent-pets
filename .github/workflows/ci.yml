@@ -43,3 +43,11 @@ jobs:
         working-directory: app
       - run: pnpm test
         working-directory: app
+      # the Claude Code mod: both commands run without a Claude login.
+      - run: npm i -g @anthropic-ai/claude-code
+      - run: claude plugin validate .
+        working-directory: claude-plugin
+      - run: claude plugin test .
+        working-directory: claude-plugin
+      # the marketplace manifest in the repo root
+      - run: claude plugin validate .

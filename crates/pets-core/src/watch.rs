@@ -21,6 +21,7 @@ pub fn kind_of(path: &Path) -> Option<FileKind> {
     None
 }
 
+#[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 enum Parser { Claude(TranscriptParser), Subagent(SubagentParser), Codex(RolloutParser) }
 
 /// Watched transcript and rollout files, each with its own tail reader and parser.

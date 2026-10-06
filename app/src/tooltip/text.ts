@@ -43,6 +43,7 @@ export function formatReset(resetsAt: number | null, nowMs: number): string {
 
 export function petTooltip(s: Session, nowMs: number, media?: Media | null): TooltipContent {
   const lines = [s.action || actionLabel(s, media)];
+  if (s.state === 'needs_you' && s.question) lines.push(cut(s.question, 200)); // what the agent asks, also with bubbles switched off
   const f = progressFraction(s.progress);
   if (f != null && s.progress) lines.push(t().tooltip.tasks(s.progress.done, s.progress.total));
   if (s.context && s.context.max > 0) lines.push(t().tooltip.context(Math.round(clampPct(s.context.used * 100 / s.context.max))));
@@ -64,8 +65,10 @@ export function limitsTooltip(limits: Limit[], nowMs: number): TooltipContent {
     const l = limits.find(v => v.agent === agent && v.window === window);
     if (!l || !Number.isFinite(l.used_pct)) continue;
     const reset = formatReset(l.resets_at, nowMs);
-    lines.push(`${limitName(agent)} · ${t().window[window as 'five_hour' | 'weekly']}: ${Math.round(clampPct(l.used_pct))}%${reset ? ` · ${reset}` : ''}`);
+    const note = l.stale_since != null ? t().limits.asOf(formatAgo(nowMs - l.stale_since)) : reset;
+    lines.push(`${limitName(agent)} · ${t().window[window as 'five_hour' | 'weekly']}: ${Math.round(clampPct(l.used_pct))}%${note ? ` · ${note}` : ''}`);
   }
+  if (limits.some(l => l.stale_since != null)) lines.push(t().limits.staleHint);
   return { title: t().limits.title, subtitle: '', lines };
 }
 

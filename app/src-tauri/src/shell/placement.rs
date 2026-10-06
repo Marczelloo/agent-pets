@@ -5,6 +5,7 @@ pub struct Rect { pub left: i32, pub top: i32, pub right: i32, pub bottom: i32 }
 
 impl Rect {
     pub fn height(&self) -> i32 { self.bottom - self.top }
+    pub fn width(&self) -> i32 { self.right - self.left }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -54,8 +55,18 @@ impl Zone {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Anchor { Left, Center, Right }
 
+pub use pets_core::settings::Dock;
+
+/// `Custom.dock`: edge of a free zone the stage is glued to; it wins over the `at` fraction, which only
+/// remains as the fallback while that zone does not exist (e.g. icons temporarily fill the left side).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Mode { Right, Left, Custom { at: f64, anchor: Anchor } }
+pub enum Mode { Right, Left, Custom { at: f64, anchor: Anchor, dock: Option<Dock> } }
+
+impl Mode {
+    pub fn anchor(self) -> Anchor {
+        match self { Mode::Left => Anchor::Left, Mode::Right => Anchor::Right, Mode::Custom { anchor, .. } => anchor }
+    }
+}
 
 /// Zones: left (from taskbar edge or after Widgets to the first icon-group item), if it fits a pet,
 /// and right (from the last icon to the tray).
@@ -90,6 +101,38 @@ fn nearest(m: &Metrics, x: i32) -> Zone {
     }
 }
 
+/// Zone, anchor point and growth side of a horizontal dock; `None` for a vertical-bar dock or a missing left zone.
+fn dock_target(lz: Option<Zone>, rz: Zone, d: Dock) -> Option<(Zone, i32, Anchor)> {
+    match d {
+        Dock::LeftStart => lz.map(|z| (z, z.left, Anchor::Left)),
+        Dock::LeftEnd => lz.map(|z| (z, z.right, Anchor::Right)),
+        Dock::RightStart => Some((rz, rz.left, Anchor::Left)),
+        Dock::RightEnd => Some((rz, rz.right, Anchor::Right)),
+        Dock::Top | Dock::Bottom => None,
+    }
+}
+
+/// How close (CSS pixels) a dropped stage must be to a zone edge to be glued to it.
+pub const SNAP_CSS: f64 = 12.0;
+
+/// Edge to glue a stage dropped at `at` to, if it ended up flush with (or pushed against) a zone edge.
+pub fn snap_dock(m: &Metrics, want_css: f64, at: f64, anchor: Anchor) -> Option<Dock> {
+    let p = place_mode(m, want_css, Mode::Custom { at, anchor, dock: None })?;
+    if p.w <= 0 { return None; }
+    let (left, right) = (m.tray.left + p.x, m.tray.left + p.x + p.w);
+    let centre = (left + right) / 2;
+    let (lz, rz) = zones(m);
+    let (z, is_left) = match lz { Some(l) if l.distance(centre) < rz.distance(centre) => (l, true), _ => (rz, false) };
+    let thr = (SNAP_CSS * m.scale).round() as i32;
+    let (to_start, to_end) = (left - z.left <= thr, z.right - right <= thr);
+    if !to_start && !to_end { return None; }
+    let start = if to_start && to_end { anchor != Anchor::Right } else { to_start };
+    Some(match (is_left, start) {
+        (true, true) => Dock::LeftStart, (true, false) => Dock::LeftEnd,
+        (false, true) => Dock::RightStart, (false, false) => Dock::RightEnd,
+    })
+}
+
 /// Stage in the selected mode. Always in a free zone, never over app icons.
 /// `None` when a measurement is temporarily unreliable (taskbar height is 0 during a scale change).
 pub fn place_mode(m: &Metrics, want_css: f64, mode: Mode) -> Option<Placement> {
@@ -101,7 +144,11 @@ pub fn place_mode(m: &Metrics, want_css: f64, mode: Mode) -> Option<Placement> {
             Some(z) => in_zone(m, z, z.left, Anchor::Left, want_css, false),
             None => in_zone(m, rz, rz.right, Anchor::Right, want_css, true),
         },
-        Mode::Custom { at, anchor } => {
+        Mode::Custom { dock: Some(d), .. } if dock_target(lz, rz, d).is_some() => {
+            let (z, a, anchor) = dock_target(lz, rz, d).unwrap_or((rz, rz.right, Anchor::Right));
+            in_zone(m, z, a, anchor, want_css, false)
+        }
+        Mode::Custom { at, anchor, .. } => {
             let a = m.tray.left + (at.clamp(0.0, 1.0) * (m.tray.right - m.tray.left) as f64).round() as i32;
             let z = nearest(m, a);
             in_zone(m, z, a.clamp(z.left, z.right), anchor, want_css, false)
@@ -163,9 +210,42 @@ pub fn tooltip_pos(anchor_x: i32, stage: Rect, monitor: Rect, pw: i32, ph: i32, 
     (x, if above >= monitor.top { above } else { stage.bottom + gap })
 }
 
-/// Auto-hidden taskbar moves below the screen edge, leaving about 2 px.
+/// Screen edge a taskbar is docked to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side { Left, Right, Top, Bottom }
+
+impl Side { pub fn vertical(self) -> bool { matches!(self, Side::Left | Side::Right) } }
+
+/// Edge of its monitor that the taskbar sits on, judged from its shape and position (an auto-hidden bar
+/// keeps its shape and mostly stays on its side of the monitor's centre).
+pub fn bar_side(bar: Rect, monitor: Rect) -> Side {
+    if bar.width() < bar.height() {
+        if bar.left + bar.right < monitor.left + monitor.right { Side::Left } else { Side::Right }
+    } else if bar.top + bar.bottom < monitor.top + monitor.bottom { Side::Top } else { Side::Bottom }
+}
+
+/// Stage next to a taskbar docked at the left or right edge: the embedded layout assumes a horizontal bar,
+/// so the stage floats in the work area's bottom corner beside it.
+/// `top`: the upper corner instead of the lower one.
+pub fn beside_vertical_bar(work: Rect, side: Side, top: bool, w_css: f64, h_css: f64, scale: f64) -> Rect {
+    let (w, h, m) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32, (GAP_CSS * scale).round() as i32);
+    let x = if side == Side::Right { work.right - w - m } else { work.left + m };
+    let x = x.clamp(work.left, (work.right - w).max(work.left));
+    let y = (if top { work.top + m } else { work.bottom - m - h }).clamp(work.top, (work.bottom - h).max(work.top));
+    Rect { left: x, top: y, right: x + w, bottom: y + h }
+}
+
+/// Corner of the work area a stage dropped at `r` beside a vertical bar is glued to, if it is close to one.
+pub fn snap_corner(work: Rect, r: Rect, scale: f64) -> Option<Dock> {
+    let thr = ((GAP_CSS + SNAP_CSS) * scale).round() as i32;
+    let (up, down) = (r.top - work.top, work.bottom - r.bottom);
+    if down <= thr && down <= up { Some(Dock::Bottom) } else if up <= thr { Some(Dock::Top) } else { None }
+}
+
+/// Auto-hidden taskbar moves beyond the screen edge, leaving about 2 px.
 pub fn taskbar_visible(tray: Rect, screen: Rect) -> bool {
-    screen.bottom - tray.top > 4 && tray.bottom > screen.top
+    if tray.width() < tray.height() { tray.right.min(screen.right) - tray.left.max(screen.left) > 4 }
+    else { tray.bottom.min(screen.bottom) - tray.top.max(screen.top) > 4 }
 }
 
 #[cfg(test)]
@@ -206,25 +286,25 @@ mod tests {
     #[test]
     fn custom_anchor_inside_the_icons_snaps_to_the_nearest_zone() {
         // anchor at 1200 px lies among icons (882–1657): closer to left zone (ends 874) than right (starts 1665)
-        let p = place_mode(&centered(), 200.0, Mode::Custom { at: 1200.0 / 2560.0, anchor: Anchor::Right }).unwrap();
+        let p = place_mode(&centered(), 200.0, Mode::Custom { at: 1200.0 / 2560.0, anchor: Anchor::Right, dock: None }).unwrap();
         assert_eq!((p.x, p.w), (874 - 200, 200));
-        let q = place_mode(&centered(), 200.0, Mode::Custom { at: 1600.0 / 2560.0, anchor: Anchor::Left }).unwrap();
+        let q = place_mode(&centered(), 200.0, Mode::Custom { at: 1600.0 / 2560.0, anchor: Anchor::Left, dock: None }).unwrap();
         assert_eq!((q.x, q.w), (1665, 200));
     }
 
     #[test]
     fn custom_window_is_pushed_back_when_icons_grow_and_never_covers_them() {
         let at = 1700.0 / 2560.0;
-        let before = place_mode(&centered(), 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
+        let before = place_mode(&centered(), 300.0, Mode::Custom { at, anchor: Anchor::Left, dock: None }).unwrap();
         assert_eq!(before.x, 1700);
         // more icons: the last one now ends at 1900
         let grown = Metrics { icons_right: Some(1900), ..centered() };
-        let after = place_mode(&grown, 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
+        let after = place_mode(&grown, 300.0, Mode::Custom { at, anchor: Anchor::Left, dock: None }).unwrap();
         assert!(after.x >= 1908, "{after:?}");
         assert!(after.x + after.w <= 2283);
         // zone narrower than content: clip window to the zone
         let tight = Metrics { icons_right: Some(2100), ..centered() };
-        let t = place_mode(&tight, 300.0, Mode::Custom { at, anchor: Anchor::Left }).unwrap();
+        let t = place_mode(&tight, 300.0, Mode::Custom { at, anchor: Anchor::Left, dock: None }).unwrap();
         assert_eq!((t.x, t.w), (2108, 2283 - 2108));
     }
 
@@ -232,7 +312,7 @@ mod tests {
     fn custom_anchor_round_trips_and_keeps_its_zone_on_another_resolution() {
         for (anchor, x) in [(Anchor::Left, 300), (Anchor::Center, 500), (Anchor::Right, 2000)] {
             let at = custom_at(&centered(), x);
-            let p = place_mode(&centered(), 120.0, Mode::Custom { at, anchor }).unwrap();
+            let p = place_mode(&centered(), 120.0, Mode::Custom { at, anchor, dock: None }).unwrap();
             let got = match anchor { Anchor::Left => p.x, Anchor::Center => p.x + p.w / 2, Anchor::Right => p.x + p.w };
             assert!((got - x).abs() <= 1, "{anchor:?}: {got} vs {x}");
         }
@@ -240,8 +320,70 @@ mod tests {
         // same fraction on a 1920 px taskbar (icons 662–1242) stays in the left zone
         let small = Metrics { tray: Rect { left: 0, top: 1032, right: 1920, bottom: 1080 }, notify_left: Some(1700),
             icons_right: Some(1242), first_left: Some(662), widgets_right: None, scale: 1.0 };
-        let p = place_mode(&small, 120.0, Mode::Custom { at: 300.0 / 2560.0, anchor: Anchor::Left }).unwrap();
+        let p = place_mode(&small, 120.0, Mode::Custom { at: 300.0 / 2560.0, anchor: Anchor::Left, dock: None }).unwrap();
         assert!(p.x + p.w <= 654, "{p:?}");
+    }
+
+    fn custom(dock: Dock, want: f64, m: &Metrics) -> Placement {
+        place_mode(m, want, Mode::Custom { at: 0.5, anchor: Anchor::Left, dock: Some(dock) }).unwrap()
+    }
+
+    #[test]
+    fn a_docked_stage_follows_its_zone_edge_when_the_icons_move() {
+        // next to the icons on the left: the zone ends where the icon group starts (882 -> 874 with the gap)
+        assert_eq!(custom(Dock::LeftEnd, 200.0, &centered()).x, 874 - 200);
+        // a window opens and the whole group shifts left by 60 px, then the app closes again
+        let shifted = Metrics { first_left: Some(822), icons_right: Some(1597), ..centered() };
+        assert_eq!(custom(Dock::LeftEnd, 200.0, &shifted).x, 814 - 200);
+        assert_eq!(custom(Dock::LeftEnd, 200.0, &centered()).x, 874 - 200, "and it comes back by itself");
+        // next to the icons on the right: starts where they end
+        assert_eq!(custom(Dock::RightStart, 200.0, &centered()).x, 1665);
+        assert_eq!(custom(Dock::RightStart, 200.0, &Metrics { icons_right: Some(1717), ..centered() }).x, 1725);
+        assert_eq!(custom(Dock::RightEnd, 200.0, &centered()).x, 2283 - 200);
+        assert_eq!(custom(Dock::LeftStart, 200.0, &centered()).x, 8);
+    }
+
+    #[test]
+    fn a_left_dock_without_a_left_zone_falls_back_to_the_saved_fraction() {
+        let left_aligned = Metrics { first_left: Some(12), ..m(Some(700), 1.0) };
+        let free = |m: &Metrics| place_mode(m, 200.0, Mode::Custom { at: 0.5, anchor: Anchor::Left, dock: None }).unwrap();
+        assert_eq!(custom(Dock::LeftEnd, 200.0, &left_aligned), free(&left_aligned));
+        assert_eq!(custom(Dock::Top, 200.0, &centered()), free(&centered()), "a vertical-bar dock means nothing here");
+    }
+
+    #[test]
+    fn dropping_next_to_an_edge_glues_the_stage_to_it() {
+        let m = centered();
+        // dropped with its right side near the icon group (878 is within 12 px of 874)
+        assert_eq!(snap_dock(&m, 200.0, custom_at(&m, 878), Anchor::Right), Some(Dock::LeftEnd));
+        // dragged far into the icons: pushed against them, still glued
+        assert_eq!(snap_dock(&m, 200.0, 1200.0 / 2560.0, Anchor::Right), Some(Dock::LeftEnd));
+        assert_eq!(snap_dock(&m, 200.0, 1670.0 / 2560.0, Anchor::Left), Some(Dock::RightStart));
+        assert_eq!(snap_dock(&m, 200.0, 2290.0 / 2560.0, Anchor::Right), Some(Dock::RightEnd));
+        assert_eq!(snap_dock(&m, 200.0, 0.0, Anchor::Left), Some(Dock::LeftStart));
+        // in the middle of a zone: nothing to glue to
+        assert_eq!(snap_dock(&m, 100.0, 400.0 / 2560.0, Anchor::Left), None);
+        assert_eq!(snap_dock(&m, 100.0, 1900.0 / 2560.0, Anchor::Left), None);
+    }
+
+    #[test]
+    fn a_stage_filling_a_narrow_zone_picks_the_edge_of_its_anchor() {
+        let m = Metrics { first_left: Some(300), icons_right: Some(1657), ..centered() };
+        // the left zone 8..292 is narrower than the content: both edges touch
+        assert_eq!(snap_dock(&m, 400.0, 100.0 / 2560.0, Anchor::Left), Some(Dock::LeftStart));
+        assert_eq!(snap_dock(&m, 400.0, 100.0 / 2560.0, Anchor::Right), Some(Dock::LeftEnd));
+    }
+
+    #[test]
+    fn beside_a_vertical_bar_the_stage_can_sit_in_either_corner() {
+        let work = Rect { left: 62, top: 0, right: 2560, bottom: 1440 };
+        let up = beside_vertical_bar(work, Side::Left, true, 200.0, 48.0, 1.0);
+        assert_eq!(up, Rect { left: 70, top: 8, right: 270, bottom: 56 });
+        assert_eq!(snap_corner(work, up, 1.0), Some(Dock::Top));
+        let down = beside_vertical_bar(work, Side::Left, false, 200.0, 48.0, 1.0);
+        assert_eq!(snap_corner(work, down, 1.0), Some(Dock::Bottom));
+        assert_eq!(snap_corner(work, Rect { left: 70, top: 600, right: 270, bottom: 648 }, 1.0), None);
+        assert_eq!(snap_corner(work, Rect { left: 70, top: 14, right: 270, bottom: 62 }, 1.0), Some(Dock::Top));
     }
 
     #[test]
@@ -339,5 +481,35 @@ mod tests {
     fn autohidden_taskbar_is_not_visible() {
         assert!(taskbar_visible(TRAY, SCREEN));
         assert!(!taskbar_visible(Rect { left: 0, top: 1438, right: 2560, bottom: 1486 }, SCREEN));
+        // top bar slid up, vertical bars slid left or right
+        assert!(taskbar_visible(Rect { left: 0, top: 0, right: 2560, bottom: 48 }, SCREEN));
+        assert!(!taskbar_visible(Rect { left: 0, top: -46, right: 2560, bottom: 2 }, SCREEN));
+        assert!(taskbar_visible(Rect { left: 0, top: 0, right: 62, bottom: 1440 }, SCREEN));
+        assert!(!taskbar_visible(Rect { left: -60, top: 0, right: 2, bottom: 1440 }, SCREEN));
+        assert!(!taskbar_visible(Rect { left: 2558, top: 0, right: 2620, bottom: 1440 }, SCREEN));
+    }
+
+    #[test]
+    fn taskbar_side_follows_its_shape_and_place_on_the_monitor() {
+        assert_eq!(bar_side(TRAY, SCREEN), Side::Bottom);
+        assert_eq!(bar_side(Rect { left: 0, top: 0, right: 2560, bottom: 48 }, SCREEN), Side::Top);
+        assert_eq!(bar_side(Rect { left: 0, top: 0, right: 62, bottom: 1440 }, SCREEN), Side::Left);
+        assert_eq!(bar_side(Rect { left: 2498, top: 0, right: 2560, bottom: 1440 }, SCREEN), Side::Right);
+        let second = Rect { left: -1920, top: 139, right: 0, bottom: 1219 };
+        assert_eq!(bar_side(Rect { left: -62, top: 139, right: 0, bottom: 1219 }, second), Side::Right, "secondary monitor left of the primary");
+        assert!(Side::Left.vertical() && Side::Right.vertical() && !Side::Top.vertical() && !Side::Bottom.vertical());
+    }
+
+    #[test]
+    fn the_stage_sits_beside_a_vertical_bar_in_the_work_area_corner() {
+        let work = Rect { left: 62, top: 0, right: 2560, bottom: 1440 };
+        let l = beside_vertical_bar(work, Side::Left, false, 200.0, 48.0, 1.0);
+        assert_eq!(l, Rect { left: 70, top: 1440 - 8 - 48, right: 270, bottom: 1432 });
+        let right_work = Rect { left: 0, top: 0, right: 2498, bottom: 1440 };
+        let r = beside_vertical_bar(right_work, Side::Right, false, 200.0, 48.0, 1.5);
+        assert_eq!((r.right, r.bottom, r.right - r.left, r.bottom - r.top), (2498 - 12, 1440 - 12, 300, 72));
+        let wide = beside_vertical_bar(work, Side::Left, false, 5000.0, 48.0, 1.0);
+        assert!(wide.left >= work.left && wide.right <= work.right + 5000, "never starts left of the work area");
+        assert_eq!(wide.left, work.left);
     }
 }

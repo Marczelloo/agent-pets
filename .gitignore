@@ -12,3 +12,4 @@ app/src-tauri/resources
 tools/video/node_modules
 tools/video/out
 tools/video/audio/__pycache__
+claude-plugin/tsconfig.json

@@ -9,6 +9,7 @@ import { Wizard } from './Wizard';
 import { setLoopSaving } from './look/loop';
 import { setPreviewSaving } from './look/PetsCanvas';
 import { resolveLang, setLang, setPreviewLang, setSystemLang, t } from '../i18n';
+import { applyTheme } from '../theme';
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 if (!inTauri) setPreviewLang();
@@ -19,6 +20,8 @@ const demoRows: AppRow[] = [
   { id: 'codex', detected: { found: true, path: 'C:/Users/ja/.codex', note: null }, status: { installed: true, detail: '' }, enabled: true },
   { id: 'agent_router', detected: { found: true, path: 'C:/Users/ja/.agent-router', note: null }, status: { installed: true, detail: '' }, enabled: true },
   { id: 'opencode', detected: { found: true, path: 'C:/Users/ja/.config/opencode', note: null }, status: { installed: false, detail: '' }, enabled: false },
+  { id: 'copilot', detected: { found: true, path: 'C:/Users/ja/.copilot', note: null }, status: { installed: false, detail: '' }, enabled: false },
+  { id: 'cursor', detected: { found: false, path: null, note: 'Not found: ~/.cursor' }, status: { installed: false, detail: '' }, enabled: false },
 ];
 const demoDiag: Diagnostics = { version: '0.5.0', endpoint_port: 61234, settings_path: 'C:/Users/ja/.agent-pets/settings.json', settings_error: null,
   hook_exe: 'C:/Users/ja/.agent-pets/hook.exe', autostart_registered: true, last_seen: { claude_code: Date.now() - 20_000, codex: Date.now() - 300_000 },
@@ -41,6 +44,7 @@ function Root() {
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' });
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [leftFallback, setLeftFallback] = useState(false);
+  const [verticalBar, setVerticalBar] = useState(false);
 
   const reload = useCallback(async () => {
     if (!inTauri) {
@@ -49,9 +53,13 @@ function Root() {
       setDiag({ ...demoDiag, apps: demoDiag.apps.map(([id, on]) => [id, on, id === 'claude_code' ? t().demo.hooksInstalled : t().demo.nothingToInstall]) });
       return;
     }
-    const [v, r, d] = await Promise.all([invoke<View>('settings_get'), invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
+    // the theme goes on as soon as the settings arrive, not after the slower integration scan and diagnostics
+    const viewP = invoke<View>('settings_get');
+    void viewP.then(x => applyTheme(x.settings.theme), () => {});
+    const [v, r, d] = await Promise.all([viewP, invoke<AppRow[]>('integrations_list'), invoke<Diagnostics>('diagnostics')]);
     setSystemLang(v.system_lang);
     setLang(resolveLang(v.settings.language ?? 'auto'));
+    applyTheme(v.settings.theme);
     setView(v);
     setRows(r);
     setDiag(d);
@@ -63,6 +71,7 @@ function Root() {
     if (!inTauri) return;
     const un = listen<Settings>('pets://settings', e => {
       setLang(resolveLang(e.payload.language ?? 'auto'));
+      applyTheme(e.payload.theme);
       setView(v => (v ? { ...v, settings: e.payload } : v));
     });
     const power = (s: boolean) => { setLoopSaving(s); setPreviewSaving(s); };
@@ -71,8 +80,8 @@ function Root() {
     const unUpdate = listen<UpdateStatus>('pets://update', e => setUpdate(e.payload));
     void invoke<UpdateStatus>('update_status').then(setUpdate);
     const unTab = listen<string>('settings://tab', e => { const t = tabFrom(e.payload); if (t) setTab(t); });
-    const unLayout = listen<StageLayout & { left_fallback?: boolean }>('pets://layout', e => setLeftFallback(!!e.payload.left_fallback));
-    void invoke<(StageLayout & { left_fallback?: boolean }) | null>('stage_layout').then(l => setLeftFallback(!!l?.left_fallback));
+    const unLayout = listen<StageLayout>('pets://layout', e => { setLeftFallback(!!e.payload.left_fallback); setVerticalBar(!!e.payload.vertical_bar); });
+    void invoke<StageLayout | null>('stage_layout').then(l => { setLeftFallback(!!l?.left_fallback); setVerticalBar(!!l?.vertical_bar); });
     return () => [un, unPower, unUpdate, unTab, unLayout].forEach(p => void p.then(f => f()));
   }, [reload]);
 
@@ -93,12 +102,26 @@ function Root() {
 
   const onChange = (s: Settings) => {
     setLang(resolveLang(s.language ?? 'auto'));
+    applyTheme(s.theme);
     setView({ ...view, settings: s });
     setMessage(null);
     if (!inTauri) return;
     const relang = s.language !== view.settings.language;
     // integration descriptions and diagnostics arrive from Rust in the new language
     void invoke('settings_set', { settings: s }).then(() => { if (relang) void reload(); }).catch(e => setMessage(String(e)));
+  };
+  const onClaudeMod = async (on: boolean) => {
+    if (!inTauri) { setView({ ...view, settings: { ...view.settings, claude_mod: on } }); return ''; }
+    try {
+      const m = await invoke<string>('claude_mod_set', { on });
+      setMessage(m);
+      return m;
+    } catch (e) {
+      setMessage(String(e));
+      return String(e);
+    } finally {
+      await reload();
+    }
   };
   const onIntegration = async (id: AppId, on: boolean) => {
     if (!inTauri) return '';
@@ -115,7 +138,7 @@ function Root() {
   };
 
   return <SettingsView settings={view.settings} rows={rows} diag={diag} tab={tab} onTab={setTab} onChange={onChange}
-    onIntegration={onIntegration} message={message} update={update} monitors={monitors} leftFallback={leftFallback}
+    onIntegration={onIntegration} onClaudeMod={onClaudeMod} message={message} update={update} monitors={monitors} leftFallback={leftFallback} verticalBar={verticalBar}
     onMove={() => { if (inTauri) void invoke('stage_move'); }}
     onReport={inTauri ? () => void invoke('report_problem_open') : undefined}
     onCheck={() => { if (inTauri) void invoke<UpdateStatus>('update_check').then(setUpdate); else setUpdate({ state: 'latest' }); }} />;

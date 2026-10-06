@@ -80,13 +80,13 @@ export function drawRouterBadge(x: CanvasRenderingContext2D, cx: number, y: numb
 export type LimitAgent = 'claude' | 'codex' | 'antigravity';
 export const LIMIT_AGENTS: readonly LimitAgent[] = ['claude', 'codex', 'antigravity'];
 
-export interface LimitBar { agent: LimitAgent; window: 'five_hour' | 'weekly'; pct: number }
+export interface LimitBar { agent: LimitAgent; window: 'five_hour' | 'weekly'; pct: number; stale: boolean }
 
 export function limitBars(limits: Limit[]): LimitBar[] {
   const out: LimitBar[] = [];
   for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly'] as const) {
     const l = limits.find(v => v.agent === agent && v.window === window);
-    if (l && Number.isFinite(l.used_pct)) out.push({ agent, window, pct: clampPct(l.used_pct) });
+    if (l && Number.isFinite(l.used_pct)) out.push({ agent, window, pct: clampPct(l.used_pct), stale: l.stale_since != null });
   }
   return out;
 }
@@ -101,7 +101,7 @@ export function drawLimits(x: CanvasRenderingContext2D, lx: number, h: number, b
     x.save();
     x.fillStyle = TRACK;
     x.fillRect(px, top, 3, H);
-    x.globalAlpha = b.window === 'weekly' ? .6 : 1;
+    x.globalAlpha = (b.window === 'weekly' ? .6 : 1) * (b.stale ? .5 : 1);
     x.fillStyle = b.pct >= 90 ? HOT : AGENT_COLOR[b.agent];
     const fh = H * b.pct / 100;
     x.fillRect(px, top + H - fh, 3, fh);

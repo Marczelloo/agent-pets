@@ -1,7 +1,7 @@
 import { LIMIT_AGENTS, clampPct, progressFraction, type LimitAgent } from '../stage/hud';
-import { actionLabel, formatReset, limitName } from '../tooltip/text';
+import { actionLabel, formatAgo, formatReset, limitName } from '../tooltip/text';
 import { isLive, routerHealth } from '../stage/router';
-import type { AgentUsage, Limit, Session, UpdateStatus } from '../types';
+import type { AgentUsage, Limit, NotificationEntry, Session, UpdateStatus } from '../types';
 import { formatTokens } from '../stats/model';
 import { t } from '../i18n';
 import { agentLabel, hostLabel, modelLabel } from '../model-label';
@@ -17,6 +17,22 @@ export function panelSessions(sessions: Session[]): Session[] {
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
 /** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately). */
 export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
+
+export type PanelTab = 'sessions' | 'limits';
+
+/** Number on the Sessions tab: top-level sessions that are not inactive. */
+export const activeCount = (sessions: Session[]): number => sessions.filter(s => !s.parent && !INACTIVE.has(s.state)).length;
+
+/** Warning dot on the Limits tab: a reading at 80 % or more, or a stale one. */
+export const limitsAlert = (limits: Limit[]): boolean =>
+  limits.some(l => l.stale_since != null || (Number.isFinite(l.used_pct) && l.used_pct >= 80));
+
+export const COLLAPSE_AFTER = 3;
+/** Subagents under a card: more than three fold into "+N subagents" until expanded. */
+export function collapseChildren<T>(children: T[], expanded: boolean): { shown: T[]; hidden: number } {
+  if (expanded || children.length <= COLLAPSE_AFTER) return { shown: children, hidden: 0 };
+  return { shown: children.slice(0, COLLAPSE_AFTER), hidden: children.length - COLLAPSE_AFTER };
+}
 
 /** A finished child disappears from the panel after this time. */
 export const CHILD_DONE_MS = 10_000;
@@ -46,20 +62,13 @@ export function updateBar(u: UpdateStatus | undefined): UpdateBar | null {
 export function usageLine(s: Session, today: AgentUsage | undefined): string | null {
   if (!s.usage) return null;
   const u = t().panel.usage;
-  const parts = [u.session(formatTokens(s.usage.tokens))];
+  const parts = s.usage.tokens > 0 ? [u.session(formatTokens(s.usage.tokens))] : [];
   if (today) parts.push(u.today(formatTokens(today.tokens_today)));
   if (s.usage.cost > 0) parts.push(`$${s.usage.cost.toFixed(2)}`);
-  return parts.join(' · ');
+  return parts.length ? parts.join(' · ') : null;
 }
 
-/** Bars for the account running the session (Claude or ChatGPT subscription); only those with data. */
-export function accountRows(s: Session, limits: Limit[], nowMs: number): LimitRow[] {
-  const acct = s.usage?.account;
-  if (acct !== 'claude' && acct !== 'codex') return [];
-  return limitRows(limits, nowMs).filter(r => r.agent === acct && r.pct != null);
-}
-
-export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string }
+export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string; stale: boolean }
 
 /** Always four Claude and Codex rows; missing data is `pct: null`, never 0%. Antigravity only with data. */
 export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
@@ -70,7 +79,9 @@ export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
     if (!ok && agent === 'antigravity') continue;
     rows.push({
       agent, window, label: `${limitName(agent)} · ${t().window[window]}`,
-      pct: ok ? clampPct(l!.used_pct) : null, reset: ok ? formatReset(l!.resets_at, nowMs) : '',
+      pct: ok ? clampPct(l!.used_pct) : null,
+      reset: !ok ? '' : l!.stale_since != null ? t().limits.asOf(formatAgo(nowMs - l!.stale_since)) : formatReset(l!.resets_at, nowMs),
+      stale: ok && l!.stale_since != null,
     });
   }
   return rows;
@@ -85,6 +96,9 @@ export function sessionSubtitle(s: Session): string {
 export function progressText(s: Session): string | null {
   return progressFraction(s.progress) == null || !s.progress ? null : `${s.progress.done}/${s.progress.total}`;
 }
+
+/** Fill of the thin context bar on a card. */
+export const contextPct = (s: Session): number | null => s.context && s.context.max > 0 ? clampPct(s.context.used * 100 / s.context.max) : null;
 
 export function contextText(s: Session): string | null {
   return s.context && s.context.max > 0 ? `${Math.round(clampPct(s.context.used * 100 / s.context.max))}%` : null;
@@ -127,4 +141,25 @@ export function clock(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000)), p = (n: number) => String(n).padStart(2, '0');
   const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60;
   return h ? `${h}:${p(m)}:${p(s % 60)}` : `${m}:${p(s % 60)}`;
+}
+
+/** Unread count for the bell badge. */
+export const unreadCount = (items: readonly NotificationEntry[]): number => items.filter(e => !e.read).length;
+
+/** Time of a notification: "5 min ago" for the first day, then the date. */
+export function notificationTime(at: number, nowMs: number): string {
+  const d = nowMs - at;
+  if (d < 24 * 3_600_000) return formatAgo(Math.max(0, d));
+  return new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+export interface AgentLimitCard { agent: LimitAgent; rows: LimitRow[]; noData: boolean; stale: boolean }
+
+/** One card per agent on the Limits tab; `noData` when none of its rows has a reading. */
+export function limitCards(limits: Limit[], nowMs: number): AgentLimitCard[] {
+  const rows = limitRows(limits, nowMs);
+  return LIMIT_AGENTS.map(agent => {
+    const mine = rows.filter(r => r.agent === agent);
+    return { agent, rows: mine, noData: mine.every(r => r.pct == null), stale: mine.some(r => r.stale) };
+  }).filter(c => c.rows.length > 0);
 }

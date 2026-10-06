@@ -13,6 +13,7 @@ import { Calendar } from './Calendar';
 import { COUNT_MS, countUp } from './count';
 import { demoStats } from './demo';
 import { formatChange, formatHours, formatPct, formatTokens, scanPct } from './model';
+import { applyTheme } from '../theme';
 
 export const PERIODS: StatsPeriod[] = ['today', 'week', 'month', 'all'];
 
@@ -142,11 +143,11 @@ export default function Root({ tauri }: { tauri: boolean }) {
         if (e.payload.done || Date.now() - shown >= 2_000) { shown = Date.now(); refresh(); }
       }),
       listen<boolean>('pets://power', e => setSaving(e.payload)),
-      listen<Settings>('pets://settings', e => { lang(e.payload.language ?? 'auto'); setPets(e.payload.pets); }),
+      listen<Settings>('pets://settings', e => { lang(e.payload.language ?? 'auto'); applyTheme(e.payload.theme); setPets(e.payload.pets); }),
     ];
     void invoke<StatsProgress>('stats_progress').then(setProgress);
     void invoke<boolean>('power_get').then(setSaving);
-    void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); lang(v.settings.language ?? 'auto'); setPets(v.settings.pets); });
+    void invoke<SettingsView>('settings_get').then(v => { setSystemLang(v.system_lang); lang(v.settings.language ?? 'auto'); applyTheme(v.settings.theme); setPets(v.settings.pets); });
     return () => { clearInterval(every); un.forEach(p => void p.then(f => f())); };
   }, [tauri, refresh]);
 

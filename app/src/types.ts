@@ -47,14 +47,15 @@ export interface SubInfo { kind: SubKind; agent_type: string | null; description
 
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
-export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null }
+/** `stale_since`: time of the last real reading when the value is old (the Claude app stopped polling). */
+export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null; stale_since?: number | null }
 /** Session tokens and cost from the agent database (opencode only since 0.11); `account` = account whose limits apply. */
 export interface Usage { tokens: number; cost: number; account: Agent | null }
 /** Agent's daily total (since local midnight). */
 export interface AgentUsage { agent: Agent; tokens_today: number; cost_today: number }
 export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[] }
 /** Layout from Rust; `mode` and `light` since 0.7 (absent = taskbar, dark). */
-export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean }
+export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean; left_fallback?: boolean; vertical_bar?: boolean }
 export type PointerMsg =
   | { kind: 'move'; x: number; y: number }
   | { kind: 'leave' }
@@ -76,17 +77,24 @@ export interface AppsSettings { claude_code: boolean; codex: boolean; agent_rout
 export interface Settings {
   version: number;
   apps: AppsSettings;
-  claude_statusline: boolean;
   claude_plan_usage: boolean;
+  /** Claude Code mod in `~/.claude/skills/agent-pets` (since 0.16); on by default. */
+  claude_mod: boolean;
+  /** The mod's pixel pet above the Claude Code prompt (0.16.1); off by default. */
+  claude_mod_pet: boolean;
+  /** The mod's nudges about other agents (0.16.1); on by default. */
+  claude_mod_nudges: boolean;
   notifications: { needs_you: boolean; done: boolean; limits: boolean };
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;
   language: Language;
+  theme: Theme;
   updates: Updates;
   stage: StageSettings;
   [extra: string]: unknown;
 }
+export type Theme = 'system' | 'light' | 'dark';
 export type Updates = 'notify' | 'auto' | 'off';
 /** Lustro `placement::MonitorInfo` (komenda `monitors_list`). */
 export interface MonitorInfo { id: string; primary: boolean; width: number; height: number; index: number; has_bar: boolean }
@@ -98,6 +106,9 @@ export type UpdateStatus =
   | { state: 'ready'; version: string }
   /** `verify`: problem with the update itself (panel and settings); otherwise a check error (settings only) */
   | { state: 'error'; message: string; verify: boolean };
+/** Mirrors `notify::center::Entry` (event `pets://notifications`). */
+export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update';
+export interface NotificationEntry { id: number; kind: NotificationKind; title: string; body: string; session_id: string | null; at: number; read: boolean }
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';
 export type StageOrder = 'start' | 'attention' | 'agent';
@@ -107,6 +118,7 @@ export interface StageSettings {
   position: StagePosition;
   /** taskbar anchor as a fraction of taskbar width (0–1) */
   custom_at?: number | null;
+  dock?: 'left_start' | 'left_end' | 'right_start' | 'right_end' | 'top' | 'bottom' | null;
   /** floating window anchor (CSS px relative to the monitor work area) */
   floating_at?: { x: number; y: number } | null;
   monitor: string;

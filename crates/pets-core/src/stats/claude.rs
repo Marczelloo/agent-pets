@@ -28,6 +28,8 @@ pub fn project_of(cwd: &str) -> Option<String> {
     let none = low.iter().any(|p| p == "scratch-workspaces")                              // Claude: conversation without a project
         || (n >= 3 && low[n - 3] == "codex" && is_date(parts[n - 2]))                      // Codex: Documents\Codex\<data>\<czat>
         || pair("local", "temp")                                                           // katalog tymczasowy
+        || pair("windows", "temp") || pair("var", "tmp") || pair("var", "folders") || low[0] == "tmp" // temp elsewhere (8.3 names, POSIX)
+        || (last.len() > 7 && ["agent-router-", "ar-plain-", "ar-nogit-"].iter().any(|p| last.to_ascii_lowercase().starts_with(p))) // Agent Router scratch dirs
         || (n == 3 && parts[0].ends_with(':') && low[1] == "users")                        // C:\Users\<name>
         || (n == 2 && (low[0] == "home" || low[0] == "users"));                            // /home/<name>, /Users/<name>
     Some(if none { NO_PROJECT.to_string() } else { last.to_string() })
@@ -178,6 +180,9 @@ mod tests {
             r"C:\Users\ja\AppData\Local\Temp",
             r"C:\Users\ja\AppData\Local\Temp\claude\x\scratchpad\spike",
             "/home/ja",
+            "/tmp/agent-router-test-Ab12",
+            r"C:\Windows\Temp\x",
+            r"D:\work\agent-router-repo-Zx9",
         ] { assert_eq!(project_of(cwd).as_deref(), Some(NO_PROJECT), "{cwd}"); }
         for (cwd, p) in [
             (r"C:\Users\ja\Documents\ChatGPT\Agent Pets", "Agent Pets"),

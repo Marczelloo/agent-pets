@@ -1,8 +1,9 @@
 use serde_json::{json, Value};
 use std::path::Path;
 
-pub const EVENTS: [&str; 9] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification",
-                              "Stop", "SubagentStop", "PreCompact", "SessionEnd"];
+pub const EVENTS: [&str; 16] = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification",
+                               "Stop", "SubagentStop", "PreCompact", "SessionEnd", "PermissionRequest", "PostToolUseFailure",
+                               "SubagentStart", "StopFailure", "PostCompact", "Elicitation", "ElicitationResult"];
 /// Identify widget entries by this command suffix; hook.exe ignores the arguments.
 const MARK: &str = " --agent-pets";
 
@@ -22,7 +23,7 @@ pub fn uninstall(settings: &mut Value) {
     if hooks.is_empty() { settings.as_object_mut().unwrap().remove("hooks"); }
 }
 
-/// Number of the nine events with our hook (9 = complete).
+/// Number of the `EVENTS` with our hook (`EVENTS.len()` = complete).
 pub fn installed_count(settings: &Value) -> usize {
     let Some(hooks) = settings.get("hooks").and_then(|h| h.as_object()) else { return 0 };
     EVENTS.iter().filter(|ev| hooks.get(**ev).and_then(|g| g.as_array()).map(|arr| arr.iter()
@@ -37,7 +38,7 @@ pub fn install(settings: &mut Value, hook_exe: &str) {
     let hooks = obj.entry("hooks").or_insert_with(|| json!({}));
     for ev in EVENTS {
         let entry = json!({"type": "command", "command": format!("\"{hook_exe}\"{MARK}"), "timeout": 2});
-        let group = if ev == "PreToolUse" || ev == "PostToolUse" {
+        let group = if matches!(ev, "PreToolUse" | "PostToolUse" | "PermissionRequest" | "PostToolUseFailure") {
             json!({"matcher": "*", "hooks": [entry]})
         } else {
             json!({"hooks": [entry]})
@@ -47,14 +48,22 @@ pub fn install(settings: &mut Value, hook_exe: &str) {
     }
 }
 
+/// A settings file as an editor or PowerShell leaves it: a UTF-8 BOM in front is fine, and an empty (or blank) file
+/// is the same as `{}`. Anything else must be valid JSON.
+pub(crate) fn parse_config(b: &[u8]) -> Result<Value, serde_json::Error> {
+    let b = b.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(b);
+    if b.iter().all(u8::is_ascii_whitespace) { return Ok(json!({})); }
+    serde_json::from_slice(b)
+}
+
 /// Edit the file with a `<name>.agent-pets.bak` backup and atomic write. Invalid JSON fails without writing.
 pub(crate) fn edit_file(path: &Path, f: impl FnOnce(&mut Value)) -> std::io::Result<()> { edit_file_opts(path, true, f) }
 
 /// Like `edit_file`; `backup = false` keeps the existing backup (e.g. the original file before our first edit).
 pub(crate) fn edit_file_opts(path: &Path, backup: bool, f: impl FnOnce(&mut Value)) -> std::io::Result<()> {
-    let mut v: Value = match std::fs::read_to_string(path) {
+    let mut v: Value = match std::fs::read(path) {
         Ok(s) => {
-            let v = serde_json::from_str(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            let v = parse_config(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             if backup { std::fs::write(path.with_file_name(format!(
                 "{}.agent-pets.bak", path.file_name().unwrap().to_string_lossy())), &s)?; }
             v
@@ -140,5 +149,29 @@ mod tests {
         std::fs::write(&p, "{broken").unwrap();
         assert!(install_file(&p, "h.exe").is_err());
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "{broken");
+    }
+
+    #[test]
+    fn install_gives_every_event_ours_and_a_matcher_to_the_tool_ones() {
+        let mut v = json!({});
+        install(&mut v, "h.exe");
+        assert_eq!(installed_count(&v), EVENTS.len());
+        for ev in ["PermissionRequest", "PostToolUseFailure"] { assert_eq!(v["hooks"][ev][0]["matcher"], "*", "{ev}"); }
+        assert!(v["hooks"]["StopFailure"][0].get("matcher").is_none());
+    }
+
+    #[test]
+    fn settings_with_only_the_old_nine_events_are_incomplete() {
+        let mut v = json!({});
+        install(&mut v, "h.exe");
+        for ev in &EVENTS[9..] { v["hooks"].as_object_mut().unwrap().remove(*ev); }
+        assert_eq!(installed_count(&v), 9);
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(home.path().join(".claude")).unwrap();
+        std::fs::write(crate::integrations::claude_settings(home.path()), v.to_string()).unwrap();
+        assert!(crate::integrations::claude_needs_repair(home.path(), None));
+        let st = crate::integrations::status(crate::integrations::AppId::ClaudeCode, home.path(), crate::i18n::Lang::En);
+        assert!(!st.installed);
+        assert!(st.detail.contains("9/16"), "{}", st.detail);
     }
 }

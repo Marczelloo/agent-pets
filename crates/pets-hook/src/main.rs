@@ -1,8 +1,8 @@
 //! hook.exe: forwards Claude Code hook JSON to the widget. Never blocks the agent:
 //! 300 ms limit, always exits with code 0. Prints nothing in hook mode.
 //!
-//! `--agent-pets-statusline` mode (statusline pass-through): forwards statusline JSON to the widget and prints
-//! only the output of the user's existing statusline command, byte for byte.
+//! `--agent-pets-statusline` mode (retired pass-through, kept for a `settings.json` that still points here until the app's
+//! migration runs): sends nothing and prints only the output of the user's existing statusline command, byte for byte.
 //!
 //! `hook.exe report --agent <id> --session <id> --state <state> [...]` (door, spec 0.10 §8): a command for people and scripts,
 //! not a hook. It alone prints errors to stderr and exits with code 2.
@@ -12,7 +12,7 @@
 //! a "stop" decision; Cursor: `{}`, at `beforeSubmitPrompt` `{"continue":true}`).
 //!
 //! Cursor and Grok also run Claude hooks, and Grok runs Cursor hooks. Such a hook sends nothing (spec 0.12 §2.2).
-use pets_core::claude::{HookEnvelope, StatuslineEnvelope};
+use pets_core::claude::HookEnvelope;
 use pets_core::endpoint::Endpoint;
 use pets_core::{host, pid, statusline_install, time};
 use std::io::{Read, Write};
@@ -91,13 +91,9 @@ fn run() -> Option<()> {
     post("/v1/events/claude", serde_json::to_value(&env).ok()?)
 }
 
-/// Statusline pass-through: data goes to the widget, while the user sees their statusline's exact output.
+/// Retired statusline pass-through: nothing goes to the widget, the user sees their statusline's exact output.
 fn statusline() {
     let buf = read_stdin();
-    if let Some(payload) = json_of(&buf) {
-        let env = StatuslineEnvelope { ts: time::now_ms(), payload };
-        if let Ok(body) = serde_json::to_value(&env) { let _ = post("/v1/events/claude-statusline", body); }
-    }
     let original: Option<serde_json::Value> = std::fs::read(statusline_install::original_path()).ok()
         .and_then(|b| serde_json::from_slice(&b).ok());
     let Some(cmd) = original.as_ref().and_then(|o| o["command"].as_str()) else { return };

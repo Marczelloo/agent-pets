@@ -37,6 +37,8 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
             "elicitation_dialog" => (Kind::NeedsInput, top.clone(), None),
             _ => return vec![],
         },
+        // The CLI runs this only when a permission prompt is really shown (auto-approved tools skip it); no output = normal flow
+        "permissionRequest" => (Kind::NeedsInput, top.clone(), Some(from_copilot(tool))),
         "Stop" => (Kind::TurnEnd, top.clone(), None),
         "errorOccurred" if get("recoverable", "recoverable").and_then(|v| v.as_bool()) != Some(true) => (Kind::Error, top.clone(), None),
         // JetBrains ends every turn this way (after `Stop`, or without it if interrupted) while the conversation continues;
@@ -53,7 +55,7 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     };
     let ts = Some(env.ts).filter(|t| *t > 0).unwrap_or_else(crate::time::now_ms);
     let mut e = Event::new(Source::Copilot, id.clone(), kind, ts);
-    e.tool = t;
+    e.tool = t.filter(|_| kind != Kind::NeedsInput);
     let d = &mut e.data;
     d.pid = env.ppid.filter(|p| *p > 0);
     d.cwd = text("cwd", "cwd", 260);
@@ -71,6 +73,8 @@ pub fn events(env: &AgentEnvelope, lang: Lang) -> Vec<Event> {
     }
     match (kind, t) {
         (Kind::ToolStart, Some(tl)) => d.action = claude_name(tl).and_then(|n| action_from(n, get("tool_input", "toolArgs"), &KEYS, lang)),
+        (Kind::NeedsInput, Some(tl)) => d.question = claude_name(tl).and_then(|n| action_from(n, get("tool_input", "toolInput"), &KEYS, lang))
+            .or_else(|| text("tool_name", "toolName", 80)),
         (Kind::NeedsInput, _) => d.question = text("message", "message", 300).or_else(|| text("title", "title", 300)),
         _ => {}
     }
@@ -189,6 +193,24 @@ mod tests {
         assert_eq!((long.kind, long.data.question.map(|q| q.chars().count())), (Kind::NeedsInput, Some(300)));
         let titled = one(env("notification", json!({"sessionId": "s", "notification_type": "elicitation_dialog", "title": "Allow?"})));
         assert_eq!(titled.data.question.as_deref(), Some("Allow?"));
+    }
+
+    #[test]
+    fn a_permission_request_means_waiting_and_names_what_is_asked() {
+        let e = one(env("permissionRequest", json!({"sessionId": "c1", "toolName": "bash", "toolInput": {"command": "rm -rf build", "content": "SEKRET-123"}})));
+        assert_eq!((e.kind, e.tool), (Kind::NeedsInput, None));
+        assert_eq!(e.data.question.as_deref(), Some("rm -rf build"));
+        let mcp = one(env("permissionRequest", json!({"sessionId": "c1", "toolName": "github-create_issue", "toolInput": {}})));
+        assert_eq!(mcp.data.question.as_deref(), Some("github-create_issue"));
+    }
+
+    /// Copilot CLI delivers `toolArgs` as a JSON string, not an object.
+    #[test]
+    fn tool_args_may_be_a_json_string() {
+        let e = one(env("PreToolUse", json!({"sessionId": "s", "toolName": "bash", "toolArgs": "{\"command\":\"npm test\",\"content\":\"SEKRET-123\"}"})));
+        assert_eq!(e.data.action.as_deref(), Some("npm test"));
+        let bad = one(env("PreToolUse", json!({"sessionId": "s", "toolName": "bash", "toolArgs": "not json"})));
+        assert_eq!(bad.data.action, None);
     }
 
     #[test]

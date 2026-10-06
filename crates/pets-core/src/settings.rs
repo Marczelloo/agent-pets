@@ -9,9 +9,16 @@ use std::path::{Path, PathBuf};
 pub struct Settings {
     pub version: u32,
     pub apps: Apps,
-    pub claude_statusline: bool,
     /// Permission to fetch Claude limits from `api.anthropic.com` with the Claude Code token. Off by default.
     pub claude_plan_usage: bool,
+    /// The Claude Code mod placed in `~/.claude/skills/agent-pets` (live limits, `/pets`, nudges, pixel pet). On by default.
+    #[serde(default = "yes")]
+    pub claude_mod: bool,
+    /// The mod's pixel pet above the Claude Code prompt. Off by default.
+    pub claude_mod_pet: bool,
+    /// The mod's nudges about other agents (toasts in Claude Code). On by default.
+    #[serde(default = "yes")]
+    pub claude_mod_nudges: bool,
     pub notifications: Notifications,
     pub pets: Pets,
     pub power_saving: PowerSaving,
@@ -19,6 +26,9 @@ pub struct Settings {
     /// Interface language: `auto` = Polish on Polish Windows, English otherwise.
     #[serde(deserialize_with = "or_default")]
     pub language: Language,
+    /// Colour theme of every window: follow Windows, or force light or dark.
+    #[serde(deserialize_with = "or_default")]
+    pub theme: Theme,
     /// Updates from GitHub releases: notify only, install during a quiet period, or disabled.
     #[serde(deserialize_with = "or_default")]
     pub updates: Updates,
@@ -81,6 +91,10 @@ pub enum Motion { #[default] Calm, #[serde(alias = "anime")] Dynamic }
 #[serde(rename_all = "snake_case")]
 pub enum Language { #[default] Auto, Pl, En }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme { #[default] System, Light, Dark }
+
 /// Agent appearance differing from the default; missing field means "use default".
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(default)]
@@ -126,6 +140,13 @@ pub enum Updates { #[default] Notify, Auto, Off }
 #[serde(rename_all = "snake_case")]
 pub enum Position { #[default] Right, Left, Custom, Floating }
 
+/// Edge the dragged stage is glued to, so it follows that edge when the icons move: the left or right free
+/// zone of a horizontal taskbar (`Start` = its left edge, `End` = its right edge), or the top or bottom
+/// corner beside a vertical one.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Dock { LeftStart, LeftEnd, RightStart, RightEnd, Top, Bottom }
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BgKind { #[default] None, Glass, Solid }
@@ -168,6 +189,9 @@ pub struct Stage {
     /// Taskbar anchor as a fraction of its width (0–1).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_at: Option<f64>,
+    /// Edge `custom_at` was dropped on; wins over the fraction, which stays as the fallback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dock: Option<Dock>,
     /// Floating window anchor in CSS pixels relative to the monitor work area.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub floating_at: Option<Point>,
@@ -242,6 +266,7 @@ impl<'de> Deserialize<'de> for Stage {
         let mut s = Stage::default();
         field(&m, "position", &mut s.position);
         s.custom_at = m.get("custom_at").and_then(|v| v.as_f64());
+        field(&m, "dock", &mut s.dock);
         s.floating_at = m.get("floating_at").and_then(|v| serde_json::from_value(v.clone()).ok());
         if let Some(v) = m.get("monitor").and_then(|v| v.as_str()) { s.monitor = v.to_string(); }
         field(&m, "background", &mut s.background);
@@ -253,7 +278,7 @@ impl<'de> Deserialize<'de> for Stage {
         field(&m, "show", &mut s.show);
         field(&m, "bubbles", &mut s.bubbles);
         field(&m, "minis", &mut s.minis);
-        for k in ["position", "custom_at", "floating_at", "monitor", "background", "size", "gap", "padding", "align", "order", "show",
+        for k in ["position", "custom_at", "dock", "floating_at", "monitor", "background", "size", "gap", "padding", "align", "order", "show",
                   "bubbles", "minis"] {
             m.remove(k);
         }
@@ -273,7 +298,7 @@ impl Default for Bubbles { fn default() -> Self { Bubbles { questions: true, act
 impl Default for Stage {
     fn default() -> Self {
         Stage {
-            position: Position::Right, custom_at: None, floating_at: None, monitor: PRIMARY.into(),
+            position: Position::Right, custom_at: None, dock: None, floating_at: None, monitor: PRIMARY.into(),
             background: Background::default(), size: 100, gap: 0, padding: 2, align: Align::Right,
             order: Order::Start, show: Show::default(), bubbles: Bubbles::default(), minis: true,
             extra: serde_json::Map::new(),
@@ -312,13 +337,16 @@ impl Default for Pets {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            version: 1, apps: Apps::default(), claude_statusline: false, claude_plan_usage: false,
+            version: 1, apps: Apps::default(), claude_plan_usage: false, claude_mod: true,
+            claude_mod_pet: false, claude_mod_nudges: true,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
-            autostart: true, language: Language::Auto, updates: Updates::Notify, stage: Stage::default(),
+            autostart: true, language: Language::Auto, theme: Theme::System, updates: Updates::Notify, stage: Stage::default(),
             extra: serde_json::Map::new(),
         }
     }
 }
+
+fn yes() -> bool { true }
 
 pub const MAX_VISIBLE: (u8, u8) = (1, 8);
 
@@ -335,7 +363,11 @@ pub fn load(path: &Path) -> Loaded {
         Err(e) => return Loaded { settings: Settings::default(), first_run: false, error: Some(e.to_string()) },
     };
     match serde_json::from_slice::<Settings>(&bytes) {
-        Ok(mut s) => { s.stage = s.stage.clamped(); Loaded { settings: s, first_run: false, error: None } }
+        Ok(mut s) => {
+            s.stage = s.stage.clamped();
+            s.extra.remove("claude_statusline"); // retired switch (0.16)
+            Loaded { settings: s, first_run: false, error: None }
+        }
         Err(e) => Loaded { settings: Settings::default(), first_run: false,
             error: Some(format!("{}: {e}", path.display())) },
     }
@@ -365,9 +397,45 @@ mod tests {
     #[test]
     fn defaults_ask_nothing_of_the_network() {
         let s = Settings::default();
-        assert!(!s.claude_plan_usage && !s.claude_statusline);
+        assert!(!s.claude_plan_usage);
         assert!(s.apps.claude_code && s.apps.codex && s.apps.agent_router);
         assert_eq!((s.pets.style, s.pets.max_visible, s.power_saving, s.autostart), (Style::Sticker, 5, PowerSaving::Auto, true));
+    }
+
+    #[test]
+    fn the_claude_mod_is_on_unless_a_file_says_otherwise() {
+        assert!(Settings::default().claude_mod);
+        assert!(load_str(r#"{"version":1,"apps":{"claude_code":true}}"#).settings.claude_mod);
+        assert!(!load_str(r#"{"version":1,"claude_mod":false}"#).settings.claude_mod);
+    }
+
+    #[test]
+    fn the_mod_pet_is_off_and_the_nudges_are_on_unless_a_file_says_otherwise() {
+        let d = Settings::default();
+        assert!(!d.claude_mod_pet && d.claude_mod_nudges);
+        let l = load_str(r#"{"version":1,"claude_mod":true}"#).settings;
+        assert!(!l.claude_mod_pet && l.claude_mod_nudges);
+        let l = load_str(r#"{"version":1,"claude_mod_pet":true,"claude_mod_nudges":false}"#).settings;
+        assert!(l.claude_mod_pet && !l.claude_mod_nudges);
+    }
+
+    #[test]
+    fn the_mod_switches_survive_a_save() {
+        let (_d, p) = tmp();
+        let s = Settings { claude_mod_pet: true, claude_mod_nudges: false, ..Settings::default() };
+        save(&p, &s).unwrap();
+        let back = load(&p).settings;
+        assert!(back.claude_mod_pet && !back.claude_mod_nudges);
+    }
+
+    #[test]
+    fn the_retired_statusline_flag_in_an_old_file_is_dropped() {
+        let (_d, p) = tmp();
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, r#"{"claude_statusline": true, "claude_plan_usage": true}"#).unwrap();
+        let l = load(&p);
+        assert!(l.error.is_none() && l.settings.claude_plan_usage);
+        assert!(!l.settings.extra.contains_key("claude_statusline"));
     }
 
     #[test]
@@ -491,6 +559,18 @@ mod tests {
     }
 
     #[test]
+    fn theme_defaults_to_system_and_unknown_values_fall_back() {
+        assert_eq!(Settings::default().theme, Theme::System);
+        assert_eq!(load_str(r#"{"version":1,"theme":"dark"}"#).settings.theme, Theme::Dark);
+        let l = load_str(r#"{"version":1,"theme":"nonsense"}"#);
+        assert_eq!(l.settings.theme, Theme::System);
+        assert!(l.error.is_none());
+        let s = Settings { theme: Theme::Light, ..Settings::default() };
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.theme, Theme::Light);
+    }
+
+    #[test]
     fn a_broken_file_error_is_technical_and_names_the_path() {
         let l = load_str("{bad");
         let e = l.error.unwrap();
@@ -580,6 +660,17 @@ mod tests {
         assert_eq!(l.settings.updates, Updates::Notify);
         assert_eq!((st.position, st.align, st.order, st.size), (Position::Right, Align::Right, Order::Start, 110));
         assert_eq!((st.background.kind, st.background.radius), (BgKind::None, 6));
+    }
+
+    #[test]
+    fn the_dock_survives_a_round_trip_and_an_unknown_one_is_dropped() {
+        let st: Stage = serde_json::from_str(r#"{"position":"custom","custom_at":0.3,"dock":"left_end"}"#).unwrap();
+        assert_eq!(st.dock, Some(Dock::LeftEnd));
+        assert_eq!(serde_json::to_value(&st).unwrap()["dock"], "left_end");
+        let bad: Stage = serde_json::from_str(r#"{"dock":"middle"}"#).unwrap();
+        assert_eq!(bad.dock, None);
+        assert!(serde_json::to_value(&bad).unwrap().get("dock").is_none());
+        assert!(serde_json::to_value(&st).unwrap().get("extra").is_none(), "dock is a known field, not an extra one");
     }
 
     #[test]

@@ -47,14 +47,22 @@ fn entry(c: &rusqlite::Connection, s: &db::DbSession) -> Option<FileEntry> {
 /// Recalculate `opencode:<id>` entries for sessions whose `time_updated` differs from the stored `cursor.mtime`.
 /// Check for pause (full-screen game) before each session. Return the number of recalculated sessions.
 pub fn sync(book: &mut Book, c: &rusqlite::Connection, pause: &dyn Fn() -> bool) -> usize {
+    let book = std::cell::RefCell::new(book);
+    sync_with(&|key| book.borrow().files.get(key).map(|e| e.cursor.mtime), c, pause, &mut |key, e| { book.borrow_mut().files.insert(key, e); })
+}
+
+/// Same, but without touching a ledger: `known` gives the stored `mtime` of an entry and `put` receives a recalculated one.
+/// The caller can then hold its ledger lock only inside those two calls, not while the database is read.
+pub fn sync_with(known: &dyn Fn(&str) -> Option<i64>, c: &rusqlite::Connection, pause: &dyn Fn() -> bool,
+    put: &mut dyn FnMut(String, FileEntry)) -> usize {
     let mut n = 0;
     for s in db::sessions(c) {
         let key = format!("opencode:{}", s.id);
-        if book.files.get(&key).is_some_and(|e| e.cursor.mtime == s.updated) { continue; }
+        if known(&key) == Some(s.updated) { continue; }
         if pause() { break; }
         // read error: keep the old entry; different `time_updated` will recalculate it on the next scan
         let Some(e) = entry(c, &s) else { continue };
-        book.files.insert(key, e);
+        put(key, e);
         n += 1;
     }
     n

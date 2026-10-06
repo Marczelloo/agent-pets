@@ -7,13 +7,22 @@ Agent Pets reads what your agents do from local files and hooks, and keeps it on
 Agent Pets makes only these connections to the internet:
 
 - **Update check.** It downloads `latest.json` and, when you install an update, the installer from this repository's GitHub releases. Nothing is sent. Turn it off in Settings → General.
-- **Claude plan limits** (opt-in, off by default). Every 5 minutes it asks `api.anthropic.com` for your plan usage with the login Claude Code keeps on your disk. The token is read for each request, sent only to Anthropic and never stored or logged. See [Claude rate limits](agents.md#claude-rate-limits).
+- **Claude plan limits** (opt-in, off by default). Every 5 minutes it asks `api.anthropic.com` for your plan usage with the login Claude Code keeps on your disk. The token is read for each request, sent only to Anthropic and never stored or logged. See [Claude rate limits](agents.md#claude-rate-limits). The Claude Code mod needs none of this: it gets your limits from inside Claude Code.
 
 It never asks any other agent's servers for anything. With Antigravity on, it asks Antigravity's own local server on `127.0.0.1` for the Gemini limits; how Antigravity gets those numbers is up to Antigravity.
 
 ## Local connection
 
 The app listens only on `127.0.0.1` and requires a random token, stored with its port in `~/.agent-pets/endpoint.json`. The hooks, the opencode plugin and the [door](door.md) send over it only session states, tool kinds, short action texts (a file name, a command, a search pattern), the question an agent asks, and model names. Never prompts, answers, tool results or file contents. Text from the door is treated as untrusted, cut to size and shown as plain text.
+
+### The Claude Code mod
+
+The [mod](agents.md#the-claude-code-mod) inside Claude Code talks to the app over two routes, both on `127.0.0.1` and both needing the Bearer token from `~/.agent-pets/endpoint.json`:
+
+- **`POST /v1/events/claude-mod`** receives from the mod the session id, working folder, model, context size, cost, how a turn ended and the plan limits (percent used and reset time). No prompts, answers or file contents. A body over 1 MiB is refused, percentages are clamped to 0-100, and an unknown session never creates a pet.
+- **`GET /v1/state`** gives the mod the board for `/pets` and the nudges: the visible sessions (id, agent, state, title, question, working folder and start time) and the limits, plus the mod's two switches (pet and nudges, as plain booleans). Hidden and dismissed sessions are left out. It has no other paths than the working folder, and no process ids, tokens or other settings.
+
+The mod sends only to `127.0.0.1`, keeps the endpoint token in memory and never writes it to disk. It never reads `~/.claude/.credentials.json`; it gets your limits from Claude Code itself.
 
 ## What is read
 

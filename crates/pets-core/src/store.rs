@@ -18,6 +18,7 @@ impl Default for Timing {
     }
 }
 
+#[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 #[derive(Clone, Debug, PartialEq)]
 pub enum Change { Upsert(Session), Removed(String), Limits(Vec<Limit>) }
 
@@ -33,6 +34,10 @@ pub struct Store {
     /// so minimum state duration starts when the core sees one, not at its file timestamp.
     clock: i64,
     shown_at: BTreeMap<String, i64>,
+    /// Time of each session's last state event (not `Meta`/`Limits`). State events are ordered against these alone:
+    /// metadata stamped later by another source (a mod measure, a transcript line) does not make the hook's `Stop`
+    /// "older" and drop it.
+    state_ts: BTreeMap<String, i64>,
     /// Children already gone: ID → end time. Older events (late file lines, the same entry
     /// in router status.json) do not revive them; newer ones (another turn) do.
     tombs: BTreeMap<String, i64>,
@@ -48,6 +53,9 @@ const LONG_DEAD_MS: i64 = 60_000;
 pub const CHILD_QUIET_MS: i64 = 120_000;
 /// A background subagent ends only via `SubagentStop` or after this much quiet time.
 pub const CHILD_BACKGROUND_QUIET_MS: i64 = 600_000;
+/// Antigravity sends no `Stop` when the user cancels a turn, so silence is the only sign: its pet rests sooner
+/// than the 10 minutes of the others (the next hook wakes it again).
+const ANTIGRAVITY_STALE_MS: i64 = 180_000;
 /// A child that ended (or has an error) disappears after this duration.
 pub const CHILD_DONE_MS: i64 = 10_000;
 /// How long to remember a child's end (the router retains finished tasks for 2 h).
@@ -159,7 +167,7 @@ impl Store {
     pub fn new(timing: Timing) -> Self {
         Store { timing, sessions: BTreeMap::new(), pending: BTreeMap::new(),
                 ended_at: BTreeMap::new(), limits: Vec::new(), limits_ts: Vec::new(),
-                clock: i64::MIN, shown_at: BTreeMap::new(), tombs: BTreeMap::new(), agent_usage: Vec::new() }
+                clock: i64::MIN, shown_at: BTreeMap::new(), state_ts: BTreeMap::new(), tombs: BTreeMap::new(), agent_usage: Vec::new() }
     }
 
     pub fn session(&self, id: &str) -> Option<&Session> { self.sessions.get(id) }
@@ -269,11 +277,15 @@ impl Store {
         let s = self.sessions.entry(e.session_id.clone()).or_insert_with(|| new_session(e));
         merge(s, data);
         if parent_gone && sub_kind(s) == Some(SubKind::Router) { orphan(s); }
-        if e.ts < s.last_activity {
+        let meta = matches!(e.kind, Kind::Meta | Kind::Limits);
+        let order = if meta { s.last_activity } else { self.state_ts.get(&e.session_id).copied().unwrap_or(i64::MIN) };
+        if e.ts < order {
             out.push(Change::Upsert(s.clone()));
             return out;
         }
-        s.last_activity = e.ts;
+        if !meta { self.state_ts.insert(e.session_id.clone(), e.ts); }
+        let prev_activity = s.last_activity;
+        s.last_activity = s.last_activity.max(e.ts);
         texts(s, e);
         let child = s.parent.is_some();
         if !child && !matches!(e.kind, Kind::Meta | Kind::Limits) {
@@ -303,7 +315,12 @@ impl Store {
                 else { Some((State::Thinking, None)) }
             }
             Kind::NeedsInput => Some((if child { State::Thinking } else { State::NeedsYou }, None)),
-            Kind::TurnEnd => Some((State::Done, None)),
+            Kind::TurnEnd => {
+                // opencode follows `session.error` with `session.status idle` at once: the error is the outcome, not "done"
+                let now = self.pending.get(&e.session_id).map(|p| p.0).unwrap_or(s.state);
+                if e.source == Source::Opencode && now == State::Error && e.ts - prev_activity <= 5_000 { None }
+                else { Some((State::Done, None)) }
+            }
             Kind::Error => Some((State::Error, None)),
             Kind::Compact => Some((State::Compacting, None)),
             Kind::SessionStart => if s.state == State::Ended { Some((State::Idle, None)) } else { None },
@@ -463,8 +480,10 @@ impl Store {
                 // count "no events" thresholds from the later of state entry and last activity
                 let calm = now - s.state_since.max(s.last_activity);
                 match s.state {
-                    State::Done if calm >= t.done_to_idle_ms => set(s, State::Idle, None, now),
-                    State::Thinking | State::Working | State::Compacting if quiet >= t.stale_to_idle_ms =>
+                    // an error is an outcome like "done": the pet calms down instead of showing it until the session ends
+                    State::Done | State::Error if calm >= t.done_to_idle_ms => set(s, State::Idle, None, now),
+                    State::Thinking | State::Working | State::Compacting
+                        if quiet >= if s.agent == Agent::Antigravity { t.stale_to_idle_ms.min(ANTIGRAVITY_STALE_MS) } else { t.stale_to_idle_ms } =>
                         set(s, State::Idle, None, now),
                     State::Idle if calm >= t.idle_to_sleep_ms => set(s, State::Sleep, None, now),
                     _ => {}
@@ -482,6 +501,7 @@ impl Store {
             self.ended_at.remove(&id);
             self.pending.remove(&id);
             self.shown_at.remove(&id);
+            self.state_ts.remove(&id);
             out.push(Change::Removed(id));
         }
         out
@@ -593,6 +613,31 @@ mod tests {
         assert_eq!(s.session("s1").unwrap().turn_started_at, Some(20_000), "new turn after the previous one ended");
     }
 
+    /// opencode reports `session.error` and then `session.status idle` right away: the idle must not turn the error into "done".
+    #[test]
+    fn an_idle_right_after_an_opencode_error_keeps_the_error() {
+        let oc = |k: Kind, ts: i64| Event::new(Source::Opencode, "s1", k, ts);
+        let mut s = Store::new(Timing::default());
+        s.apply(&oc(Kind::Prompt, 0));
+        s.tick(1000, &alive);
+        s.apply(&oc(Kind::Error, 2000));
+        s.apply(&oc(Kind::TurnEnd, 2010));
+        s.tick(3000, &alive);
+        assert_eq!(st(&s).0, State::Error);
+        // a later, real end of a new turn is still "done"
+        s.apply(&oc(Kind::Prompt, 20_000));
+        s.tick(21_000, &alive);
+        s.apply(&oc(Kind::TurnEnd, 25_000));
+        s.tick(26_000, &alive);
+        assert_eq!(st(&s).0, State::Done);
+        // other agents keep their rules: an idle after an error is "done"
+        let mut c = Store::new(Timing::default());
+        c.apply(&ev(Kind::Error, 0));
+        c.apply(&ev(Kind::TurnEnd, 10));
+        c.tick(1000, &alive);
+        assert_eq!(st(&c).0, State::Done);
+    }
+
     /// After an interrupted turn (`stop` with `aborted`), Cursor sends `postToolUseFailure` for tools in flight (verified live).
     #[test]
     fn a_late_tool_end_does_not_reopen_a_finished_turn() {
@@ -661,6 +706,31 @@ mod tests {
     }
 
     #[test]
+    fn a_later_stamped_measure_does_not_drop_the_stop_hook() {
+        // the mod's measure is stamped after hook.exe stamped `Stop`, but reaches the core first
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.apply(&ev(Kind::Meta, 5_050));
+        s.apply(&ev(Kind::TurnEnd, 5_000));
+        assert_eq!(st(&s).0, State::Done);
+        // the order of state events still holds: a late tool event older than `Stop` does not revive the turn
+        s.apply(&ev(Kind::ToolStart, 4_000));
+        assert_eq!(st(&s).0, State::Done);
+        assert_eq!(s.session("s1").unwrap().last_activity, 5_050, "activity keeps the latest time");
+    }
+
+    #[test]
+    fn an_error_calms_down_like_done() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&ev(Kind::Prompt, 0));
+        s.apply(&ev(Kind::Error, 1_000));
+        s.tick(120_000, &alive);
+        assert_eq!(st(&s).0, State::Error);
+        s.tick(121_000, &alive);
+        assert_eq!(st(&s).0, State::Idle);
+    }
+
+    #[test]
     fn idle_and_done_timeouts_count_from_last_activity() {
         let mut s = Store::new(Timing::default());
         s.apply(&ev(Kind::SessionStart, 0));
@@ -694,6 +764,16 @@ mod tests {
         let mut s = Store::new(Timing::default());
         s.apply(&tool(Tool::Edit, 0));
         s.tick(600_000, &alive);
+        assert_eq!(st(&s).0, State::Idle);
+    }
+
+    #[test]
+    fn an_antigravity_turn_that_went_silent_rests_after_3_min() {
+        let mut s = Store::new(Timing::default());
+        s.apply(&Event::new(Source::Antigravity, "s1", Kind::Prompt, 0));
+        s.tick(179_000, &alive);
+        assert_eq!(st(&s).0, State::Thinking);
+        s.tick(180_000, &alive);
         assert_eq!(st(&s).0, State::Idle);
     }
 
@@ -762,7 +842,7 @@ mod tests {
     #[test]
     fn limits_merge_by_agent_and_window() {
         let mut s = Store::new(Timing::default());
-        let lim = |p: f32| Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: p, resets_at: None };
+        let lim = |p: f32| Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: p, resets_at: None, stale_since: None };
         let mut e = Event::new(Source::Codex, "c1", Kind::Limits, 0);
         e.data.limits = vec![lim(10.0)];
         s.apply(&e);
@@ -821,7 +901,7 @@ mod tests {
     fn an_older_reading_never_overrides_a_newer_one() {
         // The Codex app touches old threads: read their rollouts with August limits after September limits.
         let mut s = Store::new(Timing::default());
-        let week = |p: f32, r: i64| Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: p, resets_at: Some(r) };
+        let week = |p: f32, r: i64| Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: p, resets_at: Some(r), stale_since: None };
         let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Codex, "c", Kind::Limits, ts); e.data.limits = vec![l]; e };
         s.apply(&at(2_000_000, week(18.0, 9_000_000)));
         s.apply(&at(1_000_000, week(61.0, 1_500_000)));
@@ -832,7 +912,7 @@ mod tests {
     fn a_limit_whose_reset_passed_is_no_longer_shown() {
         let mut s = Store::new(Timing::default());
         let mut e = Event::new(Source::Codex, "c", Kind::Limits, 0);
-        e.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 61.0, resets_at: Some(5_000) }];
+        e.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 61.0, resets_at: Some(5_000), stale_since: None }];
         s.apply(&e);
         assert!(s.tick(4_000, &|_| true).is_empty());
         assert!(matches!(s.tick(5_000, &|_| true).as_slice(), [Change::Limits(l)] if l.is_empty()));
@@ -844,9 +924,9 @@ mod tests {
         let mut s = Store::new(Timing::default());
         let mut e = Event::new(Source::Claude, "x", Kind::Limits, 0);
         e.data.limits = vec![
-            Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 50.0, resets_at: None },
-            Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 60.0, resets_at: Some(9) },
-            Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 70.0, resets_at: None },
+            Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 50.0, resets_at: None, stale_since: None },
+            Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 60.0, resets_at: Some(9), stale_since: None },
+            Limit { agent: Agent::Codex, window: Window::FiveHour, used_pct: 70.0, resets_at: None, stale_since: None },
         ];
         s.apply(&e);
         assert!(s.drop_limits_without_reset(Agent::Claude));
@@ -858,11 +938,11 @@ mod tests {
     #[test]
     fn limit_without_reset_keeps_a_future_reset_of_the_same_window() {
         let mut s = Store::new(Timing::default());
-        let lim = |p: f32, r: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: p, resets_at: r };
+        let lim = |p: f32, r: Option<i64>| Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: p, resets_at: r, stale_since: None };
         let at = |ts: i64, l: Limit| { let mut e = Event::new(Source::Claude, "x", Kind::Limits, ts); e.data.limits = vec![l]; e };
         s.apply(&at(1_000, lim(30.0, Some(10_000))));
         s.apply(&at(2_000, lim(40.0, None)));
-        assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "same window: retain statusline reset");
+        assert_eq!(s.limits(), &[lim(40.0, Some(10_000))], "same window: retain the earlier reset");
         s.apply(&at(20_000, lim(5.0, None)));
         assert_eq!(s.limits(), &[lim(5.0, None)], "reset passed: next time unknown");
     }

@@ -95,7 +95,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   function frame() {
     if (!visible) { running = false; return; }
     const now = performance.now();
-    const dt = Math.min(.05, (now - last) / 1000);
+    // power saving runs at 10 fps: a real 0.1 s frame must advance the clock by 0.1 s (substepped in tick), not by the 0.05 s hitch cap
+    const dt = Math.min(budget.fps < 30 ? .25 : .05, (now - last) / 1000);
     last = now;
     T += dt;
     const { w, h } = fit();

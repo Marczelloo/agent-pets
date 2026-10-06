@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use serde_json::Value;
-use crate::action::{action_text, question_text};
+use crate::action::{action_text, clip, question_text};
 use crate::claude::{progress_from_tool_use, HookEnvelope};
 use crate::i18n::Lang;
 use crate::model::*;
@@ -61,7 +61,9 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
     }
     // a subagent question (`AskUserQuestion`) waits at the parent, like its permission requests
     let asks = name == "PreToolUse" && tool_name == "AskUserQuestion";
-    let in_child = matches!(name, "PreToolUse" | "PostToolUse") && !asks;
+    // a tool interrupted by the user ends the turn of the parent session, even when a subagent ran it
+    let interrupted = name == "PostToolUseFailure" && p.get("is_interrupt").and_then(|v| v.as_bool()) == Some(true);
+    let in_child = matches!(name, "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "SubagentStart") && !asks && !interrupted;
     let mut e = match agent_id {
         Some(a) if in_child => child(sid, a, p, Kind::Meta, env.ts),
         _ => {
@@ -101,6 +103,8 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
                 e.data.action = action_text(tool_name, tool_input, lang);
             }
         }
+        "PostToolUseFailure" if task_tool || tool_name == "TodoWrite" => return vec![],
+        "PostToolUseFailure" => e.kind = if interrupted { Kind::TurnEnd } else { Kind::ToolEnd },
         "PostToolUse" => {
             if tool_name == "TodoWrite" { return vec![]; }
             e.kind = Kind::ToolEnd;
@@ -113,6 +117,23 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
             e.data.question = question_text(p.get("message").and_then(|v| v.as_str()), last, None, lang);
             e.data.from_child = agent_id.is_some();
         }
+        // the permission dialog is already open: the question names the tool's action, like the `Notification` after it
+        "PermissionRequest" => {
+            e.kind = Kind::NeedsInput;
+            let act = action_text(tool_name, tool_input, lang);
+            let msg = (!tool_name.is_empty()).then(|| format!("Claude needs your permission to use {tool_name}"));
+            e.data.question = question_text(msg.as_deref(), act.as_deref().map(|a| (tool_name, a)).or(last), None, lang);
+            e.data.from_child = agent_id.is_some();
+        }
+        "Elicitation" => {
+            e.kind = Kind::NeedsInput;
+            e.data.question = p.get("message").and_then(|v| v.as_str()).map(clip).filter(|q| !q.is_empty());
+        }
+        "ElicitationResult" => e.kind = Kind::ToolEnd,
+        "SubagentStart" if agent_id.is_none() => return vec![],
+        "SubagentStart" => e.kind = Kind::SessionStart,
+        "StopFailure" => e.kind = Kind::Error,
+        "PostCompact" => e.kind = if p.get("trigger").and_then(|v| v.as_str()) == Some("manual") { Kind::TurnEnd } else { Kind::ToolEnd },
         "Stop" => e.kind = Kind::TurnEnd,
         "PreCompact" => e.kind = Kind::Compact,
         "SessionEnd" => e.kind = Kind::SessionEnd,
@@ -147,10 +168,20 @@ impl HookState {
         let last = self.last.get(sid).map(|(t, a)| (t.as_str(), a.as_str()));
         let events = to_events(env, lang, last);
         let tool = p.get("tool_name").and_then(|v| v.as_str()).unwrap_or("");
+        // the `Notification` that follows a permission request asks about the same action
+        if p.get("hook_event_name").and_then(|v| v.as_str()) == Some("PermissionRequest") {
+            if let Some(a) = action_text(tool, p.get("tool_input").unwrap_or(&Value::Null), lang) {
+                self.last.insert(sid.to_string(), (tool.to_string(), a));
+            }
+        }
         for e in &events {
             match (e.kind, &e.data.action) {
                 // include child action: permission for its tool waits at the parent
                 (Kind::ToolStart, Some(a)) => { self.last.insert(sid.to_string(), (tool.to_string(), a.clone())); }
+                // the permission request that follows a question must not replace the question's text
+                (Kind::NeedsInput, _) if tool == "AskUserQuestion" => {
+                    if let Some(q) = &e.data.question { self.last.insert(sid.to_string(), (tool.to_string(), q.clone())); }
+                }
                 (Kind::SessionEnd, _) if e.session_id == sid => { self.last.remove(sid); }
                 _ => {}
             }
@@ -410,6 +441,18 @@ mod tests {
     }
 
     #[test]
+    fn the_permission_to_ask_keeps_the_question_text() {
+        let mut h = HookState::default();
+        let ask = env(json!({"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "AskUserQuestion",
+            "tool_input": {"questions": [{"question": "Który wariant?"}]}}));
+        let perm = env(json!({"hook_event_name": "Notification", "session_id": "s",
+            "message": "Claude needs your permission to use AskUserQuestion", "notification_type": "permission_prompt"}));
+        assert_eq!(h.events(&perm, Lang::En)[0].data.question, None, "nothing to show without the question");
+        h.events(&ask, Lang::En);
+        assert_eq!(h.events(&perm, Lang::En)[0].data.question.as_deref(), Some("Question: Który wariant?"));
+    }
+
+    #[test]
     fn a_router_delegation_links_its_task_to_the_caller() {
         let e = te(&fixture("PostToolUse-mcp-codex_delegate.json"));
         assert_eq!((e[0].kind, e[0].session_id.as_str()), (Kind::ToolEnd, "3746a003-5ba1-42b3-a085-009646ebcf00"));
@@ -442,6 +485,78 @@ mod tests {
             "tool_input": {"questions": [{"question": "Który?"}]}})));
         assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.question.as_deref(), e[0].data.from_child),
             ("s", Kind::NeedsInput, Some("Pytanie: Który?"), true));
+    }
+
+    #[test]
+    fn new_hook_events_map() {
+        let k = |v| to_events(&env(v), Lang::En, None).iter().map(|e| (e.session_id.clone(), e.kind)).collect::<Vec<_>>();
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"StopFailure"})), [("s".into(), Kind::Error)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"PostCompact","trigger":"manual"})), [("s".into(), Kind::TurnEnd)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"PostCompact","trigger":"auto"})), [("s".into(), Kind::ToolEnd)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"PostToolUseFailure","tool_name":"Bash"})), [("s".into(), Kind::ToolEnd)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"PostToolUseFailure","tool_name":"Bash","is_interrupt":true})), [("s".into(), Kind::TurnEnd)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"PostToolUseFailure","tool_name":"Bash","agent_id":"a"})), [("s/a".into(), Kind::ToolEnd)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"PostToolUseFailure","tool_name":"Bash","agent_id":"a","is_interrupt":true})), [("s".into(), Kind::TurnEnd)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"SubagentStart","agent_id":"a","agent_type":"Explore"})), [("s/a".into(), Kind::SessionStart)]);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"SubagentStart"})), []);
+        assert_eq!(k(json!({"session_id":"s","hook_event_name":"ElicitationResult"})), [("s".into(), Kind::ToolEnd)]);
+    }
+
+    #[test]
+    fn permission_request_asks_at_once_with_the_tool_action() {
+        let e = &to_events(&env(json!({"session_id":"s","hook_event_name":"PermissionRequest","tool_name":"Bash",
+            "tool_input":{"command":"cargo test"}})), Lang::En, None)[0];
+        assert_eq!(e.kind, Kind::NeedsInput);
+        assert_eq!(e.data.question.as_deref(), Some("Allow Bash? cargo test"));
+        assert!(!e.data.from_child);
+    }
+
+    #[test]
+    fn permission_request_inside_a_subagent_waits_at_the_parent_marked_as_the_child_s() {
+        let e = &to_events(&env(json!({"session_id":"s","hook_event_name":"PermissionRequest","tool_name":"Bash","agent_id":"a1",
+            "tool_input":{"command":"ls"}})), Lang::En, None)[0];
+        assert_eq!((e.session_id.as_str(), e.kind, e.data.from_child), ("s", Kind::NeedsInput, true));
+    }
+
+    #[test]
+    fn permission_request_without_a_tool_asks_nothing_in_particular() {
+        let e = &to_events(&env(json!({"session_id":"s","hook_event_name":"PermissionRequest"})), Lang::En, None)[0];
+        assert_eq!((e.kind, e.data.question.as_deref()), (Kind::NeedsInput, None));
+    }
+
+    #[test]
+    fn the_notification_after_a_permission_request_asks_the_same_question() {
+        let mut h = HookState::default();
+        let asked = h.events(&env(json!({"session_id":"s","hook_event_name":"PermissionRequest","tool_name":"Bash",
+            "tool_input":{"command":"cargo test"}})), Lang::En);
+        let notified = h.events(&env(json!({"session_id":"s","hook_event_name":"Notification",
+            "message":"Claude needs your permission to use Bash"})), Lang::En);
+        assert_eq!(asked[0].data.question, notified[0].data.question);
+        assert_eq!(notified[0].data.question.as_deref(), Some("Allow Bash? cargo test"));
+    }
+
+    #[test]
+    fn elicitation_carries_the_mcp_question_on_one_line() {
+        let e = &to_events(&env(json!({"session_id":"s","hook_event_name":"Elicitation","message":"Pick a repo
+please"})), Lang::En, None)[0];
+        assert_eq!(e.kind, Kind::NeedsInput);
+        assert_eq!(e.data.question.as_deref(), Some("Pick a repo"));
+        let none = &to_events(&env(json!({"session_id":"s","hook_event_name":"Elicitation"})), Lang::En, None)[0];
+        assert_eq!((none.kind, none.data.question.as_deref()), (Kind::NeedsInput, None));
+    }
+
+    #[test]
+    fn subagent_start_names_the_child_type() {
+        let e = &to_events(&env(json!({"session_id":"s","hook_event_name":"SubagentStart","agent_id":"a","agent_type":"Explore"})), Lang::En, None)[0];
+        assert_eq!(e.data.parent.as_deref(), Some("s"));
+        assert_eq!(e.data.sub.as_ref().unwrap().agent_type.as_deref(), Some("Explore"));
+    }
+
+    #[test]
+    fn the_new_hook_fixtures_each_yield_an_event() {
+        for f in ["PermissionRequest", "PostToolUseFailure", "SubagentStart", "StopFailure", "PostCompact", "Elicitation", "ElicitationResult"] {
+            assert!(!te(&fixture(&format!("{f}.json"))).is_empty(), "{f}");
+        }
     }
 
     #[test]

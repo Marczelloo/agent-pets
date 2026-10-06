@@ -6,8 +6,11 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub const FILE: &str = "plan-usage-history.json";
-/// An older sample is stale (app closed) and is not reported.
+/// A sample older than this is no longer live (the app stopped polling): it is shown as "as of", not as current.
 pub const MAX_AGE_MS: i64 = 30 * 60 * 1000;
+/// Past its window a reading says nothing any more (the 5 h / weekly window has certainly reset).
+const FIVE_HOUR_MS: i64 = 5 * 3_600_000;
+const WEEK_MS: i64 = 7 * 24 * 3_600_000;
 pub const POLL_MS: i64 = 60_000;
 pub const SESSION_ID: &str = "claude-desktop-usage";
 
@@ -22,29 +25,47 @@ pub fn candidate_files(local_appdata: &Path, appdata: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Latest sample as a limits event. `None` for unknown format, empty history, or a stale sample.
-pub fn latest(bytes: &[u8], now: i64) -> Option<Event> {
+/// Newest history entry.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Sample { pub t: i64, pub five_hour: Option<f32>, pub weekly: Option<f32> }
+
+/// `None` for unknown format or empty history.
+pub fn newest(bytes: &[u8]) -> Option<Sample> {
     let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     if v.get("version")?.as_i64()? != 2 { return None; }
-    let sample = v.get("samples")?.as_array()?.iter()
+    let (t, u) = v.get("samples")?.as_array()?.iter()
         .filter_map(|s| Some((s.get("t")?.as_i64()?, s.get("u")?)))
         .max_by_key(|(t, _)| *t)?;
-    let (t, u) = sample;
-    if now - t > MAX_AGE_MS { return None; }
-    let limits: Vec<Limit> = [("fh", Window::FiveHour), ("sd", Window::Weekly)].into_iter()
-        .filter_map(|(k, window)| Some(Limit { agent: Agent::Claude, window, used_pct: u.get(k)?.as_f64()? as f32, resets_at: None }))
-        .collect();
-    if limits.is_empty() { return None; }
-    let mut e = Event::new(Source::Claude, SESSION_ID, Kind::Limits, t);
-    e.data.limits = limits;
-    Some(e)
+    let pct = |k: &str| u.get(k).and_then(|x| x.as_f64()).map(|x| x as f32);
+    Some(Sample { t, five_hour: pct("fh"), weekly: pct("sd") })
 }
 
+impl Sample {
+    /// Limits event for `now`. A sample older than `MAX_AGE_MS` is flagged `stale_since`; a window that has
+    /// run out since the reading is left out (unknown, never a stale number). `None` when nothing is left.
+    pub fn event(&self, now: i64) -> Option<Event> {
+        let age = now - self.t;
+        let stale_since = (age > MAX_AGE_MS).then_some(self.t);
+        let limits: Vec<Limit> = [(Window::FiveHour, self.five_hour, FIVE_HOUR_MS), (Window::Weekly, self.weekly, WEEK_MS)].into_iter()
+            .filter(|(_, _, span)| age <= *span)
+            .filter_map(|(window, pct, _)| Some(Limit { agent: Agent::Claude, window, used_pct: pct?, resets_at: None, stale_since }))
+            .collect();
+        if limits.is_empty() { return None; }
+        let mut e = Event::new(Source::Claude, SESSION_ID, Kind::Limits, self.t);
+        e.data.limits = limits;
+        Some(e)
+    }
+}
+
+/// Latest sample as a limits event (see `Sample::event`).
+pub fn latest(bytes: &[u8], now: i64) -> Option<Event> { newest(bytes)?.event(now) }
+
+#[allow(clippy::large_enum_variant)] // short-lived values passed by move; boxing would only add noise
 #[derive(Debug)]
 pub enum Usage {
-    /// New sample.
+    /// New sample, or the same one after it grew stale or lost a window (`Limit::stale_since`).
     Limits(Event),
-    /// Last reported sample is older than `MAX_AGE_MS` (app closed): remove its limits.
+    /// Nothing usable left: remove the limits reported earlier.
     Stale,
 }
 
@@ -52,31 +73,36 @@ pub struct Poller {
     files: Vec<PathBuf>,
     next_check: i64,
     seen: Option<(PathBuf, SystemTime)>,
-    /// Time of the last reported sample while its limits are in use.
-    reported: Option<i64>,
+    last: Option<Sample>,
+    /// What was last reported for `last`: (stale, has 5 h, has weekly). A change means another report.
+    reported: Option<(bool, bool, bool)>,
 }
 
 impl Poller {
-    pub fn new(files: Vec<PathBuf>) -> Poller { Poller { files, next_check: i64::MIN, seen: None, reported: None } }
+    pub fn new(files: Vec<PathBuf>) -> Poller { Poller { files, next_check: i64::MIN, seen: None, last: None, reported: None } }
 
     /// Check files every `POLL_MS`; read only the one with the latest mtime and only if it changed.
     pub fn poll(&mut self, now: i64) -> Option<Usage> {
         if now < self.next_check { return None; }
         self.next_check = now + POLL_MS;
-        let newest = self.files.iter()
+        let newest_file = self.files.iter()
             .filter_map(|f| Some((f.clone(), std::fs::metadata(f).ok()?.modified().ok()?)))
             .max_by_key(|(_, m)| *m);
-        if let Some(newest) = newest.filter(|n| self.seen.as_ref() != Some(n)) {
-            let e = std::fs::read(&newest.0).ok().and_then(|b| latest(&b, now));
-            self.seen = Some(newest);
-            if let Some(e) = e {
-                self.reported = Some(e.ts);
-                return Some(Usage::Limits(e));
-            }
+        let mut fresh_read = false;
+        if let Some(n) = newest_file.filter(|n| self.seen.as_ref() != Some(n)) {
+            self.last = std::fs::read(&n.0).ok().and_then(|b| newest(&b));
+            self.seen = Some(n);
+            fresh_read = self.last.is_some();
         }
-        match self.reported {
-            Some(t) if now - t > MAX_AGE_MS => { self.reported = None; Some(Usage::Stale) }
-            _ => None,
+        match self.last.and_then(|s| s.event(now)) {
+            Some(e) => {
+                let shape = (e.data.limits.iter().any(|l| l.stale_since.is_some()),
+                    e.data.limits.iter().any(|l| l.window == Window::FiveHour), e.data.limits.iter().any(|l| l.window == Window::Weekly));
+                if !fresh_read && self.reported == Some(shape) { return None; }
+                self.reported = Some(shape);
+                Some(Usage::Limits(e))
+            }
+            None => self.reported.take().map(|_| Usage::Stale),
         }
     }
 }
@@ -108,9 +134,21 @@ mod tests {
     }
 
     #[test]
-    fn stale_sample_is_no_data() {
-        let b = history(json!([{ "t": NOW - MAX_AGE_MS - 1, "org": "o", "u": { "fh": 10, "sd": 20 } }]));
-        assert!(latest(&b, NOW).is_none());
+    fn an_old_sample_is_kept_but_marked_with_its_age() {
+        let t = NOW - MAX_AGE_MS - 1;
+        let e = latest(&history(json!([{ "t": t, "org": "o", "u": { "fh": 10, "sd": 20 } }])), NOW).unwrap();
+        assert_eq!((pct(&e, Window::FiveHour), pct(&e, Window::Weekly)), (Some(10.0), Some(20.0)));
+        assert!(e.data.limits.iter().all(|l| l.stale_since == Some(t)));
+        let live = latest(&history(json!([{ "t": NOW - MAX_AGE_MS, "org": "o", "u": { "fh": 10 } }])), NOW).unwrap();
+        assert_eq!(live.data.limits[0].stale_since, None, "30 min is still live");
+    }
+
+    #[test]
+    fn a_window_that_has_run_out_since_the_reading_is_dropped() {
+        let at = |age: i64| history(json!([{ "t": NOW - age, "org": "o", "u": { "fh": 38, "sd": 47 } }]));
+        let e = latest(&at(18 * 3_600_000), NOW).unwrap();
+        assert_eq!((pct(&e, Window::FiveHour), pct(&e, Window::Weekly)), (None, Some(47.0)), "5 h is long over, the week is not");
+        assert!(latest(&at(8 * 24 * 3_600_000), NOW).is_none(), "nothing left after a week");
     }
 
     #[test]
@@ -159,16 +197,22 @@ mod tests {
     }
 
     #[test]
-    fn poller_reports_once_when_the_app_stops_updating() {
-        // Claude app closed: the file stops changing and the last sample grows stale
+    fn poller_reports_each_change_of_age_once_when_the_app_stops_updating() {
+        // Claude app closed: the file stops changing; the sample becomes "as of", then loses its 5 h window, then goes
         let d = tempfile::tempdir().unwrap();
         let f = d.path().join(FILE);
         let now = crate::time::now_ms();
-        std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 50 } }]))).unwrap();
+        std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 50, "sd": 60 } }]))).unwrap();
         let mut p = Poller::new(vec![f]);
-        limits(p.poll(now));
+        assert!(limits(p.poll(now)).data.limits.iter().all(|l| l.stale_since.is_none()));
         assert!(p.poll(now + MAX_AGE_MS - POLL_MS).is_none());
-        assert!(matches!(p.poll(now + MAX_AGE_MS + POLL_MS), Some(Usage::Stale)));
+        let aged = limits(p.poll(now + MAX_AGE_MS + POLL_MS));
+        assert!(aged.data.limits.iter().all(|l| l.stale_since == Some(now)) && aged.data.limits.len() == 2);
         assert!(p.poll(now + MAX_AGE_MS + 3 * POLL_MS).is_none(), "only once");
+        let later = limits(p.poll(now + FIVE_HOUR_MS + 5 * POLL_MS));
+        assert_eq!((pct(&later, Window::FiveHour), pct(&later, Window::Weekly)), (None, Some(60.0)));
+        assert!(p.poll(now + FIVE_HOUR_MS + 7 * POLL_MS).is_none());
+        assert!(matches!(p.poll(now + WEEK_MS + 3 * POLL_MS), Some(Usage::Stale)));
+        assert!(p.poll(now + WEEK_MS + 5 * POLL_MS).is_none(), "only once");
     }
 }

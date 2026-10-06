@@ -98,9 +98,16 @@ fn session_undismiss(app: tauri::AppHandle, ids: Vec<String>) {
     let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Undismiss(ids));
 }
 
+/// The mod's two switches, as the board carries them.
+pub fn mod_prefs_of(s: &pets_core::settings::Settings) -> pets_core::mod_state::ModPrefs {
+    pets_core::mod_state::ModPrefs { pet: s.claude_mod_pet, nudges: s.claude_mod_nudges }
+}
+
 /// Effects of changing settings. Notifications and Anthropic-limit consent are read continuously in their threads.
 pub fn apply_effects(app: &tauri::AppHandle, old: &pets_core::settings::Settings, new: &pets_core::settings::Settings) {
     if old.apps != new.apps { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::Apps(new.apps)); }
+    let (old_prefs, new_prefs) = (mod_prefs_of(old), mod_prefs_of(new));
+    if old_prefs != new_prefs { let _ = app.state::<core::Control>().0.lock().unwrap().send(core::CoreMsg::ModPrefs(new_prefs)); }
     // open gate: `hook.exe report` at the fixed path `~/.agent-pets/hook.exe` (spec 8)
     if new.apps.generic && !old.apps.generic {
         let st = app.state::<settings::SettingsState>();
@@ -130,6 +137,13 @@ pub fn sync_autostart(on: bool) {
     if let Some(v) = system::autostart_action(on, system::autostart_value(system::RUN_KEY).as_deref(), &cmd) { let _ = system::set_autostart(v); }
 }
 
+/// At startup: a `statusLine` still pointing at our retired pass-through gets the user's own statusline back
+/// (limits now come from the Claude mod). Idempotent.
+fn migrate_statusline(app: &tauri::AppHandle) {
+    let home = app.state::<settings::SettingsState>().home.clone();
+    if pets_core::integrations::migrate_statusline(&home) { pets_core::applog::write("restored the user's statusLine in ~/.claude/settings.json"); }
+}
+
 /// At startup: enabled Claude Code without hooks or with an old `hook.exe` (after an update) gets them again;
 /// enabled opencode gets this version's plugin; the open gate keeps `hook.exe report` at a fixed location.
 fn repair_integrations(app: &tauri::AppHandle) {
@@ -139,6 +153,10 @@ fn repair_integrations(app: &tauri::AppHandle) {
     let src = settings::pick_hook(&settings::hook_candidates(app));
     if apps.claude_code && integrations::claude_needs_repair(&st.home, src.as_deref()) {
         let _ = integrations::enable(AppId::ClaudeCode, &st.home, src.as_deref(), st.lang());
+    }
+    // the mod: placed again after an update (new version) or when files vanished; a folder that is not ours stays
+    if apps.claude_code && st.get().claude_mod && integrations::plugin_needs_repair(&st.home) {
+        let _ = integrations::place_plugin(&st.home, st.lang());
     }
     // only our file: another `agent-pets.js` stays, and enable returns an error without changes
     if apps.opencode { let _ = integrations::enable(AppId::Opencode, &st.home, None, st.lang()); }
@@ -186,6 +204,7 @@ pub fn run() {
         .setup(|app| {
             let prefs = settings::SettingsState::load(settings::home());
             let first_run = *prefs.first_run.lock().unwrap();
+            app.set_theme(settings::window_theme(prefs.get().theme));
             app.manage(prefs);
             app.manage(settings::LastSeen::default());
             let shared: core::Shared = Default::default();
@@ -198,6 +217,7 @@ pub fn run() {
             app.manage(panel::Panel::default());
             panel::build(app.handle())?;
             tray::build(app.handle(), app.state::<settings::SettingsState>().lang())?;
+            app.manage(notify::center::Center::load(settings::home()));
             let snaps = notify::start(app.handle().clone());
             let (core_tx, core_rx) = std::sync::mpsc::channel();
             app.manage(core::Control(std::sync::Mutex::new(core_tx)));
@@ -212,6 +232,7 @@ pub fn run() {
             app.manage(shell::menu::MenuTarget::default());
             app.on_menu_event(|app, e| shell::menu::on_event(app, e.id().as_ref()));
             updater::start(app.handle().clone());
+            migrate_statusline(app.handle());
             if !first_run {
                 sync_autostart(app.state::<settings::SettingsState>().get().autostart);
                 repair_integrations(app.handle());
@@ -223,8 +244,9 @@ pub fn run() {
             snapshot, stage_hello, stage_set_width, stage_move, stage_menu, stage_passthrough, monitors_list, stage_layout, jump, panel::panel_open, panel::panel_hide,
             tooltip::tooltip_show, tooltip::tooltip_size, tooltip::tooltip_hide,
             bubbles::stage_pets, bubbles::bubbles_place, bubbles::bubbles_hide, bubbles::bubbles_hits,
-            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set,
+            settings::settings_get, settings::settings_set, settings::integrations_list, settings::integration_set, settings::claude_mod_set,
             settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
+            notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
             updater::update_status, updater::update_check, updater::update_install,
             session_dismiss, sessions_dismiss_inactive, session_undismiss,
             stats::stats_open, stats::stats_view, stats::stats_progress

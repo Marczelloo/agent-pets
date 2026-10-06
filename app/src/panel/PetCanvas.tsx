@@ -40,7 +40,7 @@ export function PetCanvas({ session, look, mini = false, music = false }: { sess
     let raf = 0, last = performance.now(), T = Math.random() * 10, acc = 0;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dt = Math.min(fps < 30 ? 0.25 : 0.05, (now - last) / 1000);
       last = now;
       acc += dt;
       if (acc < 1 / fps) return;

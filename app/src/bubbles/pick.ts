@@ -20,6 +20,9 @@ export class Picker {
 
   constructor(private readonly ms = 3000) {}
 
+  /** An action bubble is waiting to expire: only then does a timer need to re-run `update`. */
+  pending(): boolean { return this.current !== null; }
+
   update(snap: Snapshot, pets: { id: string; x: number }[], looks: (s: Session) => Look, on: BubbleSwitches, now: number): BubbleWant[] {
     const at = new Map(pets.map(p => [p.id, p.x]));
     const own = snap.sessions.filter(s => !s.parent);

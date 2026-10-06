@@ -1,5 +1,7 @@
 //! Windows notifications (spec 2.4): WinRT toasts with a "Jump" button. `rules` decides when to send them.
+pub mod center;
 pub mod rules;
+pub mod shortcut;
 
 use crate::core::Snapshot;
 use pets_core::model::Session;
@@ -7,19 +9,31 @@ use std::sync::mpsc::{channel, Sender};
 use tauri::{AppHandle, Manager};
 use tauri_winrt_notification::Toast;
 
-pub const AUMID: &str = "dev.agentpets.app";
+/// A fresh id on purpose: Windows keeps the (blank) header icon it first saw for `dev.agentpets.app` forever.
+pub const AUMID: &str = "dev.agentpets.desktop";
 
 /// Toast identifier determined when the notification thread starts (AUMID or PowerShell fallback).
 static APP_ID: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
 /// Toast outside session rules (updates). `button`: label of the `install` action button.
-pub fn show_update(_app: &AppHandle, title: &str, body: &str, button: Option<&str>,
+pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str>,
                    on: impl Fn(Option<String>) + Send + Sync + 'static) {
+    center::record(app, center::Kind::Update, title, body, None);
     let id = APP_ID.get().copied().unwrap_or(AUMID);
     let mut toast = Toast::new(id).title(title);
     if !body.is_empty() { toast = toast.text1(body); }
     if let Some(b) = button { toast = toast.add_button(b, "install"); }
     let _ = toast.on_activated(move |action| { on(action); Ok(()) }).show();
+}
+
+/// Path for the `IconUri` value: the toast shell does not load an image through the `\\?\` verbatim prefix
+/// that `resource_dir()` returns, so the notifications showed no app icon.
+fn toast_icon_path(p: &std::path::Path) -> String {
+    let s = p.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with(r"UNC\") => rest.to_string(),
+        _ => s.to_string(),
+    }
 }
 
 /// Register AUMID for an uninstalled app (HKCU), so toasts are labeled "Agent Pets".
@@ -37,7 +51,7 @@ fn register_aumid(icon: Option<&std::path::Path>) -> bool {
         let mut ok = RegSetValueExW(h, &HSTRING::from("DisplayName"), None, REG_SZ, Some(bytes)).is_ok();
         // toast icon (file from installed resources; absent in development builds)
         if let Some(icon) = icon {
-            let v: Vec<u16> = icon.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+            let v: Vec<u16> = toast_icon_path(icon).encode_utf16().chain(std::iter::once(0)).collect();
             let b = std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 2);
             ok &= RegSetValueExW(h, &HSTRING::from("IconUri"), None, REG_SZ, Some(b)).is_ok();
         }
@@ -58,7 +72,11 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
     let (tx, rx) = channel::<Snapshot>();
     std::thread::spawn(move || {
         let icon = app.path().resource_dir().ok().map(|r| r.join("icons").join("128x128.png")).filter(|p| p.is_file());
-        let app_id = if register_aumid(icon.as_deref()) { AUMID } else { Toast::POWERSHELL_APP_ID };
+        // installed build: the Start Menu shortcut carries the AUMID, which is what gives the toast its header icon;
+        // otherwise (development build, or the shortcut cannot be written) the registry key labels the toasts
+        let stamped = icon.is_some() && std::env::current_exe().ok().zip(shortcut::start_menu_link())
+            .is_some_and(|(exe, lnk)| shortcut::ensure_at(&lnk, &exe, AUMID).is_ok());
+        let app_id = if stamped || register_aumid(icon.as_deref()) { AUMID } else { Toast::POWERSHELL_APP_ID };
         let _ = APP_ID.set(app_id);
         let mut rules = rules::Rules::new(rules::Settings::default());
         let mut last = Snapshot::default();
@@ -80,6 +98,11 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
             // session window in foreground or visible question bubble: no toast needed (send later if the bubble disappears)
             let bubbles = app.state::<crate::bubbles::Bubbles>();
             for t in rules.observe(&last, now, &|s| focused(s) || bubbles.asking(&s.id)) {
+                center::record(&app, match t.kind {
+                    rules::ToastKind::NeedsYou => center::Kind::NeedsYou,
+                    rules::ToastKind::Done => center::Kind::Done,
+                    rules::ToastKind::Limit => center::Kind::Limit,
+                }, &t.title, &t.body, t.session_id.clone());
                 let a = app.clone();
                 let sid = t.session_id.clone();
                 let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body);
@@ -99,4 +122,21 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
         }
     });
     tx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::toast_icon_path;
+    use std::path::Path;
+
+    #[test]
+    fn strips_the_verbatim_prefix_that_hides_the_toast_icon() {
+        assert_eq!(toast_icon_path(Path::new(r"\\?\C:\Users\a\Agent Pets\icons\128x128.png")), r"C:\Users\a\Agent Pets\icons\128x128.png");
+    }
+
+    #[test]
+    fn leaves_plain_and_unc_paths_alone() {
+        assert_eq!(toast_icon_path(Path::new(r"C:\x\i.png")), r"C:\x\i.png");
+        assert_eq!(toast_icon_path(Path::new(r"\\?\UNC\srv\x\i.png")), r"\\?\UNC\srv\x\i.png");
+    }
 }

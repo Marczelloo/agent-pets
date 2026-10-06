@@ -26,6 +26,7 @@ pub fn to_event(body: &Value, now: i64) -> Option<Event> {
             Some(Limit {
                 agent: Agent::Claude, window, used_pct: w.get("utilization")?.as_f64()? as f32,
                 resets_at: w.get("resets_at").and_then(Value::as_str).and_then(crate::time::rfc3339_ms),
+                stale_since: None,
             })
         })
         .collect();
@@ -60,8 +61,8 @@ mod tests {
         let e = to_event(&body, NOW).unwrap();
         assert_eq!((e.kind, e.source, e.ts, e.session_id.as_str()), (Kind::Limits, Source::Claude, NOW, SESSION_ID));
         assert_eq!(e.data.limits, vec![
-            Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 1.0, resets_at: Some(1_790_360_400_013) },
-            Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 84.0, resets_at: Some(1_790_665_200_013) },
+            Limit { agent: Agent::Claude, window: Window::FiveHour, used_pct: 1.0, resets_at: Some(1_790_360_400_013), stale_since: None },
+            Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 84.0, resets_at: Some(1_790_665_200_013), stale_since: None },
         ]);
     }
 
@@ -70,6 +71,6 @@ mod tests {
         assert!(to_event(&json!({"five_hour": null, "seven_day": {"utilization": null}}), NOW).is_none());
         assert!(to_event(&json!("x"), NOW).is_none());
         let e = to_event(&json!({"seven_day": {"utilization": 5.0, "resets_at": null}}), NOW).unwrap();
-        assert_eq!(e.data.limits, vec![Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 5.0, resets_at: None }]);
+        assert_eq!(e.data.limits, vec![Limit { agent: Agent::Claude, window: Window::Weekly, used_pct: 5.0, resets_at: None, stale_since: None }]);
     }
 }

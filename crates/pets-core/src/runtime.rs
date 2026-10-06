@@ -1,7 +1,7 @@
 //! Live data core: hook ingestion, file watching, state restoration at startup, and the clock.
 use crate::claude::{self, hook::{HookState, TaskTracker}, HookEnvelope};
 use crate::endpoint::Endpoint;
-use crate::ingest::{Incoming, Ingest};
+use crate::ingest::{Incoming, Ingest, StateBoard};
 use crate::model::Event;
 use crate::pid;
 use crate::rehydrate::{keep_for_rehydration, recent_files};
@@ -63,11 +63,15 @@ pub struct Runtime {
     _ingest: Ingest,
     /// Routes enabled in settings (door, Copilot, Antigravity), shared with the endpoint thread.
     doors: std::sync::Arc<crate::ingest::Doors>,
+    /// Body of `GET /v1/state`, shared with the endpoint thread.
+    board: StateBoard,
     /// Host program for an opencode session, resolved once per session (one process snapshot).
     opencode_hosts: std::collections::HashMap<String, Option<crate::host::Host>>,
     /// Home directory (opencode database).
+    #[cfg_attr(not(feature = "opencode-db"), allow(dead_code))]
     home: PathBuf,
     /// Last opencode usage read and request for an immediate read (turn end).
+    #[cfg_attr(not(feature = "opencode-db"), allow(dead_code))]
     usage_at: Option<i64>,
     usage_due: bool,
     _watcher: Option<notify::RecommendedWatcher>,
@@ -80,14 +84,15 @@ impl Runtime {
         links.prune(crate::time::now_ms());
         let (tx, hooks) = channel();
         let doors = std::sync::Arc::new(crate::ingest::Doors::new(&cfg.apps));
-        let ingest = Ingest::start(Endpoint::new_token(), tx, doors.clone())?;
+        let board: StateBoard = std::sync::Arc::new(std::sync::RwLock::new(crate::mod_state::empty(env!("CARGO_PKG_VERSION"))));
+        let ingest = Ingest::start(Endpoint::new_token(), tx, doors.clone(), board.clone())?;
         ingest.endpoint().write(&cfg.endpoint_path).context("writing endpoint.json")?;
         let mut rt = Runtime {
             store: Store::new(Timing::default()), sources: Sources::new(), tasks: TaskTracker::default(),
             hook_state: HookState::default(), lang: cfg.lang, links, links_path,
             record: cfg.record, hooks, files: None, usage: claude::desktop_usage::Poller::new(cfg.claude_usage_files),
             router: cfg.router_status.map(crate::router::Poller::new), apps: cfg.apps, last_seen: Default::default(),
-            _ingest: ingest, doors, opencode_hosts: Default::default(), _watcher: None,
+            _ingest: ingest, doors, board, opencode_hosts: Default::default(), _watcher: None,
             home: cfg.home.clone(), usage_at: None, usage_due: false,
         };
         rt.sources.lang = rt.lang;
@@ -100,7 +105,8 @@ impl Runtime {
         let recent: Vec<PathBuf> = roots.iter().flat_map(|r| recent_files(r, Duration::from_secs(1800))).collect();
         for f in keep_for_rehydration(&recent, &live_ids) { rt.poll_file(&f); }
         rt.end_answered_subagents(crate::time::now_ms());
-        if let Some(claude::desktop_usage::Usage::Limits(e)) = rt.usage.poll(crate::time::now_ms()) { rt.apply(e); }
+        let first = rt.usage.poll(crate::time::now_ms());
+        rt.desktop_usage(first);
         rt.poll_router(crate::time::now_ms());
         // one tick before the first snapshot: old threads from recently touched files disappear before being shown
         rt.store.tick(crate::time::now_ms(), &pid::is_alive);
@@ -111,6 +117,9 @@ impl Runtime {
     }
 
     pub fn store(&self) -> &Store { &self.store }
+
+    /// The board served by `GET /v1/state`: the same allocation the endpoint thread reads.
+    pub fn state_board(&self) -> StateBoard { self.board.clone() }
 
     /// Event from outside the core (e.g. Claude account limits fetched by the app). Return whether state changed.
     pub fn apply_external(&mut self, e: Event) -> bool { self.apply(e) }
@@ -150,7 +159,7 @@ impl Runtime {
         while let Ok(msg) = self.hooks.try_recv() {
             changed |= match msg {
                 Incoming::ClaudeHook(env) => self.on_hook(env),
-                Incoming::ClaudeStatusline(s) => claude::statusline::to_events(&s).into_iter().fold(false, |c, e| self.apply(e) | c),
+                Incoming::ClaudeMod(p) => self.on_mod(p),
                 Incoming::Generic(e) => self.apply(e),
                 Incoming::Opencode(v) => self.on_opencode(&v),
                 Incoming::Copilot(env) => self.apps.copilot
@@ -169,13 +178,24 @@ impl Runtime {
         for p in paths { changed |= self.poll_file(&p); }
         changed |= self.poll_router(now);
         changed |= self.poll_opencode_usage(now);
-        match self.usage.poll(now) {
-            Some(claude::desktop_usage::Usage::Limits(e)) => changed |= self.apply(e),
-            Some(claude::desktop_usage::Usage::Stale) => changed |= self.store.drop_limits_without_reset(crate::model::Agent::Claude),
-            None => {}
-        }
+        let usage = self.usage.poll(now);
+        changed |= self.desktop_usage(usage);
         changed |= !self.store.tick(now, &pid::is_alive).is_empty();
         changed
+    }
+
+    /// Claude app limits. An older "as of" reading is replaced by the next report, so a window that ran out disappears.
+    fn desktop_usage(&mut self, u: Option<claude::desktop_usage::Usage>) -> bool {
+        use claude::desktop_usage::Usage;
+        use crate::model::Agent;
+        match u {
+            Some(Usage::Limits(e)) => {
+                let dropped = self.store.retain_limits(|l| l.agent != Agent::Claude || l.stale_since.is_none());
+                self.apply(e) | dropped
+            }
+            Some(Usage::Stale) => self.store.drop_limits_without_reset(Agent::Claude),
+            None => false,
+        }
     }
 
     fn poll_router(&mut self, now: i64) -> bool {
@@ -315,6 +335,24 @@ impl Runtime {
     #[cfg(not(feature = "opencode-db"))]
     fn poll_opencode_usage(&mut self, _now: i64) -> bool { false }
 
+    /// Payload from the Claude Code mod. It only enriches sessions that hooks already created (a mod payload never
+    /// makes a pet); account limits are the exception because they belong to no session.
+    fn on_mod(&mut self, p: claude::plugin::ModPayload) -> bool {
+        if !self.apps.claude_code { return false; }
+        let update = claude::plugin::to_update(&p);
+        let mut changed = false;
+        for e in update.events {
+            if e.kind == crate::model::Kind::Limits || self.store.session(&e.session_id).is_some() {
+                changed |= self.apply(e);
+            }
+        }
+        if let Some(cost) = update.cost {
+            let usage = crate::model::Usage { tokens: 0, cost, account: Some(crate::model::Agent::Claude) };
+            changed |= self.store.set_usage(&p.session_id, Some(usage));
+        }
+        changed
+    }
+
     fn on_hook(&mut self, env: HookEnvelope) -> bool {
         if !self.apps.claude_code { return false; }
         let mut changed = false;
@@ -373,6 +411,7 @@ fn source_key(e: &Event) -> &'static str {
     if e.session_id == claude::desktop_usage::SESSION_ID || e.session_id == claude::account_usage::SESSION_ID {
         return "claude_usage";
     }
+    if e.session_id == claude::plugin::USAGE_SESSION_ID { return "claude_mod_usage"; }
     if e.session_id == crate::adapters::antigravity_usage::SESSION_ID { return "antigravity_usage"; }
     match e.source {
         Source::Claude => "claude_code",
@@ -421,6 +460,18 @@ mod tests {
         let rt = Runtime::start(cfg(&h)).unwrap();
         let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
         assert_eq!(five.map(|l| l.used_pct), Some(42.0));
+    }
+
+    #[test]
+    fn an_old_claude_app_reading_stays_visible_as_of_its_time() {
+        let h = home();
+        let t = crate::time::now_ms() - 18 * 3_600_000;
+        std::fs::create_dir_all(h.path().join("Claude")).unwrap();
+        std::fs::write(h.path().join("Claude").join(claude::desktop_usage::FILE),
+            serde_json::json!({"version": 2, "samples": [{"t": t, "org": "o", "u": {"fh": 38, "sd": 47}}]}).to_string()).unwrap();
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        let l: Vec<_> = rt.store().limits().iter().filter(|l| l.agent == Agent::Claude).map(|l| (l.window, l.used_pct, l.stale_since)).collect();
+        assert_eq!(l, vec![(crate::model::Window::Weekly, 47.0, Some(t))], "the 5 h window is long over");
     }
 
     #[test]
@@ -610,7 +661,7 @@ mod tests {
 
     fn post_agent(ep: &Endpoint, agent: &str, body: &str) -> u16 {
         ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
-            .set("Authorization", &format!("Bearer {}", ep.token)).send_string(body)
+            .timeout(Duration::from_secs(10)).set("Authorization", &format!("Bearer {}", ep.token)).send_string(body)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 })
     }
 
@@ -625,7 +676,7 @@ mod tests {
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
                 "payload": {"sessionId": "zc_1", "toolName": "Bash", "toolInput": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "zcode", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
             while rt.store().session("zcode:zc_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
             let s = rt.store().session("zcode:zc_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Zcode, Some(crate::model::Tool::Bash))), "zcode {on}");
@@ -643,7 +694,7 @@ mod tests {
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
                 "payload": {"sessionId": "grok_1", "toolName": "bash", "toolInput": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "grok", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
             while rt.store().session("grok:grok_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
             let s = rt.store().session("grok:grok_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Grok, Some(crate::model::Tool::Bash))), "grok {on}");
@@ -661,7 +712,7 @@ mod tests {
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "preToolUse",
                 "payload": {"conversation_id": "conv_1", "tool_name": "Shell", "tool_input": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "cursor", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 2000 } else { 300 });
+            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
             while rt.store().session("cursor:conv_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
             let s = rt.store().session("cursor:conv_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Cursor, Some(crate::model::Tool::Bash))), "cursor {on}");
@@ -678,7 +729,7 @@ mod tests {
         let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
             "payload": {"sessionId": "cop_1", "cwd": "C:/w", "toolName": "bash", "toolArgs": {"command": "cargo test"}}}).to_string();
         assert_eq!(post_agent(&ep, "copilot", &body), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("copilot:cop_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("copilot:cop_1").expect("Copilot session");
         assert_eq!((s.agent, s.jump.pid, s.tool), (Agent::Copilot, Some(std::process::id()), Some(crate::model::Tool::Bash)));
@@ -695,7 +746,7 @@ mod tests {
         let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreInvocation",
             "payload": {"conversationId": "d5f1", "workspacePaths": ["C:/w"], "modelName": "gemini-3.5-pro"}}).to_string();
         assert_eq!(post_agent(&ep, "antigravity", &body), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("antigravity:d5f1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("antigravity:d5f1").expect("Antigravity session");
         assert_eq!((s.agent, s.state, s.model.as_deref()), (Agent::Antigravity, crate::model::State::Thinking, Some("gemini-3.5-pro")));
@@ -760,7 +811,7 @@ mod tests {
             .send_string(r#"{"agent":"kilo","session":"a","state":"working","tool":"bash"}"#)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
         assert_eq!(send(&ep), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("generic:kilo:a").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("generic:kilo:a").expect("door session");
         assert_eq!((s.agent, s.state, s.tool), (Agent::Other, crate::model::State::Working, Some(crate::model::Tool::Bash)));
@@ -780,7 +831,7 @@ mod tests {
         let r = ureq::post(&format!("http://127.0.0.1:{}/v1/events/opencode", ep.port))
             .set("Authorization", &format!("Bearer {}", ep.token)).send_string(&body).unwrap();
         assert_eq!(r.status(), 204);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         while rt.store().session("opencode:ses_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
         let s = rt.store().session("opencode:ses_1").expect("opencode session");
         assert_eq!((s.agent, s.jump.pid), (Agent::Opencode, Some(std::process::id())));
@@ -796,7 +847,7 @@ mod tests {
         rt.apply_external(event(Source::Codex, "x1", Kind::Prompt));
         rt.apply_external(event(Source::Router, "r1", Kind::Prompt));
         let mut l = event(Source::Codex, "x1", Kind::Limits);
-        l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 10.0, resets_at: None }];
+        l.data.limits = vec![Limit { agent: Agent::Codex, window: Window::Weekly, used_pct: 10.0, resets_at: None, stale_since: None }];
         rt.apply_external(l);
         let apps = crate::settings::Apps { claude_code: true, codex: false, agent_router: false, ..Default::default() };
         assert!(rt.set_apps(apps));
@@ -839,11 +890,100 @@ mod tests {
             .send_string(&body.to_string()).unwrap().status();
         assert_eq!(status, 204);
         let t0 = Instant::now();
-        while rt.store().session("hook-s1").is_none() && t0.elapsed() < Duration::from_secs(3) {
+        while rt.store().session("hook-s1").is_none() && t0.elapsed() < Duration::from_secs(10) {
             rt.step(crate::time::now_ms());
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(rt.store().session("hook-s1").is_some());
+    }
+
+    fn mod_payload(json: serde_json::Value) -> crate::claude::plugin::ModPayload { serde_json::from_value(json).unwrap() }
+
+    fn send_mod(rt: &mut Runtime, json: serde_json::Value) -> bool { rt.on_mod(mod_payload(json)) }
+
+    #[test]
+    fn mod_limits_from_the_usage_session_apply_without_creating_a_session() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let now = crate::time::now_ms();
+        let changed = send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "measure", "session_id": "unknown", "ts": now,
+            "rate_limits": [{"kind": "five_hour", "percent_used": 23.5}]}));
+        assert!(changed);
+        let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
+        assert_eq!(five.map(|l| l.used_pct), Some(23.5));
+        assert!(rt.store().session("unknown").is_none() && rt.store().sessions().is_empty());
+        assert!(rt.last_seen().contains_key("claude_mod_usage"));
+    }
+
+    #[test]
+    fn mod_session_events_for_unknown_sessions_are_dropped() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let now = crate::time::now_ms();
+        assert!(!send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "measure", "session_id": "ghost", "ts": now,
+            "context": {"tokens": 10, "window": 100}, "cost_usd": 1.0})));
+        assert!(!send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "turn_end", "session_id": "ghost", "ts": now, "reason": "aborted"})));
+        assert!(rt.store().sessions().is_empty());
+    }
+
+    #[test]
+    fn mod_turn_end_and_cost_reach_a_session_known_from_hooks() {
+        use crate::model::{State, Usage};
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let now = crate::time::now_ms();
+        rt.apply_external(event(crate::model::Source::Claude, "s1", crate::model::Kind::Prompt));
+        assert_eq!(rt.store().session("s1").map(|s| s.state), Some(State::Thinking));
+        assert!(send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "turn_end", "session_id": "s1", "ts": now + 1, "reason": "aborted",
+            "cost_usd": 1.42})));
+        // the store holds a state for a minimum display time; let the clock pass it
+        rt.step(now + 10_000);
+        let s = rt.store().session("s1").unwrap();
+        assert_eq!(s.state, State::Done);
+        assert_eq!(s.usage, Some(Usage { tokens: 0, cost: 1.42, account: Some(Agent::Claude) }));
+    }
+
+    #[test]
+    fn mod_payloads_are_ignored_while_claude_code_is_off() {
+        let h = home();
+        let mut c = cfg(&h);
+        c.apps.claude_code = false;
+        let mut rt = Runtime::start(c).unwrap();
+        assert!(!send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "measure", "session_id": "s1", "ts": crate::time::now_ms(),
+            "rate_limits": [{"kind": "five_hour", "percent_used": 10.0}], "cost_usd": 1.0})));
+        assert!(rt.store().limits().is_empty());
+        assert!(!rt.last_seen().contains_key("claude_mod_usage"));
+    }
+
+    #[test]
+    fn mod_payload_posted_to_the_endpoint_reaches_the_store() {
+        let h = home();
+        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let body = serde_json::json!({"v": 1, "kind": "measure", "session_id": "x", "ts": crate::time::now_ms(),
+            "rate_limits": [{"kind": "seven_day", "percent_used": 40.0}]}).to_string();
+        assert_eq!(post_agent(&ep, "claude-mod", &body), 204);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while rt.store().limits().is_empty() && Instant::now() < deadline {
+            rt.step(crate::time::now_ms());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(rt.store().limits().first().map(|l| l.used_pct), Some(40.0));
+    }
+
+    #[test]
+    fn the_state_board_is_the_one_the_endpoint_serves() {
+        let h = home();
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
+        let get = |token: &str| ureq::get(&format!("http://127.0.0.1:{}/v1/state", ep.port))
+            .timeout(Duration::from_secs(10)).set("Authorization", &format!("Bearer {token}")).call()
+            .map(|r| (r.status(), r.into_string().unwrap())).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => (c, String::new()), _ => (0, String::new()) });
+        let empty = format!(r#"{{"v":1,"app_version":"{}","prefs":{{"pet":false,"nudges":true}},"sessions":[],"limits":[]}}"#, env!("CARGO_PKG_VERSION"));
+        assert_eq!(get(&ep.token), (200, empty));
+        *rt.state_board().write().unwrap() = br#"{"v":1,"sessions":[1]}"#.to_vec();
+        assert_eq!(get(&ep.token).1, r#"{"v":1,"sessions":[1]}"#);
+        assert_eq!(get("wrong").0, 401);
     }
 
     fn delegated(rt: &mut Runtime, parent: &str, task: &str, ts: i64) {

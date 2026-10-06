@@ -23,7 +23,8 @@ Animated pets in the Windows 11 taskbar that show what your coding agents are do
 ## Features
 
 - **One pet per session**, posed by what the agent does: thinking, editing, running a command, reading, searching, browsing, delegating, waiting for you, done, error, asleep.
-- **Limits at a glance.** 5-hour and weekly bars for Claude, Codex and Antigravity, task progress under each pet, a "+N" badge when the taskbar runs out of room.
+- **Limits at a glance.** 5-hour and weekly bars for Claude, Codex and Antigravity, task progress under each pet, a "+N" badge when the taskbar runs out of room. Claude limits come live from the Claude Code mod, with exact reset times; opt-in plan polling and the Claude app's own samples fill the gaps. See [Agents](docs/agents.md#claude-rate-limits).
+- **A mod inside Claude Code.** Live limits, a `/pets` pane with every agent's sessions, nudges when another agent waits or fails, and a pixel Clawd above the prompt. On by default, and installable from the marketplace without the widget (`/plugin marketplace add Marczelloo/agent-pets`). See [Agents](docs/agents.md#the-claude-code-mod).
 - **One click back to the session.** The panel lists every session; **Open** brings back the Claude or Codex app, the editor, the terminal, or resumes the session in a new one.
 - **Speech bubbles and subagents.** See the question an agent asks or the command it runs; subagents show up as mini pets next to their parent.
 - **Seven looks, two ways to move.** Sticker, Sketch, Clean, Pixel art, Neon, Ink and Pastel, plus a Dynamic mode with anime-inspired scenes.
@@ -77,7 +78,7 @@ Claude Code, Codex and opencode get the most care and testing; the experimental 
 
 | Panel | First-run wizard | Settings |
 |---|---|---|
-| <img src="docs/images/panel.png" alt="Panel with limits and sessions" width="260"> | <img src="docs/images/wizard.png" alt="Wizard step: choose the pets' look, with a live preview" width="340"> | <img src="docs/images/settings.png" alt="Settings window, Apps tab" width="340"> |
+| <img src="docs/images/panel.png" alt="Panel with the session list: a main session with its subagents and two more sessions" width="260"> | <img src="docs/images/wizard.png" alt="Wizard step: pet appearance, motion and a gallery of seven styles" width="400"> | <img src="docs/images/settings.png" alt="Settings window, Look tab with the live preview and all scenes" width="400"> |
 
 ## Privacy
 

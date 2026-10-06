@@ -98,6 +98,13 @@ pub fn question_text(notification: Option<&str>, last_action: Option<(&str, &str
     if msg.is_empty() { return None; }
     if let Some(i) = msg.find("permission to use ") {
         let tool = msg[i + "permission to use ".len()..].split_whitespace().next().unwrap_or("");
+        // Claude also asks permission to show its own question: the question is the text, "Allow AskUserQuestion?" says nothing
+        if tool == "AskUserQuestion" {
+            return match last_action {
+                Some((t, text)) if t == tool => nonempty(text.to_string()),
+                _ => None,
+            };
+        }
         let ask = format!("{} {tool}?", tr(lang, "Zgoda na", "Allow"));
         return nonempty(match last_action {
             Some((t, text)) if t == tool && !text.is_empty() => format!("{ask} {text}"),

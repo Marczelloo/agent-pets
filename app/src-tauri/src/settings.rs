@@ -109,12 +109,23 @@ pub fn hook_candidates(app: &AppHandle) -> Vec<PathBuf> {
     out
 }
 
+/// Theme setting as the native window theme (title bar, and WebView2's `prefers-color-scheme` before the page applies its own);
+/// `None` follows Windows.
+pub fn window_theme(t: core_settings::Theme) -> Option<tauri::Theme> {
+    match t {
+        core_settings::Theme::System => None,
+        core_settings::Theme::Light => Some(tauri::Theme::Light),
+        core_settings::Theme::Dark => Some(tauri::Theme::Dark),
+    }
+}
+
 /// Save and broadcast settings; `apply_effects` attaches effects (core, notifications, startup).
 fn store(app: &AppHandle, new: Settings) -> Result<(), String> {
     let st = app.state::<SettingsState>();
     core_settings::save(&st.path, &new).map_err(|e| format!("{} {}: {e}", i18n::tr(st.lang(), "Nie udało się zapisać", "Could not save"), st.path.display()))?;
     let old = std::mem::replace(&mut *st.current.write().unwrap(), new.clone());
     *st.load_error.lock().unwrap() = None;
+    if old.theme != new.theme { app.set_theme(window_theme(new.theme)); }
     crate::apply_effects(app, &old, &new);
     let _ = app.emit("pets://settings", &new);
     Ok(())
@@ -156,7 +167,11 @@ pub fn integrations_list(state: tauri::State<SettingsState>) -> Vec<AppRow> {
 fn switch(app: &AppHandle, s: &mut Settings, id: AppId, on: bool) -> Result<String, String> {
     let home = app.state::<SettingsState>().home.clone();
     let lang = i18n::current(s.language);
-    let msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), lang)? } else { integrations::disable(id, &home, lang)? };
+    let mut msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), lang)? } else { integrations::disable(id, &home, lang)? };
+    // the mod is extra: the classic hooks stay installed when it cannot be placed, the reason goes into the message
+    if on && id == AppId::ClaudeCode && s.claude_mod {
+        if let Err(e) = integrations::place_plugin(&home, lang) { msg = format!("{msg} {e}"); }
+    }
     set_app(s, id, on);
     Ok(msg)
 }
@@ -167,6 +182,29 @@ pub fn integration_set(app: AppHandle, id: AppId, on: bool) -> Result<String, St
     let msg = switch(&app, &mut s, id, on)?;
     store(&app, s)?;
     Ok(msg)
+}
+
+/// Switch for the Claude Code mod: saves the flag, then places or removes the plugin (only while Claude Code is enabled;
+/// otherwise the next enabling does it).
+#[tauri::command]
+pub fn claude_mod_set(app: AppHandle, on: bool) -> Result<String, String> {
+    let st = app.state::<SettingsState>();
+    let mut s = st.get();
+    let (lang, home) = (i18n::current(s.language), st.home.clone());
+    s.claude_mod = on;
+    let claude = s.apps.claude_code;
+    store(&app, s)?;
+    if !claude {
+        return Ok(if on { i18n::tr(lang, "Zapisano. Mod zainstaluje się po włączeniu Claude Code.", "Saved. The mod is installed when Claude Code is turned on.") }
+                  else { i18n::tr(lang, "Zapisano.", "Saved.") }.into());
+    }
+    if on {
+        integrations::place_plugin(&home, lang).map_err(|e| format!("{} {e}", i18n::tr(lang, "Mod nie został zainstalowany.", "The mod was not installed.")))?;
+        Ok(i18n::tr(lang, "Mod zainstalowany. Zadziała w nowych sesjach Claude Code.", "Mod installed. It works in new Claude Code sessions.").into())
+    } else {
+        integrations::remove_plugin(&home).map_err(|e| format!("{} {e}", i18n::tr(lang, "Mod nie został usunięty.", "The mod was not removed.")))?;
+        Ok(i18n::tr(lang, "Mod usunięty.", "Mod removed.").into())
+    }
 }
 
 /// Finish the wizard: save settings and enable or disable integrations. Return messages for the result screen.
@@ -274,8 +312,9 @@ fn open_at(app: &AppHandle, tab: Option<&str>) {
     std::thread::spawn(move || {
         let url = tab.map(|t| format!("settings.html#{t}")).unwrap_or_else(|| "settings.html".into());
         let (w, h) = fit_size(WINDOW, work_area(&app));
+        let theme = window_theme(app.state::<SettingsState>().get().theme);
         let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App(url.into()))
-            .title(window_title(app.state::<SettingsState>().lang())).inner_size(w, h).min_inner_size(620.0, 460.0).center().build();
+            .title(window_title(app.state::<SettingsState>().lang())).inner_size(w, h).min_inner_size(620.0, 460.0).theme(theme).center().build();
     });
 }
 
@@ -285,6 +324,13 @@ pub fn settings_open(app: AppHandle) { crate::panel::hide(&app); open(&app); }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_theme_setting_maps_to_the_native_window_theme() {
+        assert_eq!(window_theme(core_settings::Theme::System), None);
+        assert_eq!(window_theme(core_settings::Theme::Light), Some(tauri::Theme::Light));
+        assert_eq!(window_theme(core_settings::Theme::Dark), Some(tauri::Theme::Dark));
+    }
 
     #[test]
     fn the_view_reports_the_windows_language_not_the_resolved_one() {
@@ -311,6 +357,19 @@ mod tests {
         let merged = merge_user_settings(&current, incoming);
         assert!(!merged.apps.claude_code);
         assert!(!merged.autostart);
+    }
+
+    #[test]
+    fn the_claude_mod_switch_from_the_window_is_kept() {
+        let incoming = Settings { claude_mod: false, ..Settings::default() };
+        assert!(!merge_user_settings(&Settings::default(), incoming).claude_mod);
+    }
+
+    #[test]
+    fn the_mod_pet_and_nudges_switches_from_the_window_are_kept() {
+        let incoming = Settings { claude_mod_pet: true, claude_mod_nudges: false, ..Settings::default() };
+        let merged = merge_user_settings(&Settings::default(), incoming);
+        assert!(merged.claude_mod_pet && !merged.claude_mod_nudges);
     }
 
     #[test]

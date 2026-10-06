@@ -12,6 +12,11 @@ describe('petTooltip', () => {
   it('shows the live action text instead of the generic label', () => {
     expect(petTooltip({ ...base, action: 'npm test' }, 220_000).lines[0]).toBe('npm test');
   });
+  it('a waiting pet shows the question as well, so it is not lost when bubbles are off', () => {
+    const t = petTooltip({ ...base, state: 'needs_you', action: null, question: 'Allow Bash? npm test' }, 220_000);
+    expect(t.lines).toContain('Allow Bash? npm test');
+    expect(petTooltip({ ...base, state: 'working', question: 'stale' }, 220_000).lines).not.toContain('stale');
+  });
   it('a child names its task, runs for a while and shows router health', () => {
     const kid: Session = { ...base, id: 'p/a', title: 'Znajdź testy', parent: 'p', progress: null, context: null, started_at: 40_000,
       sub: { kind: 'router', agent_type: null, description: 'Znajdź testy', background: false },
@@ -104,5 +109,16 @@ describe('actionLabel with music', () => {
     expect(actionLabel({ state: 'idle', tool: null }, { playing: false, app: null })).toBe('Bezczynny');
     expect(actionLabel({ state: 'working', tool: 'bash' }, m)).toBe(actionLabel({ state: 'working', tool: 'bash' }));
     expect(actionLabel({ state: 'done', tool: null }, m)).toBe(actionLabel({ state: 'done', tool: null }));
+  });
+});
+
+describe('limits from an old reading', () => {
+  const now = new Date(2026, 8, 24, 12, 0).getTime();
+  const old = { agent: 'claude' as const, window: 'weekly' as const, used_pct: 47, resets_at: null, stale_since: now - 18 * 3_600_000 };
+  it('says when it was read and how to refresh it, instead of passing as current', () => {
+    const t = limitsTooltip([old], now);
+    expect(t.lines[0]).toBe('Claude · tydzień: 47% · odczyt: 18 h temu');
+    expect(t.lines).toHaveLength(2);
+    expect(limitsTooltip([{ ...old, stale_since: null }], now).lines).toEqual(['Claude · tydzień: 47%']);
   });
 });

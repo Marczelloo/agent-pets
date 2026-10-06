@@ -78,14 +78,17 @@ target\release\pets-cli.exe uninstall-hooks   # removes only the Agent Pets entr
 
 `install-hooks` merges its entries into `~/.claude/settings.json` and keeps a backup as `settings.json.agent-pets.bak`. Claude Code reads hooks when a session starts, so restart running sessions afterwards.
 
-### Statusline pass-through
+### The Claude Code mod
+
+The mod lives in `claude-plugin/` and is embedded in the app, which places it in `~/.claude/skills/agent-pets` (see [Agents](agents.md#the-claude-code-mod)). Its version must equal the app's: a test in `pets-core` and `scripts/release.ps1` both check it. To work on the mod:
 
 ```powershell
-target\release\pets-cli.exe install-statusline $HOME\.agent-pets\hook.exe   # the previous statusLine is saved in ~/.agent-pets/statusline-original.json
-target\release\pets-cli.exe uninstall-statusline                           # restores it
+cd claude-plugin
+claude plugin validate .   # manifest and hooks
+claude plugin test .       # the *.test.ts files, no Claude login needed
 ```
 
-Your previous statusline command runs through `cmd`, so a command that only works in Git Bash prints nothing while the pass-through is installed. Only terminal sessions run the statusline; the Claude app does not.
+The repo root has a marketplace (`.claude-plugin/marketplace.json`) for manual installs: `claude plugin validate .` checks it. The statusline pass-through of 0.15 is retired; `pets-cli uninstall-statusline` restores a statusline that it replaced.
 
 ## How it works
 
@@ -101,7 +104,7 @@ Agent Router ──~/.agent-router/status.json─────────┘
 ```
 
 - **`pets-core`** is the library: the data model; the state machine (`thinking`, `working:<tool>`, `needs_you`, `done`, `error`, `idle`, `sleep`, `compacting`, `ended`, with a minimum time per state and inactivity timeouts); the adapters for every agent and the door; the process-tree walk that finds the program hosting an agent; a read-only reader of opencode's database; a file tailer and watcher, the local ingest server and the hooks installer.
-- **`hook.exe`** (`pets-hook`) is the hook client. With `--agent-pets-statusline` it is the statusline pass-through, and with `report` the command-line side of the door.
+- **`hook.exe`** (`pets-hook`) is the hook client. With `report` it is the command-line side of the door; the retired `--agent-pets-statusline` mode only prints your own statusline until the app has restored it.
 - **`pets-cli`** runs everything as a terminal app, with record and replay.
 - **`app/`** is the Tauri app. The Rust side embeds the stage window in the taskbar (`SetParent` into `Shell_TrayWnd`), measures the free space with UI Automation, follows DPI and Explorer restarts, reads the mouse natively and shows the tooltip window. The TypeScript side draws the pets on a canvas at 30 fps and pauses while the taskbar is hidden or a full-screen app runs. The panel, settings and statistics are React.
 
@@ -110,10 +113,12 @@ Agent Router ──~/.agent-router/status.json─────────┘
 ```
 crates/pets-core    core library: model, state machine, adapters, ingest, watcher, settings, integrations
 crates/pets-hook    hook.exe
-crates/pets-cli     pets-cli: run, replay, install-hooks, install-statusline and their uninstall commands
+crates/pets-cli     pets-cli: run, replay, install-hooks, uninstall-hooks, uninstall-statusline
 app/                Tauri app: taskbar stage, renderer, skins, tooltip, panel, settings, statistics, installer
 prototype/          the original visual prototype of the pets (canvas 2D)
 scripts/            release script
+claude-plugin/      the Claude Code mod (function-hook plugin, embedded in the app)
+.claude-plugin/     marketplace for manual mod installs
 tools/              fixture anonymizer, CPU measurement, README media recorder (showcase/)
 docs/               documentation and README images
 ```
@@ -128,6 +133,7 @@ cd tools\showcase; pnpm install
 node record.mjs                     # all four: pets, states, styles, dynamic
 node record.mjs states --zoom=2     # one board, twice as sharp
 node record.mjs banner              # docs/images/banner.png, a still at twice the size
+node screens.mjs                    # docs/images/{panel,wizard,settings}.png from the demo data (needs the dev server on :1420)
 ```
 
 `app/showcase.html?mode=gallery|states|styles|dynamic|banner&live=1` shows a board live in the browser.
@@ -150,10 +156,10 @@ Put the new public key in `tauri.conf.json` and ask users to install the next ve
 
 ### Steps
 
-1. Set the same version in `Cargo.toml`, `app/src-tauri/tauri.conf.json` and `app/package.json` (a test in `version::tests` checks that they match).
+1. Set the same version in `Cargo.toml`, `app/src-tauri/tauri.conf.json`, `app/package.json` and `claude-plugin/.claude-plugin/plugin.json` (tests in `version::tests` and `integrations::tests` check that they match).
 2. Run the tests: `cargo test --workspace` and `pnpm --dir app test`.
 3. Write the release notes to a file. The first line that is not a heading appears in the "update available" notification.
-4. Run `pwsh scripts/release.ps1 -Notes <file>`. It checks the versions, builds the signed installer, copies it to `target/release/upload/`, writes `latest.json` and prints the `gh release create` command.
+4. Run `pwsh scripts/release.ps1 -Notes <file>`. It checks the versions, runs `claude plugin validate` and `claude plugin test` on the mod (the `claude` CLI must be installed), builds the signed installer, copies it to `target/release/upload/`, writes `latest.json` and prints the `gh release create` command.
 5. Run that command to publish the release. Attach both the installer and `latest.json`.
 
 ### Testing an update locally

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { CHILD_DONE_MS, accountRows, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
+import { CHILD_DONE_MS, activeCount, collapseChildren, contextPct, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: 'C:\\work\\' + id, state, tool: null, progress: null, context: null,
@@ -16,18 +16,15 @@ describe('opencode usage on its card', () => {
       .toBe('sesja: 950 tok. · dziś: 4,8 mln tok. · $0.42');
     expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0, account: null } }, undefined)).toBe('sesja: 950 tok.');
   });
+  it('leaves out the token part of a session that only has a cost (Claude)', () => {
+    const line = usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 1.42, account: 'claude' } }, undefined);
+    expect(line).toBe('$1.42');
+    expect(line).not.toMatch(/tok/);
+    expect(usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 0, account: 'claude' } }, undefined)).toBeNull();
+  });
   it('has no line without usage', () => {
     expect(usageLine(oc, today)).toBeNull();
     expect(usageLine({ ...s('c', 'working', 0), usage: null }, today)).toBeNull();
-  });
-  it('shows the bars of the account the session runs on, never an invented 0%', () => {
-    const now = new Date(2026, 8, 24, 12, 0).getTime();
-    const limits = [{ agent: 'codex' as const, window: 'five_hour' as const, used_pct: 30, resets_at: null },
-                    { agent: 'claude' as const, window: 'weekly' as const, used_pct: 70, resets_at: null }];
-    const rows = accountRows({ ...oc, usage: { tokens: 1, cost: 0, account: 'codex' } }, limits, now);
-    expect(rows.map(r => `${r.agent}/${r.window}/${r.pct}`)).toEqual(['codex/five_hour/30']);
-    expect(accountRows({ ...oc, usage: { tokens: 1, cost: 0, account: null } }, limits, now)).toEqual([]);
-    expect(accountRows(oc, limits, now)).toEqual([]);
   });
 });
 
@@ -103,5 +100,52 @@ describe('panel model', () => {
   });
   it('running time reads like a clock', () => {
     expect([clock(0), clock(9_999), clock(72_000), clock(3_723_000), clock(-5)]).toEqual(['0:00', '0:09', '1:12', '1:02:03', '0:00']);
+  });
+});
+
+describe('panel tabs and limits', () => {
+  const now = new Date(2026, 8, 24, 12, 0).getTime();
+  const lim = (agent: 'claude' | 'codex', window: 'five_hour' | 'weekly', used_pct: number, stale_since?: number) =>
+    ({ agent, window, used_pct, resets_at: null, ...(stale_since != null ? { stale_since } : {}) });
+
+  it('counts only top-level sessions that are not inactive', () => {
+    const child = { ...s('k', 'working', 1), parent: 'a' };
+    expect(activeCount([s('a', 'working', 1), s('b', 'needs_you', 1), s('c', 'idle', 1), s('d', 'done', 1), s('e', 'sleep', 1), s('f', 'ended', 1), child])).toBe(2);
+    expect(activeCount([])).toBe(0);
+  });
+  it('raises the limits alert from 80 % or for a stale reading, never without data', () => {
+    expect(limitsAlert([])).toBe(false);
+    expect(limitsAlert([lim('claude', 'five_hour', 79)])).toBe(false);
+    expect(limitsAlert([lim('claude', 'five_hour', 80)])).toBe(true);
+    expect(limitsAlert([lim('codex', 'weekly', 10, now - 3_600_000)])).toBe(true);
+  });
+  it('collapses more than three children until expanded', () => {
+    const c = [1, 2, 3, 4, 5];
+    expect(collapseChildren([1, 2, 3], false)).toEqual({ shown: [1, 2, 3], hidden: 0 });
+    expect(collapseChildren(c, false)).toEqual({ shown: [1, 2, 3], hidden: 2 });
+    expect(collapseChildren(c, true)).toEqual({ shown: c, hidden: 0 });
+    expect(collapseChildren([], false)).toEqual({ shown: [], hidden: 0 });
+  });
+  it('builds one limits card per agent; an agent with no readings is noData and antigravity needs data', () => {
+    const cards = limitCards([lim('claude', 'five_hour', 40)], now);
+    expect(cards.map(x => x.agent)).toEqual(['claude', 'codex']);
+    expect(cards[0].noData).toBe(false);
+    expect(cards[1].noData).toBe(true);
+    expect(cards[0].rows.length).toBe(2);
+  });
+  it('marks a card stale when any of its rows is', () => {
+    const cards = limitCards([lim('codex', 'weekly', 30, now - 7_200_000)], now);
+    expect(cards.find(x => x.agent === 'codex')!.stale).toBe(true);
+    expect(cards.find(x => x.agent === 'claude')!.stale).toBe(false);
+  });
+});
+
+describe('context bar', () => {
+  it('gives a clamped percentage, or null without a context window', () => {
+    const base = s('a', 'working', 1);
+    expect(contextPct(base)).toBeNull();
+    expect(contextPct({ ...base, context: { used: 50, max: 200 } })).toBe(25);
+    expect(contextPct({ ...base, context: { used: 500, max: 200 } })).toBe(100);
+    expect(contextPct({ ...base, context: { used: 5, max: 0 } })).toBeNull();
   });
 });

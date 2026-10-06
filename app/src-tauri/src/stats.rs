@@ -55,7 +55,9 @@ pub fn run_until_done(sc: &Mutex<Scanner>, step: u64, pause: &dyn Fn() -> bool, 
 pub fn sync_opencode(sc: &Mutex<Scanner>, db_path: &std::path::Path, on: bool, pause: &dyn Fn() -> bool) -> usize {
     if !on || pause() { return 0; }
     let Some(c) = pets_core::opencode_db::open(db_path) else { return 0 };
-    pets_core::stats::opencode::sync(&mut sc.lock().unwrap().book, &c, pause)
+    // the lock is held only for a lookup or an insert, never while the database is read: the statistics window stays responsive
+    pets_core::stats::opencode::sync_with(&|key| sc.lock().unwrap().book.files.get(key).map(|e| e.cursor.mtime), &c, pause,
+        &mut |key, e| { sc.lock().unwrap().book.files.insert(key, e); })
 }
 
 /// Ledger from disk; retry read errors (e.g. antivirus lock at startup), then return `None` if they persist:
@@ -149,8 +151,9 @@ pub fn open(app: &AppHandle) {
         let lang = app.state::<crate::settings::SettingsState>().lang();
         // 800×720 fits the whole window (podium, race, calendar, badges, and loading bar) without scrolling
         let (w, h) = crate::settings::fit_size((800.0, 720.0), crate::settings::work_area(&app));
+        let theme = crate::settings::window_theme(app.state::<crate::settings::SettingsState>().get().theme);
         let _ = WebviewWindowBuilder::new(&app, "stats", WebviewUrl::App("stats.html".into()))
-            .title(window_title(lang)).inner_size(w, h).min_inner_size(620.0, 460.0).center().build();
+            .title(window_title(lang)).inner_size(w, h).min_inner_size(620.0, 460.0).theme(theme).center().build();
     });
 }
 

@@ -1,0 +1,13 @@
+{
+  "name": "agent-pets",
+  "owner": { "name": "Marczelloo" },
+  "description": "Claude Code mods from Agent Pets, the animated agent pets for the Windows taskbar.",
+  "plugins": [
+    {
+      "name": "agent-pets",
+      "source": "./claude-plugin",
+      "author": { "name": "Marczelloo" },
+      "description": "Agent Pets for Claude Code: live limits for the Agent Pets widget, /pets, nudges about other agents and a pixel pet above the prompt."
+    }
+  ]
+}

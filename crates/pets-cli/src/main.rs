@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const USAGE: &str = "usage: pets-cli run [--record file.jsonl] | replay file.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | install-statusline [hook.exe] | uninstall-statusline | stats-scan [--out stats.json]";
+const USAGE: &str = "usage: pets-cli run [--record file.jsonl] | replay file.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | uninstall-statusline | stats-scan [--out stats.json]";
 
 fn claude_settings() -> anyhow::Result<PathBuf> {
     Ok(dirs::home_dir().context("home directory not found")?.join(".claude").join("settings.json"))
@@ -97,17 +97,6 @@ fn main() -> anyhow::Result<()> {
         Some("uninstall-hooks") => {
             hooks_install::uninstall_file(&claude_settings()?)?;
             println!("Removed Agent Pets hooks from {}", claude_settings()?.display());
-            Ok(())
-        }
-        Some("install-statusline") => {
-            let exe = match args.get(1) {
-                Some(p) => PathBuf::from(p),
-                None => std::env::current_exe()?.with_file_name("hook.exe"),
-            };
-            anyhow::ensure!(exe.exists(), "file not found: {}", exe.display());
-            statusline_install::install_file(&claude_settings()?, &exe.to_string_lossy())?;
-            println!("Installed statusline pass-through ({}) in {}; previous statusLine saved in {}",
-                exe.display(), claude_settings()?.display(), statusline_install::original_path().display());
             Ok(())
         }
         Some("uninstall-statusline") => {

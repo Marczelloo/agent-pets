@@ -120,6 +120,9 @@ pub struct Limit {
     pub window: Window,
     pub used_pct: f32,
     pub resets_at: Option<i64>,
+    /// Time of the last real reading when the value is old (Claude app stopped polling): shown as "as of", never as live.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale_since: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

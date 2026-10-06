@@ -13,6 +13,16 @@ export const appHint = (id: AppId): string => t().settings.appHint[id];
 export const EXPERIMENTAL: AppId[] = ['copilot', 'antigravity', 'cursor', 'grok', 'zcode'];
 /** Integrations without a live check: never enabled merely because they were detected. */
 export const OPT_IN: AppId[] = ['cursor', 'grok', 'zcode'];
+/** Agents shown first in the Apps tab, in this order (the rest is experimental). Agent Router is here on purpose: it is a first-class integration, checked against a live setup like the others. */
+const MAIN: AppId[] = ['claude_code', 'codex', 'agent_router', 'opencode'];
+/** Splits the integration rows into main agents and experimental ones; an id nobody knows is treated as experimental. */
+export function groupApps(rows: AppRow[]): { main: AppRow[]; experimental: AppRow[] } {
+  const by = (ids: AppId[]) => ids.flatMap(id => rows.filter(r => r.id === id));
+  const main = by(MAIN);
+  const known = by(EXPERIMENTAL);
+  const rest = rows.filter(r => !MAIN.includes(r.id) && !EXPERIMENTAL.includes(r.id));
+  return { main, experimental: [...known, ...rest] };
+}
 export const appBadge = (id: AppId | null): string | undefined => id && EXPERIMENTAL.includes(id) ? t().settings.experimental : undefined;
 const sourceLabel = (id: string): string => id === 'claude_usage' ? t().settings.sourceClaudeUsage : id in APP_LABEL ? appLabel(id as AppId) : id;
 
@@ -23,9 +33,10 @@ export type WizardStep = (typeof WIZARD_STEPS)[number];
 export function defaultSettings(): Settings {
   return {
     version: 1, apps: { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
-      cursor: false, grok: false, zcode: false }, claude_statusline: false, claude_plan_usage: false,
+      cursor: false, grok: false, zcode: false }, claude_plan_usage: false, claude_mod: true,
+    claude_mod_pet: false, claude_mod_nudges: true,
     notifications: { needs_you: true, done: true, limits: true }, pets: defaultPets(),
-    power_saving: 'auto', autostart: true, language: 'auto', updates: 'notify', stage: defaultStage(),
+    power_saving: 'auto', autostart: true, language: 'auto', theme: 'system', updates: 'notify', stage: defaultStage(),
   };
 }
 

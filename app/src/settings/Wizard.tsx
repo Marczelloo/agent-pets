@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { AppRow, Settings } from '../types';
 import { LookGallery } from './look/LookGallery';
 import { MotionSwitch } from './look/LookTab';
-import { appBadge, appHint, appLabel, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
+import { appBadge, appHint, appLabel, groupApps, WIZARD_STEPS, defaultAppChoice, type WizardStep } from './model';
+import { Row, Section } from './ui';
 import { Toggle } from './Toggle';
 import { resolveLang, setLang, t } from '../i18n';
 import { LanguageSelect } from './LanguageSelect';
@@ -24,6 +25,13 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
   const [busy, setBusy] = useState(false);
   const cur = WIZARD_STEPS[step];
   const set = (patch: Partial<Settings>) => setDraft(d => ({ ...d, ...patch }));
+  const { main, experimental } = groupApps(rows);
+  const appRow = (r: AppRow) => (
+    <Toggle key={r.id} label={appLabel(r.id)} badge={appBadge(r.id)} checked={r.detected.found && !!draft.apps[r.id]} disabled={!r.detected.found}
+      onChange={on => set({ apps: { ...draft.apps, [r.id]: on } })}>
+      {r.detected.found ? `${r.detected.path}. ${appHint(r.id)}` : r.detected.note}
+    </Toggle>
+  );
 
 
   if (result) {
@@ -31,7 +39,7 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
       <main className="wizard">
         <h1>{t().wizard.done}</h1>
         <ul className="result">{result.map((m, i) => <li key={i}>{m}</li>)}</ul>
-        <p className="desc">{t().wizard.doneDesc}</p>
+        <p className="ui-note">{t().wizard.doneDesc}</p>
         <footer><span /><button type="button" className="accent" onClick={onDone}>{t().wizard.goSettings}</button></footer>
       </main>
     );
@@ -49,29 +57,30 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
       </div>
       <h1>{t().wizard.title[cur]}</h1>
 
-      {cur === 'apps' && <section className="card">
-        {rows.map(r => (
-          <Toggle key={r.id} label={appLabel(r.id)} badge={appBadge(r.id)} checked={r.detected.found && !!draft.apps[r.id]} disabled={!r.detected.found}
-            onChange={on => set({ apps: { ...draft.apps, [r.id]: on } })}>
-            {r.detected.found ? `${r.detected.path}. ${appHint(r.id)}` : r.detected.note}
-          </Toggle>
+      {cur === 'apps' && <>
+        {([['main', main], ['experimental', experimental]] as const).filter(([, list]) => list.length > 0).map(([key, list]) => (
+          <Section key={key} title={t().settings.sections[key]} note={key === 'experimental' ? t().settings.experimentalNote : undefined}>
+            {list.map(appRow)}
+          </Section>
         ))}
-      </section>}
+      </>}
 
-      {cur === 'limits' && <section className="card">
-        <p className="desc">
+      {cur === 'limits' && <>
+        <p className="ui-note">
           {t().wizard.limitsIntro}<code>/usage</code>{t().wizard.limitsIntroAfter}
         </p>
-        <p className="desc">
+        <p className="ui-note">
           {t().wizard.limitsAuth}<code>~/.claude/.credentials.json</code>{t().wizard.limitsAuthAfter}
           <code> api.anthropic.com</code>{t().wizard.limitsAuthEnd}
         </p>
-        <Toggle label={t().limits.fromAnthropic} checked={draft.claude_plan_usage} onChange={on => set({ claude_plan_usage: on })}>
-          {t().wizard.fetchLimits}
-        </Toggle>
-      </section>}
+        <Section title="Claude">
+          <Toggle label={t().limits.fromAnthropic} checked={draft.claude_plan_usage} onChange={on => set({ claude_plan_usage: on })}>
+            {t().wizard.fetchLimits}
+          </Toggle>
+        </Section>
+      </>}
 
-      {cur === 'notify' && <section className="card">
+      {cur === 'notify' && <Section>
         <Toggle label={t().state.needs_you} checked={draft.notifications.needs_you}
           onChange={on => set({ notifications: { ...draft.notifications, needs_you: on } })}>{t().settings.notifyNeeds}</Toggle>
         <Toggle label={t().state.done} checked={draft.notifications.done}
@@ -81,12 +90,13 @@ export function Wizard({ rows, initial, onFinish, onDone, initialStep = 'apps' }
         <Toggle label={t().settings.autostart} checked={draft.autostart} onChange={on => set({ autostart: on })}>
           {t().settings.autostartDesc}
         </Toggle>
-      </section>}
+      </Section>}
 
-      {cur === 'look' && <section className="card look">
-        <MotionSwitch motion={draft.pets.motion} onPick={m => set({ pets: { ...draft.pets, motion: m } })} />
+      {cur === 'look' && <Section>
+        <Row label={t().look.motionTitle} hint={t().look.motionDesc} control={
+          <MotionSwitch motion={draft.pets.motion} onPick={m => set({ pets: { ...draft.pets, motion: m } })} />} />
         <LookGallery compact style={draft.pets.style} motion={draft.pets.motion} scene="edit" onPick={st => set({ pets: { ...draft.pets, style: st } })} />
-      </section>}
+      </Section>}
 
       <footer>
         <button type="button" disabled={step === 0} onClick={() => setStep(s => s - 1)}>{t().wizard.back}</button>

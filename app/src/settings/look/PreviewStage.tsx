@@ -2,12 +2,13 @@ import { useEffect } from 'react';
 import { t } from '../../i18n';
 import type { SceneKey } from '../../stage/sceneFor';
 import type { Agent, Look } from '../../types';
+import { Segmented } from '../ui';
 import { PetsCanvas } from './PetsCanvas';
-import { CYCLE_MS, PREVIEW_GROUPS, cycleScene } from './scenes';
+import { CYCLE_MS, SCENE_GROUPS, cycleScene } from './scenes';
 
 interface Props { look: Look; agent: Agent; scene: SceneKey; cycle: boolean; onScene: (s: SceneKey) => void; onCycle: (on: boolean) => void }
 
-/** Large preview of the selected pet with a choice of each animation or all in sequence. */
+/** Large preview of the selected pet with a choice of each animation (three groups) or all in sequence. */
 export function PreviewStage({ look, agent, scene, cycle, onScene, onCycle }: Props) {
   useEffect(() => {
     if (!cycle) return;
@@ -16,18 +17,17 @@ export function PreviewStage({ look, agent, scene, cycle, onScene, onCycle }: Pr
   }, [cycle, scene, onScene]);
 
   return <>
-    <PetsCanvas key={agent} className="preview-stage" scene={scene} u={0.8} width={460} height={150} pets={[{ agent, look }]} />
-    <div className="scene-picker" role="radiogroup" aria-label={t().look.previewScene}>
-      <button type="button" role="radio" aria-checked={cycle} className={`chip-all${cycle ? ' on' : ''}`} onClick={() => onCycle(!cycle)}>
-        {t().look.allInOrder}
-      </button>
-      {PREVIEW_GROUPS.map(g => (
-        <div className="chip-group" key={g.id}>
-          <span className="desc">{t().look.groups[g.id]}</span>
-          {g.scenes.map(k => (
-            <button type="button" key={k} role="radio" aria-checked={!cycle && scene === k} className={scene === k ? (cycle ? 'playing' : 'on') : ''}
-              onClick={() => { onCycle(false); onScene(k); }}>{t().look.sceneName[k]}</button>
-          ))}
+    <PetsCanvas key={agent} className="preview-stage" scene={scene} u={0.8} width={640} height={170} pets={[{ agent, look }]} />
+    <button type="button" className={cycle ? 'play-all on' : 'play-all'} aria-pressed={cycle} onClick={() => onCycle(!cycle)}>
+      <span aria-hidden="true">{cycle ? '■' : '▶'}</span> {t().look.allInOrder}
+    </button>
+    <div className="scene-picker">
+      {SCENE_GROUPS.map(g => (
+        <div className="scene-group" key={g.id}>
+          <span className="ui-hint">{t().look.groups[g.id]}</span>
+          <Segmented wrap aria-label={t().look.groups[g.id]} value={!cycle && g.scenes.includes(scene) ? scene : ('' as SceneKey)}
+            onChange={k => { onCycle(false); onScene(k); }}
+            options={g.scenes.map(k => ({ value: k, label: t().look.sceneName[k], playing: cycle && scene === k }))} />
         </div>
       ))}
     </div>

@@ -11,6 +11,7 @@ pub mod i18n;
 pub mod ingest;
 pub mod links;
 pub mod integrations;
+pub mod mod_state;
 pub mod model;
 #[cfg(feature = "opencode-db")]
 pub mod opencode_db;

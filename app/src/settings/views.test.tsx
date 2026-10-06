@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { setLang } from '../i18n';
 import { PanelView } from '../panel/App';
 import type { AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
+import { SLOT } from '../stage/layout';
 import { defaultSettings } from './model';
-import { SettingsView } from './SettingsView';
+import { AppsTab } from './AppsTab';
+import { SettingsView, type Tab } from './SettingsView';
 import { resetStage, withBubbles } from './StageTab';
 import { Wizard } from './Wizard';
 
@@ -71,6 +73,88 @@ describe('language', () => {
   });
 });
 
+describe('settings shell and appearance', () => {
+  const render = (tab: Tab, s = defaultSettings()) => renderToString(<SettingsView settings={s} rows={rows} diag={diag} tab={tab} onTab={() => {}}
+    onChange={() => {}} onIntegration={async () => ''} message={null} />);
+  it('the sidebar groups the tabs under Ustawienia and Aplikacja', () => {
+    const html = render('general');
+    expect(html).toContain('Ustawienia');
+    expect(html).toContain('Aplikacja');
+    for (const tab of ['Aplikacje', 'Wygląd', 'Pasek', 'Powiadomienia', 'Limity', 'Ogólne', 'Diagnostyka']) expect(html).toContain(tab);
+    expect(html).toMatch(/aria-current="page"[^>]*>(<svg[^>]*>.*?<\/svg>)?<span>Ogólne</);
+  });
+  it('apps tab: the Claude Code mod switch sits under Claude Code and follows the language', () => {
+    try {
+      setLang('en');
+      const html = render('apps');
+      expect(html).toContain('aria-label="Claude Code mod"');
+      expect(html).toContain('Takes effect in new Claude Code sessions.');
+      expect(html.indexOf('Claude Code mod')).toBeGreaterThan(html.indexOf('C:/h/.claude'));
+      expect(html).toContain('aria-label="Claude Code mod" checked=""');
+      expect(render('apps', { ...defaultSettings(), claude_mod: false })).toContain('aria-label="Claude Code mod"/>');
+      setLang('pl');
+      expect(render('apps')).toContain('aria-label="Mod do Claude Code"');
+      expect(render('apps', { ...defaultSettings(), apps: { ...defaultSettings().apps, claude_code: false } })).not.toContain('Mod do Claude Code');
+    } finally { setLang('pl'); }
+  });
+  it('apps tab: the pet and nudges switches show only while Claude Code and its mod are on, and flip their own field', () => {
+    try {
+      setLang('en');
+      const pet = 'aria-label="Pixel pet in the terminal"', nudges = 'aria-label="Nudges about other agents"';
+      const html = render('apps');
+      expect(html).toContain(pet);
+      expect(html).toContain(nudges);
+      expect(html.indexOf(pet)).toBeGreaterThan(html.indexOf('aria-label="Claude Code mod"'));
+      expect(html).toMatch(/aria-label="Nudges about other agents" checked=""/);
+      expect(html).not.toMatch(/aria-label="Pixel pet in the terminal" checked=""/);
+      const on = { ...defaultSettings(), claude_mod_pet: true, claude_mod_nudges: false };
+      expect(render('apps', on)).toMatch(/aria-label="Pixel pet in the terminal" checked=""/);
+      expect(render('apps', on)).not.toMatch(/aria-label="Nudges about other agents" checked=""/);
+      for (const s of [{ ...defaultSettings(), claude_mod: false },
+        { ...defaultSettings(), apps: { ...defaultSettings().apps, claude_code: false } }]) {
+        expect(render('apps', s)).not.toContain(pet);
+        expect(render('apps', s)).not.toContain(nudges);
+      }
+      const seen: Settings[] = [];
+      const toggles = (n: unknown, out: { label: string; onChange: (on: boolean) => void }[] = []): typeof out => {
+        if (Array.isArray(n)) n.forEach(c => toggles(c, out));
+        else if (n && typeof n === 'object' && 'props' in n) {
+          const p = (n as { props: Record<string, unknown> }).props;
+          if (typeof p.label === 'string' && typeof p.onChange === 'function') out.push({ label: p.label, onChange: p.onChange as (on: boolean) => void });
+          toggles(p.children, out);
+          toggles(p.control, out);
+        }
+        return out;
+      };
+      const tree = AppsTab({ settings: defaultSettings(), rows, onChange: s => seen.push(s), onIntegration: async () => '', onClaudeMod: async () => '' });
+      const by = (label: string) => toggles(tree).find(x => x.label === label)!;
+      by('Pixel pet in the terminal').onChange(true);
+      by('Nudges about other agents').onChange(false);
+      expect(seen[0]).toEqual({ ...defaultSettings(), claude_mod_pet: true });
+      expect(seen[1]).toEqual({ ...defaultSettings(), claude_mod_nudges: false });
+    } finally { setLang('pl'); }
+  });
+  it('general tab: theme is an icon-only radiogroup of system, light and dark with the current one checked', () => {
+    const html = render('general', { ...defaultSettings(), theme: 'dark' });
+    expect(html).toContain('Motyw');
+    expect(html).toMatch(/role="radiogroup" aria-label="Motyw"/);
+    expect(html.match(/role="radio" aria-checked="(true|false)"[^>]*title="(Systemowy|Jasny|Ciemny)"/g)?.length).toBe(3);
+    expect(html).toMatch(/aria-checked="true"[^>]*title="Ciemny"/);
+  });
+  it('general tab: power saving is a segmented control and the language stays a labelled select', () => {
+    const html = render('general', { ...defaultSettings(), power_saving: 'always' });
+    expect(html).toMatch(/role="radiogroup" aria-label="Tryb oszczędny"/);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>Zawsze</);
+    expect(html).toContain('aria-label="Język / Language"');
+  });
+  it('the theme labels are English after switching', () => {
+    setLang('en');
+    const html = render('general');
+    expect(html).toContain('Theme');
+    expect(html).toContain('title="Dark"');
+  });
+});
+
 describe('SettingsView', () => {
   it('general tab: update mode select, check button with its result and the installed version', () => {
     const s = { ...defaultSettings(), updates: 'auto' as const };
@@ -78,7 +162,7 @@ describe('SettingsView', () => {
       onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} update={update} onCheck={() => {}} />);
     const html = view();
     expect(html).toContain('Aktualizacje');
-    expect(html).toMatch(/<option[^>]*value="auto"[^>]*selected|<option[^>]*selected[^>]*value="auto"/);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>Instaluj automatycznie</);
     expect(html).toContain('Powiadamiaj');
     expect(html).toContain('Instaluj automatycznie');
     expect(html).toContain('Sprawdź teraz');
@@ -129,6 +213,27 @@ describe('SettingsView', () => {
     expect(view({ background: { kind: 'glass', radius: 12 } })).toContain('Przezroczystość');
     expect(html).not.toContain('Przezroczystość');
   });
+  it('taskbar tab: position is a set of cards and the Move row sits in that same section only for a custom position', () => {
+    const view = (stage: Partial<Settings['stage']>) => renderToString(<SettingsView
+      settings={{ ...defaultSettings(), stage: { ...defaultSettings().stage, ...stage } }} rows={rows} diag={diag} tab="stage" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} monitors={[]} onMove={() => {}} />);
+    const first = (h: string) => { const a = h.indexOf('<h3>Położenie</h3>'); return h.slice(a, h.indexOf('<h3>', a + 4)); };
+    const custom = first(view({ position: 'custom', custom_at: 0.3 }));
+    expect(custom).toMatch(/class="ui-card on"/);
+    expect(custom).toContain('<svg');
+    expect(custom).toContain('Przesuń');
+    expect(first(view({ position: 'right' }))).not.toContain('Przesuń');
+    expect(view({}).match(/<h3>[^<]*<\/h3>/g)).toEqual(['<h3>Położenie</h3>', '<h3>Okno</h3>', '<h3>Zwierzaki</h3>', '<h3>Elementy</h3>', '<h3>Dymki i subagenci</h3>']);
+  });
+  it('taskbar tab: the pet limit is a stepper with a name and no native number input', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="stage" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} monitors={[]} onMove={() => {}} />);
+    expect(html).toContain('class="ui-stepper"');
+    expect(html).toContain('aria-label="Najwięcej zwierzaków w pasku"');
+    expect(html).not.toContain('type="number"');
+    expect(html).not.toContain('class="segmented"');
+    expect(html).not.toContain('class="card"');
+  });
   it('taskbar tab: an unplugged saved monitor stays selected, a monitor without a taskbar gets a hint', () => {
     const monitors = [{ id: 'one', primary: true, width: 2560, height: 1440, index: 1, has_bar: true },
       { id: 'two', primary: false, width: 1920, height: 1080, index: 2, has_bar: false }];
@@ -150,7 +255,31 @@ describe('SettingsView', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
     expect(html).toContain('class="preview-stage"');
-    for (const name of ['Wszystkie po kolei', 'Praca', 'Stany', 'Komendy', 'Subagent', 'Kompaktuje', 'Pożegnanie', 'Śpi']) expect(html).toContain(name);
+    for (const name of ['Wszystkie po kolei', 'Praca', 'Stany', 'Reakcje', 'Komendy', 'Subagent', 'Kompaktuje', 'Pożegnanie', 'Śpi']) expect(html).toContain(name);
+  });
+  it('look tab: sections run Podgląd, Styl, Ruch, Dymki, the taskbar, Osobno dla agentów and no old button rows remain', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    const at = ['Podgląd', 'Styl', 'Ruch', 'Dymki', 'Tak wygląda w pasku', 'Otoczenie', 'Osobno dla agentów'].map(x => html.indexOf(`<h3>${x}</h3>`));
+    expect(at.every(i => i > -1)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(html).not.toContain('class="segmented"');
+    expect(html).not.toContain('class="chips"');
+    expect(html).toMatch(/aria-label="Słuchają muzyki"/);
+  });
+  it('look tab: all-in-order is a toggle button, not a switch, and music sits under Otoczenie rather than the taskbar preview', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toMatch(/<button[^>]*aria-pressed="false"[^>]*>.*?Wszystkie po kolei<\/button>/);
+    expect(html.match(/class="ui-switch"/g)?.length).toBe(1);
+    expect(html.indexOf('Słuchają muzyki')).toBeGreaterThan(html.indexOf('<h3>Otoczenie</h3>'));
+    expect(html.indexOf('<h3>Tak wygląda w pasku</h3>')).toBeLessThan(html.indexOf('<h3>Otoczenie</h3>'));
+    expect(html.indexOf('Słuchają muzyki')).toBeLessThan(html.indexOf('<h3>Osobno dla agentów</h3>'));
+  });
+  it('look tab: the taskbar preview gives every pet a full slot, so none overlap', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="look" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toMatch(new RegExp(`class="taskbar"[^>]*width="${SLOT * 9}"`));
   });
   it('the diagnostics tab offers to report a problem on GitHub, only when it can open it', () => {
     const view = (onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag"
@@ -158,6 +287,27 @@ describe('SettingsView', () => {
     expect(view(() => {})).toContain('Zgłoś problem</button>');
     expect(view(() => {})).toContain('wklej go do formularza');
     expect(view()).not.toContain('Zgłoś problem');
+  });
+  it('notifications, limits and diagnostics sit on the shared kit: no card chrome, Claude heading with the CLI note, actions above the report', () => {
+    const view = (tab: Tab, onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab={tab}
+      onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} onReport={onReport} />);
+    for (const tab of ['notify', 'limits', 'diag'] as Tab[]) expect(view(tab), tab).not.toContain('class="card"');
+    expect(view('notify')).toContain('class="ui-note"');
+    const limits = view('limits');
+    expect(limits).toContain('<h3>Claude</h3>');
+    expect(limits).toContain('claude auth login');
+    const diagHtml = view('diag', () => {});
+    expect(diagHtml.indexOf('Skopiuj raport')).toBeGreaterThan(-1);
+    expect(diagHtml.indexOf('Skopiuj raport')).toBeLessThan(diagHtml.indexOf('class="report"'));
+    expect(diagHtml.indexOf('Zgłoś problem</button>')).toBeLessThan(diagHtml.indexOf('class="report"'));
+  });
+  it('the wizard groups apps like the Apps tab and drops the card chrome', () => {
+    const html = renderToString(<Wizard rows={newRows} initial={defaultSettings()} onFinish={noop} />);
+    const at = ['Główne agenty', 'Eksperymentalne'].map(x => html.indexOf(`<h3>${x}</h3>`));
+    expect(at[0]).toBeGreaterThan(-1);
+    expect(at[1]).toBeGreaterThan(at[0]);
+    for (const step of ['apps', 'limits', 'notify', 'look'] as const)
+      expect(renderToString(<Wizard rows={rows} initial={defaultSettings()} onFinish={noop} initialStep={step} />), step).not.toContain('class="card');
   });
   it('lists the apps with their integration state', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
@@ -167,12 +317,16 @@ describe('SettingsView', () => {
     expect(html).toContain('opencode');
     expect(html).toContain('Plugin: brak');
   });
-  it('Copilot, Antigravity, Cursor, Grok and ZCode are experimental; the new three say what they write and what they cannot show', () => {
+  it('Copilot, Antigravity, Cursor, Grok and ZCode sit under Eksperymentalne, after the main agents; the new three say what they write and what they cannot show', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={newRows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
-    expect(html.match(/class="badge">eksperymentalne</g)?.length).toBe(3 + 2);
-    expect(html).toMatch(/>GitHub Copilot<span class="badge">/);
-    expect(html).toMatch(/>Cursor<span class="badge">/);
+    const at = (x: string) => html.indexOf(x);
+    expect(at('Główne agenty')).toBeGreaterThan(-1);
+    expect(at('Claude Code')).toBeLessThan(at('Eksperymentalne'));
+    expect(at('opencode')).toBeLessThan(at('Eksperymentalne'));
+    for (const name of ['GitHub Copilot', 'Antigravity', 'Cursor', 'Grok Build', 'ZCode']) expect(at(name)).toBeGreaterThan(at('Eksperymentalne'));
+    expect(at('Eksperymentalne')).toBeLessThan(at('Furtka dla innych agentów'));
+    expect(html).not.toContain('class="badge"');
     for (const path of ['~/.cursor/hooks.json', '~/.grok/hooks/agent-pets.json', '~/.zcode/cli/config.json']) expect(html).toContain(path);
     const only = renderToString(<SettingsView settings={defaultSettings()} rows={[found('cursor'), found('zcode')]} diag={diag} tab="apps"
       onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} />);
@@ -181,7 +335,18 @@ describe('SettingsView', () => {
     setLang('en');
     const en = renderToString(<SettingsView settings={defaultSettings()} rows={newRows} diag={diag} tab="apps" onTab={() => {}}
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
-    expect(en.match(/class="badge">experimental</g)?.length).toBe(3 + 2);
+    expect(en).toContain('Experimental');
+    expect(en).toContain('Main agents');
+  });
+  it('an app row shows one status line, keeps its path and hint under Details, dims when not detected and offers Reinstall when hooks are missing', () => {
+    const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    expect(html).toContain('Wykryto · Hooki: brak');
+    expect(html).toContain('Szczegóły');
+    expect(html).toContain('C:/h/.claude');
+    expect(html).toContain('Zainstaluj ponownie');
+    expect(html).toMatch(/class="ui-row dim"/);
+    expect(html).toContain('Nie znaleziono ~/.codex.');
   });
   it('Copilot and Antigravity say what they write and where; Antigravity says what it cannot show', () => {
     const html = renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="apps" onTab={() => {}}
@@ -256,7 +421,7 @@ describe('panel', () => {
       router_task: kind === 'router' ? { task_id: 't', status: 'running', last_activity_at: 100_000, blocked: false, stall_ms: 180_000 } : null });
     const snap = { sessions: [parent, kid('p/a', 'claude', 'Znajdź testy', 10_000), kid('c1', 'codex', 'Newton', 20_000), kid('th', 'router', 'Policz pliki', 30_000)], limits: [], now: 0 };
     const html = renderToString(<PanelView snap={snap} nowMs={300_000} status={null} focusId="c1" onJump={() => {}} />);
-    expect(html).toContain('1 sesja');
+    expect(html).toMatch(/>Sesje<span class="n">1</);
     for (const t of ['Znajdź testy', 'Newton', 'Policz pliki', 'Czyta a.rs', 'utknęło']) expect(html, t).toContain(t);
     expect(html.match(/class="kid[ "]/g)?.length).toBe(3);
     expect(html).toMatch(/class="kid[^"]*focus/);

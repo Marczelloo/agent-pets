@@ -2,7 +2,7 @@ import { defaultStage } from '../look';
 import { t } from '../i18n';
 import type { MonitorInfo, Settings, StageAlign, StageBackground, StageOrder, StagePosition, StageSettings } from '../types';
 import { clampMaxVisible } from './model';
-import { Toggle } from './Toggle';
+import { OptionCards, Row, Section, Segmented, Select, Stepper, Switch } from './ui';
 
 const POSITIONS: StagePosition[] = ['right', 'left', 'custom', 'floating'];
 const BACKGROUNDS: StageBackground['kind'][] = ['none', 'glass', 'solid'];
@@ -22,31 +22,32 @@ export function withBubbles(s: Settings, key: 'questions' | 'actions' | 'minis',
   return key === 'minis' ? { ...s, stage: { ...st, minis: on } } : { ...s, stage: { ...st, bubbles: { ...st.bubbles, [key]: on } } };
 }
 
-function Segmented<T extends string>({ label, value, options, names, disabled, onPick }: {
-  label: string; value: T; options: T[]; names: Record<T, string>; disabled?: boolean; onPick: (v: T) => void;
-}) {
-  return (
-    <div className="segmented" role="radiogroup" aria-label={label} aria-disabled={disabled || undefined}>
-      {options.map(o => (
-        <button type="button" key={o} role="radio" aria-checked={value === o} className={value === o ? 'on' : ''} disabled={disabled}
-          onClick={() => onPick(o)}>{names[o]}</button>
-      ))}
-    </div>
-  );
-}
-
 function Slider({ label, value, min, max, text, desc, onChange }: {
   label: string; value: number; min: number; max: number; text: (v: number) => string; desc?: React.ReactNode; onChange: (v: number) => void;
 }) {
   return (
-    <label className="row">
-      <span className="text"><span className="label">{label}</span>{desc && <span className="desc">{desc}</span>}</span>
+    <Row label={label} hint={desc} control={
       <span className="slider">
         <input type="range" min={min} max={max} value={value} aria-label={label} aria-valuetext={text(value)}
           onChange={e => onChange(Number(e.target.value))} />
         <output>{text(value)}</output>
-      </span>
-    </label>
+      </span>} />
+  );
+}
+
+/** Miniature of the screen: the taskbar along the bottom edge and where the widget (accent) stands. */
+function PositionPreview({ position }: { position: StagePosition }) {
+  const widget = {
+    right: { x: 70, y: 29, w: 18 }, left: { x: 6, y: 29, w: 18 }, custom: { x: 30, y: 29, w: 18 }, floating: { x: 52, y: 8, w: 24 },
+  }[position];
+  return (
+    <svg viewBox="0 0 96 40" width="100%" height="44" role="presentation">
+      <rect x="1" y="1" width="94" height="38" rx="4" fill="none" stroke="currentColor" strokeOpacity=".3" />
+      <rect x="2" y="27" width="92" height="11" rx="2" fill="currentColor" fillOpacity=".16" />
+      <rect x={widget.x} y={widget.y} width={widget.w} height={position === 'floating' ? 14 : 8} rx="2" fill="var(--accent)"
+        strokeDasharray={position === 'custom' ? '3 2' : undefined} stroke={position === 'custom' ? 'currentColor' : undefined} />
+      {position === 'custom' && <path d="M26 33h-5m5 0l-2-2m2 2l-2 2M52 33h5m-5 0l2-2m-2 2l2 2" stroke="currentColor" strokeWidth="1" fill="none" />}
+    </svg>
   );
 }
 
@@ -55,12 +56,14 @@ interface Props {
   monitors: MonitorInfo[];
   /** left-side mode with no room on the left (icons left-aligned): stage stays near the tray */
   leftFallback: boolean;
+  /** the taskbar is docked to the left or right edge: the stage floats beside it */
+  verticalBar?: boolean;
   onChange: (s: Settings) => void;
   onMove: () => void;
 }
 
 /** Taskbar tab: position, monitor, background, size, spacing, alignment, order, and visible items. */
-export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove }: Props) {
+export function StageTab({ settings: s, monitors, leftFallback, verticalBar = false, onChange, onMove }: Props) {
   const st = s.stage;
   const x = t().stage;
   const set = (patch: Partial<StageSettings>) => onChange({ ...s, stage: { ...st, ...patch } });
@@ -74,93 +77,69 @@ export function StageTab({ settings: s, monitors, leftFallback, onChange, onMove
   const chosen = monitors.find(m => m.id === st.monitor);
   const unplugged = st.monitor !== 'primary' && !chosen;
 
+  const seg = <T extends string>(label: string, value: T, ids: T[], names: Record<T, string>, onPick: (v: T) => void, disabled?: boolean) =>
+    <Segmented aria-label={label} value={value} disabled={disabled} onChange={onPick} options={ids.map(id => ({ value: id, label: names[id] }))} />;
+  const show = (key: keyof StageSettings['show'], label: string, hint: string) =>
+    <Row label={label} hint={hint} control={<Switch checked={st.show[key]} aria-label={label} onChange={on => set({ show: { ...st.show, [key]: on } })} />} />;
+  const bubble = (key: 'questions' | 'actions' | 'minis', checked: boolean, label: string, hint: string) =>
+    <Row label={label} hint={hint} control={<Switch checked={checked} aria-label={label} onChange={on => onChange(withBubbles(s, key, on))} />} />;
+
   return (
     <>
-      <h3>{x.where}</h3>
-      <section className="card">
-        <div className="row">
-          <span className="text"><span className="label">{x.position}</span>
-            <span className="desc">{st.position === 'custom' ? x.moveDesc : x.positionDesc}</span></span>
-          <Segmented label={x.position} value={st.position} options={POSITIONS} names={x.pos} onPick={p => set({ position: p })} />
-        </div>
-        {st.position === 'custom' && <div className="row">
-          <span className="text" />
-          <button type="button" onClick={onMove}>{x.move}</button>
-        </div>}
-        {st.position === 'left' && leftFallback && <p className="desc" role="status">{x.leftFallback}</p>}
-        <div className="row">
-          <span className="text"><span className="label">{x.monitor}</span></span>
-          <select aria-label={x.monitor} value={st.monitor} onChange={e => set({ monitor: e.target.value })}>
-            <option value="primary">{x.primary}</option>
-            {monitors.map(m => <option key={m.id} value={m.id}>{x.monitorName(m.index, m.width, m.height, m.primary)}</option>)}
-            {unplugged && <option value={st.monitor}>{x.unplugged}</option>}
-          </select>
-        </div>
-        {unplugged && <p className="desc" role="status">{x.unpluggedDesc}</p>}
-        {chosen && !chosen.has_bar && !floating && <p className="desc" role="status">{x.noBar}</p>}
-      </section>
+      <Section title={x.where} note={x.positionDesc}>
+        <OptionCards aria-label={x.position} value={st.position} onChange={p => set({ position: p })}
+          options={POSITIONS.map(p => ({ value: p, label: x.pos[p], preview: <PositionPreview position={p} /> }))} />
+        {st.position === 'custom' && <Row label={x.moveTitle} hint={x.moveDesc} control={<button type="button" onClick={onMove}>{x.move}</button>} />}
+        {verticalBar && st.position !== 'floating' && <p className="ui-note" role="status">{x.verticalBar}</p>}
+        {st.position === 'left' && leftFallback && <p className="ui-note" role="status">{x.leftFallback}</p>}
+        <Row label={x.monitor} control={
+          <Select aria-label={x.monitor} value={st.monitor} onChange={v => set({ monitor: v })}
+            options={[{ value: 'primary', label: x.primary },
+              ...monitors.map(m => ({ value: m.id, label: x.monitorName(m.index, m.width, m.height, m.primary) })),
+              ...(unplugged ? [{ value: st.monitor, label: x.unplugged }] : [])]} />} />
+        {unplugged && <p className="ui-note" role="status">{x.unpluggedDesc}</p>}
+        {chosen && !chosen.has_bar && !floating && <p className="ui-note" role="status">{x.noBar}</p>}
+      </Section>
 
-      <h3>{x.window}</h3>
-      <section className="card">
-        <div className="row">
-          <span className="text"><span className="label">{x.background}</span></span>
-          <Segmented label={x.background} value={bg.kind} options={BACKGROUNDS} names={x.bg} onPick={k => setBg({ kind: k, opacity: null })} />
-        </div>
+      <Section title={x.window}>
+        <Row label={x.background} control={seg(x.background, bg.kind, BACKGROUNDS, x.bg, k => setBg({ kind: k, opacity: null }))} />
         {bg.kind !== 'none' && <>
-          <div className="row">
-            <span className="text"><span className="label">{x.color}</span></span>
-            <span className="color">
-              {bg.kind === 'glass' && <label className="check"><input type="checkbox" checked={!bg.color}
-                onChange={e => setBg({ color: e.target.checked ? null : AUTO_COLOR.glass })} />{x.colorAuto}</label>}
-              <input type="color" aria-label={x.color} value={bg.color ?? AUTO_COLOR[bg.kind]} disabled={bg.kind === 'glass' && !bg.color}
-                onChange={e => setBg({ color: e.target.value.toUpperCase() })} />
-            </span>
-          </div>
+          <Row label={x.color} control={<span className="color">
+            {bg.kind === 'glass' && <label className="check"><input type="checkbox" checked={!bg.color}
+              onChange={e => setBg({ color: e.target.checked ? null : AUTO_COLOR.glass })} />{x.colorAuto}</label>}
+            <input type="color" aria-label={x.color} value={bg.color ?? AUTO_COLOR[bg.kind]} disabled={bg.kind === 'glass' && !bg.color}
+              onChange={e => setBg({ color: e.target.value.toUpperCase() })} />
+          </span>} />
           <Slider label={x.opacity} value={bg.opacity ?? DEFAULT_OPACITY[bg.kind]} min={0} max={100} text={pct} onChange={v => setBg({ opacity: v })} />
           <Slider label={x.radius} value={bg.radius} min={0} max={24} text={x.px} onChange={v => setBg({ radius: v })} />
         </>}
-      </section>
+      </Section>
 
-      <h3>{x.pets}</h3>
-      <section className="card">
+      <Section title={x.pets}>
         <Slider label={x.size} value={size} min={SIZE_MIN} max={sizeMax} text={pct} onChange={v => set({ size: v })}
           desc={!floating && st.size > SIZE_TASKBAR ? x.sizeFloatOnly : x.sizeDesc} />
         <Slider label={x.gap} value={st.gap} min={0} max={30} text={x.px} onChange={v => set({ gap: v })} />
         <Slider label={x.padding} value={st.padding} min={0} max={24} text={x.px} onChange={v => set({ padding: v })} />
-        <div className="row">
-          <span className="text"><span className="label">{t().settings.maxVisible}</span>
-            <span className="desc">{t().settings.maxVisibleDesc}</span></span>
-          <input type="number" min={1} max={8} aria-label={t().settings.maxVisible} value={s.pets.max_visible}
-            onChange={e => onChange({ ...s, pets: { ...s.pets, max_visible: clampMaxVisible(Number(e.target.value)) } })} />
-        </div>
-        <div className={`row${alignFixed ? ' off' : ''}`}>
-          <span className="text"><span className="label">{x.align}</span>
-            <span className="desc">{alignFixed ? x.alignFixed : x.alignDesc}</span></span>
-          <Segmented label={x.align} value={st.position === 'left' ? 'left' : st.position === 'right' ? 'right' : st.align}
-            options={ALIGNS} names={x.alignment} disabled={alignFixed} onPick={a => set({ align: a })} />
-        </div>
-        <div className="row">
-          <span className="text"><span className="label">{x.order}</span></span>
-          <select aria-label={x.order} value={st.order} onChange={e => set({ order: e.target.value as StageOrder })}>
-            {ORDERS.map(o => <option key={o} value={o}>{x.orders[o]}</option>)}
-          </select>
-        </div>
-      </section>
+        <Row label={t().settings.maxVisible} hint={t().settings.maxVisibleDesc} control={
+          <Stepper aria-label={t().settings.maxVisible} min={1} max={8} value={s.pets.max_visible}
+            onChange={n => onChange({ ...s, pets: { ...s.pets, max_visible: clampMaxVisible(n) } })} />} />
+        <Row label={x.align} hint={alignFixed ? x.alignFixed : x.alignDesc} dim={alignFixed} control={
+          seg(x.align, st.position === 'left' ? 'left' : st.position === 'right' ? 'right' : st.align, ALIGNS, x.alignment, a => set({ align: a }), alignFixed)} />
+        <Row label={x.order} control={seg(x.order, st.order, ORDERS, x.orders, o => set({ order: o }))} />
+      </Section>
 
-      <h3>{x.elements}</h3>
-      <section className="card">
-        <Toggle label={x.progress} checked={st.show.progress} onChange={on => set({ show: { ...st.show, progress: on } })}>{x.progressDesc}</Toggle>
-        <Toggle label={x.limits} checked={st.show.limits} onChange={on => set({ show: { ...st.show, limits: on } })}>{x.limitsDesc}</Toggle>
-        <Toggle label={x.badge} checked={st.show.badge} onChange={on => set({ show: { ...st.show, badge: on } })}>{x.badgeDesc}</Toggle>
-      </section>
+      <Section title={x.elements}>
+        {show('progress', x.progress, x.progressDesc)}
+        {show('limits', x.limits, x.limitsDesc)}
+        {show('badge', x.badge, x.badgeDesc)}
+      </Section>
 
-      <h3>{x.bubblesTitle}</h3>
-      <section className="card">
-        <Toggle label={x.bubbleQuestions} checked={st.bubbles.questions} onChange={on => onChange(withBubbles(s, 'questions', on))}>{x.bubbleQuestionsDesc}</Toggle>
-        <Toggle label={x.bubbleActions} checked={st.bubbles.actions} onChange={on => onChange(withBubbles(s, 'actions', on))}>{x.bubbleActionsDesc}</Toggle>
-        <Toggle label={x.minis} checked={st.minis} onChange={on => onChange(withBubbles(s, 'minis', on))}>{x.minisDesc}</Toggle>
-      </section>
-      <button type="button" className="reset" onClick={() => onChange(resetStage(s))}>{x.reset}</button>
+      <Section title={x.bubblesTitle}>
+        {bubble('questions', st.bubbles.questions, x.bubbleQuestions, x.bubbleQuestionsDesc)}
+        {bubble('actions', st.bubbles.actions, x.bubbleActions, x.bubbleActionsDesc)}
+        {bubble('minis', st.minis, x.minis, x.minisDesc)}
+      </Section>
+      <button type="button" className="link-btn" onClick={() => onChange(resetStage(s))}>{x.reset}</button>
     </>
   );
 }
