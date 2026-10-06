@@ -13,19 +13,23 @@ import synth as S
 
 MUSIC = 'music'
 RUN = f'{MUSIC}/running-night.mp3'
-# Running Night's beat grid: 0.392 + k * 60/106.01 s. It loops four chords, one per bar (A, F#, G#, C#); the quiet breakdown runs the same
-# loop, so any bar of it can hand over to the bar with the next chord in the loud part. Its attacks start ~15-20 ms before the grid lines,
-# so the hand-over is a short equal-power cross-fade placed LEAD before the bar line and none of the attack is lost.
+# Running Night: 106.01 BPM, beats at 0.392 + k * 60/106.01 s. Its bars start on the beat its chords change on, the drop's at 73.405 s
+# (the bass pushes in half a beat early, at 73.09 s). It loops four chords, one per bar: A (the drop), F#, G#, C#; the quiet breakdown runs
+# the same loop, so a bar of it can hand over to the loud bar with the next chord. Attacks start ~15-20 ms before the grid lines, so the
+# hand-over is a short equal-power cross-fade placed LEAD before the bar line and none of the attack is lost.
 RBAR = 4 * 60 / 106.01
-HIT = 5.620                        # time.ts HIT
+DROP = 73.405                      # the drop's bar line in the track
+bar = lambda n: DROP + n * RBAR    # the track's bar lines, counted from the drop
+HIT = 5.620                        # time.ts HIT (the C# bar before the drop)
+TOUR = HIT + RBAR                  # time.ts TOUR (the drop)
 LEAD = 0.030
 XF = 0.012
 FADE_IN = 0.25                     # the breakdown fades in over the first moment of the video
 # (from s, to s, at s in the video):
 #   0 - 3.36 s   the breakdown, no drums: the end of its A bar and its F# bar
-#   3.36 - end   from the G# bar where the drums come in (69.44 s), uncut: C# for the hit, the drop (A) on the tour, through to the end
-CUTS = [(60.387 - (HIT - RBAR), 60.387, 0.0), (69.443, 111.0, HIT - RBAR)]
-T_END = HIT + 9 * RBAR             # time.ts T_END: the end card, on an A bar; the music plays on under it and fades out
+#   3.36 - end   from the G# bar of the build (68.88 s), uncut: the drums are in, C# for the hit (the riser), the drop on the tour
+CUTS = [(bar(-6) - (TOUR - 2 * RBAR), bar(-6), 0.0), (bar(-2), 111.0, TOUR - 2 * RBAR)]
+T_END = TOUR + 8 * RBAR            # time.ts T_END: the end card, on an A bar; the music plays on under it and fades out
 FADE_AT = T_END + 0.5
 
 
