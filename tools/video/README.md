@@ -6,13 +6,12 @@ Output: `docs/video/agent-pets-16x9.mp4` (1920×1080, 60 fps, H.264 + AAC).
 
 ## The cut
 
-The picture is timed to two tracks, cut on their bar lines (`src/show/time.ts`):
+The picture is timed to one track, Running Night, cut on its bar lines (`src/show/time.ts`):
 
 | Video | Music | Scene |
 |---|---|---|
-| 0 – 4.9 s | Lofi Vlog, first 7 beats | The whole crew chilling on the taskbar, the camera panning along: *Your coding agents, now living on your taskbar.* |
-| 4.9 – 5.6 s | the break | The record is stopped: everyone freezes, turns to us (!) and crouches |
-| 5.6 – 7.9 s | Running Night, the last bar of its quieter groove (51.3 s) | *Meet the crew.* Everyone jumps, confetti, name tags; then a dive into Clawd |
+| 0 – 5.6 s | Running Night's quiet breakdown (59.3 s), no drums | The whole crew chilling on the taskbar, the camera panning along: *Your coding agents, now living on your taskbar.* When the drums come back (5.05 s) everyone freezes, turns to us (!) and crouches |
+| 5.6 – 7.9 s | the drums are back | *Meet the crew.* Everyone jumps on the bar, confetti, name tags; then a dive into Clawd |
 | 7.9 – 12.4 s | Running Night from 89.8 s, uncut to its end | One pet per beat, each in a different state: *See what every agent is doing.* |
 | 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
 | 14.7 – 16.9 s | | Click Clawd: the real panel opens, then the Limits tab |
@@ -21,7 +20,7 @@ The picture is timed to two tracks, cut on their bar lines (`src/show/time.ts`):
 | 23.7 – 26.0 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
 | 26.0 – 28.3 s | the final hit | The crew drops onto the end card |
 
-The hand-over from the lofi: on its last beat the lofi stops dead under a record scratch, a beat of silence, then Running Night is simply there at full tempo but not yet at full force: the last bar of its quieter groove (51.3 s) carries "Meet the crew.", and as the tour starts it hands over to the start of the drop's second phrase (89.8 s), from where it plays on uncut to its final hit.
+The music plays straight on from the breakdown into the drums' return, as in the track; as the tour starts it hands over to the start of the drop's second phrase (89.8 s), from where it plays on uncut to its final hit.
 
 ## How it works
 
@@ -33,19 +32,14 @@ tools/video
   src/show/time.ts   the beat grid of the cut
   src/show/show.ts   the scenes
   src/show/cues.ts   the sound effects as data, from the same times as the picture
-  audio/make_show_audio.py   cuts the two tracks and adds the effects (5 ms fade in, 10 ms fade out each)
+  audio/make_show_audio.py   cuts the track and adds the effects (5 ms fade in, 10 ms fade out each)
   render.mjs         headless Chromium frame by frame -> ffmpeg (H.264, BT.709)
   build.mjs          the whole pipeline
 ```
 
 ## Music
 
-Both tracks are from Pixabay and used under the [Pixabay Content License](https://pixabay.com/service/license-summary/) (free to use in videos, no attribution required; the license does not allow redistributing the audio on its own, so the files are not in this repository):
-
-- "Running Night" by alex_makemusic (Pixabay ID 393139)
-- "Lofi Vlog" by velariomusic (Pixabay ID 600937)
-
-Download them and save them as `tools/video/music/running-night.mp3` and `tools/video/music/lofi-vlog.mp3`.
+"Running Night" by alex_makemusic (Pixabay ID 393139), used under the [Pixabay Content License](https://pixabay.com/service/license-summary/) (free to use in videos, no attribution required; the license does not allow redistributing the audio on its own, so the file is not in this repository). Download it and save it as `tools/video/music/running-night.mp3`.
 
 ## Building it
 

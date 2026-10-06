@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The showcase soundtrack: two Pixabay tracks cut on their beat grids (see src/show/time.ts) plus light sound effects from the cues the
-animation produces. The tracks are not in the repository: put them in tools/video/music/ (see README).
+"""The showcase soundtrack: Running Night (Pixabay) cut on its beat grid (see src/show/time.ts) plus light sound effects from the cues the
+animation produces. The track is not in the repository: put it in tools/video/music/ (see README).
 Usage: make_show_audio.py cues.json out.wav [sfx_only.wav]"""
 import json
 import subprocess
@@ -12,21 +12,17 @@ from scipy.io import wavfile
 import synth as S
 
 MUSIC = 'music'
-LOFI, RUN = f'{MUSIC}/lofi-vlog.mp3', f'{MUSIC}/running-night.mp3'
-# (file, from s, to s, at s in the video, gain dB). Running Night's beat grid: 0.392 + k * 60/106.01; every cut is on a bar line.
-SCRATCH = 0.104 + 7 * 60 / 87.02   # the lofi's last beat: the record is stopped here (time.ts SCRATCH)
-HIT = 5.620                        # Running Night comes in (time.ts HIT)
-RBAR = 4 * 60 / 106.01
-LEAD = 0.030                       # Running Night's attacks start ~15-20 ms before its grid lines: cut a little earlier so none is lost
-# The hand-over (87 -> 106 BPM, so the two never play together): the lofi stops dead under a scratch, a beat of silence, and Running
-# Night is simply there, at full speed but not yet at full force: the last bar of its quieter groove (51.33 s, fewer highs, no build),
-# for "Meet the crew.". That bar ends a phrase, so it hands straight over to the start of the drop's second phrase (89.82 s) as the
-# tour begins, and from there it runs on uncut to its final hit, so the styles keep landing on its beats.
-CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0),
-        (RUN, 51.332 - LEAD, 51.332 + RBAR - LEAD, HIT - LEAD, 0.0),
-        (RUN, 89.818 - LEAD, 111.0, HIT + RBAR - LEAD, 0.0)]
-SOFTEN = 60 / 106.01              # Running Night's first beat comes in a little under full level
-XF = 0.012                         # the two Running Night pieces cross-fade over this, just before the downbeat's attack
+RUN = f'{MUSIC}/running-night.mp3'
+# Running Night's beat grid: 0.392 + k * 60/106.01 s; bar lines used here: 64.915 (drums back after the breakdown), 89.818 (the drop's
+# second phrase). Its attacks start ~15-20 ms before the grid lines, so cuts are made LEAD earlier and none is lost.
+HIT = 5.620                        # time.ts HIT: the drums come back in
+TOUR = HIT + 4 * 60 / 106.01       # time.ts TOUR
+LEAD = 0.030
+# (from s, to s, at s in the video). The breakdown plays straight on into the drums' return, as in the track; as the tour starts it
+# hands over to the drop's second phrase, from where it runs on uncut to its final hit, so the styles keep landing on its beats.
+CUTS = [(64.915 - HIT, 67.179 - LEAD, 0.0), (89.818 - LEAD, 111.0, TOUR - LEAD)]
+XF = 0.012                         # the hand-over at the tour is a short equal-power cross-fade just before the downbeat
+FADE_IN = 0.25                     # the breakdown fades in over the first moment of the video
 
 
 def load(path):
@@ -35,32 +31,16 @@ def load(path):
 
 
 def music_bed(n):
-    out = np.zeros((2, n)); files = {}
-    for i, (path, a, b, at, gain) in enumerate(CUTS):
-        y = files.setdefault(path, load(path))
-        if i == 1: b += XF / 2                                     # the quiet bar runs on into the cross-fade
-        if i == 2: a -= XF / 2; at -= XF / 2                       # and the drop starts just before it
-        seg = y[:, int(a * S.SR):int(b * S.SR)] * 10 ** (gain / 20)
-        fin = int((XF if i == 2 else 0.005) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
-        if i == 1:                                                 # take the edge off the very first beat: -5 dB back up to full over it
-            k = int(SOFTEN * S.SR); seg[:, :k] *= 10 ** (np.linspace(-5, 0, k) / 20)
-        if i < len(CUTS) - 1:                                      # the lofi stops dead (15 ms so it does not click)
-            fout = int((0.015 if i == 0 else XF) * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
+    out = np.zeros((2, n)); y = load(RUN)
+    for i, (a, b, at) in enumerate(CUTS):
+        if i == 0: b += XF / 2
+        else: a -= XF / 2; at -= XF / 2
+        seg = y[:, int(a * S.SR):int(b * S.SR)].copy()
+        fin = int((FADE_IN if i == 0 else XF) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin)) ** (2 if i == 0 else 1)
+        if i == 0: fout = int(XF * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
     return out
-
-
-def scratch(vel=1.0):
-    """The scratch itself: a short burst of noise whose band sweeps down and back up, like a stylus dragged across the groove."""
-    n = int(S.SR * 0.26); t = np.arange(n) / S.SR
-    f = 2600 * np.exp(-t / 0.05) + 500 + 1500 * np.clip((t - 0.11) / 0.12, 0, 1)
-    x = S.noise(n); out = np.zeros(n); wsum = np.zeros(n)
-    for c in (500, 800, 1300, 2100, 3400):                    # fixed bands, crossfaded along the sweep: smooth, no filter resets
-        w = np.exp(-0.5 * (np.log(f / c) / 0.35) ** 2); out += S.bp(x, c * 0.7, c * 1.4) * w; wsum += w
-    out /= np.maximum(wsum, 1e-3)
-    env = np.minimum(1, t / 0.004) * np.exp(-t / 0.12)
-    return np.tanh(out * env * 2.5) * vel * 0.6
 
 
 class Soft(S.Mix):
@@ -90,7 +70,6 @@ def sfx(cues, dur):
             for side in (-1, 1): m.add(S.softburst(1.0), t + (0.01 if side > 0 else 0), 0.45 * v, 0.8 * side, 0.3)
         elif n == 'key': m.add(S.click(0.5), t, 0.4 * v, 0.1, 0.05)
         elif n == 'phones': m.add(S.slide(500, 1400, 0.18, 1.0, 5, 0.005), t, 0.18 * v, 0.0, 0.2)
-        elif n == 'scratch': m.add(scratch(1.0), t, 1.1 * v, 0.0, 0.12)
         elif n == 'impact': m.add(S.impact(1.0), t, 0.3 * v, 0.0, 0.25)
         elif n == 'shutter': m.add(S.shutter(1.0), t, 0.5 * v, 0.0, 0.15)
     return m

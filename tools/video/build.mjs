@@ -1,7 +1,7 @@
-// One command for the showcase: cues -> soundtrack (the two tracks cut on their beat grids + effects) -> picture -> MP4 in docs/video/.
+// One command for the showcase: cues -> soundtrack (Running Night cut on its beat grid + effects) -> picture -> MP4 in docs/video/.
 //   pnpm dev                 (in another terminal: the page that draws the video)
 //   node build.mjs [--quick] [--format=16x9]
-// Needs the app windows recorded once with capture.mjs and the two tracks in music/ (see README).
+// Needs the app windows recorded once with capture.mjs and the track in music/ (see README).
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';

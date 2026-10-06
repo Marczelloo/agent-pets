@@ -1,22 +1,17 @@
-// The showcase's clock, read off the two licensed tracks it is cut to (see audio/make_show_audio.py for the cut itself):
-//   0     - 4.93 s  Lofi Vlog, its first seven beats (87.02 BPM), the calm intro
-//   4.93  - 5.62 s  the break: the lofi stops dead under a scratch, then a beat of silence
-//   5.62  - 7.88 s  Running Night 51.33 s: the last bar of its quieter groove, full tempo but not yet full force (106.01 BPM)
-//   7.88  - end     Running Night from 89.82 s, the start of the drop's second phrase, uncut to its final hit
-// From the hit on, every scene change lands on one of Running Night's bar lines.
+// The showcase's clock, read off the licensed track it is cut to (Running Night, 106.01 BPM; see audio/make_show_audio.py for the cut):
+//   0     - 5.62 s  Running Night 59.30 - 64.92 s: its quiet breakdown, no drums, the calm intro
+//   5.62  - 7.88 s  64.92 - 67.18 s: the drums are back (they come in a beat before, at 5.05 s), the crew's jump ("Meet the crew.")
+//   7.88  - end     from 89.82 s, the start of the drop's second phrase, uncut to its final hit
+// Every scene change lands on one of its bar lines.
 
 export const FPS = 60;
 
-/** Lofi Vlog: beat k (0..7) of the intro. */
-export const LOFI_BEAT = 60 / 87.02;
-export const lofiBeat = (k: number): number => 0.104 + k * LOFI_BEAT;
-
-/** The lofi beat where the record is stopped. */
-export const SCRATCH = lofiBeat(7);
-/** Running Night comes in. */
+/** The first full bar with the drums back. */
 export const HIT = 5.62;
 export const BEAT = 60 / 106.01;
 export const BAR = 4 * BEAT;
+/** The drums come back one beat before the bar: the crew notices, and jumps on the bar. */
+export const NOTICE = HIT - BEAT;
 /** Beat k counted from the hit (k = 0 .. 3 is "Meet the crew."). */
 export const beat = (k: number): number => HIT + k * BEAT;
 /** The tour of the app starts one bar after the hit. */

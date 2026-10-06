@@ -8,7 +8,7 @@ import { drawBubble, drawBurst, drawCaption, drawTag, setInk, type Burst, type T
 import { CREAM, type Theme } from '../themes';
 import { clamp, easeIn, easeInOut, easeOut, easeOutBack, hash, lerp, TAU } from '../util';
 import { drawBackdrop, drawCursor, drawTaskbar, FONT, PAL, UI_FONT } from '../world';
-import { BEAT, DURATION, HIT, SCRATCH, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, TOUR, bar } from './time';
+import { BEAT, DURATION, HIT, NOTICE, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, TOUR, bar } from './time';
 import { drawWindow, frame, frameAt, loadMeta, need, type Seq } from './ui';
 
 export { DURATION };
@@ -29,7 +29,7 @@ const NAMES: Record<Who, { name: string; agent: string; color: string }> = {
   kilo: { name: '', agent: '', color: '#000' },
 };
 
-/** What the crew is up to while the lofi plays (the app's own scenes). */
+/** What the crew is up to while it is calm (the app's own scenes). */
 const CALM: Partial<Record<Who, string>> = { copilot: 'read', opencode: 'thinking', kodek: 'vibe', clawd: 'edit', android: 'vibe', grok: 'idle', cursor: 'grep', zcode: 'sleep' };
 
 /** One pet per beat, each in a different state: the states a session can be in. */
@@ -130,24 +130,24 @@ export class Show {
   /** The row framed a little wider (s > 1) or tighter (s < 1), the taskbar top kept at `ground` px. */
   private rowAt(s: number, ground = 880): Cam { return fit({ x0: -455 * s, x1: 455 * s, y0: -300 * s, y1: 70 * s }, this.fmt, { ground }); }
 
-  /** 0 - 7.9 s: the crew chills on the taskbar to the lofi. On its last beat the record is stopped: everyone freezes and turns to us,
-   *  crouches through the silence, and jumps as Running Night drops in: "Meet the crew." Then we dive into Clawd for the tour. */
+  /** 0 - 7.9 s: the crew chills on the taskbar over the breakdown. Two beats before the drums come back everyone freezes and turns to us,
+   *  crouches, and jumps as the drums come in: "Meet the crew." Then we dive into Clawd for the tour. */
   private intro(x: CanvasRenderingContext2D, T: number, dt: number): void {
     const { fmt } = this, W = fmt.W, H = fmt.H;
-    const frozen = T >= SCRATCH, hit = T >= HIT, sinceHit = T - HIT;
-    // the camera: a slow push while it is calm, a jolt on the scratch, a pull back through the silence, a punch on the hit
-    // while it is calm: close, panning slowly along the row; the scratch snaps us out to the whole crew
-    const pan = (t: number): Cam => { const cx = lerp(-262, 262, easeInOut(clamp(t / SCRATCH))); return fit({ x0: cx - 250, x1: cx + 250, y0: -210, y1: 60 }, fmt, { ground: 930 }); };
+    const frozen = T >= NOTICE, hit = T >= HIT, sinceHit = T - HIT;
+    // the camera: a slow pan while it is calm, a snap out when they notice, a pull back, a punch on the hit
+    // while it is calm: close, panning slowly along the row; noticing snaps us out to the whole crew
+    const pan = (t: number): Cam => { const cx = lerp(-262, 262, easeInOut(clamp(t / NOTICE))); return fit({ x0: cx - 250, x1: cx + 250, y0: -210, y1: 60 }, fmt, { ground: 930 }); };
     let cam: Cam;
     if (!frozen) cam = pan(T);
     else if (!hit) {
-      const k = T - SCRATCH;
-      cam = mixCam(pan(SCRATCH), this.rowAt(lerp(1.0, 1.04, easeInOut(clamp((k - 0.15) / (HIT - SCRATCH - 0.15))))), easeOut(clamp(k / 0.16)));
+      const k = T - NOTICE;
+      cam = mixCam(pan(NOTICE), this.rowAt(lerp(1.0, 1.04, easeInOut(clamp((k - 0.15) / (HIT - NOTICE - 0.15))))), easeOut(clamp(k / 0.16)));
     } else cam = this.rowAt(1.04 - 0.05 * Math.exp(-sinceHit * 7) * Math.cos(sinceHit * 14));
     const dive = easeIn(clamp((T - (TOUR - 0.34)) / 0.34));
     cam = mixCam(cam, { x: rowX('clawd') + 4, y: -48, z: cam.z * 9 }, dive);
-    // a short shake on the scratch and on the hit
-    const shake = (frozen ? Math.exp(-(T - SCRATCH) * 14) * 10 : 0) + (hit ? Math.exp(-sinceHit * 10) * 14 : 0);
+    // a short shake when they notice and on the hit
+    const shake = (frozen ? Math.exp(-(T - NOTICE) * 14) * 10 : 0) + (hit ? Math.exp(-sinceHit * 10) * 14 : 0);
     x.save(); x.translate(Math.sin(T * 97) * shake, Math.cos(T * 83) * shake * 0.6);
     drawBackdrop(x, fmt, cam, T, CREAM, undefined, 0);
     drawTaskbar(x, fmt, cam, T, { limits: LIMITS, bars: ROW.map(w => ({ x: rowX(w), session: { agent: w === 'clawd' ? 'claude' : 'codex', state: 'working', progress: { done: 1 + (hash(ROW.indexOf(w)) * 4 | 0), total: 6 } } })) });
@@ -156,7 +156,7 @@ export class Show {
       if (!frozen) { this.put(w, { x: slot, y: 0, z: i, scene: CALM[w] ?? 'idle' }); return; }
       if (!hit) {
         // frozen: face us, arms up in surprise with a little jump, then sink into a crouch for the jump
-        const k = T - SCRATCH - stagger, jump = k > 0 ? Math.max(0, Math.sin(Math.min(1, k / 0.22) * Math.PI)) * 22 : 0;
+        const k = T - NOTICE - stagger, jump = k > 0 ? Math.max(0, Math.sin(Math.min(1, k / 0.22) * Math.PI)) * 22 : 0;
         const crouch = easeInOut(clamp((T - (HIT - 0.42)) / 0.4));
         this.put(w, { x: slot, y: -jump, z: i, sx: 1 + 0.08 * crouch, sy: 1 - 0.13 * crouch, scene: 'puppet',
           drive: { th: 0, look: 0, ex: 0, lx: 0, armL: lerp(1.7, 0.5, crouch), armR: lerp(1.7, 0.5, crouch), oscL: 0, oscR: 0, happy: 0, _f: 30 } });
@@ -176,9 +176,9 @@ export class Show {
       }
     });
     this.draw(x, cam, dt, T);
-    // "!" over every head on the scratch, until the build's last half beat comes in
+    // "!" over every head when they notice, until just before the drums
     if (frozen && !hit) ROW.forEach((w, i) => {
-      const t0 = SCRATCH + i * 0.025, age = T - t0, out = clamp((T - (HIT - BEAT / 2 - 0.05)) / 0.12);
+      const t0 = NOTICE + i * 0.025, age = T - t0, out = clamp((T - (HIT - 0.16)) / 0.12);
       if (age < 0 || out >= 1) return;
       const [px, py] = this.crew[w].pt(0, -112), sc = (age < 0.18 ? easeOutBack(age / 0.18, 2.4) : 1) * (1 - out), r = 34 * sc;
       x.save(); x.translate(px, py); x.rotate((hash(i + 3) - 0.5) * 0.4);
@@ -199,9 +199,9 @@ export class Show {
       drawTag(x, T, tx, ty, { name: NAMES[w].name, sub: NAMES[w].agent !== NAMES[w].name ? NAMES[w].agent : undefined, color: NAMES[w].color, t: t0, out: TOUR - 0.42, h: 44, tilt: (hash(i) - 0.5) * 0.1 });
     });
     x.restore();
-    // the words: calm with the lofi; the second line is knocked off by the scratch; the hit slams in the third
-    drawCaption(x, T, [[tk('Your', 0.35, 2.5), tk('coding', 0.45, 2.5), tk('agents,', 0.55, 2.5, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
-    drawCaption(x, T, [[tk('now', 2.65, SCRATCH + 0.04), tk('living', 2.75, SCRATCH + 0.06), tk('on', 2.85, SCRATCH + 0.08), tk('your', 2.95, SCRATCH + 0.1), tk('taskbar.', 3.05, SCRATCH + 0.12, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
+    // the words: calm over the breakdown; the second line is knocked off when they notice; the hit brings the third
+    drawCaption(x, T, [[tk('Your', 0.35, 2.15), tk('coding', 0.45, 2.15), tk('agents,', 0.55, 2.15, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
+    drawCaption(x, T, [[tk('now', 2.3, NOTICE + 0.04), tk('living', 2.4, NOTICE + 0.06), tk('on', 2.5, NOTICE + 0.08), tk('your', 2.6, NOTICE + 0.1), tk('taskbar.', 2.7, NOTICE + 0.12, CLAY)]], { size: 92, cx: W / 2, cy: 150 });
     drawCaption(x, T, [[tk('Meet', HIT, TOUR - 0.4), tk('the', HIT + 0.08, TOUR - 0.4), tk('crew.', HIT + 0.16, TOUR - 0.4, CLAY)]], { size: 112, cx: W / 2, cy: 160 });
     // a white flash on the hit, and into Clawd for the tour
     const flash = hit ? 0.8 * Math.exp(-sinceHit * 9) : 0;
