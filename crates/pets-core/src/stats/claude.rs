@@ -20,8 +20,15 @@ fn is_date(s: &str) -> bool {
 
 /// Project name from `cwd`: the last path component, or `NO_PROJECT` for folders that are not projects.
 pub fn project_of(cwd: &str) -> Option<String> {
+    project_of_in(cwd, &std::env::temp_dir().to_string_lossy())
+}
+
+/// Keep temporary working directories out of project rankings, regardless of their names.
+fn project_of_in(cwd: &str, temp_dir: &str) -> Option<String> {
     let parts: Vec<&str> = cwd.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
     let last = *parts.last()?;
+    let temp: Vec<&str> = temp_dir.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    if !temp.is_empty() && parts.len() >= temp.len() && parts.iter().zip(&temp).all(|(a, b)| a.eq_ignore_ascii_case(b)) { return None; }
     let low: Vec<String> = parts.iter().map(|p| p.to_ascii_lowercase()).collect();
     let n = low.len();
     let pair = |a: &str, b: &str| low.windows(2).any(|w| w[0] == a && w[1] == b);
@@ -191,6 +198,15 @@ mod tests {
             (r"C:\Users\ja\Documents\Codex\2026-07-15\czy\src", "src"),
             ("/home/ja/code/agent-pets", "agent-pets"),
         ] { assert_eq!(project_of(cwd).as_deref(), Some(p), "{cwd}"); }
+    }
+
+    #[test]
+    fn system_temp_children_do_not_enter_project_rankings() {
+        let temp = r"Q:\Somewhere\Scratch";
+        for cwd in [r"q:\somewhere\scratch\agent-router-old", r"Q:\Somewhere\Scratch\.tmp42\project"] {
+            assert_eq!(project_of_in(cwd, temp), None, "{cwd}");
+        }
+        assert_eq!(project_of_in(r"Q:\Somewhere\Scratchwork\repo", temp).as_deref(), Some("repo"));
     }
 
     #[test]

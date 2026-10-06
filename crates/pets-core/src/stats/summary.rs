@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
 use super::{Book, Cell, StatAgent, HOUR_MS};
+use super::claude::NO_PROJECT;
 use crate::i18n::{tr, Lang};
 
 const DAY: i64 = 86_400_000;
@@ -78,7 +79,7 @@ pub fn week_compare(book: &Book, now: i64, tz: &dyn Fn(i64) -> i64) -> WeekCompa
                 totals[i].active_ms += c.active_ms;
                 totals[i].tokens += c.tokens();
                 *agents[i].entry(agent).or_default() += c.active_ms;
-                if let Some(p) = &e.meta.project { *projects[i].entry(p.clone()).or_default() += c.active_ms; }
+                if let Some(p) = e.meta.project.as_ref().filter(|p| p.as_str() != NO_PROJECT) { *projects[i].entry(p.clone()).or_default() += c.active_ms; }
             }
         }
     }
@@ -150,7 +151,7 @@ pub fn summary(book: &Book, q: &Query, now: i64, tz: &dyn Fn(i64) -> i64) -> Sta
                 total.add(c);
                 agents.entry(agent).or_default().add(c);
                 file_active += c.active_ms;
-                if let Some(p) = &e.meta.project {
+                if let Some(p) = e.meta.project.as_ref().filter(|p| p.as_str() != NO_PROJECT) {
                     let x = projects.entry(p.clone()).or_default();
                     x.cell.add(c);
                     *x.by_agent.entry(agent).or_default() += c.active_ms;
@@ -305,6 +306,17 @@ mod tests {
     }
 
     #[test]
+    fn past_days_use_the_offset_at_the_event() {
+        let mut b = Book::default();
+        let past = at(-90, 22) + 30 * 60_000;
+        put(&mut b, "a", meta(StatAgent::Claude, "p", false, past), past, work(10 * MIN));
+        let switched = |ts: i64| if ts < at(-30, 0) { 2 * HOUR_MS } else { HOUR_MS };
+        let v = summary(&b, &q(Period::All, Metric::Time, RaceBy::Agents), NOW, &switched);
+        assert_eq!(v.calendar.iter().find(|d| d.date == date_of(local_day(past, &switched))).unwrap().active_ms, 10 * MIN);
+        assert_eq!(week_compare(&b, NOW, &switched).this.active_ms, 0);
+    }
+
+    #[test]
     fn periods_sum_their_hours_and_compare_with_the_one_before() {
         let mut b = Book::default();
         let m = meta(StatAgent::Claude, "p", false, at(-20, 1));
@@ -334,6 +346,17 @@ mod tests {
         let v = summary(&b, &q(Period::Week, Metric::Tokens, RaceBy::Projects), NOW, &utc);
         assert_eq!(v.podium[0].project, "beta");
         assert_eq!(v.race.iter().map(|l| l.key.as_str()).collect::<Vec<_>>(), ["beta", "alpha"]);
+    }
+
+    #[test]
+    fn temporary_no_project_work_stays_in_totals_but_not_project_rankings() {
+        let mut b = Book::default();
+        put(&mut b, "temp", meta(StatAgent::Router, NO_PROJECT, false, at(0, 1)), at(0, 1),
+            Cell { active_ms: H, input: 20, ..Cell::default() });
+        let v = summary(&b, &q(Period::Today, Metric::Tokens, RaceBy::Projects), NOW, &utc);
+        assert_eq!((v.tiles.tokens, v.tiles.active_ms), (20, H));
+        assert!(v.podium.is_empty() && v.race.is_empty());
+        assert_eq!(v.week.this.top_project, None);
     }
 
     #[test]
