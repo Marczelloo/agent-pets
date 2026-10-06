@@ -2781,6 +2781,7 @@ dependencies = [
  "dirs 5.0.1",
  "notify",
  "rand",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

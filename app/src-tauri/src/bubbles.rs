@@ -4,7 +4,7 @@
 //! detects clicks on bubbles every 30 ms, as with the floating window.
 use crate::shell::{self, placement::Rect, Shell};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindowBuilder};
 
@@ -39,13 +39,22 @@ pub fn allowed(fullscreen: bool, stage_shown: bool) -> bool { !fullscreen && sta
 pub const MARGIN_CSS: f64 = 150.0;
 
 #[derive(Default)]
-pub struct Bubbles { inner: Mutex<Inner> }
+pub struct Bubbles { inner: Mutex<Inner>, wake: Condvar }
 
 #[derive(Default)]
 struct Inner { hits: Vec<Hit>, shown: bool }
 
 impl Bubbles {
-    pub fn set_hits(&self, hits: Vec<Hit>) { self.inner.lock().unwrap().hits = hits; }
+    pub fn set_hits(&self, hits: Vec<Hit>) {
+        self.inner.lock().unwrap().hits = hits;
+        self.wake.notify_one();
+    }
+
+    /// Sleep without cursor polling until a visible bubble has a clickable rectangle.
+    fn visible_hits(&self) -> Vec<Hit> {
+        let s = self.wake.wait_while(self.inner.lock().unwrap(), |s| !s.shown || s.hits.is_empty()).unwrap();
+        s.hits.clone()
+    }
 
     /// A bubble is visible above this session's pet: hovering expands it instead of showing a tooltip.
     pub fn showing(&self, id: &str) -> bool { self.inner.lock().unwrap().hits.iter().any(|h| h.id == id) }
@@ -94,7 +103,7 @@ pub fn bubbles_place(app: AppHandle, state: State<Bubbles>, shell: State<Shell>,
     let _ = win.set_size(PhysicalSize::new((b.rect.right - b.rect.left).max(1) as u32, (b.rect.bottom - b.rect.top).max(1) as u32));
     let _ = win.set_position(PhysicalPosition::new(b.rect.left, b.rect.top));
     let mut s = state.inner.lock().unwrap();
-    if !s.shown { shell::show_no_activate(&win); s.shown = true; }
+    if !s.shown { shell::show_no_activate(&win); s.shown = true; state.wake.notify_one(); }
     Some(Placed { offset: b.offset as f64 / scale, above: b.above })
 }
 
@@ -139,10 +148,15 @@ fn spawn_pointer(app: AppHandle) {
         // the bubble under the cursor expands to its full text, as when hovering over a pet
         let mut hovering: Option<String> = None;
         loop {
-            std::thread::sleep(Duration::from_millis(30));
-            let Some(win) = app.get_webview_window("bubbles") else { continue };
+            let Some(win) = app.get_webview_window("bubbles") else { break };
             let state = app.state::<Bubbles>();
-            let hits = { let s = state.inner.lock().unwrap(); if s.shown { s.hits.clone() } else { Vec::new() } };
+            let active = { let s = state.inner.lock().unwrap(); s.shown && !s.hits.is_empty() };
+            if !active {
+                if over { over = false; shell::set_passthrough(&win, true); }
+                if hovering.take().is_some() { let _ = app.emit_to("bubbles", "pets://bubble-hover", Option::<String>::None); }
+                was_down = false;
+            }
+            let hits = state.visible_hits();
             let Some(c) = shell::cursor_in(&win) else { continue };
             let target = hit(&hits, c.x, c.y).cloned();
             if target.is_some() != over { over = target.is_some(); shell::set_passthrough(&win, !over); }
@@ -159,6 +173,7 @@ fn spawn_pointer(app: AppHandle) {
                 }
             }
             was_down = c.left;
+            std::thread::sleep(Duration::from_millis(30));
         }
     });
 }
@@ -248,5 +263,20 @@ mod tests {
         assert!(!b.asking("b"), "an action bubble is not a question");
         b.set_hits(vec![]);
         assert!(!b.asking("a"), "bubble disappeared (fullscreen, +N): toast needed again");
+    }
+
+    #[test]
+    fn pointer_waits_until_a_visible_hit_is_available() {
+        let b = std::sync::Arc::new(Bubbles::default());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let reader = b.clone();
+        let thread = std::thread::spawn(move || { tx.send(reader.visible_hits()).unwrap(); });
+        assert!(rx.recv_timeout(Duration::from_millis(20)).is_err());
+        b.set_hits(vec![Hit { id: "a".into(), kind: Kind::Action, x: 0.0, y: 0.0, w: 10.0, h: 10.0 }]);
+        assert!(rx.recv_timeout(Duration::from_millis(20)).is_err(), "hidden hits do not start polling");
+        b.inner.lock().unwrap().shown = true;
+        b.wake.notify_one();
+        assert_eq!(rx.recv_timeout(Duration::from_secs(1)).unwrap()[0].id, "a");
+        thread.join().unwrap();
     }
 }

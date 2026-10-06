@@ -7,8 +7,6 @@ use crate::i18n::Lang;
 use crate::model::*;
 use crate::tools::from_claude;
 
-/// Agent Router tools whose results link a task to the session that requested it.
-const ROUTER_LINKING: [&str; 3] = ["mcp__agent-router__codex_delegate", "mcp__agent-router__codex_continue", "mcp__agent-router__codex_review"];
 
 /// Router task `taskId` in an MCP tool result: JSON fields, text containing JSON, or plain text.
 pub fn find_task_id(v: &Value) -> Option<String> {
@@ -108,7 +106,7 @@ pub fn to_events(env: &HookEnvelope, lang: Lang, last: Option<(&str, &str)>) -> 
         "PostToolUse" => {
             if tool_name == "TodoWrite" { return vec![]; }
             e.kind = Kind::ToolEnd;
-            if ROUTER_LINKING.contains(&tool_name) {
+            if crate::router::linking_tool(tool_name) {
                 e.data.router_link = p.get("tool_response").and_then(find_task_id);
             }
         }
@@ -457,6 +455,9 @@ mod tests {
         let e = te(&fixture("PostToolUse-mcp-codex_delegate.json"));
         assert_eq!((e[0].kind, e[0].session_id.as_str()), (Kind::ToolEnd, "3746a003-5ba1-42b3-a085-009646ebcf00"));
         assert_eq!(e[0].data.router_link.as_deref(), Some("codex-20260926192354-00172e9"));
+        let alternate = te(&env(json!({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "mcp__plugin_x_agent-router__codex_continue",
+            "tool_response": {"taskId": "other-task"}})));
+        assert_eq!(alternate[0].data.router_link.as_deref(), Some("other-task"));
         let other = te(&env(json!({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "mcp__agent-router__codex_task_status",
             "tool_response": [{"type": "text", "text": "{\"taskId\":\"x\"}"}]})));
         assert_eq!(other[0].data.router_link, None, "only delegation, continuation, and review link a task");
