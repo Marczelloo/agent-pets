@@ -1,9 +1,8 @@
 // The showcase's clock, read off the two licensed tracks it is cut to (see audio/make_show_audio.py for the cut itself):
 //   0     - 4.93 s  Lofi Vlog, its first seven beats (87.02 BPM), the calm intro
-//   4.93  - 5.62 s  the break: the lofi is spun back like a record, a breath of silence, then the last half beat of Running Night's build
-//   5.62  - 12.41 s Running Night 71.71 - 78.50 s: its first three bars from the drop (106.01 BPM)
-//   12.41 - end     Running Night 94.35 s to its real ending: six more bars and the final hit
-// The beat grid runs on unbroken through both Running Night pieces, so every scene change lands on a bar line.
+//   4.93  - 5.62 s  the break: the lofi stops dead under a scratch, then a beat of silence
+//   5.62  - end     Running Night from 87.56 s (a bar deep in its drop section, already at full speed), uncut to its final hit (106.01 BPM)
+// From the hit on, every scene change lands on one of Running Night's bar lines.
 
 export const FPS = 60;
 
@@ -13,7 +12,7 @@ export const lofiBeat = (k: number): number => 0.104 + k * LOFI_BEAT;
 
 /** The lofi beat where the record is stopped. */
 export const SCRATCH = lofiBeat(7);
-/** Running Night comes in at its drop. */
+/** Running Night comes in. */
 export const HIT = 5.62;
 export const BEAT = 60 / 106.01;
 export const BAR = 4 * BEAT;

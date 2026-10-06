@@ -12,16 +12,16 @@ The picture is timed to two tracks, cut on their bar lines (`src/show/time.ts`):
 |---|---|---|
 | 0 – 4.9 s | Lofi Vlog, first 7 beats | The whole crew chilling on the taskbar, the camera panning along: *Your coding agents, now living on your taskbar.* |
 | 4.9 – 5.6 s | the break | The record is stopped: everyone freezes, turns to us (!) and crouches |
-| 5.6 – 7.9 s | Running Night, from its drop | *Meet the crew.* Everyone jumps, confetti, name tags; then a dive into Clawd |
+| 5.6 – 7.9 s | Running Night from 87.6 s, uncut to its end | *Meet the crew.* Everyone jumps, confetti, name tags; then a dive into Clawd |
 | 7.9 – 12.4 s | | One pet per beat, each in a different state: *See what every agent is doing.* |
-| 12.4 – 14.7 s | Running Night, last phrase (from 94.3 s) | Clawd needs you: a bubble, a Windows notification, Open |
+| 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
 | 14.7 – 16.9 s | | Click Clawd: the real panel opens, then the Limits tab |
 | 16.9 – 21.5 s | | *7 styles.* Clawd and Kodek (the two with every look) change look on every beat for two bars |
 | 21.5 – 23.7 s | | The real statistics window |
 | 23.7 – 26.0 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
 | 26.0 – 28.3 s | the final hit | The crew drops onto the end card |
 
-The hand-over from the lofi: on its last beat the lofi is spun back like a record under a DJ's hand, with a scratch on top; a breath of silence; then Running Night is already running, half a beat before its drop (the last half beat of its build, swelling up into the drop).
+The hand-over from the lofi: on its last beat the lofi stops dead under a record scratch, a beat of silence, then Running Night is simply there at full speed, from a bar deep in its drop section, and plays on uncut to its final hit.
 
 ## How it works
 

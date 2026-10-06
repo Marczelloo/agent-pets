@@ -13,19 +13,14 @@ import synth as S
 
 MUSIC = 'music'
 LOFI, RUN = f'{MUSIC}/lofi-vlog.mp3', f'{MUSIC}/running-night.mp3'
-# (file, from s, to s, at s in the video, gain dB). Running Night's beat grid: 0.392 + k * 60/106.01; every cut is on a bar line
-# except the half-beat pickup into the drop.
+# (file, from s, to s, at s in the video, gain dB). Running Night's beat grid: 0.392 + k * 60/106.01; every cut is on a bar line.
 SCRATCH = 0.104 + 7 * 60 / 87.02   # the lofi's last beat: the record is stopped here (time.ts SCRATCH)
-HIT = 5.620                        # Running Night's drop (time.ts HIT)
-PICKUP = 0.5 * 60 / 106.01         # Running Night comes in this early: the last half beat of its build, already at full speed
-RBAR = 4 * 60 / 106.01
-# Running Night from its drop: bars 0-2, then bars 10-15 (bar 10 plays the part bar 2 does a phrase earlier, so the only repeat is a
-# middle bar, under the band at 12.4 s; from there it runs on untouched through the styles to its final hit).
-CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0), (RUN, 71.707 - PICKUP, 71.707 + 3 * RBAR, HIT - PICKUP, 0.0), (RUN, 71.707 + 10 * RBAR, 111.0, HIT + 3 * RBAR, 0.0)]
-XF = 0.020                         # the jump between the two Running Night pieces is a 20 ms equal-power crossfade centred on the bar line
-# The hand-over (87 -> 106 BPM, so the two never play together): the lofi is yanked back like a record under a DJ's hand, a breath of
-# silence, then Running Night is simply there, mid-run, half a beat before its drop.
-SPIN = 0.30                        # how long the spin-back lasts
+HIT = 5.620                        # Running Night comes in (time.ts HIT)
+LEAD = 0.030                       # its downbeat's attack starts ~15 ms before the grid line: begin a little earlier so none of it is lost
+# The hand-over (87 -> 106 BPM, so the two never play together): the lofi stops dead under a scratch, a beat of silence, and Running
+# Night is simply there at full speed: bar 7 of its drop section (87.56 s), the first one that hits as hard as the rest, from where it
+# runs on uncut to its final hit, so the styles keep landing on its beats.
+CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0), (RUN, 87.555 - LEAD, 111.0, HIT - LEAD, 0.0)]
 
 
 def load(path):
@@ -33,35 +28,14 @@ def load(path):
     return np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).T.astype(float)
 
 
-def spin_back(y, at, length):
-    """The record at `at` s pulled backwards: the speed swings from +1 to -3.5 in 25 ms, then slows to a stop over `length` s."""
-    m = int(length * S.SR); t = np.arange(m) / S.SR
-    v = np.where(t < 0.025, 1 - 4.5 * t / 0.025, -3.5 * (1 - (t - 0.025) / (length - 0.025)) ** 1.6)
-    pos = at + np.cumsum(v) / S.SR
-    idx = np.clip(pos * S.SR, 0, y.shape[1] - 2); i0 = np.floor(idx).astype(int); f = idx - i0
-    seg = y[:, i0] * (1 - f) + y[:, i0 + 1] * f
-    # a scratched record is never bright: the low-pass fades in over 40 ms, so the hand-over from the plain lofi has no step in it
-    w = np.minimum(1, t / 0.04); seg = seg * (1 - w) + np.stack([S.lp(ch, 5000, 2) for ch in seg]) * w
-    return seg * (1 - t / length) ** 0.7
-
-
 def music_bed(n):
     out = np.zeros((2, n)); files = {}
     for i, (path, a, b, at, gain) in enumerate(CUTS):
         y = files.setdefault(path, load(path))
-        g = 10 ** (gain / 20)
-        if i == 1: b += XF / 2                                     # run on past the bar line into the crossfade
-        if i == 2: a -= XF / 2; at -= XF / 2                       # and start the next piece just before it
-        seg = y[:, int(a * S.SR):int(b * S.SR)] * g
-        if i == 0:
-            sp = spin_back(y, b, SPIN) * g                         # carries straight on from the last sample played
-            seg = np.concatenate([seg, sp], axis=1)
-        else:
-            fin = int((0.006 if i == 1 else XF) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
-            if i == 1:                                             # the pickup swells from -9 dB so the drop, not the pickup, is the hit
-                k = int(PICKUP * S.SR); seg[:, :k] *= 10 ** (np.linspace(-9, 0, k) / 20)
-        if i < len(CUTS) - 1:
-            fout = int((XF if i == 1 else 0.012) * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
+        seg = y[:, int(a * S.SR):int(b * S.SR)] * 10 ** (gain / 20)
+        fin = int(0.005 * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
+        if i == 0:                                                 # the lofi stops dead (a 15 ms fade so it does not click)
+            fout = int(0.015 * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
     return out
@@ -106,7 +80,7 @@ def sfx(cues, dur):
             for side in (-1, 1): m.add(S.softburst(1.0), t + (0.01 if side > 0 else 0), 0.45 * v, 0.8 * side, 0.3)
         elif n == 'key': m.add(S.click(0.5), t, 0.4 * v, 0.1, 0.05)
         elif n == 'phones': m.add(S.slide(500, 1400, 0.18, 1.0, 5, 0.005), t, 0.18 * v, 0.0, 0.2)
-        elif n == 'scratch': m.add(scratch(1.0), t, 0.55 * v, 0.0, 0.1)
+        elif n == 'scratch': m.add(scratch(1.0), t, 1.1 * v, 0.0, 0.12)
         elif n == 'impact': m.add(S.impact(1.0), t, 0.6 * v, 0.0, 0.25)
         elif n == 'shutter': m.add(S.shutter(1.0), t, 0.5 * v, 0.0, 0.15)
     return m
