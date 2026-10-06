@@ -22,6 +22,7 @@
 ### Fixed
 
 - The session cost in the panel follows the UI language (0,42 $ in Polish, $0.42 in English).
+- Update news in the panel's notifications looks like the other entries and stays on top. Only the latest one is kept, and "Updated to version" no longer shows an Install button; Install appears only while that version still waits to be installed.
 
 ## 0.16.1
 

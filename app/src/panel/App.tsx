@@ -110,6 +110,25 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
   const toggleInbox = () => { setInbox(o => !o); if (!inbox && unread > 0) onNotificationsSeen?.(); };
   const sessions = panelSessions(snap.sessions);
   const bar = updateBar(update);
+  // Update news stays on top of the inbox; Install only while that version is still waiting to be installed.
+  const pinned = notifications.filter(n => n.kind === 'update' || n.kind === 'updated');
+  const rest = notifications.filter(n => n.kind !== 'update' && n.kind !== 'updated');
+  const openLabel = (n: NotificationEntry): string | null => n.kind === 'update' ? bar?.action ?? null
+    : n.kind === 'problem' ? t().panel.notifications.diagnostics : n.session_id || n.kind === 'weekly' ? t().panel.open : null;
+  const note = (n: NotificationEntry) => (
+    <li key={n.id} className={`note ${n.kind}${n.read ? '' : ' unread'}`}>
+      <div className="body">
+        <div className="line1"><span className="kind">{t().panel.notifications.kind[n.kind]}</span><span className="when">{notificationTime(n.at, nowMs)}</span></div>
+        <div className="title">{n.title}</div>
+        {n.body && <div className="text">{n.body}</div>}
+      </div>
+      <div className="actions">
+        {onNotificationOpen && openLabel(n) && <button type="button" onClick={() => onNotificationOpen(n)}>{openLabel(n)}</button>}
+        {onNotificationRemove && <button type="button" className="remove" aria-label={t().panel.notifications.remove(n.title)}
+          title={t().panel.notifications.remove(n.title)} onClick={() => onNotificationRemove(n.id)}>✕</button>}
+      </div>
+    </li>
+  );
   const alert = limitsAlert(snap.limits);
   const cards = limitCards(snap.limits, nowMs, snap.forecasts);
   const toggleExpanded = (id: string) => setExpanded(prev => { const n = new Set(prev); if (!n.delete(id)) n.add(id); return n; });
@@ -138,7 +157,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           {onSettings && <button type="button" className="icon-btn" aria-label={t().panel.settings} title={t().panel.settings} onClick={onSettings}><GearIcon /></button>}
         </div>
       </header>
-      {bar && <div className="update" role="status">
+      {bar && <div className="update-bar" role="status">
         <span className="text">{bar.text}</span>
         {bar.pct != null && <span className="bar" role="progressbar" aria-label={t().panel.update.progress}
           aria-valuemin={0} aria-valuemax={100} aria-valuenow={bar.pct}><i style={{ width: `${bar.pct}%` }} /></span>}
@@ -153,22 +172,8 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
           {muteUntil >= FOREVER ? t().panel.notifications.mutedForever : t().panel.notifications.mutedUntil(clockText(muteUntil))}{onUnmute && <> · <button type="button" className="quiet" onClick={onUnmute}>{t().panel.notifications.unmute}</button></>}
         </p>}
         {notifications.length === 0 && <p className="empty">{t().panel.notifications.empty}</p>}
-        <ul>
-          {notifications.map(n => (
-            <li key={n.id} className={`note ${n.kind}${n.read ? '' : ' unread'}`}>
-              <div className="body">
-                <div className="line1"><span className="kind">{t().panel.notifications.kind[n.kind]}</span><span className="when">{notificationTime(n.at, nowMs)}</span></div>
-                <div className="title">{n.title}</div>
-                {n.body && <div className="text">{n.body}</div>}
-              </div>
-              <div className="actions">
-                {onNotificationOpen && (n.session_id || n.kind === 'update' || n.kind === 'problem' || n.kind === 'weekly') && <button type="button" onClick={() => onNotificationOpen(n)}>{n.kind === 'update' ? t().panel.update.install : n.kind === 'problem' ? t().panel.notifications.diagnostics : t().panel.open}</button>}
-                {onNotificationRemove && <button type="button" className="remove" aria-label={t().panel.notifications.remove(n.title)}
-                  title={t().panel.notifications.remove(n.title)} onClick={() => onNotificationRemove(n.id)}>✕</button>}
-              </div>
-            </li>
-          ))}
-        </ul>
+        {pinned.length > 0 && <ul className="pinned">{pinned.map(note)}</ul>}
+        {rest.length > 0 && <ul>{rest.map(note)}</ul>}
       </section> : <>
       <div className="tabs">
         <div className="seg" role="tablist" onKeyDown={tabKeys}>

@@ -199,7 +199,7 @@ fn announce(app: &AppHandle, version: &str, notes: Option<&str>) {
     let title = format!("{} {version}", tr(l, "Dostępna wersja", "Version available:"));
     let body = notes.and_then(|n| n.lines().map(str::trim).find(|x| !x.is_empty())).unwrap_or("").to_string();
     let a = app.clone();
-    crate::notify::show_update(app, &title, &body, Some(tr(l, "Zainstaluj", "Install")), move |action| {
+    crate::notify::show_update(app, crate::notify::center::Kind::Update, &title, &body, Some(tr(l, "Zainstaluj", "Install")), move |action| {
         if action.as_deref() == Some("install") {
             let a2 = a.clone();
             tauri::async_runtime::spawn(async move { let _ = install(&a2).await; });
@@ -261,7 +261,7 @@ fn greet_after_update(app: &AppHandle) {
     let current = app.package_info().version.to_string();
     if let Some(v) = updated_toast(st.seen_version.as_deref(), &current) {
         let title = format!("{} {v}", tr(lang(app), "Zaktualizowano do wersji", "Updated to version"));
-        crate::notify::show_update(app, &title, "", None, |_| {});
+        crate::notify::show_update(app, crate::notify::center::Kind::Updated, &title, "", None, |_| {});
     }
     if st.seen_version.as_deref() != Some(current.as_str()) {
         st.seen_version = Some(current);

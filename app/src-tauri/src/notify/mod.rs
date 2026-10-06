@@ -16,9 +16,9 @@ pub const AUMID: &str = "dev.agentpets.desktop";
 static APP_ID: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
 /// Toast outside session rules (updates), recorded in the center even while muted. `button`: label of the `install` action button.
-pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str>,
+pub fn show_update(app: &AppHandle, kind: center::Kind, title: &str, body: &str, button: Option<&str>,
                    on: impl Fn(Option<String>) + Send + Sync + 'static) {
-    center::record(app, center::Kind::Update, title, body, None);
+    center::record(app, kind, title, body, None);
     if pets_core::mute::muted(&app.state::<crate::settings::SettingsState>().get().notifications, pets_core::time::now_ms()) { return; }
     let id = APP_ID.get().copied().unwrap_or(AUMID);
     let mut toast = Toast::new(id).title(title);

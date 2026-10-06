@@ -115,7 +115,7 @@ export const pl = {
       mutedUntil: (when: string) => `Powiadomienia wyciszone do ${when}`,
       mutedForever: 'Powiadomienia wyciszone do odwołania',
       unread: (n: number) => `${n} nieprzeczytanych`,
-      kind: { needs_you: 'Czeka na Ciebie', done: 'Zakończono', limit: 'Limit', update: 'Aktualizacja', weekly: 'Statystyki', problem: 'Problem' },
+      kind: { needs_you: 'Czeka na Ciebie', done: 'Zakończono', limit: 'Limit', update: 'Aktualizacja', updated: 'Zaktualizowano', weekly: 'Statystyki', problem: 'Problem' },
       diagnostics: 'Diagnostyka',
     },
     subagents: (n: number) => `${n} ${n === 1 ? 'subagent' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'subagenty' : 'subagentów'}`,

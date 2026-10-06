@@ -104,7 +104,7 @@ export const en: Dict = {
       mutedUntil: when => `Notifications muted until ${when}`,
       mutedForever: 'Notifications muted until turned on',
       unread: n => `${n} unread`,
-      kind: { needs_you: 'Needs you', done: 'Finished', limit: 'Limit', update: 'Update', weekly: 'Statistics', problem: 'Problem' },
+      kind: { needs_you: 'Needs you', done: 'Finished', limit: 'Limit', update: 'Update', updated: 'Updated', weekly: 'Statistics', problem: 'Problem' },
       diagnostics: 'Diagnostics',
     },
     subagents: n => `${n} ${n === 1 ? 'subagent' : 'subagents'}`,

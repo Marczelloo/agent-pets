@@ -121,9 +121,9 @@ describe('PanelView', () => {
     expect(dl).toContain('role="progressbar"');
     expect(dl).toContain('aria-valuenow="40"');
     expect(view({ state: 'ready', version: '0.7.1' })).toContain('Zainstaluj teraz');
-    for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update');
+    for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update-bar');
     // manual check errors belong in settings; the panel shows only problems with the update itself
-    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).not.toContain('class="update');
+    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).not.toContain('class="update-bar');
     expect(view({ state: 'error', message: 'Nie udało się zweryfikować aktualizacji', verify: true })).toContain('Nie udało się zweryfikować');
   });
   it('each card has a labelled ⋯ menu button (collapsed); "clear inactive" shows only when something is inactive', () => {
@@ -239,6 +239,24 @@ describe('PanelView', () => {
       expect(html).toContain('class="note problem unread"');
       expect(html).toContain('>Problem</span>');
       expect(html).toContain('>Diagnostics</button>');
+    });
+    it('keeps update news on top, styled as a note, with Install only while the version still waits', () => {
+      setLang('en');
+      const at = (update?: UpdateStatus) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}
+        animate={false} update={update} notifications={[note({ id: 2, kind: 'done', session_id: 'a', title: 'Agent finished' }), note({ id: 1, title: 'Version available: 1.2.3' })]}
+        notificationsOpen onNotificationsSeen={() => {}} onNotificationOpen={() => {}} onInstall={() => {}} />);
+      const html = at({ state: 'available', version: '1.2.3', notes: null });
+      expect(html.indexOf('Version available: 1.2.3')).toBeLessThan(html.indexOf('Agent finished'));
+      expect(html).toContain('<ul class="pinned"><li class="note update unread">');
+      expect(html.match(/>Install<\/button>/g)).toHaveLength(2);
+      expect(at({ state: 'latest' })).not.toContain('>Install</button>');
+      expect(at()).not.toContain('>Install</button>');
+      const updated = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}
+        animate={false} update={{ state: 'available', version: '1.2.4', notes: null }} notifications={[note({ kind: 'updated', title: 'Updated to version 1.2.3' })]}
+        notificationsOpen onNotificationsSeen={() => {}} onNotificationOpen={() => {}} onInstall={() => {}} />);
+      expect(updated).toContain('>Updated</span>');
+      expect(updated).toContain('class="note updated unread"');
+      expect(updated.match(/>Install<\/button>/g)).toHaveLength(1);
     });
     it('lets the weekly recap open the statistics', () => {
       setLang('en');

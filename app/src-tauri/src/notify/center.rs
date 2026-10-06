@@ -10,7 +10,12 @@ pub const MAX: usize = 50;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Kind { NeedsYou, Done, Limit, Update, Weekly, Problem }
+/// `Update`: a version is available (the panel offers Install while it still is); `Updated`: the app was updated (informational).
+pub enum Kind { NeedsYou, Done, Limit, Update, Updated, Weekly, Problem }
+
+impl Kind {
+    fn about_updates(self) -> bool { matches!(self, Kind::Update | Kind::Updated) }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Entry {
@@ -34,7 +39,9 @@ impl Log {
     pub fn items(&self) -> &[Entry] { &self.items }
     pub fn unread(&self) -> usize { self.items.iter().filter(|e| !e.read).count() }
 
+    /// An update entry replaces the previous one: only the latest news about versions stays.
     pub fn push(&mut self, kind: Kind, title: &str, body: &str, session_id: Option<String>, at: i64) -> &Entry {
+        if kind.about_updates() { self.items.retain(|e| !e.kind.about_updates()); }
         self.next += 1;
         self.items.insert(0, Entry { id: self.next, kind, title: title.into(), body: body.into(), session_id, at, read: false });
         self.items.truncate(MAX);
@@ -154,5 +161,18 @@ mod tests {
     #[test]
     fn problem_kind_has_a_stable_wire_name() {
         assert_eq!(serde_json::to_string(&Kind::Problem).unwrap(), "\"problem\"");
+        assert_eq!(serde_json::to_string(&Kind::Updated).unwrap(), "\"updated\"");
+    }
+
+    #[test]
+    fn a_newer_update_entry_replaces_the_older_one() {
+        let mut l = Log::default();
+        l.push(Kind::Update, "available 1.1", "", None, 1);
+        l.push(Kind::Done, "d", "", None, 2);
+        l.push(Kind::Update, "available 1.2", "", None, 3);
+        assert_eq!(l.items().iter().filter(|e| e.kind == Kind::Update).count(), 1);
+        l.push(Kind::Updated, "updated to 1.2", "", None, 4);
+        let kinds: Vec<_> = l.items().iter().map(|e| (e.kind, e.title.as_str())).collect();
+        assert_eq!(kinds, [(Kind::Updated, "updated to 1.2"), (Kind::Done, "d")]);
     }
 }
