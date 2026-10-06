@@ -131,12 +131,14 @@ export function layout(inp: LayoutIn): LayoutOut {
   const ml = LEFT_REACH * g.zoom * MINI_SCALE;
   const pets: PetAt[] = visible.map(s => {
     const m = minisOf(s), extra = extraOf(s);
-    // group: [badge][minis…][parent] with a right anchor, [parent][minis…][badge] with a left anchor
+    // group: [minis…][+N][parent] with a right anchor, [parent][+N][minis…] with a left anchor; the +N sits beside its
+    // own parent, never at the far edge where it would read as the neighbouring pet's
+    const mw = m.more > 0 ? moreW : 0;
     const px = inp.minisLeft ? x + extra + g.left : x + g.left;
-    const from = inp.minisLeft ? x + extra - miniSlot : px + g.right;
+    const from = inp.minisLeft ? x + extra - mw - miniSlot : px + g.right + mw;
     const step = inp.minisLeft ? -miniSlot : miniSlot;
     const minis = m.shown.map((c, k) => ({ id: c.id, x: from + k * step + ml }));
-    const moreAt = inp.minisLeft ? x + moreW / 2 : from + m.shown.length * miniSlot + moreW / 2;
+    const moreAt = inp.minisLeft ? x + extra - moreW / 2 : px + g.right + moreW / 2;
     x += g.slot + extra;
     return { id: s.id, x: px, minis, miniMore: m.more > 0 ? { x: moreAt, n: m.more } : null };
   });

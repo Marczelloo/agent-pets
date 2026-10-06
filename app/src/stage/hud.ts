@@ -126,9 +126,9 @@ export function drawBadge(x: CanvasRenderingContext2D, bx: number, h: number, hi
   x.restore();
 }
 
-/** "+N" children beside minis: a small pill at ground level (coordinates at 1×, `h` = 48). */
+/** "+N" children between a parent and its minis: a small pill level with the minis' bodies (coordinates at 1×, `h` = 48). */
 export function drawMiniMore(x: CanvasRenderingContext2D, cx: number, h: number, n: number, font: string): void {
-  const w = 14, hh = 11, y = h - 9 - hh / 2;
+  const w = 14, hh = 11, y = h - 15 - hh / 2;
   x.save();
   x.fillStyle = 'rgba(128,128,128,0.35)';
   x.beginPath();

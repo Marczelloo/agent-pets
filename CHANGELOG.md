@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The "+N" for extra subagents sits between the parent and its minis, level with them, instead of at the far end of the group where it looked like it belonged to the neighbouring pet.
+
 ## 0.17.0
 
 ### Added
