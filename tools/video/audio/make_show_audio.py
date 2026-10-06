@@ -16,11 +16,17 @@ LOFI, RUN = f'{MUSIC}/lofi-vlog.mp3', f'{MUSIC}/running-night.mp3'
 # (file, from s, to s, at s in the video, gain dB). Running Night's beat grid: 0.392 + k * 60/106.01; every cut is on a bar line.
 SCRATCH = 0.104 + 7 * 60 / 87.02   # the lofi's last beat: the record is stopped here (time.ts SCRATCH)
 HIT = 5.620                        # Running Night comes in (time.ts HIT)
-LEAD = 0.030                       # its downbeat's attack starts ~15 ms before the grid line: begin a little earlier so none of it is lost
+RBAR = 4 * 60 / 106.01
+LEAD = 0.030                       # Running Night's attacks start ~15-20 ms before its grid lines: cut a little earlier so none is lost
 # The hand-over (87 -> 106 BPM, so the two never play together): the lofi stops dead under a scratch, a beat of silence, and Running
-# Night is simply there at full speed: bar 7 of its drop section (87.56 s), the first one that hits as hard as the rest, from where it
-# runs on uncut to its final hit, so the styles keep landing on its beats.
-CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0), (RUN, 87.555 - LEAD, 111.0, HIT - LEAD, 0.0)]
+# Night is simply there, at full speed but not yet at full force: the last bar of its quieter groove (51.33 s, fewer highs, no build),
+# for "Meet the crew.". That bar ends a phrase, so it hands straight over to the start of the drop's second phrase (89.82 s) as the
+# tour begins, and from there it runs on uncut to its final hit, so the styles keep landing on its beats.
+CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0),
+        (RUN, 51.332 - LEAD, 51.332 + RBAR - LEAD, HIT - LEAD, 0.0),
+        (RUN, 89.818 - LEAD, 111.0, HIT + RBAR - LEAD, 0.0)]
+SOFTEN = 60 / 106.01              # Running Night's first beat comes in a little under full level
+XF = 0.012                         # the two Running Night pieces cross-fade over this, just before the downbeat's attack
 
 
 def load(path):
@@ -32,10 +38,14 @@ def music_bed(n):
     out = np.zeros((2, n)); files = {}
     for i, (path, a, b, at, gain) in enumerate(CUTS):
         y = files.setdefault(path, load(path))
+        if i == 1: b += XF / 2                                     # the quiet bar runs on into the cross-fade
+        if i == 2: a -= XF / 2; at -= XF / 2                       # and the drop starts just before it
         seg = y[:, int(a * S.SR):int(b * S.SR)] * 10 ** (gain / 20)
-        fin = int(0.005 * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
-        if i == 0:                                                 # the lofi stops dead (a 15 ms fade so it does not click)
-            fout = int(0.015 * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
+        fin = int((XF if i == 2 else 0.005) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
+        if i == 1:                                                 # take the edge off the very first beat: -5 dB back up to full over it
+            k = int(SOFTEN * S.SR); seg[:, :k] *= 10 ** (np.linspace(-5, 0, k) / 20)
+        if i < len(CUTS) - 1:                                      # the lofi stops dead (15 ms so it does not click)
+            fout = int((0.015 if i == 0 else XF) * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
     return out
@@ -81,7 +91,7 @@ def sfx(cues, dur):
         elif n == 'key': m.add(S.click(0.5), t, 0.4 * v, 0.1, 0.05)
         elif n == 'phones': m.add(S.slide(500, 1400, 0.18, 1.0, 5, 0.005), t, 0.18 * v, 0.0, 0.2)
         elif n == 'scratch': m.add(scratch(1.0), t, 1.1 * v, 0.0, 0.12)
-        elif n == 'impact': m.add(S.impact(1.0), t, 0.6 * v, 0.0, 0.25)
+        elif n == 'impact': m.add(S.impact(1.0), t, 0.3 * v, 0.0, 0.25)
         elif n == 'shutter': m.add(S.shutter(1.0), t, 0.5 * v, 0.0, 0.15)
     return m
 
