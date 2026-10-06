@@ -222,11 +222,17 @@ pub fn open(app: &AppHandle) {
 #[tauri::command]
 pub fn stats_open(app: AppHandle) { crate::panel::hide(&app); open(&app); }
 
+async fn on_worker<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(job).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
-pub fn stats_view(app: AppHandle, period: Period, metric: Metric, race: RaceBy) -> StatsView {
-    let st = app.state::<StatsState>();
-    let sc = st.scanner.lock().unwrap();
-    summary(&sc.book, &Query { period, metric, race }, pets_core::time::now_ms(), &tz_offset)
+pub async fn stats_view(app: AppHandle, period: Period, metric: Metric, race: RaceBy) -> Result<StatsView, String> {
+    on_worker(move || {
+        let st = app.state::<StatsState>();
+        let sc = st.scanner.lock().unwrap();
+        summary(&sc.book, &Query { period, metric, race }, pets_core::time::now_ms(), &tz_offset)
+    }).await
 }
 
 #[tauri::command]
@@ -239,6 +245,13 @@ mod tests {
     use pets_core::stats::Book;
     use std::cell::{Cell, RefCell};
     use std::sync::Mutex;
+
+    #[test]
+    fn stats_work_runs_on_a_blocking_worker() {
+        let caller = std::thread::current().id();
+        let worker = tauri::async_runtime::block_on(on_worker(|| std::thread::current().id())).unwrap();
+        assert_ne!(worker, caller);
+    }
 
     #[test]
     fn a_failed_recap_is_recorded_once_and_tried_again() {
