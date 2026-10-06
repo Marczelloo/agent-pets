@@ -240,6 +240,12 @@ describe('PanelView', () => {
       expect(html).toContain('>Problem</span>');
       expect(html).toContain('>Diagnostics</button>');
     });
+    it('lets the weekly recap open the statistics', () => {
+      setLang('en');
+      const html = view([note({ kind: 'weekly', title: 'Last week', body: '12 turns' })], true);
+      expect(html).toContain('>Statistics</span>');
+      expect(html).toContain('>Open</button>');
+    });
     it('says in the inbox that notifications are muted, with a way to turn them on', () => {
       const hhmm = (ts: number) => `${String(new Date(ts).getHours()).padStart(2, '0')}:${String(new Date(ts).getMinutes()).padStart(2, '0')}`;
       const at = (muteUntil: number | null) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}
