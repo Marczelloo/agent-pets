@@ -233,6 +233,13 @@ describe('PanelView', () => {
       expect(html).toContain('Wyczyść wszystko');
       expect(html).not.toContain('class="limits"');
     });
+    it('shows a problem with a Diagnostics action', () => {
+      setLang('en');
+      const html = view([note({ kind: 'problem', title: 'Update failed', body: 'invalid signature' })], true);
+      expect(html).toContain('class="note problem unread"');
+      expect(html).toContain('>Problem</span>');
+      expect(html).toContain('>Diagnostics</button>');
+    });
     it('says in the inbox that notifications are muted, with a way to turn them on', () => {
       const hhmm = (ts: number) => `${String(new Date(ts).getHours()).padStart(2, '0')}:${String(new Date(ts).getMinutes()).padStart(2, '0')}`;
       const at = (muteUntil: number | null) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}

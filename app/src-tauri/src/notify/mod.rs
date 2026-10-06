@@ -29,14 +29,25 @@ pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str
 
 /// Recap is recorded even while muted; its action opens the statistics window.
 pub fn show_weekly(app: &AppHandle, title: &str, body: &str, button: &str) {
-    center::record(app, center::Kind::Weekly, title, body, None);
+    show_action(app, center::Kind::Weekly, title, body, button, "statistics", crate::stats::open);
+}
+
+/// Record a problem and let the toast take the user straight to Diagnostics.
+pub fn show_problem(app: &AppHandle, title: &str, body: &str) {
+    let lang = app.state::<crate::settings::SettingsState>().lang();
+    show_action(app, center::Kind::Problem, title, body, pets_core::i18n::tr(lang, "Diagnostyka", "Diagnostics"), "diagnostics", |a| crate::settings::open_tab(a, "diag"));
+}
+
+fn show_action(app: &AppHandle, kind: center::Kind, title: &str, body: &str, button: &str, action: &str, open: fn(&AppHandle)) {
+    center::record(app, kind, title, body, None);
     let n = app.state::<crate::settings::SettingsState>().get().notifications;
     if pets_core::mute::muted(&n, pets_core::time::now_ms()) { return; }
     let id = APP_ID.get().copied().unwrap_or(AUMID);
     let a = app.clone();
+    let action = action.to_string();
     let _ = Toast::new(id).title(title).text1(body).sound(sound_for(rules::ToastKind::Done, n.sound))
-        .add_button(button, "statistics")
-        .on_activated(move |_| { crate::stats::open(&a); Ok(()) }).show();
+        .add_button(button, &action)
+        .on_activated(move |_| { open(&a); Ok(()) }).show();
 }
 
 /// Path for the `IconUri` value: the toast shell does not load an image through the `\\?\` verbatim prefix

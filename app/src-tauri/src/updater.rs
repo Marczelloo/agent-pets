@@ -101,10 +101,10 @@ fn endpoint() -> String {
     endpoint_from(std::env::var("AGENT_PETS_UPDATE_URL").ok(), cfg!(any(debug_assertions, feature = "update-test")))
 }
 
-async fn find(app: &AppHandle) -> Result<Option<Update>, String> {
-    let url = endpoint().parse().map_err(|e| format!("{e}"))?;
-    let up = app.updater_builder().endpoints(vec![url]).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())?;
-    up.check().await.map_err(|e| e.to_string())
+async fn find(app: &AppHandle) -> Result<Option<Update>, (String, bool)> {
+    let url = endpoint().parse().map_err(|e| (format!("{e}"), false))?;
+    let up = app.updater_builder().endpoints(vec![url]).map_err(|e| (e.to_string(), false))?.build().map_err(|e| (e.to_string(), false))?;
+    up.check().await.map_err(|e| (e.to_string(), is_network(&e)))
 }
 
 /// Check the version. `manual`: "Check now" button (result always visible, works even when `off`).
@@ -131,9 +131,10 @@ pub async fn check(app: &AppHandle, manual: bool) -> UpdateStatus {
                     let _ = crate::appstate::save(&home, &st);
                 }
             }
-            Err(e) => {
+            Err((e, network)) => {
                 pets_core::app_log!("update check: {e}");
                 if manual { set(app, UpdateStatus::Error { message: tr(lang(app), "Błąd sprawdzania aktualizacji", "Could not check for updates").into(), verify: false }); }
+                else if !network { crate::problems::report(app, "update", tr(lang(app), "Aktualizacja nie powiodła się", "Update failed"), &e); }
             }
         }
     }
@@ -171,6 +172,7 @@ async fn download(app: &AppHandle) -> bool {
             pets_core::app_log!("update download: {e}");
             *u.found.lock().unwrap() = None;
             set(app, UpdateStatus::Error { message: verify_failed(app), verify: true });
+            crate::problems::report(app, "update", tr(lang(app), "Aktualizacja nie powiodła się", "Update failed"), &e.to_string());
             false
         }
     }
@@ -238,7 +240,11 @@ pub fn start(app: AppHandle) {
                 let states: Vec<_> = app.state::<crate::core::Shared>().lock().unwrap().sessions.iter().map(|s| s.state).collect();
                 let b = busy(&states, crate::shell::fullscreen_app(), ui_open(&app));
                 if calm.observe(b, pets_core::time::now_ms()) {
-                    if let Err(e) = tauri::async_runtime::block_on(install(&app)) { pets_core::app_log!("{e}"); }
+                    if let Err(e) = tauri::async_runtime::block_on(install(&app)) {
+                        if !matches!(app.state::<Updater>().status(), UpdateStatus::Available { .. }) {
+                            crate::problems::report(&app, "update", tr(lang(&app), "Aktualizacja nie powiodła się", "Update failed"), &e);
+                        }
+                    }
                     calm = Calm::default();
                 }
             } else {

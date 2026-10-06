@@ -119,7 +119,7 @@ export type UpdateStatus =
   /** `verify`: problem with the update itself (panel and settings); otherwise a check error (settings only) */
   | { state: 'error'; message: string; verify: boolean };
 /** Mirrors `notify::center::Entry` (event `pets://notifications`). */
-export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update' | 'weekly';
+export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update' | 'weekly' | 'problem';
 export interface NotificationEntry { id: number; kind: NotificationKind; title: string; body: string; session_id: string | null; at: number; read: boolean }
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';

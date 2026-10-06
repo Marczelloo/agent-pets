@@ -10,7 +10,7 @@ pub const MAX: usize = 50;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Kind { NeedsYou, Done, Limit, Update, Weekly }
+pub enum Kind { NeedsYou, Done, Limit, Update, Weekly, Problem }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Entry {
@@ -149,5 +149,10 @@ mod tests {
         assert_eq!(back.push(Kind::Done, "c", "", None, 6).id, 2);
         std::fs::write(path(d.path()), "{bad").unwrap();
         assert_eq!(load(d.path()), Log::default());
+    }
+
+    #[test]
+    fn problem_kind_has_a_stable_wire_name() {
+        assert_eq!(serde_json::to_string(&Kind::Problem).unwrap(), "\"problem\"");
     }
 }

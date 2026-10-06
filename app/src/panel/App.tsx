@@ -162,7 +162,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 {n.body && <div className="text">{n.body}</div>}
               </div>
               <div className="actions">
-                {onNotificationOpen && (n.session_id || n.kind === 'update') && <button type="button" onClick={() => onNotificationOpen(n)}>{n.kind === 'update' ? t().panel.update.install : t().panel.open}</button>}
+                {onNotificationOpen && (n.session_id || n.kind === 'update' || n.kind === 'problem') && <button type="button" onClick={() => onNotificationOpen(n)}>{n.kind === 'update' ? t().panel.update.install : n.kind === 'problem' ? t().panel.notifications.diagnostics : t().panel.open}</button>}
                 {onNotificationRemove && <button type="button" className="remove" aria-label={t().panel.notifications.remove(n.title)}
                   title={t().panel.notifications.remove(n.title)} onClick={() => onNotificationRemove(n.id)}>✕</button>}
               </div>
@@ -354,7 +354,7 @@ export default function App() {
     onDismissInactive={() => void invoke<string[]>('sessions_dismiss_inactive').then(removed)}
     onRename={(id, name) => void invoke('session_rename', { id, name })} onPin={(id, pinned) => void invoke('session_pin', { id, pinned })}
     notifications={notes} onNotificationsSeen={() => void invoke('notifications_read')}
-    onNotificationOpen={n => { if (n.session_id) void onJump(n.session_id); else if (n.kind === 'update') void invoke('update_install').catch(e => setStatus(String(e))); }}
+    onNotificationOpen={n => { if (n.session_id) void onJump(n.session_id); else if (n.kind === 'update') void invoke('update_install').catch(e => setStatus(String(e))); else if (n.kind === 'problem') void invoke('settings_open_tab', { tab: 'diag' }); }}
     onNotificationRemove={id => void invoke('notification_remove', { id })} onNotificationsClear={() => void invoke('notifications_clear')}
     muteUntil={muteUntil} onUnmute={() => void invoke('notifications_mute', { choice: 'off' })}
     undo={undo} onUndo={() => { if (undo) void invoke('session_undismiss', { ids: undo.ids }); clearTimeout(undoTimer.current); setUndo(null); }} />;

@@ -422,6 +422,9 @@ pub fn open(app: &AppHandle) { open_at(app, None) }
 /// Settings window on a specified tab (e.g. "stage" from the stage menu).
 pub fn open_tab(app: &AppHandle, tab: &str) { open_at(app, Some(tab)) }
 
+#[tauri::command]
+pub fn settings_open_tab(app: AppHandle, tab: String) { crate::panel::hide(&app); open_tab(&app, &tab); }
+
 fn open_at(app: &AppHandle, tab: Option<&str>) {
     if let Some(w) = app.get_webview_window("settings") {
         if let Some(t) = tab { let _ = app.emit_to("settings", "settings://tab", t); }

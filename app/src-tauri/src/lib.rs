@@ -7,6 +7,7 @@ mod jump;
 mod media;
 mod notify;
 mod panel;
+mod problems;
 mod settings;
 mod shell;
 mod stats;
@@ -166,22 +167,24 @@ fn repair_integrations(app: &tauri::AppHandle) {
     let st = app.state::<settings::SettingsState>();
     let apps = st.get().apps;
     let src = settings::pick_hook(&settings::hook_candidates(app));
+    let mut errors = Vec::new();
     if apps.claude_code && integrations::claude_needs_repair(&st.home, src.as_deref()) {
-        let _ = integrations::enable(AppId::ClaudeCode, &st.home, src.as_deref(), st.lang());
+        problems::collect_repair(&mut errors, "Claude Code", integrations::enable(AppId::ClaudeCode, &st.home, src.as_deref(), st.lang()));
     }
     // the mod: placed again after an update (new version) or when files vanished; a folder that is not ours stays
     if apps.claude_code && st.get().claude_mod && integrations::plugin_needs_repair(&st.home) {
-        let _ = integrations::place_plugin(&st.home, st.lang());
+        problems::collect_repair(&mut errors, "Claude Code", integrations::place_plugin(&st.home, st.lang()));
     }
     // only our file: another `agent-pets.js` stays, and enable returns an error without changes
-    if apps.opencode { let _ = integrations::enable(AppId::Opencode, &st.home, None, st.lang()); }
+    if apps.opencode { problems::collect_repair(&mut errors, "opencode", integrations::enable(AppId::Opencode, &st.home, None, st.lang())); }
     // refresh commands and `hook.exe` after an update; another file or key stays (enable returns an error without changes)
-    if apps.copilot { let _ = integrations::enable(AppId::Copilot, &st.home, src.as_deref(), st.lang()); }
-    if apps.antigravity { let _ = integrations::enable(AppId::Antigravity, &st.home, src.as_deref(), st.lang()); }
-    if apps.cursor { let _ = integrations::enable(AppId::Cursor, &st.home, src.as_deref(), st.lang()); }
-    if apps.grok { let _ = integrations::enable(AppId::Grok, &st.home, src.as_deref(), st.lang()); }
-    if apps.zcode { let _ = integrations::enable(AppId::Zcode, &st.home, src.as_deref(), st.lang()); }
-    if apps.generic { let _ = integrations::place_hook(&st.home, src.as_deref(), st.lang()); }
+    if apps.copilot { problems::collect_repair(&mut errors, "GitHub Copilot", integrations::enable(AppId::Copilot, &st.home, src.as_deref(), st.lang())); }
+    if apps.antigravity { problems::collect_repair(&mut errors, "Antigravity", integrations::enable(AppId::Antigravity, &st.home, src.as_deref(), st.lang())); }
+    if apps.cursor { problems::collect_repair(&mut errors, "Cursor", integrations::enable(AppId::Cursor, &st.home, src.as_deref(), st.lang())); }
+    if apps.grok { problems::collect_repair(&mut errors, "Grok Build", integrations::enable(AppId::Grok, &st.home, src.as_deref(), st.lang())); }
+    if apps.zcode { problems::collect_repair(&mut errors, "ZCode", integrations::enable(AppId::Zcode, &st.home, src.as_deref(), st.lang())); }
+    if apps.generic { problems::collect_repair(&mut errors, "Agent Pets", integrations::place_hook(&st.home, src.as_deref(), st.lang())); }
+    if !errors.is_empty() { problems::report(app, "repair", problems::repair_title(st.lang()), &problems::repair_body(&errors)); }
 }
 
 /// `agent-pets.exe --uninstall-integrations [--remove-data]` (NSIS uninstaller): clean up and exit without windows.
@@ -235,6 +238,7 @@ pub fn run() {
             panel::build(app.handle())?;
             tray::build(app.handle())?;
             app.manage(notify::center::Center::load(settings::home()));
+            app.manage(problems::Problems::default());
             let snaps = notify::start(app.handle().clone());
             let (core_tx, core_rx) = std::sync::mpsc::channel();
             app.manage(core::Control(std::sync::Mutex::new(core_tx)));
@@ -265,7 +269,7 @@ pub fn run() {
             bubbles::stage_pets, bubbles::bubbles_place, bubbles::bubbles_hide, bubbles::bubbles_hits,
             settings::settings_get, settings::settings_set, settings::settings_export, settings::settings_import, settings::settings_reveal,
             settings::integrations_list, settings::integration_set, settings::claude_mod_set, settings::notifications_mute,
-            settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::report_problem_open, system::power_get, media::media_get,
+            settings::wizard_finish, settings::diagnostics, settings::settings_open, settings::settings_open_tab, settings::report_problem_open, system::power_get, media::media_get,
             notify::center::notifications_list, notify::center::notifications_read, notify::center::notification_remove, notify::center::notifications_clear,
             updater::update_status, updater::update_check, updater::update_install, hotkeys::hotkeys_status,
             session_dismiss, sessions_dismiss_inactive, session_undismiss, session_rename, session_pin,

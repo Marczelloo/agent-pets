@@ -4,6 +4,7 @@
 
 ### Added
 
+- Background integration repair and update failures appear in notifications and open Diagnostics for a copyable report.
 - Weekly stats compare this calendar week with last week, with an optional Monday recap notification.
 - Export settings to a dated JSON file and import them on another PC; installed agent integrations, Claude token consent and notification mute state stay local.
 - Two global shortcuts: Win+Shift+J jumps to the agent that needs you (the one waiting longest, else the latest one that finished in the last 30 minutes, else opens the panel) and Win+Shift+K shows or hides the panel. Change or turn them off in Settings → General.
