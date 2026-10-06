@@ -80,7 +80,7 @@ impl Default for Hotkeys {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
 pub struct Notifications {
-    pub needs_you: bool, pub done: bool, pub limits: bool,
+    pub needs_you: bool, pub done: bool, pub limits: bool, pub weekly: bool,
     /// Toasts play a sound ("needs you" its own). Since 0.17.
     pub sound: bool,
     /// Toasts are silenced until this time (ms since epoch; `i64::MAX` = until turned back on). `None` = not muted. Since 0.17.
@@ -358,7 +358,7 @@ impl Default for Apps {
     fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
         cursor: false, grok: false, zcode: false } }
 }
-impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true, sound: true, muted_until: None } } }
+impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true, weekly: true, sound: true, muted_until: None } } }
 impl Default for Pets {
     fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5, react_to_media: true } }
 }
@@ -433,6 +433,12 @@ mod tests {
         assert!(!s.claude_plan_usage);
         assert!(s.apps.claude_code && s.apps.codex && s.apps.agent_router);
         assert_eq!((s.pets.style, s.pets.max_visible, s.power_saving, s.autostart), (Style::Sticker, 5, PowerSaving::Auto, true));
+    }
+
+    #[test]
+    fn weekly_notifications_default_on_for_old_settings() {
+        assert!(load_str(r#"{"version":1,"notifications":{"sound":false}}"#).settings.notifications.weekly);
+        assert!(!load_str(r#"{"version":1,"notifications":{"weekly":false}}"#).settings.notifications.weekly);
     }
 
     #[test]

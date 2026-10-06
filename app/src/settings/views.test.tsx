@@ -301,6 +301,17 @@ describe('SettingsView', () => {
     expect(view(until)).toContain(`Muted until ${hhmm(until)}`);
     expect(view(null)).toContain('Until 8:00');
   });
+  it('offers the weekly recap switch in both languages', () => {
+    const view = () => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="notify" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    setLang('pl');
+    expect(view()).toContain('Podsumowanie tygodnia');
+    expect(view()).toContain('W poniedziałek rano');
+    setLang('en');
+    expect(view()).toContain('Weekly recap');
+    expect(view()).toContain('On Monday morning');
+    setLang('pl');
+  });
   it('the diagnostics tab offers to report a problem on GitHub, only when it can open it', () => {
     const view = (onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag"
       onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} onReport={onReport} />);

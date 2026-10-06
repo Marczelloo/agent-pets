@@ -39,6 +39,14 @@ header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .row.bottom{grid-template-columns:auto 1fr;margin-bottom:0}
 @media (max-width:700px){.row.top,.row.bottom{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.week-compare{margin-bottom:10px;padding:8px 12px}
+.week-compare .ct{margin-bottom:3px}
+.week-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.week-pair>div{display:flex;align-items:baseline;gap:8px;min-width:0}
+.week-pair b{font-size:11px;color:var(--mut);min-width:72px}
+.week-pair strong{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.week-pair span,.week-note{font-size:11px;color:var(--mut)}
+.week-note{margin-top:3px}
 .ct{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--mut);margin:0 0 6px}
 .ct .seg{margin-left:auto}
 .podium{height:210px;position:relative;display:flex;align-items:flex-end;justify-content:center;gap:6px;overflow:hidden}

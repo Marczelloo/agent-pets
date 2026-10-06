@@ -91,7 +91,7 @@ export interface Settings {
   /** The mod's nudges about other agents (0.16.1); on by default. */
   claude_mod_nudges: boolean;
   /** `muted_until`: toasts are silenced until then (ms since epoch; a huge value = until turned back on); absent or null = not muted (0.17). */
-  notifications: { needs_you: boolean; done: boolean; limits: boolean; sound: boolean; muted_until?: number | null };
+  notifications: { needs_you: boolean; done: boolean; limits: boolean; weekly: boolean; sound: boolean; muted_until?: number | null };
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;
@@ -119,7 +119,7 @@ export type UpdateStatus =
   /** `verify`: problem with the update itself (panel and settings); otherwise a check error (settings only) */
   | { state: 'error'; message: string; verify: boolean };
 /** Mirrors `notify::center::Entry` (event `pets://notifications`). */
-export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update';
+export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update' | 'weekly';
 export interface NotificationEntry { id: number; kind: NotificationKind; title: string; body: string; session_id: string | null; at: number; read: boolean }
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';
@@ -184,5 +184,7 @@ export interface StatsTiles {
 export interface StatsLane { key: string; agent: StatAgent | null; value: number }
 export interface StatsDay { date: string; active_ms: number; level: number }
 export interface StatsBadge { kind: BadgeKind; project: string | null; agent: StatAgent | null; value: number }
-export interface StatsView { empty: boolean; podium: StatsPlace[]; tiles: StatsTiles; race: StatsLane[]; calendar: StatsDay[]; badges: StatsBadge[]; record: boolean }
+export interface WeekTotals { active_ms: number; tokens: number; sessions: number; top_project: string | null; top_agent: StatAgent | null }
+export interface WeekCompare { this: WeekTotals; last: WeekTotals; days_into_week: number }
+export interface StatsView { empty: boolean; podium: StatsPlace[]; tiles: StatsTiles; race: StatsLane[]; calendar: StatsDay[]; badges: StatsBadge[]; record: boolean; week: WeekCompare }
 export interface StatsProgress { files: number; scanned: number; total: number; done: boolean }

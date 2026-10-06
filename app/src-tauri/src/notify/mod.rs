@@ -27,6 +27,18 @@ pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str
     let _ = toast.on_activated(move |action| { on(action); Ok(()) }).show();
 }
 
+/// Recap is recorded even while muted; its action opens the statistics window.
+pub fn show_weekly(app: &AppHandle, title: &str, body: &str, button: &str) {
+    center::record(app, center::Kind::Weekly, title, body, None);
+    let n = app.state::<crate::settings::SettingsState>().get().notifications;
+    if pets_core::mute::muted(&n, pets_core::time::now_ms()) { return; }
+    let id = APP_ID.get().copied().unwrap_or(AUMID);
+    let a = app.clone();
+    let _ = Toast::new(id).title(title).text1(body).sound(sound_for(rules::ToastKind::Done, n.sound))
+        .add_button(button, "statistics")
+        .on_activated(move |_| { crate::stats::open(&a); Ok(()) }).show();
+}
+
 /// Path for the `IconUri` value: the toast shell does not load an image through the `\\?\` verbatim prefix
 /// that `resource_dir()` returns, so the notifications showed no app icon.
 fn toast_icon_path(p: &std::path::Path) -> String {

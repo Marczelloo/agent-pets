@@ -2,6 +2,7 @@ import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { StatsPage, type PageProps } from './App';
 import { demoStats } from './demo';
+import { setLang } from '../i18n';
 import type { StatsView } from '../types';
 
 const base = (over: Partial<PageProps> = {}): PageProps => ({
@@ -9,9 +10,18 @@ const base = (over: Partial<PageProps> = {}): PageProps => ({
   animate: false, onPeriod: () => {}, onMetric: () => {}, onRace: () => {}, ...over,
 });
 const empty: StatsView = { empty: true, podium: [], tiles: { tokens: 0, tokens_change: null, cache_pct: null, cache_read: 0, active_ms: 0,
-  longest_ms: 0, sessions: 0, subagents: 0, questions: 0 }, race: [], calendar: [], badges: [], record: false };
+  longest_ms: 0, sessions: 0, subagents: 0, questions: 0 }, race: [], calendar: [], badges: [], record: false,
+  week: { this: { active_ms: 0, tokens: 0, sessions: 0, top_project: null, top_agent: null }, last: { active_ms: 0, tokens: 0, sessions: 0, top_project: null, top_agent: null }, days_into_week: 1 } };
 
 describe('StatsPage', () => {
+  it('compares both calendar weeks and labels a partial week', () => {
+    setLang('pl');
+    const html = renderToString(<StatsPage {...base()} />);
+    expect(html).toContain('Ten tydzień');
+    expect(html).toContain('Poprzedni');
+    expect(html).toContain('Dzień 3 z 7');
+    expect(html).toContain('▲ 25%');
+  });
   it('shows the tiles, the podium and the period switch', () => {
     const html = renderToString(<StatsPage {...base()} />);
     for (const s of ['Tokeny', '48,2 mln', 'Z cache', '91%', 'Czas pracy', 'Sesje', 'Agent Pets', 'Tydzień']) expect(html, s).toContain(s);

@@ -10,7 +10,7 @@ pub const MAX: usize = 50;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Kind { NeedsYou, Done, Limit, Update }
+pub enum Kind { NeedsYou, Done, Limit, Update, Weekly }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Entry {

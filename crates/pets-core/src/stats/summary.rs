@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
 use super::{Book, Cell, StatAgent, HOUR_MS};
+use crate::i18n::{tr, Lang};
 
 const DAY: i64 = 86_400_000;
 const CALENDAR_DAYS: i64 = 182;
@@ -42,11 +43,68 @@ pub struct Badge { pub kind: BadgeKind, pub project: Option<String>, pub agent: 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StatsView {
     pub empty: bool, pub podium: Vec<Place>, pub tiles: Tiles, pub race: Vec<Lane>,
-    pub calendar: Vec<Day>, pub badges: Vec<Badge>, pub record: bool,
+    pub calendar: Vec<Day>, pub badges: Vec<Badge>, pub record: bool, pub week: WeekCompare,
 }
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct WeekTotals { pub active_ms: u64, pub tokens: u64, pub sessions: u32, pub top_project: Option<String>, pub top_agent: Option<StatAgent> }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct WeekCompare { pub this: WeekTotals, pub last: WeekTotals, pub days_into_week: u8 }
 
 /// Local day number (days since epoch) for `ts`.
 pub fn local_day(ts: i64, tz: &dyn Fn(i64) -> i64) -> i64 { (ts + tz(ts)).div_euclid(DAY) }
+/// Monday's local day number for any day in its calendar week.
+pub fn week_start(day: i64) -> i64 { day - (day + 3).rem_euclid(7) }
+
+pub fn week_compare(book: &Book, now: i64, tz: &dyn Fn(i64) -> i64) -> WeekCompare {
+    let today = local_day(now, tz);
+    let start = week_start(today);
+    let mut totals = [WeekTotals::default(), WeekTotals::default()];
+    let mut projects = [BTreeMap::<String, u64>::new(), BTreeMap::new()];
+    let mut agents = [BTreeMap::<StatAgent, u64>::new(), BTreeMap::new()];
+    for e in book.files.values() {
+        let Some(agent) = e.meta.agent else { continue };
+        if !e.meta.sub {
+            if let Some(s) = e.meta.started {
+                let day = local_day(s, tz);
+                if (start..=today).contains(&day) { totals[0].sessions += 1; }
+                else if (start - 7..start).contains(&day) { totals[1].sessions += 1; }
+            }
+        }
+        for (&h, models) in &e.buckets {
+            let day = local_day(h * super::BUCKET_MS, tz);
+            let i = if (start..=today).contains(&day) { 0 } else if (start - 7..start).contains(&day) { 1 } else { continue };
+            for c in models.values() {
+                totals[i].active_ms += c.active_ms;
+                totals[i].tokens += c.tokens();
+                *agents[i].entry(agent).or_default() += c.active_ms;
+                if let Some(p) = &e.meta.project { *projects[i].entry(p.clone()).or_default() += c.active_ms; }
+            }
+        }
+    }
+    for i in 0..2 {
+        totals[i].top_project = projects[i].iter().filter(|(_, v)| **v > 0).max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map(|(k, _)| k.clone());
+        totals[i].top_agent = agents[i].iter().filter(|(_, v)| **v > 0).max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map(|(k, _)| *k);
+    }
+    WeekCompare { this: totals[0].clone(), last: totals[1].clone(), days_into_week: (today - start + 1) as u8 }
+}
+
+pub fn weekly_recap(last: &WeekTotals, prev: &WeekTotals, lang: Lang) -> Option<(String, String)> {
+    if last.active_ms == 0 && last.tokens == 0 && last.sessions == 0 { return None; }
+    let minutes = last.active_ms / 60_000;
+    let duration = if minutes >= 60 { format!("{} h {} min", minutes / 60, minutes % 60) } else { format!("{minutes} min") };
+    let tokens = if last.tokens >= 1_000_000 {
+        let decimal = format!("{:.1}", last.tokens as f64 / 1_000_000.0).replace('.', if lang == Lang::Pl { "," } else { "." });
+        format!("{decimal}{}", tr(lang, " mln", "M"))
+    } else { last.tokens.to_string() };
+    let change = if prev.active_ms > 0 {
+        let pct = ((last.active_ms as f64 / prev.active_ms as f64 - 1.0) * 100.0).round() as i64;
+        format!(" ({} {}%)", if pct >= 0 { '▲' } else { '▼' }, pct.abs())
+    } else { String::new() };
+    let project = last.top_project.as_ref().map(|p| format!(" {}: {p}.", tr(lang, "Najwięcej", "Most active"))).unwrap_or_default();
+    Some((tr(lang, "Podsumowanie tygodnia", "Weekly recap").into(),
+        format!("{duration}{}{change}, {tokens} {}.{project}", tr(lang, " pracy agentów", " of agent work"), tr(lang, "tokenów", "tokens"))))
+}
 fn local_hour(ts: i64, tz: &dyn Fn(i64) -> i64) -> i64 { (ts + tz(ts)).rem_euclid(DAY) / HOUR_MS }
 fn date_of(day: i64) -> String { crate::time::rfc3339(day * DAY)[..10].to_string() }
 fn pct(part: u64, whole: u64) -> Option<f64> { (whole > 0).then(|| part as f64 * 100.0 / whole as f64) }
@@ -151,7 +209,7 @@ pub fn summary(book: &Book, q: &Query, now: i64, tz: &dyn Fn(i64) -> i64) -> Sta
     let best_before = days.range(..today).map(|(_, &v)| v).filter(|&v| v > 0).max();
     let record = today_ms >= RECORD_MIN_MS && best_before.is_some_and(|b| today_ms > b);
 
-    StatsView { empty, podium, tiles, race, calendar, badges, record }
+    StatsView { empty, podium, tiles, race, calendar, badges, record, week: week_compare(book, now, tz) }
 }
 
 #[cfg(test)]
@@ -180,6 +238,39 @@ mod tests {
     }
     fn work(ms: u64) -> Cell { Cell { active_ms: ms, ..Cell::default() } }
     fn tok(n: u64) -> Cell { Cell { input: n, ..Cell::default() } }
+
+    #[test]
+    fn calendar_weeks_split_on_local_monday_and_rank_work() {
+        let mut b = Book::default();
+        let offset = |_: i64| 2 * HOUR_MS;
+        let monday = week_start(local_day(NOW, &offset));
+        let at_local = |day: i64, hour: i64| day * DAY_MS + hour * HOUR_MS - 2 * HOUR_MS;
+        let start = at_local(monday, 1);
+        let before = at_local(monday - 1, 23);
+        put(&mut b, "a", meta(StatAgent::Claude, "alpha", false, start), start, Cell { active_ms: 2 * H, input: 20, ..Cell::default() });
+        put(&mut b, "a", meta(StatAgent::Claude, "alpha", false, start), start + HOUR_MS, work(H));
+        put(&mut b, "b", meta(StatAgent::Codex, "beta", true, start), start, work(H));
+        put(&mut b, "c", meta(StatAgent::Codex, "beta", false, before), before, Cell { active_ms: 5 * H, input: 50, ..Cell::default() });
+        let v = week_compare(&b, at_local(monday + 2, 12), &offset);
+        assert_eq!(v.days_into_week, 3);
+        assert_eq!((v.this.active_ms, v.this.tokens, v.this.sessions), (4 * H, 20, 1));
+        assert_eq!((v.this.top_project.as_deref(), v.this.top_agent), (Some("alpha"), Some(StatAgent::Claude)));
+        assert_eq!((v.last.active_ms, v.last.sessions, v.last.top_project.as_deref()), (5 * H, 1, Some("beta")));
+        assert_eq!(week_compare(&Book::default(), NOW, &offset).this, WeekTotals::default());
+    }
+
+    #[test]
+    fn recap_text_uses_explicit_language_and_skips_empty_weeks() {
+        let last = WeekTotals { active_ms: 12 * H + 30 * MIN, tokens: 4_200_000, sessions: 4, top_project: Some("agent-pets".into()), top_agent: Some(StatAgent::Claude) };
+        let prev = WeekTotals { active_ms: 10 * H, ..WeekTotals::default() };
+        let pl = weekly_recap(&last, &prev, Lang::Pl).unwrap();
+        let en = weekly_recap(&last, &prev, Lang::En).unwrap();
+        assert_eq!(pl.0, "Podsumowanie tygodnia");
+        assert!(pl.1.contains("12 h 30 min pracy agentów (▲ 25%), 4,2 mln tokenów"));
+        assert_eq!(en.0, "Weekly recap");
+        assert!(en.1.contains("12 h 30 min of agent work (▲ 25%), 4.2M tokens"));
+        assert!(weekly_recap(&WeekTotals::default(), &prev, Lang::En).is_none());
+    }
 
     #[test]
     fn an_empty_book_is_empty_and_calm() {

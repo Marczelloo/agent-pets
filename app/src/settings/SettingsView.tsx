@@ -118,6 +118,8 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
               onChange={on => set({ notifications: { ...s.notifications, done: on } })}>{t().settings.notifyDone}</Toggle>
             <Toggle label={t().limits.label} checked={s.notifications.limits}
               onChange={on => set({ notifications: { ...s.notifications, limits: on } })}>{t().limits.notification}</Toggle>
+            <Toggle label={t().settings.notifyWeekly} checked={s.notifications.weekly ?? true}
+              onChange={on => set({ notifications: { ...s.notifications, weekly: on } })}>{t().settings.notifyWeeklyDesc}</Toggle>
           </Section>
           <Section>
             <Toggle label={t().settings.notifySound} checked={s.notifications.sound ?? true}
