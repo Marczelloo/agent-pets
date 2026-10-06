@@ -1,6 +1,6 @@
 // The showcase's clock, read off the licensed track it is cut to (Running Night, 106.01 BPM; see audio/make_show_audio.py).
 // The track plays uncut from 65.52 s, so the video's bar lines are its own. It loops four chords, one per bar: A, F#, G#, C#.
-//   0     - 5.62 s  its build, the drums eased in from low (or the whole track: INTRO=volume); the drums are full at the hit
+//   0     - 5.62 s  its build, eased in from low (or only its drums: INTRO=drums); full at the hit; it lifts a bar before, at 3.36 s
 //   5.62  - 7.88 s  the riser bar before the drop (C#, "Meet the crew.")
 //   7.88  - end     the drop as Clawd appears for the tour (A; the bass pushes in half a beat early, as the dive starts),
 //                   on through the styles (16.94 s) to the end card (26.0 s), where it fades out
@@ -12,7 +12,7 @@ export const FPS = 60;
 export const HIT = 5.62;
 export const BEAT = 60 / 106.01;
 export const BAR = 4 * BEAT;
-/** The drums come in a bar before the hit: the crew notices, nods along, and jumps on the hit. */
+/** A bar before the hit the track lifts: we cut out to the whole crew, bouncing on the beats until they jump on the hit. */
 export const NOTICE = HIT - BAR;
 /** Beat k counted from the hit (k = 0 .. 3 is "Meet the crew."). */
 export const beat = (k: number): number => HIT + k * BEAT;

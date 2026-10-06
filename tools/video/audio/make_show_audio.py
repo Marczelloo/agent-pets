@@ -24,9 +24,9 @@ TOUR = HIT + RBAR                  # time.ts TOUR: the drop, as Clawd appears
 START = DROP - TOUR                # the track is never cut: video t plays the track at START + t (65.52 s, its build, drums already in)
 T_END = TOUR + 8 * RBAR            # time.ts T_END: the end card, on an A bar; the music plays on under it and fades out
 FADE_AT = T_END + 0.5
-# How the intro eases in (INTRO=drums, the default, or INTRO=volume): either only the drums start low and come up to full by the hit,
-# split from the rest of the mix by harmonic/percussive separation, or the whole track does.
-INTRO = os.environ.get('INTRO', 'drums')
+# How the intro eases in (INTRO=volume, the default, or INTRO=drums): either the whole track starts low and comes up to full by the hit,
+# or only its drums do, split from the rest of the mix by harmonic/percussive separation.
+INTRO = os.environ.get('INTRO', 'volume')
 RAMP_DB = {'drums': -24.0, 'volume': -14.0}[INTRO]   # how far down the ramp starts
 
 

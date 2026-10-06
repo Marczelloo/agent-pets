@@ -23,7 +23,7 @@ export const WORLD = {
   win2: { x: 380, y: -500, w: 280, h: 230 },
   win3: { x: -500, y: -470, w: 270, h: 260 },
   trayX: 470,
-  limitsX: 376,
+  limitsX: 400,
 };
 
 const rr = (x: CanvasRenderingContext2D, X: number, Y: number, W: number, H: number, R: number) => { x.beginPath(); x.roundRect(X, Y, W, H, R); };

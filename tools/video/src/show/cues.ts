@@ -1,12 +1,11 @@
 // The showcase's sound effects as data, timed from the same constants as the picture. audio/make_show_audio.py lays them over the music.
-import { BEAT, HIT, NOTICE, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, TOUR, bar } from './time';
+import { BEAT, HIT, T_END, T_MOD, T_NEEDS, T_PANEL, T_STATES, T_STATS, T_STYLES, TOUR, bar } from './time';
 
 export interface Cue { t: number; name: string; v?: number; p?: number }
 
 export function buildCues(): Cue[] {
   const c: Cue[] = [];
   const add = (t: number, name: string, v = 1, p?: number) => c.push({ t: +t.toFixed(4), name, v, p });
-  for (let i = 0; i < 8; i++) add(NOTICE + i * 0.025 + 0.02, 'pop', 0.3, i + 4);     // "!" over every head
   add(HIT + 0.02, 'confetti', 0.4);                                                     // the crew jumps
   for (let i = 0; i < 8; i++) add(HIT + 0.55 + i * 0.09, 'tag', 0.4, i);              // name tags, left to right
   add(TOUR - 0.3, 'whoosh', 0.45);                                                       // the dive into Clawd
