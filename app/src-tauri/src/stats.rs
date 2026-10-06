@@ -14,6 +14,8 @@ const RESCAN: Duration = Duration::from_secs(30);
 const PROGRESS_EVERY_MS: i64 = 500;
 const DAY_MS: i64 = 86_400_000;
 const HOUR_MS: i64 = 3_600_000;
+/// Toast attempts for one recap (one per rescan, ~5 min): right after logon Windows may not take toasts yet.
+const WEEKLY_TRIES: u8 = 10;
 
 /// Current Monday when the local clock has passed 09:00 and the week was not handled yet.
 pub fn due(now: i64, last_sent_week: Option<i64>, tz: &dyn Fn(i64) -> i64) -> Option<i64> {
@@ -21,6 +23,14 @@ pub fn due(now: i64, last_sent_week: Option<i64>, tz: &dyn Fn(i64) -> i64) -> Op
     let week = week_start(day);
     let local_ms = (now + tz(now)).rem_euclid(DAY_MS);
     (last_sent_week.is_some_and(|last| last < week) && (day > week || local_ms >= 9 * HOUR_MS)).then_some(week)
+}
+
+/// The attempt for `week` after `prev`: whether it is the first one (record the recap in the center then) and the new count.
+fn weekly_attempt(prev: Option<(i64, u8)>, week: i64) -> (bool, (i64, u8)) {
+    match prev {
+        Some((w, n)) if w == week => (false, (w, n.saturating_add(1))),
+        _ => (true, (week, 1)),
+    }
 }
 
 fn weekly_path(home: &std::path::Path) -> std::path::PathBuf { home.join(".agent-pets").join("weekly.json") }
@@ -46,11 +56,18 @@ fn check_weekly(app: &AppHandle, book: &Book, home: &std::path::Path, now: i64) 
     let lang = pets_core::i18n::current(cur.language);
     let last = week_compare(book, now, &tz_offset).last;
     let prev = week_compare(book, now - 7 * DAY_MS, &tz_offset).last;
-    if let Err(e) = save_week(&path, week) { pets_core::app_log!("statistics: weekly state: {e}"); return; }
-    if !cur.notifications.weekly { return; }
-    if let Some((title, body)) = weekly_recap(&last, &prev, lang) {
-        crate::notify::show_weekly(app, &title, &body, tr(lang, "Statystyki", "Statistics"));
-    }
+    // the week counts as handled only once the toast went out (or there is nothing to show): a failed one is tried again
+    let handled = match weekly_recap(&last, &prev, lang).filter(|_| cur.notifications.weekly) {
+        None => true,
+        Some((title, body)) => {
+            let st = app.state::<StatsState>();
+            let mut attempt = st.weekly.lock().unwrap();
+            let (first, next) = weekly_attempt(*attempt, week);
+            *attempt = Some(next);
+            crate::notify::show_weekly(app, &title, &body, tr(lang, "Statystyki", "Statistics"), first) || next.1 >= WEEKLY_TRIES
+        }
+    };
+    if handled { if let Err(e) = save_week(&path, week) { pets_core::app_log!("statistics: weekly state: {e}"); } }
 }
 
 pub struct StatsState {
@@ -58,6 +75,8 @@ pub struct StatsState {
     pub progress: Mutex<Progress>,
     /// Writing is allowed only after successfully reading the ledger from disk.
     pub writable: std::sync::atomic::AtomicBool,
+    /// Monday recap not delivered yet: its week and the attempts so far.
+    weekly: Mutex<Option<(i64, u8)>>,
 }
 
 impl StatsState {
@@ -65,7 +84,7 @@ impl StatsState {
     pub fn load(home: &std::path::Path) -> StatsState {
         let roots = vec![home.join(".claude").join("projects"), home.join(".codex").join("sessions")];
         StatsState { scanner: Mutex::new(Scanner::new(roots, Book::default())), progress: Mutex::new(Progress::default()),
-            writable: std::sync::atomic::AtomicBool::new(false) }
+            writable: std::sync::atomic::AtomicBool::new(false), weekly: Mutex::new(None) }
     }
 }
 
@@ -220,6 +239,14 @@ mod tests {
     use pets_core::stats::Book;
     use std::cell::{Cell, RefCell};
     use std::sync::Mutex;
+
+    #[test]
+    fn a_failed_recap_is_recorded_once_and_tried_again() {
+        assert_eq!(weekly_attempt(None, 7), (true, (7, 1)));
+        assert_eq!(weekly_attempt(Some((7, 1)), 7), (false, (7, 2)));
+        assert_eq!(weekly_attempt(Some((0, 4)), 7), (true, (7, 1)));
+        assert_eq!(weekly_attempt(Some((7, u8::MAX)), 7), (false, (7, u8::MAX)));
+    }
 
     #[test]
     fn recap_due_respects_local_monday_and_missed_days() {

@@ -27,9 +27,11 @@ pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str
     let _ = toast.on_activated(move |action| { on(action); Ok(()) }).show();
 }
 
-/// Recap is recorded even while muted; its action opens the statistics window.
-pub fn show_weekly(app: &AppHandle, title: &str, body: &str, button: &str) {
-    show_action(app, center::Kind::Weekly, title, body, button, "statistics", crate::stats::open);
+/// Recap is recorded (when `record`) even while muted; its action opens the statistics window.
+/// `false` = Windows refused the toast, so the caller may try again (without recording it twice).
+pub fn show_weekly(app: &AppHandle, title: &str, body: &str, button: &str, record: bool) -> bool {
+    if record { center::record(app, center::Kind::Weekly, title, body, None); }
+    toast_action(app, title, body, button, "statistics", crate::stats::open)
 }
 
 /// Record a problem and let the toast take the user straight to Diagnostics.
@@ -40,14 +42,20 @@ pub fn show_problem(app: &AppHandle, title: &str, body: &str) {
 
 fn show_action(app: &AppHandle, kind: center::Kind, title: &str, body: &str, button: &str, action: &str, open: fn(&AppHandle)) {
     center::record(app, kind, title, body, None);
+    toast_action(app, title, body, button, action, open);
+}
+
+/// Toast with one action button; `true` also when muted (nothing to deliver), `false` when Windows refused it.
+fn toast_action(app: &AppHandle, title: &str, body: &str, button: &str, action: &str, open: fn(&AppHandle)) -> bool {
     let n = app.state::<crate::settings::SettingsState>().get().notifications;
-    if pets_core::mute::muted(&n, pets_core::time::now_ms()) { return; }
+    if pets_core::mute::muted(&n, pets_core::time::now_ms()) { return true; }
     let id = APP_ID.get().copied().unwrap_or(AUMID);
     let a = app.clone();
     let action = action.to_string();
-    let _ = Toast::new(id).title(title).text1(body).sound(sound_for(rules::ToastKind::Done, n.sound))
+    Toast::new(id).title(title).text1(body).sound(sound_for(rules::ToastKind::Done, n.sound))
         .add_button(button, &action)
-        .on_activated(move |_| { open(&a); Ok(()) }).show();
+        .on_activated(move |_| { open(&a); Ok(()) }).show()
+        .map_err(|e| pets_core::app_log!("toast: {e}")).is_ok()
 }
 
 /// Path for the `IconUri` value: the toast shell does not load an image through the `\\?\` verbatim prefix
