@@ -4,7 +4,7 @@ import type { Agent } from '@app/types';
 
 export interface Asset { name: string; size: number; browser_download_url: string }
 export interface Release { tag_name: string; name: string; body: string; html_url: string; published_at: string; prerelease: boolean; assets: Asset[] }
-interface SiteData { releases: Release[]; builtAt: string; repo: string }
+interface SiteData { releases: Release[]; builtAt: string; repo: string; live?: boolean }
 
 const DATA = (window as unknown as { __SITE__: SiteData }).__SITE__;
 const API = `https://api.github.com/repos/${DATA.repo}/releases?per_page=100`;
@@ -135,7 +135,7 @@ function render(list: Release[], source: 'live' | 'snapshot'): void {
         </a>
         <a class="btn ghost" href="${latest.html_url}"><span>Release on GitHub</span></a>
       </div>
-      <canvas class="party-stage" aria-hidden="true"></canvas>
+      <div class="party"><canvas class="party-stage" aria-hidden="true"></canvas></div>
     </div>`;
   const more = document.querySelector<HTMLButtonElement>('.latest .more')!, notes = document.getElementById('latest-notes')!;
   if (notes.scrollHeight <= FOLDED + 4) { notes.classList.remove('clip'); notes.style.maxHeight = 'none'; more.hidden = true; }
@@ -201,14 +201,15 @@ function slide(d: HTMLDetailsElement): void {
 type Spot = [agent: Agent, scene: string];
 const ROWS: Spot[][] = [
   [['codex', 'clap'], ['claude', 'done'], ['antigravity', 'cheer']],
-  [['copilot', 'web'], ['opencode', 'bash']],
-  [['zcode', 'vibe'], ['grok', 'wave'], ['cursor', 'clap']],
-  [['other', 'edit'], ['codex', 'read']],
-  [['claude', 'compact'], ['antigravity', 'thinking'], ['zcode', 'done']],
-  [['cursor', 'grep'], ['grok', 'agent']],
-  [['opencode', 'needs'], ['copilot', 'thinking'], ['claude', 'vibe']],
+  [['copilot', 'web']],
+  [['zcode', 'vibe'], ['grok', 'wave']],
+  [['opencode', 'bash']],
+  [['cursor', 'grep']],
+  [['other', 'read']],
+  [['codex', 'thinking'], ['claude', 'vibe']],
+  [['zcode', 'done']],
 ];
-const FIRST = 150, ROW_H = 170;
+const FIRST = 150, ROW_H = 260;
 let partyStage: Stage | null = null;
 function party(canvas: HTMLCanvasElement): void {
   partyStage?.dispose();
@@ -221,8 +222,8 @@ function party(canvas: HTMLCanvasElement): void {
       // a row that just found room drops in
       if (!rows[r]) rows[r] = spots.map(([agent, scene], i) => { const a = new Actor(agent, scene, agent === 'other' ? 'Any agent' : null); a.drop(220 + i * 70); return a; });
       s.x.fillStyle = 'rgba(255,255,255,.08)'; s.x.fillRect(0, floor, s.w, 2);
-      // two pets with props leave room on the right; three without spread out
-      const xs = spots.length === 2 ? [.24, .66] : [.2, .5, .8];
+      // one pet with props sits left of centre, alternating sides; two or three spread out
+      const xs = spots.length === 1 ? [r % 2 ? .3 : .55] : spots.length === 2 ? [.3, .7] : [.2, .5, .8];
       rows[r]!.forEach((a, i) => {
         a.u = u; a.x = s.w * xs[i]; a.y = floor;
         a.step(dt); a.draw(s.x, dt, T, s.dpr);
@@ -234,5 +235,6 @@ function party(canvas: HTMLCanvasElement): void {
 
 export function releases(): void {
   render(DATA.releases, 'snapshot');
-  live().then(list => { if (list && list.length) render(list, 'live'); });
+  // a build for a host that blocks outside requests (a preview) keeps the snapshot and asks nobody
+  if (DATA.live !== false) live().then(list => { if (list && list.length) render(list, 'live'); });
 }

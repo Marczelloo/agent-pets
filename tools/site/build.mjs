@@ -3,7 +3,8 @@
 //
 //   node build.mjs                        site/index.html
 //   node build.mjs --watch                rebuild on every change in src/ or app/src
-//   node build.mjs --body-only=<file>     also write the page without <html>/<head> (for hosts that add their own)
+//   node build.mjs --body-only=<file>     also write the page without <html>/<head> and without live requests
+//                                         (for a preview host that adds its own document and blocks other sites)
 //   GITHUB_TOKEN=… node build.mjs         fetch the releases with a token (higher rate limit)
 import * as esbuild from 'esbuild';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -46,17 +47,20 @@ async function build(snapshot) {
       alias: { '@app': here('../../app/src') }, legalComments: 'none', charset: 'utf8',
     }).then(r => r.outputFiles[0].text),
   ]);
-  const data = json({ releases: snapshot, builtAt: new Date().toISOString(), repo: REPO });
-  const page = html
+  const builtAt = new Date().toISOString();
+  // `live: false` keeps the page from asking the GitHub API (for hosts whose policy would refuse the request)
+  const make = (live) => html
     .replace('/*__CSS__*/', () => css)
-    .replace('/*__DATA__*/', () => `window.__SITE__=${data};`)
+    .replace('/*__DATA__*/', () => `window.__SITE__=${json({ releases: snapshot, builtAt, repo: REPO, live })};`)
     .replace('/*__JS__*/', () => js.replace(/<\/script/gi, '<\\/script'));
+  const page = make(true);
   await mkdir(dirname(OUT), { recursive: true });
   await writeFile(OUT, page);
   if (bodyOnly) {
     // a host that adds its own <html>/<head>: keep the head's content (title, fonts, style) at the top
-    const head = page.match(/<head>([\s\S]*?)<\/head>/)[1].replace(/<meta charset[^>]*>|<meta name="viewport"[^>]*>/g, '');
-    const body = page.match(/<body[^>]*>([\s\S]*)<\/body>/)[1];
+    const other = make(false);
+    const head = other.match(/<head>([\s\S]*?)<\/head>/)[1].replace(/<meta charset[^>]*>|<meta name="viewport"[^>]*>/g, '');
+    const body = other.match(/<body[^>]*>([\s\S]*)<\/body>/)[1];
     await writeFile(bodyOnly, head + body);
   }
   console.log(`site/index.html  ${(Buffer.byteLength(page) / 1024).toFixed(0)} KB, ${snapshot.length} releases in the snapshot`);

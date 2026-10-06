@@ -129,8 +129,8 @@ p { margin: 0; }
 /* states console */
 .console { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 28px; align-items: stretch; }
 .console-stage { background: var(--card); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; }
-.state-stage { width: 100%; height: 400px; display: block; flex: 1; }
-.who { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.state-stage { width: 100%; height: 400px; display: block; flex: none; }
+.who { margin-top: auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .who button { font: 700 .82rem/1 var(--body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
 .who button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .events { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; align-content: start; font-family: var(--mono); font-size: .86rem; counter-reset: ev; }
@@ -243,7 +243,9 @@ p { margin: 0; }
 .counts span { font: 600 .8rem/1 var(--mono); padding: 7px 10px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
 .counts b { font-weight: 700; }
 .latest-side { background: var(--bar); color: var(--bar-ink); min-height: 300px; display: flex; flex-direction: column; min-width: 0; }
-.latest-side canvas { width: 100%; flex: 1; min-height: 210px; display: block; }
+/* the canvas is laid over its box, so its own pixel size can never push the card taller */
+.latest-side .party { position: relative; flex: 1; min-height: 210px; }
+.latest-side .party canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .latest-side .btns { display: flex; flex-wrap: wrap; gap: 10px; padding: 22px 22px 0; }
 .latest-side .btn.primary { background: var(--clay); color: #1F120C; }
 .latest-side .btn.primary b { color: #1F120C; }
@@ -335,9 +337,9 @@ p { margin: 0; }
 .sm-rec span { display: grid; min-width: 0; }
 .sm-rec b { font-size: .88rem; }
 .sm-rec small { font-size: .74rem; opacity: .65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sm-pinned a:hover, .sm-rec a:hover, .sm-power:hover { background: var(--bar-2); }
+.sm-pinned a:hover, .sm-rec a:hover, .sm-power:hover, .sm-user:hover { background: var(--bar-2); }
 .sm-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--bar-2); padding-top: 12px; margin-top: 4px; }
-.sm-user { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: .88rem; }
+.sm-user { text-decoration: none; padding: 4px 10px 4px 4px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: .88rem; }
 .sm-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--clay); color: #1F120C; display: grid; place-items: center; font: 700 .9rem/1 var(--display); }
 .sm-power { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--bar-ink); }
 .sm-power svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
