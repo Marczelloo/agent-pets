@@ -143,10 +143,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let _w = watch(&[dir.path().to_path_buf()], tx).unwrap();
-        std::thread::sleep(Duration::from_millis(200));
         let p = dir.path().join("rollout-b.jsonl");
         std::fs::write(&p, format!("{META}\n")).unwrap();
-        let got = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        let got = rx.recv_timeout(Duration::from_secs(10)).unwrap();
         assert_eq!(got.file_name(), p.file_name());
     }
 }

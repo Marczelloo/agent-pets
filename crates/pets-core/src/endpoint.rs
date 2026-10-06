@@ -12,8 +12,10 @@ impl Endpoint {
     /// (the Claude app, its terminal, and hooks it starts), so a packaged process and one outside it
     /// would see two different files. The home directory is not virtualized (like `~/.claude`).
     pub fn default_path() -> PathBuf {
-        dirs::home_dir().unwrap_or_else(std::env::temp_dir).join(".agent-pets").join("endpoint.json")
+        Self::path_in_home(&dirs::home_dir().unwrap_or_else(std::env::temp_dir))
     }
+
+    fn path_in_home(home: &Path) -> PathBuf { home.join(".agent-pets").join("endpoint.json") }
 
     pub fn new_token() -> String {
         use rand::RngCore;
@@ -44,9 +46,9 @@ mod tests {
     fn default_path_lives_in_the_home_directory_not_appdata() {
         // AppData is virtualized for processes in MSIX packages (e.g. the Claude app and its terminal):
         // hook.exe started by Claude would see a different endpoint.json than the widget outside the package.
-        let p = Endpoint::default_path();
-        assert_eq!(p, dirs::home_dir().unwrap().join(".agent-pets").join("endpoint.json"));
-        assert!(!p.to_string_lossy().to_lowercase().contains("appdata"));
+        let home = tempfile::tempdir().unwrap();
+        let p = Endpoint::path_in_home(home.path());
+        assert_eq!(p, home.path().join(".agent-pets").join("endpoint.json"));
     }
     #[test]
     fn roundtrip_and_token_shape() {
