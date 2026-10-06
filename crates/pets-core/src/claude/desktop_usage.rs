@@ -186,8 +186,10 @@ mod tests {
         let mut p = Poller::new(vec![d.path().join("missing.json"), f.clone()]);
         assert_eq!(pct(&limits(p.poll(now)), Window::FiveHour), Some(1.0));
         assert!(p.poll(now + POLL_MS).is_none(), "file did not change");
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        let modified = std::fs::metadata(&f).unwrap().modified().unwrap();
         std::fs::write(&f, history(json!([{ "t": now, "org": "o", "u": { "fh": 2 } }]))).unwrap();
+        std::fs::File::options().write(true).open(&f).unwrap()
+            .set_modified(modified + std::time::Duration::from_secs(2)).unwrap();
         assert!(p.poll(now + POLL_MS + 1).is_none(), "too soon since the last check");
         assert_eq!(pct(&limits(p.poll(now + 2 * POLL_MS)), Window::FiveHour), Some(2.0));
     }

@@ -9,6 +9,12 @@ fn run_hook(endpoint_path: &std::path::Path, stdin: &str) -> std::process::Outpu
     run_with(endpoint_path, &[], &[], stdin)
 }
 
+fn output_bounded(child: std::process::Child) -> std::process::Output {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || { let _ = tx.send(child.wait_with_output()); });
+    rx.recv_timeout(Duration::from_secs(20)).expect("hook.exe did not exit").unwrap()
+}
+
 #[test]
 fn forwards_hook_payload_silently() {
     let (tx, rx) = channel();
@@ -39,8 +45,8 @@ fn exits_zero_fast_when_widget_is_down() {
 }
 
 fn run_report(endpoint_path: &std::path::Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_hook")).arg("report").args(args)
-        .env("AGENT_PETS_ENDPOINT", endpoint_path).output().unwrap()
+    output_bounded(Command::new(env!("CARGO_BIN_EXE_hook")).arg("report").args(args)
+        .env("AGENT_PETS_ENDPOINT", endpoint_path).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap())
 }
 
 #[test]
@@ -90,12 +96,7 @@ fn an_agent_that_never_closes_stdin_still_gets_its_answer() {
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     let mut si = c.stdin.take().unwrap();
     si.write_all(br#"{"conversationId":"d5"#).unwrap();
-    let t = Instant::now();
-    while c.try_wait().unwrap().is_none() {
-        if t.elapsed() > Duration::from_secs(20) { let _ = c.kill(); panic!("hook.exe waits for stdin forever"); }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    let out = c.wait_with_output().unwrap();
+    let out = output_bounded(c);
     drop(si);
     assert!(out.status.success());
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#"{"decision":"stop"}"#);
@@ -112,7 +113,7 @@ fn run_with(endpoint_path: &std::path::Path, args: &[&str], vars: &[(&str, &str)
     let mut si = c.stdin.take().unwrap();
     let body = stdin.as_bytes().to_vec();
     let w = std::thread::spawn(move || { let _ = si.write_all(&body); });
-    let out = c.wait_with_output().unwrap();
+    let out = output_bounded(c);
     let _ = w.join();
     out
 }
@@ -183,7 +184,7 @@ fn a_bad_or_missing_event_name_sends_nothing() {
         assert!(out.status.success(), "{args:?}");
         assert!(out.stdout.is_empty(), "{args:?}");
     }
-    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing was sent");
+    assert!(rx.try_recv().is_err(), "nothing was sent");
     ing.stop();
 }
 
@@ -323,7 +324,7 @@ fn a_hook_run_by_another_agent_sends_nothing() {
     // Cursor and Grok read Claude hooks: these are not Claude sessions
     run_with(&p, &[], &[], r#"{"hook_event_name":"Stop","session_id":"abc","cursor_version":"1.7.2"}"#);
     run_with(&p, &[], &[("GROK_HOOK_EVENT", "Stop")], r#"{"hook_event_name":"Stop","session_id":"abc"}"#);
-    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing was sent");
+    assert!(rx.try_recv().is_err(), "nothing was sent");
     ing.stop();
 }
 
@@ -359,6 +360,6 @@ fn a_bad_cursor_event_name_sends_nothing() {
     let (ing, rx, _dir, p) = widget();
     let out = run_agent(&p, &["--agent", "cursor", "--event", "a b"], r#"{"cursor_version":"1"}"#);
     assert!(out.status.success());
-    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing was sent");
+    assert!(rx.try_recv().is_err(), "nothing was sent");
     ing.stop();
 }

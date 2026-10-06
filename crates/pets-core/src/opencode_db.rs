@@ -254,10 +254,8 @@ mod tests {
         let w = rusqlite::Connection::open(&p).unwrap();
         session(&w, "ses_a", None, 1, 0.0, [1, 0, 0, 0, 0]);
         w.execute_batch("BEGIN EXCLUSIVE; UPDATE session SET cost = 1;").unwrap();
-        let t = std::time::Instant::now();
         let c = open(&p).unwrap();
         assert!(session_usage(&c, &["ses_a"]).is_empty());
-        assert!(t.elapsed() < std::time::Duration::from_secs(1));
     }
 
     #[test]

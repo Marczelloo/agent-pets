@@ -138,8 +138,10 @@ mod tests {
         let mut p = Poller::new(f.clone());
         assert_eq!(p.poll(0).len(), 3);
         assert!(p.poll(POLL_MS).is_empty(), "file did not change");
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        let modified = std::fs::metadata(&f).unwrap().modified().unwrap();
         std::fs::write(&f, fixture()).unwrap();
+        std::fs::File::options().write(true).open(&f).unwrap()
+            .set_modified(modified + std::time::Duration::from_secs(2)).unwrap();
         assert!(p.poll(POLL_MS + 1).is_empty(), "too early");
         assert_eq!(p.poll(2 * POLL_MS).len(), 3);
     }

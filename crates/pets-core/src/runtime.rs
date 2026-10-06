@@ -79,6 +79,10 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn start(cfg: RuntimeConfig) -> anyhow::Result<Runtime> {
+        Self::start_with_watch(cfg, true)
+    }
+
+    fn start_with_watch(cfg: RuntimeConfig, watch_files: bool) -> anyhow::Result<Runtime> {
         let links_path = crate::links::path(&cfg.home);
         let mut links = crate::links::Links::load(&links_path);
         links.prune(crate::time::now_ms());
@@ -110,9 +114,11 @@ impl Runtime {
         rt.poll_router(crate::time::now_ms());
         // one tick before the first snapshot: old threads from recently touched files disappear before being shown
         rt.store.tick(crate::time::now_ms(), &pid::is_alive);
-        let (ftx, files) = channel();
-        rt._watcher = Some(watch(&roots, ftx)?);
-        rt.files = Some(files);
+        if watch_files {
+            let (ftx, files) = channel();
+            rt._watcher = Some(watch(&roots, ftx)?);
+            rt.files = Some(files);
+        }
         Ok(rt)
     }
 
@@ -432,7 +438,7 @@ mod tests {
     use super::*;
     use crate::endpoint::Endpoint;
     use crate::model::{Agent, Origin};
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     fn home() -> tempfile::TempDir {
         let d = tempfile::tempdir().unwrap();
@@ -449,6 +455,16 @@ mod tests {
             apps: crate::settings::Apps::default(), lang: crate::i18n::Lang::Pl }
     }
 
+    fn start(cfg: RuntimeConfig) -> Runtime { Runtime::start_with_watch(cfg, false).unwrap() }
+
+    #[test]
+    fn public_start_and_shutdown_use_only_the_temporary_home() {
+        let h = home();
+        let rt = Runtime::start(cfg(&h)).unwrap();
+        assert!(h.path().join("endpoint.json").exists());
+        drop(rt);
+    }
+
     #[test]
     fn claude_desktop_usage_file_reaches_limits() {
         let h = home();
@@ -457,7 +473,7 @@ mod tests {
         std::fs::write(h.path().join("Claude").join(claude::desktop_usage::FILE),
             serde_json::json!({"version": 2, "samples": [{"t": now, "org": "o", "u": {"fh": 42, "sd": 7}}]}).to_string()).unwrap();
         // already in the first post-startup snapshot: otherwise notification rules would treat an existing limit as new
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         let five = rt.store().limits().iter().find(|l| l.agent == Agent::Claude && l.window == crate::model::Window::FiveHour).copied();
         assert_eq!(five.map(|l| l.used_pct), Some(42.0));
     }
@@ -469,7 +485,7 @@ mod tests {
         std::fs::create_dir_all(h.path().join("Claude")).unwrap();
         std::fs::write(h.path().join("Claude").join(claude::desktop_usage::FILE),
             serde_json::json!({"version": 2, "samples": [{"t": t, "org": "o", "u": {"fh": 38, "sd": 47}}]}).to_string()).unwrap();
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         let l: Vec<_> = rt.store().limits().iter().filter(|l| l.agent == Agent::Claude).map(|l| (l.window, l.used_pct, l.stale_since)).collect();
         assert_eq!(l, vec![(crate::model::Window::Weekly, 47.0, Some(t))], "the 5 h window is long over");
     }
@@ -480,7 +496,7 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.antigravity = true;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         let body = serde_json::json!({"groups": [{"buckets": [
             {"bucketId": "gemini-5h", "remainingFraction": 0.75, "resetTime": crate::time::rfc3339(crate::time::now_ms() + 3_600_000)}]}]});
         assert!(rt.antigravity_usage(Usage::Limits(from_summary(&body, crate::time::now_ms()).unwrap())));
@@ -496,7 +512,7 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.antigravity = false;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         let body = serde_json::json!({"groups": [{"buckets": [{"bucketId": "gemini-5h", "remainingFraction": 0.5}]}]});
         rt.antigravity_usage(Usage::Limits(from_summary(&body, crate::time::now_ms()).unwrap()));
         assert!(rt.store().limits().iter().all(|l| l.agent != Agent::Antigravity));
@@ -521,7 +537,7 @@ mod tests {
         // write instead of fs::copy: Windows copying preserves the old modification time,
         // and restore only files changed within the last 30 minutes
         std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-test.jsonl"), fresh(fixture)).unwrap();
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         assert!(rt.store().sessions().iter().any(|s| s.agent == Agent::Codex && s.origin == Origin::Router));
     }
 
@@ -541,7 +557,7 @@ mod tests {
         std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-test.jsonl"), fresh(fixture)).unwrap();
         let thread = "01a04e96-7474-79a1-a173-8c3cc2919eeb";
         router_status(&h, thread, "running", crate::time::now_ms());
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         let s = rt.store().session(thread).expect("one session per thread");
         assert_eq!((s.origin, s.title.as_str()), (Origin::Router, "Policz pliki"));
         assert_eq!(s.router_task.as_ref().map(|r| r.task_id.as_str()), Some("t1"));
@@ -552,7 +568,7 @@ mod tests {
     fn an_old_failed_router_task_does_not_appear_at_startup() {
         let h = home();
         router_status(&h, "old-thread", "failed", crate::time::now_ms() - 2 * 3_600_000);
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         assert!(rt.store().sessions().is_empty());
     }
 
@@ -566,7 +582,7 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.claude_code = false;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         assert!(!rt.apply_external(event(Source::Claude, "c1", Kind::Prompt)));
         assert!(rt.store().session("c1").is_none());
         assert!(rt.apply_external(event(Source::Codex, "x1", Kind::Prompt)));
@@ -578,7 +594,7 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.opencode = true;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         rt.apply_external(event(Source::Claude, "c1", Kind::Prompt));
         rt.apply_external(event(Source::Opencode, "opencode:a", Kind::Prompt));
         rt.apply_external(event(Source::Generic, "generic:kilo:a", Kind::Prompt));
@@ -594,7 +610,7 @@ mod tests {
     fn copilot_and_antigravity_follow_their_switches() {
         use crate::model::{Kind, Source};
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         assert!(!rt.apply_external(event(Source::Copilot, "copilot:a", Kind::Prompt)));
         assert!(!rt.apply_external(event(Source::Antigravity, "antigravity:a", Kind::Prompt)));
         rt.set_apps(crate::settings::Apps { copilot: true, antigravity: true, ..Default::default() });
@@ -609,7 +625,7 @@ mod tests {
     #[test]
     fn copilot_and_antigravity_routes_open_with_their_switches() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let send = |agent: &str, token: &str, body: &str| ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
             .set("Authorization", &format!("Bearer {token}")).send_string(body)
@@ -628,7 +644,7 @@ mod tests {
     fn cursor_grok_and_zcode_follow_their_switches() {
         use crate::model::{Kind, Source};
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let all = [(Source::Cursor, "cursor:a", Agent::Cursor), (Source::Grok, "grok:a", Agent::Grok), (Source::Zcode, "zcode:a", Agent::Zcode)];
         for (x, id, _) in all { assert!(!rt.apply_external(event(x, id, Kind::Prompt)), "{id} disabled"); }
         rt.set_apps(crate::settings::Apps { cursor: true, grok: true, zcode: true, ..Default::default() });
@@ -644,7 +660,7 @@ mod tests {
     #[test]
     fn cursor_grok_and_zcode_routes_open_with_their_switches() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let send = |agent: &str, token: &str, body: &str| ureq::post(&format!("http://127.0.0.1:{}/v1/events/{agent}", ep.port))
             .set("Authorization", &format!("Bearer {token}")).send_string(body)
@@ -671,13 +687,12 @@ mod tests {
             let h = home();
             let mut c = cfg(&h);
             c.apps.zcode = on;
-            let mut rt = Runtime::start(c).unwrap();
+            let mut rt = start(c);
             let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
                 "payload": {"sessionId": "zc_1", "toolName": "Bash", "toolInput": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "zcode", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
-            while rt.store().session("zcode:zc_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+            rt.step(crate::time::now_ms());
             let s = rt.store().session("zcode:zc_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Zcode, Some(crate::model::Tool::Bash))), "zcode {on}");
         }
@@ -689,13 +704,12 @@ mod tests {
             let h = home();
             let mut c = cfg(&h);
             c.apps.grok = on;
-            let mut rt = Runtime::start(c).unwrap();
+            let mut rt = start(c);
             let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
                 "payload": {"sessionId": "grok_1", "toolName": "bash", "toolInput": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "grok", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
-            while rt.store().session("grok:grok_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+            rt.step(crate::time::now_ms());
             let s = rt.store().session("grok:grok_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Grok, Some(crate::model::Tool::Bash))), "grok {on}");
         }
@@ -707,13 +721,12 @@ mod tests {
             let h = home();
             let mut c = cfg(&h);
             c.apps.cursor = on;
-            let mut rt = Runtime::start(c).unwrap();
+            let mut rt = start(c);
             let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
             let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "preToolUse",
                 "payload": {"conversation_id": "conv_1", "tool_name": "Shell", "tool_input": {"command": "npm test"}}}).to_string();
             assert_eq!(post_agent(&ep, "cursor", &body), if on { 204 } else { 404 });
-            let deadline = Instant::now() + Duration::from_millis(if on { 10_000 } else { 300 });
-            while rt.store().session("cursor:conv_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+            rt.step(crate::time::now_ms());
             let s = rt.store().session("cursor:conv_1");
             assert_eq!(s.map(|s| (s.agent, s.tool)), on.then_some((Agent::Cursor, Some(crate::model::Tool::Bash))), "cursor {on}");
         }
@@ -724,13 +737,12 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.copilot = true;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreToolUse",
             "payload": {"sessionId": "cop_1", "cwd": "C:/w", "toolName": "bash", "toolArgs": {"command": "cargo test"}}}).to_string();
         assert_eq!(post_agent(&ep, "copilot", &body), 204);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while rt.store().session("copilot:cop_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        rt.step(crate::time::now_ms());
         let s = rt.store().session("copilot:cop_1").expect("Copilot session");
         assert_eq!((s.agent, s.jump.pid, s.tool), (Agent::Copilot, Some(std::process::id()), Some(crate::model::Tool::Bash)));
         assert_eq!(s.action.as_deref(), Some("cargo test"));
@@ -741,13 +753,12 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.antigravity = true;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": std::process::id(), "event": "PreInvocation",
             "payload": {"conversationId": "d5f1", "workspacePaths": ["C:/w"], "modelName": "gemini-3.5-pro"}}).to_string();
         assert_eq!(post_agent(&ep, "antigravity", &body), 204);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while rt.store().session("antigravity:d5f1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        rt.step(crate::time::now_ms());
         let s = rt.store().session("antigravity:d5f1").expect("Antigravity session");
         assert_eq!((s.agent, s.state, s.model.as_deref()), (Agent::Antigravity, crate::model::State::Thinking, Some("gemini-3.5-pro")));
     }
@@ -770,7 +781,7 @@ mod tests {
         opencode_db_in(&h, now);
         let mut c = cfg(&h);
         c.apps.opencode = true;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         rt.apply_external(event(Source::Opencode, "opencode:ses_1", Kind::Prompt));
         assert!(rt.step(now));
         let s = rt.store().session("opencode:ses_1").unwrap();
@@ -788,7 +799,7 @@ mod tests {
         let now = crate::time::now_ms();
         opencode_db_in(&h, now);
         let opens = || crate::opencode_db::OPENS.with(|n| n.get());
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         rt.apply_external(event(Source::Opencode, "opencode:ses_1", Kind::Prompt));
         let before = opens();
         for i in 0..40 { rt.step(now + i * 1000); }
@@ -804,15 +815,14 @@ mod tests {
     #[test]
     fn a_door_session_starts_working_and_the_switch_closes_the_route() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let send = |ep: &Endpoint| ureq::post(&format!("http://127.0.0.1:{}/v1/events/generic", ep.port))
             .set("Authorization", &format!("Bearer {}", ep.token))
             .send_string(r#"{"agent":"kilo","session":"a","state":"working","tool":"bash"}"#)
             .map(|r| r.status()).unwrap_or_else(|e| match e { ureq::Error::Status(c, _) => c, _ => 0 });
         assert_eq!(send(&ep), 204);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while rt.store().session("generic:kilo:a").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        rt.step(crate::time::now_ms());
         let s = rt.store().session("generic:kilo:a").expect("door session");
         assert_eq!((s.agent, s.state, s.tool), (Agent::Other, crate::model::State::Working, Some(crate::model::Tool::Bash)));
         rt.set_apps(crate::settings::Apps { generic: false, ..Default::default() });
@@ -824,15 +834,14 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.opencode = true;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let body = serde_json::json!({"v": 1, "ts": crate::time::now_ms(), "pid": std::process::id(), "event": "tool.before",
             "session": "ses_1", "cwd": "C:/w", "tool": "bash", "input": {"command": "cargo test"}}).to_string();
         let r = ureq::post(&format!("http://127.0.0.1:{}/v1/events/opencode", ep.port))
             .set("Authorization", &format!("Bearer {}", ep.token)).send_string(&body).unwrap();
         assert_eq!(r.status(), 204);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while rt.store().session("opencode:ses_1").is_none() && Instant::now() < deadline { rt.step(crate::time::now_ms()); }
+        rt.step(crate::time::now_ms());
         let s = rt.store().session("opencode:ses_1").expect("opencode session");
         assert_eq!((s.agent, s.jump.pid), (Agent::Opencode, Some(std::process::id())));
         assert_eq!(s.action.as_deref(), Some("cargo test"));
@@ -842,7 +851,7 @@ mod tests {
     fn turning_an_app_off_removes_its_pets_and_limits_at_once() {
         use crate::model::{Agent, Kind, Limit, Source, Window};
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         rt.apply_external(event(Source::Claude, "c1", Kind::Prompt));
         rt.apply_external(event(Source::Codex, "x1", Kind::Prompt));
         rt.apply_external(event(Source::Router, "r1", Kind::Prompt));
@@ -862,7 +871,7 @@ mod tests {
     fn last_event_per_source_for_diagnostics() {
         use crate::model::{Kind, Source};
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         assert!(!rt.last_seen().contains_key("codex"));
         rt.apply_external(event(Source::Codex, "x1", Kind::Prompt));
         assert!(rt.last_seen().contains_key("codex"));
@@ -874,14 +883,14 @@ mod tests {
         let h = home();
         let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/codex/router-task.jsonl");
         std::fs::write(h.path().join(".codex/sessions/2026/09/24/rollout-old.jsonl"), std::fs::read(fixture).unwrap()).unwrap();
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         assert!(rt.store().sessions().is_empty());
     }
 
     #[test]
     fn hook_posted_to_endpoint_reaches_store() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let body = serde_json::json!({"ts": crate::time::now_ms(), "ppid": null, "payload": {
             "hook_event_name": "UserPromptSubmit", "session_id": "hook-s1", "cwd": "C:\\work\\demo", "prompt": "x"}});
@@ -889,11 +898,7 @@ mod tests {
             .set("Authorization", &format!("Bearer {}", ep.token))
             .send_string(&body.to_string()).unwrap().status();
         assert_eq!(status, 204);
-        let t0 = Instant::now();
-        while rt.store().session("hook-s1").is_none() && t0.elapsed() < Duration::from_secs(10) {
-            rt.step(crate::time::now_ms());
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        rt.step(crate::time::now_ms());
         assert!(rt.store().session("hook-s1").is_some());
     }
 
@@ -904,7 +909,7 @@ mod tests {
     #[test]
     fn mod_limits_from_the_usage_session_apply_without_creating_a_session() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let now = crate::time::now_ms();
         let changed = send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "measure", "session_id": "unknown", "ts": now,
             "rate_limits": [{"kind": "five_hour", "percent_used": 23.5}]}));
@@ -918,7 +923,7 @@ mod tests {
     #[test]
     fn mod_session_events_for_unknown_sessions_are_dropped() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let now = crate::time::now_ms();
         assert!(!send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "measure", "session_id": "ghost", "ts": now,
             "context": {"tokens": 10, "window": 100}, "cost_usd": 1.0})));
@@ -930,7 +935,7 @@ mod tests {
     fn mod_turn_end_and_cost_reach_a_session_known_from_hooks() {
         use crate::model::{State, Usage};
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let now = crate::time::now_ms();
         rt.apply_external(event(crate::model::Source::Claude, "s1", crate::model::Kind::Prompt));
         assert_eq!(rt.store().session("s1").map(|s| s.state), Some(State::Thinking));
@@ -948,7 +953,7 @@ mod tests {
         let h = home();
         let mut c = cfg(&h);
         c.apps.claude_code = false;
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         assert!(!send_mod(&mut rt, serde_json::json!({"v": 1, "kind": "measure", "session_id": "s1", "ts": crate::time::now_ms(),
             "rate_limits": [{"kind": "five_hour", "percent_used": 10.0}], "cost_usd": 1.0})));
         assert!(rt.store().limits().is_empty());
@@ -958,23 +963,19 @@ mod tests {
     #[test]
     fn mod_payload_posted_to_the_endpoint_reaches_the_store() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let body = serde_json::json!({"v": 1, "kind": "measure", "session_id": "x", "ts": crate::time::now_ms(),
             "rate_limits": [{"kind": "seven_day", "percent_used": 40.0}]}).to_string();
         assert_eq!(post_agent(&ep, "claude-mod", &body), 204);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while rt.store().limits().is_empty() && Instant::now() < deadline {
-            rt.step(crate::time::now_ms());
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        rt.step(crate::time::now_ms());
         assert_eq!(rt.store().limits().first().map(|l| l.used_pct), Some(40.0));
     }
 
     #[test]
     fn the_state_board_is_the_one_the_endpoint_serves() {
         let h = home();
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         let ep = Endpoint::read(&h.path().join("endpoint.json")).unwrap();
         let get = |token: &str| ureq::get(&format!("http://127.0.0.1:{}/v1/state", ep.port))
             .timeout(Duration::from_secs(10)).set("Authorization", &format!("Bearer {token}")).call()
@@ -997,7 +998,7 @@ mod tests {
     #[test]
     fn a_router_task_delegated_by_a_session_is_its_child() {
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let now = crate::time::now_ms();
         delegated(&mut rt, "p1", "t1", now);
         router_status(&h, "th1", "running", now);
@@ -1015,7 +1016,7 @@ mod tests {
         let h = home();
         let now = crate::time::now_ms();
         router_status(&h, "th1", "running", now);
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         assert_eq!(rt.store().session("th1").map(|s| s.parent.clone()), Some(None), "without a link: ordinary pet as in 0.7");
         delegated(&mut rt, "p1", "t1", now);
         assert_eq!(rt.store().session("th1").and_then(|s| s.parent.clone()).as_deref(), Some("p1"));
@@ -1026,10 +1027,10 @@ mod tests {
         let h = home();
         let now = crate::time::now_ms();
         {
-            let mut rt = Runtime::start(cfg(&h)).unwrap();
+            let mut rt = start(cfg(&h));
             delegated(&mut rt, "p1", "t1", now);
         }
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         rt.apply_external(crate::model::Event::new(crate::model::Source::Claude, "p1", crate::model::Kind::Prompt, now));
         router_status(&h, "th1", "running", now);
         rt.step(now + 2_000);
@@ -1043,7 +1044,7 @@ mod tests {
         let rec = h.path().join("rec.jsonl");
         let mut c = cfg(&h);
         c.record = Some(File::create(&rec).unwrap());
-        let mut rt = Runtime::start(c).unwrap();
+        let mut rt = start(c);
         let now = crate::time::now_ms();
         let mut t = crate::model::Event::new(Source::Claude, "s1", Kind::ToolStart, now);
         t.data.action = Some("curl -H \"Authorization: Bearer sekret-XYZ\"".into());
@@ -1060,7 +1061,7 @@ mod tests {
 
     fn rt_store_kept_text(h: &tempfile::TempDir) -> bool {
         use crate::model::{Kind, Source};
-        let mut rt = Runtime::start(cfg(h)).unwrap();
+        let mut rt = start(cfg(h));
         let mut t = crate::model::Event::new(Source::Claude, "s2", Kind::ToolStart, crate::time::now_ms());
         t.data.action = Some("npm test".into());
         rt.apply_external(t);
@@ -1071,7 +1072,7 @@ mod tests {
     fn a_router_task_delegated_inside_a_subagent_belongs_to_the_top_session() {
         use crate::model::{Event, Kind, Source, SubInfo, SubKind};
         let h = home();
-        let mut rt = Runtime::start(cfg(&h)).unwrap();
+        let mut rt = start(cfg(&h));
         let now = crate::time::now_ms();
         rt.apply_external(Event::new(Source::Claude, "p1", Kind::Prompt, now));
         let mut post = Event::new(Source::Claude, "p1/a", Kind::ToolEnd, now);
@@ -1100,7 +1101,7 @@ mod tests {
             line("a", "assistant", serde_json::json!([{"type": "text", "text": "gotowe"}]), 120_000)].join("\n") + "\n").unwrap();
         std::fs::write(dir.join("agent-a.meta.json"), r#"{"agentType":"general-purpose","requestShape":"background"}"#).unwrap();
         std::fs::write(dir.join("agent-b.jsonl"), [line("b", "user", serde_json::json!("y"), 60_000), running("b", 5_000)].join("\n") + "\n").unwrap();
-        let rt = Runtime::start(cfg(&h)).unwrap();
+        let rt = start(cfg(&h));
         assert!(rt.store().session("p1/a").map(|s| s.state == crate::model::State::Ended).unwrap_or(true), "finished background subagent: {:?}", rt.store().session("p1/a").map(|s| (s.state, s.last_activity, s.parent.clone())));
         assert_eq!(rt.store().session("p1/b").map(|s| s.state), Some(crate::model::State::Working), "working one remains");
     }

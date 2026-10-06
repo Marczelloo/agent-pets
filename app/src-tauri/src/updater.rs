@@ -324,13 +324,18 @@ mod tests {
     fn a_second_install_waits_for_the_running_download_instead_of_failing() {
         let u = std::sync::Arc::new(Updater::default());
         let busy = u.take().unwrap();
-        let t = std::time::Instant::now();
         let u2 = u.clone();
-        let waiter = std::thread::spawn(move || tauri::async_runtime::block_on(async { u2.acquire().await.is_some() }));
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            done_tx.send(tauri::async_runtime::block_on(async { u2.acquire().await.is_some() })).unwrap();
+        });
+        ready_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+        assert!(done_rx.try_recv().is_err());
         drop(busy);
-        assert!(waiter.join().unwrap());
-        assert!(t.elapsed() >= std::time::Duration::from_millis(150));
+        assert!(done_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap());
+        waiter.join().unwrap();
     }
 
     #[test]

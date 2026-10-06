@@ -270,13 +270,15 @@ mod tests {
         let b = std::sync::Arc::new(Bubbles::default());
         let (tx, rx) = std::sync::mpsc::channel();
         let reader = b.clone();
-        let thread = std::thread::spawn(move || { tx.send(reader.visible_hits()).unwrap(); });
-        assert!(rx.recv_timeout(Duration::from_millis(20)).is_err());
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || { ready_tx.send(()).unwrap(); tx.send(reader.visible_hits()).unwrap(); });
+        ready_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(rx.try_recv().is_err());
         b.set_hits(vec![Hit { id: "a".into(), kind: Kind::Action, x: 0.0, y: 0.0, w: 10.0, h: 10.0 }]);
-        assert!(rx.recv_timeout(Duration::from_millis(20)).is_err(), "hidden hits do not start polling");
+        assert!(rx.try_recv().is_err(), "hidden hits do not start polling");
         b.inner.lock().unwrap().shown = true;
         b.wake.notify_one();
-        assert_eq!(rx.recv_timeout(Duration::from_secs(1)).unwrap()[0].id, "a");
+        assert_eq!(rx.recv_timeout(Duration::from_secs(10)).unwrap()[0].id, "a");
         thread.join().unwrap();
     }
 }

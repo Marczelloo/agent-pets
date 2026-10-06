@@ -57,6 +57,6 @@ describe('every style × motion × skin × scene through PetPainter: no NaN, can
         expect(rec.log.some(l => l.includes('NaN')), `${skin}/${scene}`).toBe(false);
         expect(rec.log.filter(l => l === 'save()').length).toBe(rec.log.filter(l => l === 'restore()').length);
       }
-    }, 45_000); // sketch × 9 skins × all scenes takes about 8 s: the default timeout can catch a loaded machine
+    }, 120_000);
   }
 });

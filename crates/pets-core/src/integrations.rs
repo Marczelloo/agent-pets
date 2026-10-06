@@ -1330,8 +1330,10 @@ mod tests {
         let src = hook_src(h.path());
         assert!(!status(AppId::ClaudeCode, h.path(), Lang::Pl).installed);
         enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
-        let first = std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        let hook = installed_hook(h.path());
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+        std::fs::File::options().write(true).open(&hook).unwrap().set_modified(old).unwrap();
+        let first = std::fs::metadata(&hook).unwrap().modified().unwrap();
         enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
         assert_eq!(our_hooks(&claude_json(h.path())), crate::hooks_install::EVENTS.len());
         assert_eq!(std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap(), first, "same hook.exe is not copied again");
