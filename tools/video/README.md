@@ -16,7 +16,7 @@ The picture is timed to one track, Running Night, cut on its bar lines (`src/sho
 | 7.9 – 12.4 s | the drop (73.4 s); its bass pushes in half a beat early, as the dive into Clawd starts | One pet per beat, each in a different state: *See what every agent is doing.* |
 | 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
 | 14.7 – 16.9 s | | Click Clawd: the real panel opens, then the Limits tab |
-| 16.9 – 21.5 s | | *7 styles.* Clawd and Kodek (the two with every look) change look on every beat for two bars |
+| 16.9 – 21.5 s | | *7 styles.* Clawd and Kodek (the two with every look) jump on every beat for two bars, each jump in a new look |
 | 21.5 – 23.7 s | | The real statistics window |
 | 23.7 – 26.0 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
 | 26.0 – 28.3 s | fading out | The crew drops onto the end card |

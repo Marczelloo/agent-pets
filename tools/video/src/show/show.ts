@@ -58,27 +58,6 @@ const LOOKS: { style: StyleId; name: string; theme: Theme }[] = [
 ];
 
 /** A pose for each look (same order as LOOKS): what the two pets do on that beat, and how high they bounce. `side` is -1 for the left pet. */
-/** Props a pose must not inherit from the one before it. */
-const OFF = { _phones: 0, _notes: 0 };
-const POSES: ((t: number, side: number) => { drive: Record<string, unknown>; hop: number })[] = [
-  // Sticker: waving at us
-  (_t, side) => ({ drive: { ...OFF, happy: 0.9, look: -0.1, armL: side < 0 ? 0.5 : 2.5, armR: side < 0 ? 2.5 : 0.5, oscL: 0.6, oscR: 0.6, _f: 10 }, hop: 10 }),
-  // Sketch: thinking it over
-  () => ({ drive: { ...OFF, th: -0.3, look: -1, think: 1 }, hop: 0 }),
-  // Clean: cheering
-  () => ({ drive: { ...OFF, happy: 1, armL: 2.8, armR: 2.8, oscL: 0.35, oscR: 0.35, _f: 12 }, hop: 18 }),
-  // Pixel art: marching on the spot
-  (_t, side) => ({ drive: { ...OFF, walkW: 1, th: 0.5 * side, armL: 1.3, armR: 1.3, oscL: 0.5, oscR: 0.5, _f: 8 }, hop: 0 }),
-  // Neon: dancing with headphones on
-  (t) => { const a = ((t - T_STYLES) / BEAT) % 1, b = Math.sin(a * TAU), w = Math.sin(a * Math.PI); return { drive: { th: 0.4 * w, lx: 6 * w, tilt: 0.06 * b, armL: 1.8 + 0.85 * b, armR: 1.8 - 0.85 * b, happy: 0.8, _phones: 1, _notes: 0 }, hop: 8 }; },
-  // Ink: sitting, swinging their legs
-  () => ({ drive: { ...OFF, sit: 1, swing: 1, happy: 0.8 }, hop: 0 }),
-  // Pastel: a happy sway
-  (t, side) => ({ drive: { ...OFF, happy: 1, tilt: 0.12 * Math.sin((t - T_STYLES) / BEAT * Math.PI) * side, armL: 1.7, armR: 1.7, oscL: 0.25, oscR: 0.25, _f: 6 }, hop: 8 }),
-  // Clean again: one big jump, arms up
-  () => ({ drive: { ...OFF, happy: 1, armL: 2.9, armR: 2.9, oscL: 0.2, oscR: 0.2, _f: 14 }, hop: 14 }),
-];
-
 const LIMITS: Limit[] = [
   { agent: 'claude', window: 'five_hour', used_pct: 34, resets_at: null }, { agent: 'claude', window: 'weekly', used_pct: 61, resets_at: null },
   { agent: 'codex', window: 'five_hour', used_pct: 12, resets_at: null }, { agent: 'codex', window: 'weekly', used_pct: 91, resets_at: null },
@@ -106,6 +85,8 @@ export class Show {
   readonly crew: Record<Who, Actor> = makeCrew();
   private seqs = new Map<string, Seq>();
   private icon = new Image();
+  /** the time of the frame drawn before this one */
+  private prevT = -1;
 
   constructor(readonly fmt: Format) {}
 
@@ -140,6 +121,7 @@ export class Show {
     // the bands that carry us from one section to the next
     drawBand(x, this.fmt, T, T_NEEDS, 0.34, 1);
     drawBand(x, this.fmt, T, T_STYLES, 0.34, -1);
+    this.prevT = T;
     // fade to cream at the very end so the loop starts clean
     const f = clamp((T - (DURATION - 0.35)) / 0.35);
     if (f > 0) { x.save(); x.globalAlpha = f; x.fillStyle = CREAM.bg; x.fillRect(0, 0, this.fmt.W, this.fmt.H); x.restore(); }
@@ -333,12 +315,14 @@ export class Show {
     // a slice of taskbar
     const [gx, gy] = worldToScreen(cam, fmt, 0, 0);
     x.fillStyle = PAL.bar; x.beginPath(); x.roundRect(gx - 520, gy, 1040, 64 * cam.z * 0.35, 24); x.fill();
-    // each look its own pose, changing with it on the beat (the pets' springs carry them from one pose to the next); a bounce per beat
-    // that starts and ends on the ground, so nothing jumps where the beats meet
-    const ph = clamp(since / BEAT), bounce = Math.sin(Math.PI * ph);
+    // one jump per beat, arms up; each jump takes off in a new look. The arc starts and ends on the ground, so nothing jumps where beats meet
+    const ph = clamp(since / BEAT), up = Math.sin(Math.PI * ph);
+    // a cut: nothing (headphones, notes) carries over from the shot before
+    if (this.prevT < T_STYLES) { this.crew.clawd.snap(); this.crew.kodek.snap(); }
     ['clawd', 'kodek'].forEach((w, k) => {
-      const side = k ? 1 : -1, p = POSES[i](T + k * 0.11, side);
-      this.put(w as Who, { x: 78 * side, y: -p.hop * bounce, z: k + 1, look: { style: L.style, motion: 'calm' }, drive: p.drive });
+      const side = k ? 1 : -1, land = Math.exp(-ph * BEAT * 12) * (i > 0 ? 1 : 0);
+      this.put(w as Who, { x: 78 * side, y: -20 * up, z: k + 1, sx: 1 + 0.06 * land, sy: 1 - 0.1 * land, look: { style: L.style, motion: 'calm' },
+        drive: { happy: 0.9, armL: 2.4, armR: 2.4, oscL: 0.35, oscR: 0.35, _f: 10, look: -0.1, _phones: 0, _notes: 0 } });
     });
     this.draw(x, cam, dt, T, ['clawd', 'kodek']);
     // the name of the look, big and centred, popping on its half beat

@@ -89,6 +89,9 @@ export class Actor {
     x.restore();
   }
 
+  /** Make the next draw start its scene from scratch: no springs, headphones or floating notes carried over (for a cut to a new shot). */
+  snap(): void { this.wasHidden = true; this.pet.phA = 0; this.pet.parts = []; }
+
   /** Screen position of a point given in pet-local pu (origin at the feet, x right, y down; same units as hxR, hoop, face). */
   pt(lx: number, ly: number): [number, number] {
     const [X, Y] = this.lastXY, u = this.lastU, off = (this.pet.p?.lx?.x ?? 0) * u;
