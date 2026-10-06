@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.10.0.schema.json
+# Template: scripts/winget.ps1 fills in {{version}} and writes the manifests to target/release/winget/<version>.
+PackageIdentifier: Marczelloo.AgentPets
+PackageVersion: {{version}}
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.10.0

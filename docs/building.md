@@ -140,11 +140,17 @@ node screens.mjs                    # docs/images/{panel,wizard,settings}.png fr
 
 ## Releases
 
-Maintainer only. Since 0.7 the app reads `latest.json` from the latest GitHub release and installs only an installer with a valid signature. Releases are built and signed locally, because the key exists only on the maintainer's computer; the `ci` workflow only runs the tests.
+Maintainer only. Since 0.7 the app reads `latest.json` from the latest GitHub release and installs only an installer with a valid updater signature. Releases are built by the `release` workflow (`.github/workflows/release.yml`); `scripts/release.ps1` builds the same thing locally when CI is not available. The `ci` workflow only runs the tests.
 
 ### Signing key
 
 Updates are signed with a key in `~/.tauri/agent-pets.key` (no password). It is never in the repository. The public key is in `app/src-tauri/tauri.conf.json` under `plugins.updater.pubkey`. Keep a backup of the key: without it, installed copies cannot be updated.
+
+For the workflow, store the key as a repository secret (it reads the file, nothing is printed):
+
+```powershell
+Get-Content ~/.tauri/agent-pets.key -Raw | gh secret set TAURI_SIGNING_PRIVATE_KEY
+```
 
 If the key is lost, generate a new one:
 
@@ -152,15 +158,40 @@ If the key is lost, generate a new one:
 pnpm --dir app exec tauri signer generate --ci -w ~/.tauri/agent-pets.key
 ```
 
-Put the new public key in `tauri.conf.json` and ask users to install the next version by hand once.
+Put the new public key in `tauri.conf.json`, update the secret and ask users to install the next version by hand once.
 
 ### Steps
 
-1. Set the same version in `Cargo.toml`, `app/src-tauri/tauri.conf.json`, `app/package.json` and `claude-plugin/.claude-plugin/plugin.json` (tests in `version::tests` and `integrations::tests` check that they match).
-2. Run the tests: `cargo test --workspace` and `pnpm --dir app test`.
-3. Write the release notes to a file. The first line that is not a heading appears in the "update available" notification.
-4. Run `pwsh scripts/release.ps1 -Notes <file>`. It checks the versions, runs `claude plugin validate` and `claude plugin test` on the mod (the `claude` CLI must be installed), builds the signed installer, copies it to `target/release/upload/`, writes `latest.json` and prints the `gh release create` command.
-5. Run that command to publish the release. Attach both the installer and `latest.json`.
+1. Set the same version in `Cargo.toml`, `app/src-tauri/tauri.conf.json`, `app/package.json` and `claude-plugin/.claude-plugin/plugin.json` (`pwsh scripts/version.ps1` checks them; so do the tests in `version::tests` and `integrations::tests`).
+2. Move the `## Unreleased` notes in `CHANGELOG.md` under a `## <version>` heading. Its first bullet appears in the "update available" notification.
+3. Push the commit, then the tag: `git tag v<version>` and `git push origin v<version>`.
+4. The `release` workflow runs the mod checks, builds the app, signs it (see Code signing), signs the update, writes `latest.json` and attaches both files to a **draft** release with the changelog section as its notes. Running it by hand (`workflow_dispatch`) only uploads them as a workflow artifact.
+5. Check the draft (download and install the installer once), then publish it. The updater reads only published releases, so nothing reaches users before this step.
+
+Locally: write the notes to a file and run `pwsh scripts/release.ps1 -Notes <file>`. It checks the versions, runs `claude plugin validate` and `claude plugin test`, builds the signed installer into `target/release/upload/`, writes `latest.json` and prints the `gh release create` command. Local builds are not code-signed.
+
+### Code signing
+
+The installer, `agent-pets.exe` and `hook.exe` are signed with a free certificate from [SignPath Foundation](https://signpath.org) for open-source projects. Until the project is accepted the workflow skips this step and builds unsigned installers.
+
+Setup, once:
+
+1. Apply at signpath.org for an open-source certificate (the repository must be public with an OSI license, and the README must carry the code signing policy).
+2. In SignPath, create the project `agent-pets` with the artifact configurations `binaries` and `installer` from `packaging/signpath/`, and a signing policy `release-signing`. Link the project to the GitHub repository as a trusted build system.
+3. In GitHub, add the secret `SIGNPATH_API_TOKEN` (a CI user's token) and the variable `SIGNPATH_ORGANIZATION_ID`. `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG` are variables too, only needed when the names differ from the ones above.
+
+With `SIGNPATH_ORGANIZATION_ID` set, the workflow sends the two executables for signing before they go into the installer, then the installer itself. The updater signature is made last, from the signed installer, so both checks pass. SignPath Foundation may need a manual approval per release; the workflow waits up to an hour for it.
+
+### winget
+
+The package is `Marczelloo.AgentPets`; manifest templates are in `packaging/winget/`.
+
+The first version goes in by hand:
+
+1. Publish a release, then run `pwsh scripts/winget.ps1 -Version <version>`. It downloads the installer, fills in the manifests in `target/release/winget/<version>/` and runs `winget validate`.
+2. Fork `microsoft/winget-pkgs`, copy the three files to `manifests/m/Marczelloo/AgentPets/<version>/` and open a pull request. Moderators review the first submission of a package.
+
+After it is merged, set the variable `WINGET_ENABLED` to `true` and the secret `WINGET_TOKEN` (a classic token with the `public_repo` scope, of the account that owns the fork). From then on the `winget` workflow opens the pull request for each published release.
 
 ### Testing an update locally
 

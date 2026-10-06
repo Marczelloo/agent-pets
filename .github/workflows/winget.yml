@@ -1,0 +1,29 @@
+# Opens a pull request to microsoft/winget-pkgs for every published release (docs/building.md, "winget").
+#
+# Off until the first version is in winget-pkgs: the action only updates an existing package. Then set
+#   variable WINGET_ENABLED  = true
+#   secret    WINGET_TOKEN   = a classic token with the public_repo scope, of the account that owns a fork of
+#                              microsoft/winget-pkgs (the pull request comes from that fork)
+name: winget
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to submit, e.g. v0.17.0
+        required: true
+
+jobs:
+  submit:
+    if: vars.WINGET_ENABLED == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: Marczelloo.AgentPets
+          installers-regex: '_x64-setup\.exe$'
+          release-tag: ${{ inputs.tag || github.event.release.tag_name }}
+          token: ${{ secrets.WINGET_TOKEN }}
