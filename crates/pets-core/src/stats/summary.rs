@@ -96,7 +96,7 @@ pub fn weekly_recap(last: &WeekTotals, prev: &WeekTotals, lang: Lang) -> Option<
     let tokens = if last.tokens >= 1_000_000 {
         let decimal = format!("{:.1}", last.tokens as f64 / 1_000_000.0).replace('.', if lang == Lang::Pl { "," } else { "." });
         format!("{decimal}{}", tr(lang, " mln", "M"))
-    } else { last.tokens.to_string() };
+    } else if last.tokens >= 1_000 { format!("{}{}", last.tokens / 1_000, tr(lang, " tys.", "k")) } else { last.tokens.to_string() };
     let change = if prev.active_ms > 0 {
         let pct = ((last.active_ms as f64 / prev.active_ms as f64 - 1.0) * 100.0).round() as i64;
         format!(" ({} {}%)", if pct >= 0 { '▲' } else { '▼' }, pct.abs())
@@ -270,6 +270,9 @@ mod tests {
         assert_eq!(en.0, "Weekly recap");
         assert!(en.1.contains("12 h 30 min of agent work (▲ 25%), 4.2M tokens"));
         assert!(weekly_recap(&WeekTotals::default(), &prev, Lang::En).is_none());
+        let small = WeekTotals { tokens: 830_412, ..last };
+        assert!(weekly_recap(&small, &prev, Lang::En).unwrap().1.contains(", 830k tokens."));
+        assert!(weekly_recap(&small, &prev, Lang::Pl).unwrap().1.contains(", 830 tys. tokenów."));
     }
 
     #[test]
