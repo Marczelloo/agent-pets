@@ -1,5 +1,6 @@
 //! Background failures worth showing once per run.
 use pets_core::i18n::{tr, Lang};
+use pets_core::integrations::Error;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
@@ -16,18 +17,6 @@ pub fn report(app: &AppHandle, key: &str, title: &str, body: &str) {
     if app.state::<Problems>().first(key) { crate::notify::show_problem(app, title, body); }
 }
 
-/// User-owned files, absent installs, and explicitly disabled hooks are deliberate no-ops.
-pub fn benign_integration_error(error: &str) -> bool {
-    [tr(Lang::Pl, "nie jest nasz", "is not ours"), "is not ours",
-        tr(Lang::Pl, "nie nadpisuję", "not overwriting"), "not overwriting",
-        tr(Lang::Pl, "nie zmieniam", "not changing"), "not changing",
-        tr(Lang::Pl, "Nie znaleziono", "not found. Run"), "not found. Run",
-        tr(Lang::Pl, "są wyłączone", "are disabled"), "are disabled",
-        tr(Lang::Pl, "nieoczekiwany format", "unexpected format"), "unexpected format",
-        tr(Lang::Pl, "nic nie zmieniam", "leaving it unchanged"), "leaving it unchanged"]
-        .iter().any(|part| error.contains(part))
-}
-
 pub fn repair_body(errors: &[(String, String)]) -> String {
     let names = errors.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join(", ");
     let first = errors.first().map(|(_, error)| error.as_str()).unwrap_or("");
@@ -35,8 +24,8 @@ pub fn repair_body(errors: &[(String, String)]) -> String {
     format!("{names}: {cut}")
 }
 
-pub fn collect_repair<T>(errors: &mut Vec<(String, String)>, name: &str, result: Result<T, String>) {
-    if let Err(error) = result { if !benign_integration_error(&error) { errors.push((name.into(), error)); } }
+pub fn collect_repair<T>(errors: &mut Vec<(String, String)>, name: &str, result: Result<T, Error>) {
+    if let Err(error) = result { if !error.left_alone() { errors.push((name.into(), error.into())); } }
 }
 
 pub fn repair_title(lang: Lang) -> &'static str { tr(lang, "Nie udało się naprawić integracji", "Couldn't repair an integration") }
@@ -60,10 +49,12 @@ mod tests {
     }
 
     #[test]
-    fn only_expected_conflicts_are_benign() {
-        assert!(benign_integration_error("agent-pets.js is not ours; not overwriting it."));
-        assert!(benign_integration_error("Hooki w ZCode są wyłączone"));
-        assert!(!benign_integration_error("Cannot write hook.exe: access denied"));
+    fn only_failures_are_collected() {
+        let mut errors = Vec::new();
+        collect_repair::<()>(&mut errors, "opencode", Err(Error::LeftAlone("left alone".into())));
+        assert!(errors.is_empty());
+        collect_repair::<()>(&mut errors, "Claude Code", Err(Error::Failed("Cannot write hook.exe: access denied".into())));
+        assert_eq!(errors, [("Claude Code".into(), "Cannot write hook.exe: access denied".into())]);
         assert_eq!(repair_title(Lang::En), "Couldn't repair an integration");
     }
 }

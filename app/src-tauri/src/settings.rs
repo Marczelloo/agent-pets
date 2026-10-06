@@ -292,7 +292,7 @@ pub fn integrations_list(state: tauri::State<SettingsState>) -> Vec<AppRow> {
 fn switch(app: &AppHandle, s: &mut Settings, id: AppId, on: bool) -> Result<String, String> {
     let home = app.state::<SettingsState>().home.clone();
     let lang = i18n::current(s.language);
-    let mut msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), lang)? } else { integrations::disable(id, &home, lang)? };
+    let mut msg = if on { integrations::enable(id, &home, pick_hook(&hook_candidates(app)).as_deref(), lang).map_err(String::from)? } else { integrations::disable(id, &home, lang).map_err(String::from)? };
     // the mod is extra: the classic hooks stay installed when it cannot be placed, the reason goes into the message
     if on && id == AppId::ClaudeCode && s.claude_mod {
         if let Err(e) = integrations::place_plugin(&home, lang) { msg = format!("{msg} {e}"); }
