@@ -54,7 +54,7 @@ More in [docs/features.md](docs/features.md).
 
 ## Install
 
-1. Download `Agent.Pets_<version>_x64-setup.exe` from [Releases](https://github.com/Marczelloo/agent-pets/releases/latest) and run it. It installs for your user, without administrator rights. The installer is not code-signed yet, so SmartScreen may ask: **More info → Run anyway**.
+1. Download `Agent.Pets_<version>_x64-setup.exe` from [Releases](https://github.com/Marczelloo/agent-pets/releases/latest) and run it. It installs for your user, without administrator rights. Code signing is being set up (see [Code signing policy](#code-signing-policy)); until then SmartScreen may ask: **More info → Run anyway**.
 2. The first-run wizard finds your agents and connects them, and lets you pick notifications, autostart and a look.
 3. Restart open agent sessions so they pick up the hooks.
 
@@ -83,6 +83,15 @@ Claude Code, Codex and opencode get the most care and testing; the experimental 
 ## Privacy
 
 Session data never leaves your computer: states come from local hooks and files, and only titles, progress and counters are kept, never message content. The only network calls are the update check on GitHub (can be turned off) and, if you allow it, fetching your Claude plan limits from `api.anthropic.com`. Details in [docs/privacy.md](docs/privacy.md).
+
+## Code signing policy
+
+From 0.17 on, release installers are built from this repository by the [release workflow](.github/workflows/release.yml) on GitHub Actions, not on a personal computer. Code signing of `Agent.Pets_<version>_x64-setup.exe`, `agent-pets.exe` and `hook.exe` is being requested from [SignPath Foundation](https://signpath.org); once it is granted, this section will say: free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [Marczelloo](https://github.com/Marczelloo)
+- Approvers: [Marczelloo](https://github.com/Marczelloo)
+
+Every release is also signed for the in-app updater, which installs only an update with a valid signature. [Privacy](docs/privacy.md) lists every network call the app makes; it sends no other data anywhere.
 
 ## Documentation
 

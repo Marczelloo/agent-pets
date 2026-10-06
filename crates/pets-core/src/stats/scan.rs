@@ -252,4 +252,23 @@ mod tests {
         let rollout = h.rollout.to_string_lossy().into_owned();
         assert!(s.book.files.contains_key(&rollout), "{:?}", s.book.files.keys().collect::<Vec<_>>());
     }
+
+    #[test]
+    fn old_child_rollout_counts_once_without_a_parent_file() {
+        let h = home();
+        let child = h.rollout.with_file_name("rollout-old-child.jsonl");
+        let meta = json!({"timestamp": "2025-01-01T10:00:00.000Z", "type": "session_meta", "payload": {
+            "id": "child", "cwd": "C:/w/cdx", "originator": "Codex Desktop", "thread_source": "subagent",
+            "subagent_history_start_ordinal": 2,
+            "source": {"subagent": {"thread_spawn": {"parent_thread_id": "absent-parent"}}}}}).to_string();
+        write(&child, &[meta, codex_tokens(1_000_000), codex_tokens(37)]);
+        std::fs::File::options().write(true).open(&child).unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(365 * 86_400)).unwrap();
+        let mut s = Scanner::new(h.roots.clone(), Book::default());
+        all(&mut s);
+        assert_eq!(input_of(&s.book), 30 + 100 + 37);
+        assert!(s.book.files[&child.to_string_lossy().into_owned()].meta.sub);
+        all(&mut s);
+        assert_eq!(input_of(&s.book), 30 + 100 + 37);
+    }
 }

@@ -49,6 +49,9 @@ input[type=number]{width:64px}
 .badge{margin-left:8px;padding:1px 6px;border-radius:8px;background:var(--notice);color:var(--accent);font-size:11px;font-weight:600;vertical-align:1px}
 .notice{background:var(--notice);border-radius:6px;padding:8px 12px;margin:0 0 12px}
 .diag-actions{display:flex;gap:8px;margin:8px 0}
+.backup-actions{display:flex;gap:8px;margin:10px 0 0}
+.backup-actions+.ui-note{margin:8px 0 0}
+.backup-actions+.ui-note .link-btn{margin:0 0 0 6px}
 .report{white-space:pre-wrap;font-family:"Cascadia Code",Consolas,monospace;font-size:12px;margin:8px 0;padding:12px 14px;border-radius:8px;background:#1C1C1C;color:#E8E6E1;overflow:auto}
 .settings main h3{font-size:14px;font-weight:600;margin:18px 0 8px}
 .settings main h3:first-of-type{margin-top:0}
@@ -86,6 +89,9 @@ button.link-btn:hover:not(:disabled){background:transparent;color:var(--txt)}
 .pet-tiles button::before{content:"";width:8px;height:8px;border-radius:50%;flex:none;background:var(--sw)}
 canvas.preview-stage{display:block;border-radius:8px;background:var(--bg);border:1px solid var(--line);margin:0 0 4px;max-width:100%;height:auto;aspect-ratio:640/170}
 .check-ctl{display:flex;align-items:center;gap:12px}
+button.hotkey{min-width:128px;font-variant-numeric:tabular-nums}
+button.hotkey.recording{border-color:var(--accent);color:var(--mut)}
+.hotkey-error{color:var(--accent);margin:0 0 8px}
 .scene-picker{display:flex;flex-direction:column;gap:8px;padding-top:10px}
 .scene-group{display:flex;flex-direction:column;gap:4px}
 .ui-seg.wrap{flex-wrap:wrap}

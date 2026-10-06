@@ -1,22 +1,33 @@
 import { LIMIT_AGENTS, clampPct, progressFraction, type LimitAgent } from '../stage/hud';
-import { actionLabel, formatAgo, formatReset, limitName } from '../tooltip/text';
+import { actionLabel, formatAgo, formatPace, formatReset, limitName } from '../tooltip/text';
 import { isLive, routerHealth } from '../stage/router';
-import type { AgentUsage, Limit, NotificationEntry, Session, UpdateStatus } from '../types';
+import type { AgentUsage, Forecast, Limit, NotificationEntry, Session, UpdateStatus } from '../types';
 import { formatTokens } from '../stats/model';
 import { t } from '../i18n';
 import { agentLabel, hostLabel, modelLabel } from '../model-label';
 
 const URGENT = new Set(['needs_you', 'error']);
 
-/** Sessions waiting for you or in error first, then by latest activity. Children appear under their parent. */
+/** Sessions waiting for you or in error first, then pinned ones, then by latest activity. Children appear under their parent. */
 export function panelSessions(sessions: Session[]): Session[] {
   return sessions.filter(s => !s.parent).sort((a, b) =>
-    Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
+    Number(URGENT.has(b.state)) - Number(URGENT.has(a.state)) || Number(!!b.pinned) - Number(!!a.pinned)
+    || b.last_activity - a.last_activity || (a.id < b.id ? -1 : 1));
+}
+
+/** What an inline rename does with a key: Enter saves, Escape cancels, anything else keeps typing. */
+export type RenameKey = 'save' | 'cancel' | null;
+export const renameKey = (key: string): RenameKey => key === 'Enter' ? 'save' : key === 'Escape' ? 'cancel' : null;
+
+/** Name to send after an inline rename: trimmed text, `null` (empty = back to the automatic title), or `undefined` when nothing changed. */
+export function renameResult(typed: string, current: string): string | null | undefined {
+  const name = typed.trim();
+  return name === current ? undefined : name || null;
 }
 
 const INACTIVE = new Set(['idle', 'done', 'sleep', 'ended']);
-/** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately). */
-export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && INACTIVE.has(s.state));
+/** Like core `dismiss::inactive`: this removes "Clear inactive" (children disappear with their parent, not separately; pinned stay). */
+export const hasInactive = (sessions: Session[]): boolean => sessions.some(s => !s.parent && !s.pinned && INACTIVE.has(s.state));
 
 export type PanelTab = 'sessions' | 'limits';
 
@@ -64,24 +75,26 @@ export function usageLine(s: Session, today: AgentUsage | undefined): string | n
   const u = t().panel.usage;
   const parts = s.usage.tokens > 0 ? [u.session(formatTokens(s.usage.tokens))] : [];
   if (today) parts.push(u.today(formatTokens(today.tokens_today)));
-  if (s.usage.cost > 0) parts.push(`$${s.usage.cost.toFixed(2)}`);
+  if (s.usage.cost > 0) parts.push(u.cost(s.usage.cost));
   return parts.length ? parts.join(' · ') : null;
 }
 
-export interface LimitRow { agent: LimitAgent; window: 'five_hour' | 'weekly'; label: string; pct: number | null; reset: string; stale: boolean }
+export interface LimitRow { agent: LimitAgent; window: Limit['window']; label: string; pct: number | null; reset: string; stale: boolean; pace: string | null }
 
-/** Always four Claude and Codex rows; missing data is `pct: null`, never 0%. Antigravity only with data. */
-export function limitRows(limits: Limit[], nowMs: number): LimitRow[] {
+/** Claude and Codex keep their 5h and weekly rows; spend and Antigravity need readings. */
+export function limitRows(limits: Limit[], nowMs: number, forecasts: Forecast[] = []): LimitRow[] {
   const rows: LimitRow[] = [];
-  for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly'] as const) {
+  for (const agent of LIMIT_AGENTS) for (const window of (agent === 'claude' ? ['five_hour', 'weekly', 'spend'] : ['five_hour', 'weekly']) as Limit['window'][]) {
     const l = limits.find(v => v.agent === agent && v.window === window);
     const ok = l != null && Number.isFinite(l.used_pct);
-    if (!ok && agent === 'antigravity') continue;
+    if (!ok && (agent === 'antigravity' || window === 'spend')) continue;
+    const f = ok && l!.stale_since == null && (window !== 'spend' || l!.resets_at != null) ? forecasts.find(v => v.agent === agent && v.window === window) : undefined;
     rows.push({
       agent, window, label: `${limitName(agent)} · ${t().window[window]}`,
-      pct: ok ? clampPct(l!.used_pct) : null,
+      pct: ok ? window === 'spend' ? Math.max(0, l!.used_pct) : clampPct(l!.used_pct) : null,
       reset: !ok ? '' : l!.stale_since != null ? t().limits.asOf(formatAgo(nowMs - l!.stale_since)) : formatReset(l!.resets_at, nowMs),
       stale: ok && l!.stale_since != null,
+      pace: f && f.runs_out_at > nowMs ? formatPace(f.runs_out_at, nowMs) : null,
     });
   }
   return rows;
@@ -156,8 +169,8 @@ export function notificationTime(at: number, nowMs: number): string {
 export interface AgentLimitCard { agent: LimitAgent; rows: LimitRow[]; noData: boolean; stale: boolean }
 
 /** One card per agent on the Limits tab; `noData` when none of its rows has a reading. */
-export function limitCards(limits: Limit[], nowMs: number): AgentLimitCard[] {
-  const rows = limitRows(limits, nowMs);
+export function limitCards(limits: Limit[], nowMs: number, forecasts: Forecast[] = []): AgentLimitCard[] {
+  const rows = limitRows(limits, nowMs, forecasts);
   return LIMIT_AGENTS.map(agent => {
     const mine = rows.filter(r => r.agent === agent);
     return { agent, rows: mine, noData: mine.every(r => r.pct == null), stale: mine.some(r => r.stale) };

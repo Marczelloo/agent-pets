@@ -9,12 +9,15 @@ pub mod hooks_install;
 pub mod host;
 pub mod i18n;
 pub mod ingest;
+pub mod labels;
 pub mod links;
 pub mod integrations;
 pub mod mod_state;
 pub mod model;
+pub mod mute;
 #[cfg(feature = "opencode-db")]
 pub mod opencode_db;
+pub mod pace;
 pub mod pid;
 pub mod rehydrate;
 pub mod router;

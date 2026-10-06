@@ -95,7 +95,7 @@ mod tests {
         let (url, headers) = serve(200, r#"{"five_hour":{"utilization":12.0,"resets_at":"2026-09-25T18:20:00+00:00"}}"#);
         let e = fetch(&url, "tok", 5).unwrap().unwrap();
         assert_eq!((e.data.limits[0].window, e.data.limits[0].used_pct), (Window::FiveHour, 12.0));
-        let h = headers.recv().unwrap();
+        let h = headers.recv_timeout(Duration::from_secs(10)).unwrap();
         assert!(h.contains(&("authorization".into(), "Bearer tok".into())));
         assert!(h.contains(&("anthropic-beta".into(), account_usage::BETA.into())));
     }

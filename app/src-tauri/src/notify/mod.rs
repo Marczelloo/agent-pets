@@ -7,7 +7,7 @@ use crate::core::Snapshot;
 use pets_core::model::Session;
 use std::sync::mpsc::{channel, Sender};
 use tauri::{AppHandle, Manager};
-use tauri_winrt_notification::Toast;
+use tauri_winrt_notification::{Sound, Toast};
 
 /// A fresh id on purpose: Windows keeps the (blank) header icon it first saw for `dev.agentpets.app` forever.
 pub const AUMID: &str = "dev.agentpets.desktop";
@@ -15,15 +15,47 @@ pub const AUMID: &str = "dev.agentpets.desktop";
 /// Toast identifier determined when the notification thread starts (AUMID or PowerShell fallback).
 static APP_ID: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
-/// Toast outside session rules (updates). `button`: label of the `install` action button.
-pub fn show_update(app: &AppHandle, title: &str, body: &str, button: Option<&str>,
+/// Toast outside session rules (updates), recorded in the center even while muted. `button`: label of the `install` action button.
+pub fn show_update(app: &AppHandle, kind: center::Kind, title: &str, body: &str, button: Option<&str>,
                    on: impl Fn(Option<String>) + Send + Sync + 'static) {
-    center::record(app, center::Kind::Update, title, body, None);
+    center::record(app, kind, title, body, None);
+    if pets_core::mute::muted(&app.state::<crate::settings::SettingsState>().get().notifications, pets_core::time::now_ms()) { return; }
     let id = APP_ID.get().copied().unwrap_or(AUMID);
     let mut toast = Toast::new(id).title(title);
     if !body.is_empty() { toast = toast.text1(body); }
     if let Some(b) = button { toast = toast.add_button(b, "install"); }
     let _ = toast.on_activated(move |action| { on(action); Ok(()) }).show();
+}
+
+/// Recap is recorded (when `record`) even while muted; its action opens the statistics window.
+/// `false` = Windows refused the toast, so the caller may try again (without recording it twice).
+pub fn show_weekly(app: &AppHandle, title: &str, body: &str, button: &str, record: bool) -> bool {
+    if record { center::record(app, center::Kind::Weekly, title, body, None); }
+    toast_action(app, title, body, button, "statistics", crate::stats::open)
+}
+
+/// Record a problem and let the toast take the user straight to Diagnostics.
+pub fn show_problem(app: &AppHandle, title: &str, body: &str) {
+    let lang = app.state::<crate::settings::SettingsState>().lang();
+    show_action(app, center::Kind::Problem, title, body, pets_core::i18n::tr(lang, "Diagnostyka", "Diagnostics"), "diagnostics", |a| crate::settings::open_tab(a, "diag"));
+}
+
+fn show_action(app: &AppHandle, kind: center::Kind, title: &str, body: &str, button: &str, action: &str, open: fn(&AppHandle)) {
+    center::record(app, kind, title, body, None);
+    toast_action(app, title, body, button, action, open);
+}
+
+/// Toast with one action button; `true` also when muted (nothing to deliver), `false` when Windows refused it.
+fn toast_action(app: &AppHandle, title: &str, body: &str, button: &str, action: &str, open: fn(&AppHandle)) -> bool {
+    let n = app.state::<crate::settings::SettingsState>().get().notifications;
+    if pets_core::mute::muted(&n, pets_core::time::now_ms()) { return true; }
+    let id = APP_ID.get().copied().unwrap_or(AUMID);
+    let a = app.clone();
+    let action = action.to_string();
+    Toast::new(id).title(title).text1(body).sound(sound_for(rules::ToastKind::Done, n.sound))
+        .add_button(button, &action)
+        .on_activated(move |_| { open(&a); Ok(()) }).show()
+        .map_err(|e| pets_core::app_log!("toast: {e}")).is_ok()
 }
 
 /// Path for the `IconUri` value: the toast shell does not load an image through the `\\?\` verbatim prefix
@@ -68,6 +100,15 @@ fn focused(s: &Session) -> bool {
     unsafe { GetAncestor(GetForegroundWindow(), GA_ROOTOWNER) == win }
 }
 
+/// "Needs you" stands out by ear; `on: false` mutes every toast of ours.
+fn sound_for(kind: rules::ToastKind, on: bool) -> Option<Sound> {
+    match (on, kind) {
+        (false, _) => None,
+        (true, rules::ToastKind::NeedsYou) => Some(Sound::Reminder),
+        (true, _) => Some(Sound::Default),
+    }
+}
+
 pub fn start(app: AppHandle) -> Sender<Snapshot> {
     let (tx, rx) = channel::<Snapshot>();
     std::thread::spawn(move || {
@@ -81,6 +122,7 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
         let mut rules = rules::Rules::new(rules::Settings::default());
         let mut last = Snapshot::default();
         let mut seen_first = false;
+        let mut was_muted = false;
         loop {
             // new snapshot or once per second: the 15 s threshold for `needs_you` passes without new events
             match rx.recv_timeout(std::time::Duration::from_secs(1)) {
@@ -95,6 +137,10 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
             rules.set_settings(rules::Settings { needs_you: n.needs_you, done: n.done, limits: n.limits });
             rules.set_lang(lang);
             let now = last.now.max(pets_core::time::now_ms());
+            // muted: the rules and the center go on (nothing piles up for later), only the Windows toast is skipped
+            let muted = pets_core::mute::muted(&n, now);
+            // the mute ran out on its own: the tray menu and tooltip follow
+            if muted != was_muted { was_muted = muted; crate::tray::refresh(&app); }
             // session window in foreground or visible question bubble: no toast needed (send later if the bubble disappears)
             let bubbles = app.state::<crate::bubbles::Bubbles>();
             for t in rules.observe(&last, now, &|s| focused(s) || bubbles.asking(&s.id)) {
@@ -103,9 +149,10 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
                     rules::ToastKind::Done => center::Kind::Done,
                     rules::ToastKind::Limit => center::Kind::Limit,
                 }, &t.title, &t.body, t.session_id.clone());
+                if muted { continue; }
                 let a = app.clone();
                 let sid = t.session_id.clone();
-                let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body);
+                let mut toast = Toast::new(app_id).title(&t.title).text1(&t.body).sound(sound_for(t.kind, n.sound));
                 if sid.is_some() { toast = toast.add_button(pets_core::i18n::tr(lang, "Przejdź", "Open"), "jump"); }
                 let _ = toast.on_activated(move |action| {
                     match (action.as_deref(), &sid) {
@@ -126,7 +173,15 @@ pub fn start(app: AppHandle) -> Sender<Snapshot> {
 
 #[cfg(test)]
 mod tests {
-    use super::toast_icon_path;
+    use super::{rules::ToastKind, sound_for, toast_icon_path};
+    use tauri_winrt_notification::Sound;
+
+    #[test]
+    fn needs_you_sounds_different_and_the_switch_mutes_all() {
+        assert_eq!(sound_for(ToastKind::NeedsYou, true), Some(Sound::Reminder));
+        assert_eq!(sound_for(ToastKind::Done, true), Some(Sound::Default));
+        assert_eq!(sound_for(ToastKind::NeedsYou, false), None);
+    }
     use std::path::Path;
 
     #[test]

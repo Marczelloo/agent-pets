@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Session, State } from '../types';
-import { CHILD_DONE_MS, activeCount, collapseChildren, contextPct, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, sessionSubtitle, usageLine } from './model';
+import { setLang } from '../i18n';
+import { CHILD_DONE_MS, activeCount, collapseChildren, contextPct, limitCards, limitsAlert, childLabels, childLine, childMark, childrenOf, clock, contextText, hasInactive, limitRows, panelSessions, progressText, renameKey, renameResult, sessionSubtitle, usageLine } from './model';
 
 const s = (id: string, state: State, last: number): Session => ({
   id, agent: 'claude', origin: 'cli', title: id, cwd: 'C:\\work\\' + id, state, tool: null, progress: null, context: null,
@@ -13,18 +14,45 @@ describe('opencode usage on its card', () => {
   it('shows session and day tokens, and the cost only when there is one', () => {
     expect(usageLine({ ...oc, usage: { tokens: 1_200_000, cost: 0, account: null } }, today)).toBe('sesja: 1,2 mln tok. · dziś: 4,8 mln tok.');
     expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0.42, account: null } }, { ...today, cost_today: 1.5 }))
-      .toBe('sesja: 950 tok. · dziś: 4,8 mln tok. · $0.42');
+      .toBe('sesja: 950 tok. · dziś: 4,8 mln tok. · 0,42 $');
     expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0, account: null } }, undefined)).toBe('sesja: 950 tok.');
   });
   it('leaves out the token part of a session that only has a cost (Claude)', () => {
     const line = usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 1.42, account: 'claude' } }, undefined);
-    expect(line).toBe('$1.42');
+    expect(line).toBe('1,42 $');
     expect(line).not.toMatch(/tok/);
     expect(usageLine({ ...s('c', 'working', 0), usage: { tokens: 0, cost: 0, account: 'claude' } }, undefined)).toBeNull();
+  });
+  it('writes the cost the way the UI language does', () => {
+    setLang('en');
+    try {
+      expect(usageLine({ ...oc, usage: { tokens: 950, cost: 0.42, account: null } }, undefined)).toBe('session: 950 tokens · $0.42');
+    } finally { setLang('pl'); }
   });
   it('has no line without usage', () => {
     expect(usageLine(oc, today)).toBeNull();
     expect(usageLine({ ...s('c', 'working', 0), usage: null }, today)).toBeNull();
+  });
+});
+
+describe('pinning and renaming', () => {
+  it('sorts pinned sessions after the ones that need you and before the rest', () => {
+    const pin = (x: Session): Session => ({ ...x, pinned: true });
+    const out = panelSessions([s('a', 'working', 50), pin(s('p', 'idle', 1)), s('n', 'needs_you', 2), pin(s('q', 'working', 9)), s('e', 'error', 1)]);
+    expect(out.map(x => x.id)).toEqual(['n', 'e', 'q', 'p', 'a']);
+  });
+  it('"clear inactive" does not count a pinned session', () => {
+    expect(hasInactive([{ ...s('a', 'idle', 0), pinned: true }])).toBe(false);
+    expect(hasInactive([{ ...s('a', 'idle', 0), pinned: true }, s('b', 'done', 0)])).toBe(true);
+  });
+  it('Enter saves, Escape cancels, other keys keep typing', () => {
+    expect([renameKey('Enter'), renameKey('Escape'), renameKey('a'), renameKey('Tab')]).toEqual(['save', 'cancel', null, null]);
+  });
+  it('sends the trimmed text, null for an empty field, and nothing when the title did not change', () => {
+    expect(renameResult('  My work  ', 'auto')).toBe('My work');
+    expect(renameResult('   ', 'auto')).toBeNull();
+    expect(renameResult('auto', 'auto')).toBeUndefined();
+    expect(renameResult(' auto ', 'auto')).toBeUndefined();
   });
 });
 
@@ -47,10 +75,39 @@ describe('panel model', () => {
     expect(rows[4].label).toMatch(/^Antigravity · /);
     expect(rows[4].pct).toBe(20);
   });
+  it('adds Claude spend only with a reading and keeps its real percentage', () => {
+    const now = 0;
+    setLang('en');
+    const spend = { agent: 'claude' as const, window: 'spend' as const, used_pct: 112, resets_at: null };
+    expect(limitRows([], now).some(r => r.window === 'spend')).toBe(false);
+    const rows = limitRows([spend], now);
+    expect(rows[2]).toMatchObject({ window: 'spend', pct: 112, label: 'Claude · spend limit' });
+    expect(limitCards([spend], now)[0].rows[2].pct).toBe(112);
+    expect(rows[2].pace).toBeNull();
+    setLang('pl');
+    expect(limitRows([spend], now)[2].label).toBe('Claude · limit wydatków');
+  });
   it('shows the reset time when it is known', () => {
     const now = new Date(2026, 8, 24, 12, 0).getTime();
     const rows = limitRows([{ agent: 'claude', window: 'five_hour', used_pct: 40, resets_at: now + 2 * 3_600_000 }], now);
     expect(rows[0].reset).toBe('reset 14:00');
+  });
+  it('says when a limit runs out at the current pace, in both languages, only for a fresh reading', () => {
+    const now = new Date(2026, 8, 24, 12, 0).getTime();
+    const l = { agent: 'claude' as const, window: 'five_hour' as const, used_pct: 60, resets_at: now + 5 * 3_600_000 };
+    const f = (ms: number) => [{ agent: 'claude' as const, window: 'five_hour' as const, runs_out_at: now + ms }];
+    setLang('pl');
+    expect(limitRows([l], now, f(3.5 * 3_600_000))[0].pace).toBe('W tym tempie: 100% ok. 15:30');
+    expect(limitRows([l], now, f(2 * 86_400_000))[0].pace).toBe('W tym tempie: 100% ok. sob 12:00');
+    setLang('en');
+    expect(limitRows([l], now, f(3.5 * 3_600_000))[0].pace).toMatch(/^At this pace: 100% around 3:30\sPM$/);
+    expect(limitRows([l], now, f(2 * 86_400_000))[0].pace).toMatch(/^At this pace: 100% around Sat 12:00\sPM$/);
+    setLang('pl');
+    expect(limitRows([l], now)[0].pace).toBeNull();
+    expect(limitRows([l], now, f(-1000))[0].pace).toBeNull();
+    expect(limitRows([{ ...l, stale_since: now - 1000 }], now, f(3_600_000))[0].pace).toBeNull();
+    expect(limitRows([l], now, [{ agent: 'codex', window: 'five_hour', runs_out_at: now + 3_600_000 }])[0].pace).toBeNull();
+    expect(limitCards([l], now, f(3_600_000))[0].rows[0].pace).not.toBeNull();
   });
   it('describes a session', () => {
     const x = { ...s('a', 'working', 0), tool: 'bash' as const, origin: 'desktop' as const, progress: { done: 2, total: 5 }, context: { used: 50, max: 200 } };

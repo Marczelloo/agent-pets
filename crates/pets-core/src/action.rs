@@ -1,14 +1,31 @@
 //! Current action and agent question text for bubbles, tooltips, and the panel.
 //! In memory only: never written to disk, logs, or the diagnostic report.
 use serde_json::Value;
+use regex::{Captures, Regex};
+use std::sync::LazyLock;
 use crate::i18n::{tr, Lang};
+
+static BEARER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?i)(\bBearer\s+)([^\s\"'`;?&]+)"#).unwrap());
+static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?i)(\b[A-Za-z0-9_]*(?:token|key|password|secret)\s*=\s*[\"']?)([^\s\"'`;?&]+)"#).unwrap());
+static FLAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?i)(--(?:token|api-key|password|secret)(?:\s+|=)\s*[\"']?)([^\s\"'`;?&]+)"#).unwrap());
+static PREFIX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\b(?:sk-ant-|sk-|ghp_|gho_|github_pat_|xoxb-|xoxp-|xoxa-|AKIA|AIza)[A-Za-z0-9_-]+").unwrap());
+
+/// Redact secrets before clipping, so even a short visible tail cannot escape.
+pub fn redact(s: &str) -> String {
+    let mut out = s.to_string();
+    for pattern in [&*BEARER, &*ASSIGNMENT, &*FLAG] {
+        out = pattern.replace_all(&out, |c: &Captures<'_>| format!("{}•••", &c[1])).into_owned();
+    }
+    PREFIX.replace_all(&out, "•••").into_owned()
+}
 
 /// Maximum bubble text length in characters, including "…".
 pub const CLIP: usize = 40;
 
 /// First nonempty line, at most `CLIP` characters (longer text ends in "…"). Clips characters, not bytes.
 pub fn clip(s: &str) -> String {
-    let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    let safe = redact(s);
+    let line = safe.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
     if line.chars().count() <= CLIP { return line.to_string(); }
     let mut out: String = line.chars().take(CLIP - 1).collect();
     out.push('…');
@@ -186,6 +203,32 @@ mod tests {
         let tok = pl("Bash", json!({"command": "curl -H \"Authorization: Bearer sk-abcdefghijklmnopqrstuvwxyz0123456789\" https://x"})).unwrap();
         assert_eq!(tok.chars().count(), CLIP);
         assert!(!tok.contains("0123456789"));
+    }
+
+    #[test]
+    fn secrets_are_redacted_before_action_and_question_text_is_clipped() {
+        for input in [
+            "curl -H 'Authorization: Bearer sk-ant-supersecret'",
+            "export GITHUB_TOKEN=ghp_supersecret",
+            "token=abc123 key=def456 password=hunter2 secret=qwerty",
+            "--token abc123 --api-key=def456 --password 'hunter2' --secret=qwerty",
+            "sk-supersecret gho_supersecret github_pat_supersecret xoxb-supersecret xoxp-supersecret xoxa-supersecret AKIA1234567890 AIza1234567890",
+        ] {
+            let action = en("Bash", json!({"command": input})).unwrap();
+            assert!(action.contains("•••"), "{action}");
+            for secret in ["supersecret", "abc123", "def456", "hunter2", "qwerty", "1234567890"] {
+                assert!(!action.contains(secret), "{action}");
+            }
+            let question = question_text(Some(input), None, None, Lang::En).unwrap();
+            assert!(question.contains("•••"), "{question}");
+        }
+        assert_eq!(redact("curl https://example.com/token=abc?x=1"), "curl https://example.com/token=•••?x=1");
+        assert_eq!(redact("Bearer ABC token=xyz API_KEY='123' --api-key qwe"), "Bearer ••• token=••• API_KEY='•••' --api-key •••");
+        for prefix in ["sk-ant-", "sk-", "ghp_", "gho_", "github_pat_", "xoxb-", "xoxp-", "xoxa-", "AKIA", "AIza"] {
+            assert_eq!(redact(&format!("value {prefix}123456789")), "value •••");
+        }
+        assert_eq!(clip("cargo test --workspace"), "cargo test --workspace");
+        assert_eq!(redact("ordinary token usage, keyboard shortcut, and secret garden"), "ordinary token usage, keyboard shortcut, and secret garden");
     }
 
     #[test]

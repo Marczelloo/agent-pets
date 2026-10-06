@@ -26,6 +26,8 @@ export function demoStats(): StatsView {
     ],
     tiles: { tokens: 48_200_000, tokens_change: 12, cache_pct: 91, cache_read: 43_900_000, active_ms: 21 * H + 17 * MIN,
       longest_ms: 3 * H + 40 * MIN, sessions: 34, subagents: 57, questions: 19 },
+    week: { this: { active_ms: 21 * H + 17 * MIN, tokens: 48_200_000, sessions: 34, top_project: 'Agent Pets', top_agent: 'claude' },
+      last: { active_ms: 17 * H, tokens: 39_000_000, sessions: 27, top_project: 'Agent Pets', top_agent: 'codex' }, days_into_week: 3 },
     race: [
       { key: 'claude', agent: 'claude', value: 14 * H + 2 * MIN },
       { key: 'codex', agent: 'codex', value: 6 * H + 30 * MIN },

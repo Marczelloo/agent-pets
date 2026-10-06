@@ -34,6 +34,8 @@ pub struct Settings {
     pub updates: Updates,
     /// Scene window: position, monitor, background, size, and layout ("Taskbar" tab).
     pub stage: Stage,
+    /// System-wide shortcuts (Since 0.17).
+    pub hotkeys: Hotkeys,
     /// Fields from newer versions, preserved on save.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -61,9 +63,31 @@ pub struct Apps {
     pub zcode: bool,
 }
 
+/// Global shortcuts as accelerator strings (`Ctrl+Alt+Shift+J`); `None` = off. A file without the field gets the defaults.
+/// No Win key in the defaults: Windows reserves Win combinations for itself and keeps adding new ones.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct Hotkeys {
+    /// Jump to the agent that needs you (else the latest finished one, else open the panel).
+    pub jump: Option<String>,
+    /// Show or hide the panel.
+    pub panel: Option<String>,
+}
+
+impl Default for Hotkeys {
+    fn default() -> Self { Hotkeys { jump: Some("Ctrl+Alt+Shift+J".into()), panel: Some("Ctrl+Alt+Shift+K".into()) } }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
-pub struct Notifications { pub needs_you: bool, pub done: bool, pub limits: bool }
+pub struct Notifications {
+    pub needs_you: bool, pub done: bool, pub limits: bool, pub weekly: bool,
+    /// Toasts play a sound ("needs you" its own). Since 0.17.
+    pub sound: bool,
+    /// Toasts are silenced until this time (ms since epoch; `i64::MAX` = until turned back on). `None` = not muted. Since 0.17.
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "ms_or_none")]
+    pub muted_until: Option<i64>,
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(default)]
@@ -126,6 +150,12 @@ fn or_default<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned +
 fn or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
     let v = serde_json::Value::deserialize(d)?;
     Ok(serde_json::from_value(v).ok())
+}
+
+/// Milliseconds as a JSON number, also when the webview round-tripped `i64::MAX` into the float 9223372036854776000
+/// (`as` saturates it back); anything else becomes `None`.
+fn ms_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+    Ok(serde_json::Value::deserialize(d)?.as_number().and_then(|n| n.as_i64().or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f as i64))))
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -329,7 +359,7 @@ impl Default for Apps {
     fn default() -> Self { Apps { claude_code: true, codex: true, agent_router: true, opencode: false, generic: true, copilot: false, antigravity: false,
         cursor: false, grok: false, zcode: false } }
 }
-impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true } } }
+impl Default for Notifications { fn default() -> Self { Notifications { needs_you: true, done: true, limits: true, weekly: true, sound: true, muted_until: None } } }
 impl Default for Pets {
     fn default() -> Self { Pets { style: Style::Sticker, motion: Motion::Calm, overrides: Overrides::default(), max_visible: 5, react_to_media: true } }
 }
@@ -341,7 +371,7 @@ impl Default for Settings {
             claude_mod_pet: false, claude_mod_nudges: true,
             notifications: Notifications::default(), pets: Pets::default(), power_saving: PowerSaving::Auto,
             autostart: true, language: Language::Auto, theme: Theme::System, updates: Updates::Notify, stage: Stage::default(),
-            extra: serde_json::Map::new(),
+            hotkeys: Hotkeys::default(), extra: serde_json::Map::new(),
         }
     }
 }
@@ -355,6 +385,14 @@ pub fn path(home: &Path) -> PathBuf { home.join(".agent-pets").join("settings.js
 #[derive(Debug, PartialEq)]
 pub struct Loaded { pub settings: Settings, pub first_run: bool, pub error: Option<String> }
 
+/// Parse settings with the same cleanup used for the on-disk file.
+pub fn from_json(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
+    let mut s: Settings = serde_json::from_slice(bytes)?;
+    s.stage = s.stage.clamped();
+    s.extra.remove("claude_statusline");
+    Ok(s)
+}
+
 pub fn load(path: &Path) -> Loaded {
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
@@ -362,12 +400,8 @@ pub fn load(path: &Path) -> Loaded {
             return Loaded { settings: Settings::default(), first_run: true, error: None },
         Err(e) => return Loaded { settings: Settings::default(), first_run: false, error: Some(e.to_string()) },
     };
-    match serde_json::from_slice::<Settings>(&bytes) {
-        Ok(mut s) => {
-            s.stage = s.stage.clamped();
-            s.extra.remove("claude_statusline"); // retired switch (0.16)
-            Loaded { settings: s, first_run: false, error: None }
-        }
+    match from_json(&bytes) {
+        Ok(s) => Loaded { settings: s, first_run: false, error: None },
         Err(e) => Loaded { settings: Settings::default(), first_run: false,
             error: Some(format!("{}: {e}", path.display())) },
     }
@@ -403,6 +437,12 @@ mod tests {
     }
 
     #[test]
+    fn weekly_notifications_default_on_for_old_settings() {
+        assert!(load_str(r#"{"version":1,"notifications":{"sound":false}}"#).settings.notifications.weekly);
+        assert!(!load_str(r#"{"version":1,"notifications":{"weekly":false}}"#).settings.notifications.weekly);
+    }
+
+    #[test]
     fn the_claude_mod_is_on_unless_a_file_says_otherwise() {
         assert!(Settings::default().claude_mod);
         assert!(load_str(r#"{"version":1,"apps":{"claude_code":true}}"#).settings.claude_mod);
@@ -429,6 +469,24 @@ mod tests {
     }
 
     #[test]
+    fn the_hotkeys_default_on_and_an_old_file_gets_them() {
+        let d = Settings::default().hotkeys;
+        assert_eq!((d.jump.as_deref(), d.panel.as_deref()), (Some("Ctrl+Alt+Shift+J"), Some("Ctrl+Alt+Shift+K")));
+        assert_eq!(load_str(r#"{"version":1,"claude_mod":true}"#).settings.hotkeys, d);
+        // a half-written section keeps the default for the missing one; null turns one off
+        let l = load_str(r#"{"version":1,"hotkeys":{"jump":null}}"#).settings.hotkeys;
+        assert_eq!((l.jump, l.panel.as_deref()), (None, Some("Ctrl+Alt+Shift+K")));
+    }
+
+    #[test]
+    fn a_changed_hotkey_survives_a_save() {
+        let (_d, p) = tmp();
+        let s = Settings { hotkeys: Hotkeys { jump: Some("Ctrl+Shift+F2".into()), panel: None }, ..Settings::default() };
+        save(&p, &s).unwrap();
+        assert_eq!(load(&p).settings.hotkeys, s.hotkeys);
+    }
+
+    #[test]
     fn the_retired_statusline_flag_in_an_old_file_is_dropped() {
         let (_d, p) = tmp();
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -436,6 +494,22 @@ mod tests {
         let l = load(&p);
         assert!(l.error.is_none() && l.settings.claude_plan_usage);
         assert!(!l.settings.extra.contains_key("claude_statusline"));
+    }
+
+    #[test]
+    fn a_file_without_muted_until_is_not_muted_and_the_deadline_survives_a_save() {
+        let (_d, p) = tmp();
+        assert_eq!(load_str(r#"{"version":1,"notifications":{"needs_you":false}}"#).settings.notifications.muted_until, None);
+        let mut s = Settings::default();
+        save(&p, &s).unwrap();
+        assert!(serde_json::from_slice::<serde_json::Value>(&std::fs::read(&p).unwrap()).unwrap()["notifications"].get("muted_until").is_none());
+        s.notifications.muted_until = Some(i64::MAX);
+        save(&p, &s).unwrap();
+        assert_eq!(load(&p).settings.notifications.muted_until, Some(i64::MAX));
+        // the webview hands i64::MAX back as a float, which must not break saving the settings
+        let n: Notifications = serde_json::from_str(r#"{"muted_until":9223372036854776000}"#).unwrap();
+        assert_eq!(n.muted_until, Some(i64::MAX));
+        assert_eq!(serde_json::from_str::<Notifications>(r#"{"muted_until":"x"}"#).unwrap().muted_until, None);
     }
 
     #[test]

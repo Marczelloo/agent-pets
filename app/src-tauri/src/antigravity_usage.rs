@@ -63,17 +63,16 @@ mod tests {
         let s = Server { port, token: "tok".into() };
         let v = post(&s, au::SUMMARY).unwrap();
         assert_eq!(au::from_summary(&v, 5).unwrap().data.limits[0].used_pct, 50.0);
-        let (path, h) = seen.recv().unwrap();
+        let (path, h) = seen.recv_timeout(Duration::from_secs(10)).unwrap();
         assert_eq!(path, "/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary");
         assert!(h.contains(&("x-codeium-csrf-token".into(), "tok".into())));
         assert!(h.contains(&("connect-protocol-version".into(), "1".into())));
     }
 
     #[test]
-    fn missing_method_and_dead_port_are_told_apart() {
+    fn missing_method_and_invalid_port_are_told_apart() {
         let (port, _) = serve(404, "{}");
         assert_eq!(post(&Server { port, token: "t".into() }, au::SUMMARY), Err(Failure::Status(404)));
-        let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        assert_eq!(post(&Server { port: free, token: "t".into() }, au::SUMMARY), Err(Failure::Io));
+        assert_eq!(post(&Server { port: 0, token: "t".into() }, au::SUMMARY), Err(Failure::Io));
     }
 }

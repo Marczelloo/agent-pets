@@ -101,10 +101,10 @@ fn endpoint() -> String {
     endpoint_from(std::env::var("AGENT_PETS_UPDATE_URL").ok(), cfg!(any(debug_assertions, feature = "update-test")))
 }
 
-async fn find(app: &AppHandle) -> Result<Option<Update>, String> {
-    let url = endpoint().parse().map_err(|e| format!("{e}"))?;
-    let up = app.updater_builder().endpoints(vec![url]).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())?;
-    up.check().await.map_err(|e| e.to_string())
+async fn find(app: &AppHandle) -> Result<Option<Update>, (String, bool)> {
+    let url = endpoint().parse().map_err(|e| (format!("{e}"), false))?;
+    let up = app.updater_builder().endpoints(vec![url]).map_err(|e| (e.to_string(), false))?.build().map_err(|e| (e.to_string(), false))?;
+    up.check().await.map_err(|e| (e.to_string(), is_network(&e)))
 }
 
 /// Check the version. `manual`: "Check now" button (result always visible, works even when `off`).
@@ -131,9 +131,10 @@ pub async fn check(app: &AppHandle, manual: bool) -> UpdateStatus {
                     let _ = crate::appstate::save(&home, &st);
                 }
             }
-            Err(e) => {
+            Err((e, network)) => {
                 pets_core::app_log!("update check: {e}");
                 if manual { set(app, UpdateStatus::Error { message: tr(lang(app), "Błąd sprawdzania aktualizacji", "Could not check for updates").into(), verify: false }); }
+                else if !network { crate::problems::report(app, "update", tr(lang(app), "Aktualizacja nie powiodła się", "Update failed"), &e); }
             }
         }
     }
@@ -171,6 +172,7 @@ async fn download(app: &AppHandle) -> bool {
             pets_core::app_log!("update download: {e}");
             *u.found.lock().unwrap() = None;
             set(app, UpdateStatus::Error { message: verify_failed(app), verify: true });
+            crate::problems::report(app, "update", tr(lang(app), "Aktualizacja nie powiodła się", "Update failed"), &e.to_string());
             false
         }
     }
@@ -197,7 +199,7 @@ fn announce(app: &AppHandle, version: &str, notes: Option<&str>) {
     let title = format!("{} {version}", tr(l, "Dostępna wersja", "Version available:"));
     let body = notes.and_then(|n| n.lines().map(str::trim).find(|x| !x.is_empty())).unwrap_or("").to_string();
     let a = app.clone();
-    crate::notify::show_update(app, &title, &body, Some(tr(l, "Zainstaluj", "Install")), move |action| {
+    crate::notify::show_update(app, crate::notify::center::Kind::Update, &title, &body, Some(tr(l, "Zainstaluj", "Install")), move |action| {
         if action.as_deref() == Some("install") {
             let a2 = a.clone();
             tauri::async_runtime::spawn(async move { let _ = install(&a2).await; });
@@ -238,7 +240,11 @@ pub fn start(app: AppHandle) {
                 let states: Vec<_> = app.state::<crate::core::Shared>().lock().unwrap().sessions.iter().map(|s| s.state).collect();
                 let b = busy(&states, crate::shell::fullscreen_app(), ui_open(&app));
                 if calm.observe(b, pets_core::time::now_ms()) {
-                    if let Err(e) = tauri::async_runtime::block_on(install(&app)) { pets_core::app_log!("{e}"); }
+                    if let Err(e) = tauri::async_runtime::block_on(install(&app)) {
+                        if !matches!(app.state::<Updater>().status(), UpdateStatus::Available { .. }) {
+                            crate::problems::report(&app, "update", tr(lang(&app), "Aktualizacja nie powiodła się", "Update failed"), &e);
+                        }
+                    }
                     calm = Calm::default();
                 }
             } else {
@@ -255,7 +261,7 @@ fn greet_after_update(app: &AppHandle) {
     let current = app.package_info().version.to_string();
     if let Some(v) = updated_toast(st.seen_version.as_deref(), &current) {
         let title = format!("{} {v}", tr(lang(app), "Zaktualizowano do wersji", "Updated to version"));
-        crate::notify::show_update(app, &title, "", None, |_| {});
+        crate::notify::show_update(app, crate::notify::center::Kind::Updated, &title, "", None, |_| {});
     }
     if st.seen_version.as_deref() != Some(current.as_str()) {
         st.seen_version = Some(current);
@@ -318,13 +324,18 @@ mod tests {
     fn a_second_install_waits_for_the_running_download_instead_of_failing() {
         let u = std::sync::Arc::new(Updater::default());
         let busy = u.take().unwrap();
-        let t = std::time::Instant::now();
         let u2 = u.clone();
-        let waiter = std::thread::spawn(move || tauri::async_runtime::block_on(async { u2.acquire().await.is_some() }));
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            done_tx.send(tauri::async_runtime::block_on(async { u2.acquire().await.is_some() })).unwrap();
+        });
+        ready_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+        assert!(done_rx.try_recv().is_err());
         drop(busy);
-        assert!(waiter.join().unwrap());
-        assert!(t.elapsed() >= std::time::Duration::from_millis(150));
+        assert!(done_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap());
+        waiter.join().unwrap();
     }
 
     #[test]

@@ -51,14 +51,15 @@ fn limits_event(p: &ModPayload) -> Option<Event> {
             let window = match l.kind.as_str() {
                 "five_hour" => Window::FiveHour,
                 "seven_day" => Window::Weekly,
+                "spend_limit" => Window::Spend,
                 _ => return None,
             };
-            // NaN would survive clamp; treat it as no data for this entry.
-            if l.percent_used.is_nan() { return None; }
+            // Non-finite usage is no reading.
+            if !l.percent_used.is_finite() { return None; }
             Some(Limit {
                 agent: Agent::Claude,
                 window,
-                used_pct: l.percent_used.clamp(0.0, 100.0) as f32,
+                used_pct: (if window == Window::Spend { l.percent_used.max(0.0) } else { l.percent_used.clamp(0.0, 100.0) }) as f32,
                 resets_at: l.resets_at.as_deref().and_then(crate::time::rfc3339_ms),
                 stale_since: None,
             })
@@ -139,17 +140,18 @@ mod tests {
         let u = to_update(&p(json!({"v":1,"kind":"measure","session_id":"s","ts":5,"rate_limits":[
             {"kind":"five_hour","percent_used":23.5,"resets_at":"2026-10-04T18:00:00Z"},
             {"kind":"seven_day","percent_used":140.0},
-            {"kind":"spend_limit","percent_used":10.0}]})));
+            {"kind":"spend_limit","percent_used":112.0}]})));
         let e = u.events.iter().find(|e| e.kind == Kind::Limits).unwrap();
         assert_eq!(e.session_id, USAGE_SESSION_ID);
         assert_eq!((e.source, e.ts), (Source::Claude, 5));
-        assert_eq!(e.data.limits.len(), 2);
+        assert_eq!(e.data.limits.len(), 3);
         assert_eq!(e.data.limits[0].window, Window::FiveHour);
         assert_eq!(e.data.limits[0].used_pct, 23.5);
         assert_eq!(e.data.limits[0].resets_at, crate::time::rfc3339_ms("2026-10-04T18:00:00Z"));
         assert_eq!(e.data.limits[1].window, Window::Weekly);
         assert_eq!(e.data.limits[1].used_pct, 100.0);
         assert_eq!(e.data.limits[1].resets_at, None);
+        assert_eq!((e.data.limits[2].window, e.data.limits[2].used_pct, e.data.limits[2].resets_at), (Window::Spend, 112.0, None));
     }
 
     #[test]

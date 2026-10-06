@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { AppId, AppRow, Diagnostics, MonitorInfo, Settings, UpdateStatus } from '../types';
+import type { AppId, AppRow, Diagnostics, HotkeyStatus, MonitorInfo, Settings, UpdateStatus } from '../types';
 import { LookTab } from './look/LookTab';
 import { StageTab } from './StageTab';
 import { AppsTab } from './AppsTab';
-import { reportText } from './model';
+import { defaultHotkeys, FOREVER, mutedText, mutedUntil, reportText } from './model';
+import { HotkeyRow } from './HotkeyRow';
+import { BackupSection } from './BackupSection';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
 import { LANGUAGE_LABEL } from '../i18n/pl';
@@ -11,6 +13,8 @@ import { AppsIcon, BellIcon, DiagIcon, GeneralIcon, LimitsIcon, LookIcon, Monito
 import { LanguageSelect } from './LanguageSelect';
 import { Row, Section, Segmented, Switch } from './ui';
 
+/** Same words as `pets_core::mute::MuteChoice::parse`. */
+export type MuteChoice = 'off' | 'hour' | 'morning' | 'forever';
 export type Tab = 'apps' | 'look' | 'stage' | 'notify' | 'limits' | 'general' | 'diag';
 /** Sidebar groups, top to bottom. */
 export const TAB_GROUPS: { key: 'settings' | 'app'; tabs: Tab[] }[] = [
@@ -37,11 +41,20 @@ interface Props {
   onCheck?: () => void;
   /** Diagnostics tab: open the bug form on GitHub */
   onReport?: () => void;
+  onExport?: () => Promise<string>;
+  onImport?: (text: string) => Promise<void>;
+  onReveal?: (path: string) => Promise<void>;
   /** Taskbar tab */
   monitors?: MonitorInfo[];
   leftFallback?: boolean;
   verticalBar?: boolean;
   onMove?: () => void;
+  /** Notifications tab: mute for a while (the deadline comes back through the settings) */
+  onMute?: (choice: MuteChoice) => void;
+  /** General tab: why a shortcut could not be registered (from the core) */
+  hotkeyStatus?: HotkeyStatus;
+  /** the clock, injectable for tests */
+  now?: number;
 }
 
 /** Manual check result beside the button. */
@@ -56,9 +69,12 @@ function checkResult(u: UpdateStatus | undefined): string | null {
 }
 
 /** Settings window: tabs on the left like Windows 11 Settings; changes apply immediately. */
-export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {} }: Props) {
+export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, onIntegration, onClaudeMod, message, update, onCheck, onReport, onExport, onImport, onReveal, monitors = [], leftFallback = false, verticalBar = false, onMove = () => {}, onMute = () => {}, hotkeyStatus, now = Date.now() }: Props) {
   const [copied, setCopied] = useState(false);
   const set = (patch: Partial<Settings>) => onChange({ ...s, ...patch });
+  const muteUntil = mutedUntil(s.notifications, now);
+  const hotkeys = s.hotkeys ?? defaultHotkeys();
+  const setHotkey = (k: 'jump' | 'panel', v: string | null) => set({ hotkeys: { ...hotkeys, [k]: v } });
 
   return (
     <div className="settings">
@@ -89,12 +105,25 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
 
         {tab === 'notify' && <>
           <Section>
+            <Row label={t().settings.mute} hint={muteUntil != null ? mutedText(muteUntil) : t().settings.muteDesc} control={
+              <Segmented aria-label={t().settings.mute} value={(muteUntil == null ? 'off' : muteUntil >= FOREVER ? 'forever' : '') as MuteChoice} onChange={onMute} options={[
+                { value: 'off', label: t().settings.muteOff }, { value: 'hour', label: t().settings.muteHour },
+                { value: 'morning', label: t().settings.muteMorning }, { value: 'forever', label: t().settings.muteForever },
+              ]} />} />
+          </Section>
+          <Section>
             <Toggle label={t().state.needs_you} checked={s.notifications.needs_you}
               onChange={on => set({ notifications: { ...s.notifications, needs_you: on } })}>{t().settings.notifyNeeds}</Toggle>
             <Toggle label={t().state.done} checked={s.notifications.done}
               onChange={on => set({ notifications: { ...s.notifications, done: on } })}>{t().settings.notifyDone}</Toggle>
             <Toggle label={t().limits.label} checked={s.notifications.limits}
               onChange={on => set({ notifications: { ...s.notifications, limits: on } })}>{t().limits.notification}</Toggle>
+            <Toggle label={t().settings.notifyWeekly} checked={s.notifications.weekly ?? true}
+              onChange={on => set({ notifications: { ...s.notifications, weekly: on } })}>{t().settings.notifyWeeklyDesc}</Toggle>
+          </Section>
+          <Section>
+            <Toggle label={t().settings.notifySound} checked={s.notifications.sound ?? true}
+              onChange={on => set({ notifications: { ...s.notifications, sound: on } })}>{t().settings.notifySoundDesc}</Toggle>
           </Section>
           <p className="ui-note">{t().settings.notifyWindows}</p>
         </>}
@@ -124,6 +153,13 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
                 { value: 'auto', label: t().settings.power.auto }, { value: 'always', label: t().settings.power.always }, { value: 'never', label: t().settings.power.never },
               ]} />} />
           </Section>
+          <Section title={t().settings.hotkeys.title} note={t().settings.hotkeys.note}>
+            <HotkeyRow label={t().settings.hotkeys.jump} hint={t().settings.hotkeys.jumpDesc} value={hotkeys.jump} fallback={defaultHotkeys().jump!}
+              error={hotkeyStatus?.jump} onChange={v => setHotkey('jump', v)} />
+            <HotkeyRow label={t().settings.hotkeys.panel} value={hotkeys.panel} fallback={defaultHotkeys().panel!}
+              error={hotkeyStatus?.panel} onChange={v => setHotkey('panel', v)} />
+          </Section>
+          <BackupSection onExport={onExport} onImport={onImport} onReveal={onReveal} />
           <Section>
             <Row label={t().settings.updates} hint={t().settings.updatesDesc} control={
               <Segmented aria-label={t().settings.updates} value={s.updates ?? 'notify'} onChange={v => set({ updates: v })} options={[

@@ -1,5 +1,6 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { setLang } from '../i18n';
 import { PanelView } from './App';
 import type { NotificationEntry, Session, UpdateStatus } from '../types';
 
@@ -10,6 +11,17 @@ const sess: Session = {
 };
 
 describe('PanelView', () => {
+  it('shows exceeded spend percentage with a full hot bar', () => {
+    setLang('en');
+    const html = renderToString(<PanelView snap={{ sessions: [], now: 0, limits: [
+      { agent: 'claude', window: 'spend', used_pct: 112, resets_at: null },
+    ] }} nowMs={0} status={null} focusId={null} onJump={() => {}} initialTab="limits" />);
+    expect(html).toContain('spend limit');
+    expect(html).toContain('112<!-- -->%');
+    expect(html).toContain('width:100%');
+    expect(html).toContain('class="hot"');
+    setLang('pl');
+  });
   it('escapes prompt text and shows a jump button per session', () => {
     const html = renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
     expect(html).not.toContain('<img');
@@ -62,6 +74,15 @@ describe('PanelView', () => {
     expect(limits).toMatch(/role="tab" aria-selected="true"[^>]*>Limity</);
     expect(limits).not.toContain('class="session ');
   });
+  it('shows the pace line under a limit that will run out, and nothing without a forecast', () => {
+    setLang('pl');
+    const now = new Date(2026, 8, 24, 12, 0).getTime();
+    const limits = [{ agent: 'claude' as const, window: 'five_hour' as const, used_pct: 70, resets_at: now + 5 * 3_600_000 }];
+    const view = (forecasts?: { agent: 'claude'; window: 'five_hour'; runs_out_at: number }[]) => renderToString(
+      <PanelView snap={{ sessions: [], limits, forecasts, now }} nowMs={now} status={null} focusId={null} onJump={() => {}} initialTab="limits" />);
+    expect(view([{ agent: 'claude', window: 'five_hour', runs_out_at: now + 3.5 * 3_600_000 }])).toMatch(/<span class="pace">W tym tempie: 100% ok\. 15:30<\/span>/);
+    expect(view()).not.toContain('class="pace"');
+  });
   it('shows an alert dot on the Limits tab when an account is nearly out', () => {
     const view = (pct: number) => renderToString(<PanelView snap={{ sessions: [], now: 0,
       limits: [{ agent: 'claude' as const, window: 'five_hour' as const, used_pct: pct, resets_at: 3_600_000 }] }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
@@ -111,9 +132,9 @@ describe('PanelView', () => {
     expect(dl).toContain('role="progressbar"');
     expect(dl).toContain('aria-valuenow="40"');
     expect(view({ state: 'ready', version: '0.7.1' })).toContain('Zainstaluj teraz');
-    for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update');
+    for (const u of [{ state: 'idle' }, { state: 'latest' }, { state: 'checking' }] as UpdateStatus[]) expect(view(u)).not.toContain('class="update-bar');
     // manual check errors belong in settings; the panel shows only problems with the update itself
-    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).not.toContain('class="update');
+    expect(view({ state: 'error', message: 'Błąd sprawdzania aktualizacji', verify: false })).not.toContain('class="update-bar');
     expect(view({ state: 'error', message: 'Nie udało się zweryfikować aktualizacji', verify: true })).toContain('Nie udało się zweryfikować');
   });
   it('each card has a labelled ⋯ menu button (collapsed); "clear inactive" shows only when something is inactive', () => {
@@ -124,6 +145,48 @@ describe('PanelView', () => {
     expect(busy).not.toContain('role="menu"');
     expect(busy).not.toContain('Wyczyść nieaktywne');
     expect(view([{ ...sess, state: 'idle' }])).toContain('Wyczyść nieaktywne');
+  });
+  describe('renaming and pinning', () => {
+    const view = (o: Partial<Parameters<typeof PanelView>[0]> & { s?: Partial<Session> } = {}) => renderToString(<PanelView snap={{ sessions: [{ ...sess, title: 'Refaktor', state: 'working', ...o.s }], limits: [], now: 0 }}
+      nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} onRename={() => {}} onPin={() => {}} {...o} />);
+    it('the menu offers Rename and Pin, and Reset name only for a renamed session', () => {
+      setLang('pl');
+      const open = view({ initialMenu: 'a' });
+      expect(open).toMatch(/role="menuitem"[^>]*>Zmień nazwę</);
+      expect(open).toMatch(/role="menuitem"[^>]*>Przypnij</);
+      expect(open).not.toContain('Przywróć nazwę');
+      const named = view({ initialMenu: 'a', s: { renamed: true, pinned: true } });
+      expect(named).toMatch(/role="menuitem"[^>]*>Przywróć nazwę</);
+      expect(named).toMatch(/role="menuitem"[^>]*>Odepnij</);
+      setLang('en');
+      try { expect(view({ initialMenu: 'a', s: { renamed: true } })).toMatch(/>Reset name</); } finally { setLang('pl'); }
+    });
+    it('offers neither without handlers', () => {
+      const html = view({ initialMenu: 'a', onRename: undefined, onPin: undefined });
+      expect(html).not.toContain('Zmień nazwę');
+      expect(html).not.toContain('Przypnij');
+    });
+    it('renaming turns the title into a field holding the current title, escaped', () => {
+      const html = view({ initialRenaming: 'a', s: { title: 'Ref"<b>' } });
+      expect(html).toMatch(/<input[^>]*class="rename"[^>]*value="Ref&quot;&lt;b&gt;"/);
+      expect(html).toMatch(/aria-label="Nazwa sesji"/);
+      expect(html).not.toContain('class="title open"');
+    });
+    it('a pinned card shows a pin mark, a plain one does not', () => {
+      expect(view({ s: { pinned: true } })).toMatch(/class="pin" role="img" aria-label="Przypięta"/);
+      expect(view()).not.toContain('class="pin"');
+    });
+    it('pinned cards come after waiting ones and before the rest', () => {
+      const snap = { sessions: [{ ...sess, id: 'x', title: 'Zwykla', state: 'working' as const, last_activity: 99 }, { ...sess, id: 'y', title: 'Przypieta', state: 'idle' as const, pinned: true }, { ...sess, id: 'z', title: 'Czeka' }], limits: [], now: 0 };
+      const html = renderToString(<PanelView snap={snap} nowMs={0} status={null} focusId={null} onJump={() => {}} animate={false} />);
+      const at = (t: string) => html.indexOf(`>${t}</button>`);
+      expect(at('Czeka')).toBeLessThan(at('Przypieta'));
+      expect(at('Przypieta')).toBeLessThan(at('Zwykla'));
+    });
+    it('"clear inactive" is not offered when the only inactive session is pinned', () => {
+      expect(view({ s: { state: 'idle' }, onDismissInactive: () => {} })).toContain('Wyczyść nieaktywne');
+      expect(view({ s: { state: 'idle', pinned: true }, onDismissInactive: () => {} })).not.toContain('Wyczyść nieaktywne');
+    });
   });
   it('more than three subagents collapse behind a "+N" toggle', () => {
     const parent: Session = { ...sess, id: 'p', title: 'Rodzic', state: 'working' };
@@ -180,6 +243,53 @@ describe('PanelView', () => {
       expect(html).toContain('Aktualizacja');
       expect(html).toContain('Wyczyść wszystko');
       expect(html).not.toContain('class="limits"');
+    });
+    it('shows a problem with a Diagnostics action', () => {
+      setLang('en');
+      const html = view([note({ kind: 'problem', title: 'Update failed', body: 'invalid signature' })], true);
+      expect(html).toContain('class="note problem unread"');
+      expect(html).toContain('>Problem</span>');
+      expect(html).toContain('>Diagnostics</button>');
+    });
+    it('keeps update news on top, styled as a note, with Install only while the version still waits', () => {
+      setLang('en');
+      const at = (update?: UpdateStatus) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}
+        animate={false} update={update} notifications={[note({ id: 2, kind: 'done', session_id: 'a', title: 'Agent finished' }), note({ id: 1, title: 'Version available: 1.2.3' })]}
+        notificationsOpen onNotificationsSeen={() => {}} onNotificationOpen={() => {}} onInstall={() => {}} />);
+      const html = at({ state: 'available', version: '1.2.3', notes: null });
+      expect(html.indexOf('Version available: 1.2.3')).toBeLessThan(html.indexOf('Agent finished'));
+      expect(html).toContain('<ul class="pinned"><li class="note update unread">');
+      expect(html.match(/>Install<\/button>/g)).toHaveLength(2);
+      expect(at({ state: 'latest' })).not.toContain('>Install</button>');
+      expect(at()).not.toContain('>Install</button>');
+      const updated = renderToString(<PanelView snap={{ sessions: [], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}
+        animate={false} update={{ state: 'available', version: '1.2.4', notes: null }} notifications={[note({ kind: 'updated', title: 'Updated to version 1.2.3' })]}
+        notificationsOpen onNotificationsSeen={() => {}} onNotificationOpen={() => {}} onInstall={() => {}} />);
+      expect(updated).toContain('>Updated</span>');
+      expect(updated).toContain('class="note updated unread"');
+      expect(updated.match(/>Install<\/button>/g)).toHaveLength(1);
+    });
+    it('lets the weekly recap open the statistics', () => {
+      setLang('en');
+      const html = view([note({ kind: 'weekly', title: 'Last week', body: '12 turns' })], true);
+      expect(html).toContain('>Statistics</span>');
+      expect(html).toContain('>Open</button>');
+    });
+    it('says in the inbox that notifications are muted, with a way to turn them on', () => {
+      const hhmm = (ts: number) => `${String(new Date(ts).getHours()).padStart(2, '0')}:${String(new Date(ts).getMinutes()).padStart(2, '0')}`;
+      const at = (muteUntil: number | null) => renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={60_000} status={null} focusId={null} onJump={() => {}}
+        animate={false} notifications={[]} notificationsOpen onNotificationsSeen={() => {}} muteUntil={muteUntil} onUnmute={() => {}} />);
+      setLang('pl');
+      expect(at(null)).not.toContain('wyciszone');
+      expect(at(30_000)).not.toContain('wyciszone');
+      const html = at(60_000 + 3_600_000);
+      expect(html).toContain(`Powiadomienia wyciszone do ${hhmm(60_000 + 3_600_000)}`);
+      expect(html).toContain('>Włącz</button>');
+      expect(at(9223372036854776000)).toContain('wyciszone do odwołania');
+      setLang('en');
+      expect(at(60_000 + 3_600_000)).toContain(`Notifications muted until ${hhmm(60_000 + 3_600_000)}`);
+      expect(at(60_000 + 3_600_000)).toContain('>Turn on</button>');
+      setLang('pl');
     });
     it('has an empty state and no bell without a handler', () => {
       expect(view([], true)).toContain('Brak powiadomień');

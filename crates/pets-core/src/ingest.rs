@@ -57,6 +57,7 @@ pub struct Ingest {
     endpoint: Endpoint,
     server: Arc<tiny_http::Server>,
     handle: Option<JoinHandle<()>>,
+    stopped: std::sync::mpsc::Receiver<()>,
 }
 
 const MAX_BODY: u64 = 1 << 20;
@@ -69,6 +70,7 @@ impl Ingest {
         let port = server.server_addr().to_ip().map(|a| a.port()).ok_or_else(|| anyhow::anyhow!("no port"))?;
         let endpoint = Endpoint { port, token: token.clone() };
         let srv = server.clone();
+        let (stopped_tx, stopped) = std::sync::mpsc::channel();
         let handle = std::thread::spawn(move || {
             let expected = format!("Bearer {token}");
             for mut req in srv.incoming_requests() {
@@ -81,15 +83,22 @@ impl Ingest {
                     None => req.respond(tiny_http::Response::empty(status)),
                 };
             }
+            let _ = stopped_tx.send(());
         });
-        Ok(Ingest { endpoint, server, handle: Some(handle) })
+        Ok(Ingest { endpoint, server, handle: Some(handle), stopped })
     }
 
     pub fn endpoint(&self) -> &Endpoint { &self.endpoint }
 
-    pub fn stop(mut self) {
+    pub fn stop(self) {}
+}
+
+impl Drop for Ingest {
+    fn drop(&mut self) {
         self.server.unblock();
-        if let Some(h) = self.handle.take() { let _ = h.join(); }
+        if self.stopped.recv_timeout(std::time::Duration::from_secs(10)).is_ok() {
+            if let Some(h) = self.handle.take() { let _ = h.join(); }
+        }
     }
 }
 
@@ -226,7 +235,7 @@ mod tests {
         assert_eq!(post(port, "/v1/events/generic", "wrong", &ev("kilo", "abc")), 401);
         let big = format!(r#"{{"agent":"kilo","session":"abc","state":"done","title":"{}"}}"#, "x".repeat(1 << 20));
         assert_eq!(post(port, "/v1/events/generic", "secret", &big), 413);
-        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "nothing reached the channel");
+        assert!(rx.try_recv().is_err(), "nothing reached the channel");
         ing.stop();
     }
 
@@ -254,7 +263,7 @@ mod tests {
         let port = ing.endpoint().port;
         let body = r#"{"agent":"kilo","session":"abc","state":"done"}"#;
         assert_eq!(post(port, "/v1/events/generic", "secret", body), 404);
-        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+        assert!(rx.try_recv().is_err());
         d.generic.store(true, std::sync::atomic::Ordering::Relaxed);
         assert_eq!(post(port, "/v1/events/generic", "secret", body), 204, "switch works live");
         ing.stop();
@@ -267,7 +276,7 @@ mod tests {
         let port = ing.endpoint().port;
         let body = r#"{"ts":1,"payload":{"session_id":"s"}}"#;
         assert_eq!(post(port, "/v1/events/claude-statusline", "secret", body), 404);
-        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+        assert!(rx.try_recv().is_err());
         ing.stop();
     }
 
@@ -285,7 +294,7 @@ mod tests {
         assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Incoming::ClaudeMod(p) if p.session_id == "s"));
         let big = format!(r#"{{"v":1,"kind":"measure","session_id":"s","cwd":"{}"}}"#, "x".repeat(1 << 20));
         assert_eq!(post(port, "/v1/events/claude-mod", "secret", &big), 413);
-        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "only the valid payload reached the channel");
+        assert!(rx.try_recv().is_err(), "only the valid payload reached the channel");
         ing.stop();
     }
 

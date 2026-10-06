@@ -1,0 +1,204 @@
+# Builds the installer and latest.json for a release, mirrors scripts/release.ps1 (docs/building.md#releases).
+# A v* tag drafts a GitHub release with both files; run it by hand for a build without a release (the files are
+# kept as a workflow artifact). Nothing is published: a maintainer reviews the draft and publishes it.
+#
+# Secrets and variables (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY   secret, required: the updater key (~/.tauri/agent-pets.key, no password)
+#   SIGNPATH_API_TOKEN          secret, optional: Authenticode signing through SignPath Foundation
+#   SIGNPATH_ORGANIZATION_ID    variable; signing runs only when it is set
+#   SIGNPATH_PROJECT_SLUG       variable, default agent-pets
+#   SIGNPATH_SIGNING_POLICY_SLUG variable, default release-signing
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    # two SignPath requests may each wait for a manual approval
+    timeout-minutes: 150
+    permissions:
+      contents: write # the draft release
+      actions: read # SignPath downloads the unsigned files from this run's artifacts
+    env:
+      SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Version and release notes
+        id: version
+        run: |
+          $v = ./scripts/version.ps1
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($env:GITHUB_REF_NAME -ne "v$v") { throw "Tag $env:GITHUB_REF_NAME does not match the app version $v" }
+            ./scripts/release-notes.ps1 -Version $v -Out "$env:RUNNER_TEMP/notes.md"
+          } else {
+            # a build by hand before the bump has only the Unreleased section
+            try { ./scripts/release-notes.ps1 -Version $v -Out "$env:RUNNER_TEMP/notes.md" }
+            catch { ./scripts/release-notes.ps1 -Version Unreleased -Out "$env:RUNNER_TEMP/notes.md" }
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+
+      # the Claude Code mod ships inside the installer
+      - run: npm i -g @anthropic-ai/claude-code
+      - run: claude plugin validate .
+        working-directory: claude-plugin
+      - run: claude plugin test .
+        working-directory: claude-plugin
+      - run: claude plugin validate .
+
+      # the app and hook.exe first, so both can be signed before they go into the installer
+      - name: Build the app
+        run: pnpm tauri build --no-bundle
+        working-directory: app
+
+      - name: Stage the binaries for signing
+        if: env.SIGN == 'true'
+        run: |
+          New-Item -ItemType Directory -Force signing/binaries | Out-Null
+          Copy-Item target/release/agent-pets.exe, app/src-tauri/resources/hook.exe signing/binaries/
+      - name: Upload the unsigned binaries
+        id: unsigned-binaries
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-binaries
+          path: signing/binaries/
+          if-no-files-found: error
+      - name: Sign the binaries (SignPath)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'agent-pets' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: binaries
+          github-artifact-id: ${{ steps.unsigned-binaries.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signing/binaries-signed
+      - name: Put the signed binaries back
+        if: env.SIGN == 'true'
+        run: |
+          Copy-Item signing/binaries-signed/agent-pets.exe target/release/agent-pets.exe -Force
+          Copy-Item signing/binaries-signed/hook.exe app/src-tauri/resources/hook.exe -Force
+
+      # the updater signature is made below, after the installer has its final bytes
+      - name: Bundle the installer
+        run: |
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content "$env:RUNNER_TEMP/bundle.json"
+          pnpm tauri bundle --bundles nsis --config "$env:RUNNER_TEMP/bundle.json"
+        working-directory: app
+
+      - name: Stage the installer
+        id: installer
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = Get-ChildItem target/release/bundle/nsis -Filter "*_${v}_x64-setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "Installer $v not found" }
+          # GitHub replaces spaces in asset names with dots; latest.json must use the real name
+          $name = $exe.Name -replace ' ', '.'
+          New-Item -ItemType Directory -Force upload | Out-Null
+          Copy-Item $exe.FullName "upload/$name"
+          "name=$name" >> $env:GITHUB_OUTPUT
+
+      - name: Stage the installer for signing
+        if: env.SIGN == 'true'
+        run: |
+          New-Item -ItemType Directory -Force signing/installer | Out-Null
+          Copy-Item 'upload/${{ steps.installer.outputs.name }}' signing/installer/
+      - name: Upload the unsigned installer
+        id: unsigned-installer
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: signing/installer/
+          if-no-files-found: error
+      - name: Sign the installer (SignPath)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'agent-pets' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signing/installer-signed
+      - name: Put the signed installer back
+        if: env.SIGN == 'true'
+        run: Copy-Item 'signing/installer-signed/${{ steps.installer.outputs.name }}' upload/ -Force
+
+      # bash: an empty password variable reaches the signer only from here (without it the signer waits for a prompt)
+      - name: Sign the update
+        shell: bash
+        timeout-minutes: 5
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+          VERSION: ${{ steps.version.outputs.version }}
+          NAME: ${{ steps.installer.outputs.name }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing (docs/building.md#releases)"; exit 1; fi
+          export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+          pnpm --dir app tauri signer sign --app-version "$VERSION" "$(cygpath -w "$PWD/upload/$NAME")" < /dev/null
+
+      - name: Write latest.json
+        run: >
+          ./scripts/latest-json.ps1 -Version '${{ steps.version.outputs.version }}'
+          -Installer 'upload/${{ steps.installer.outputs.name }}'
+          -Signature 'upload/${{ steps.installer.outputs.name }}.sig'
+          -Notes "$env:RUNNER_TEMP/notes.md" -Out upload/latest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-pets-${{ steps.version.outputs.version }}
+          path: |
+            upload/${{ steps.installer.outputs.name }}
+            upload/latest.json
+          if-no-files-found: error
+
+      - name: Draft the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NAME: ${{ steps.installer.outputs.name }}
+        run: |
+          $draft = gh release view $env:TAG --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG "upload/$env:NAME" upload/latest.json --draft --verify-tag --title "Agent Pets $env:VERSION" --notes-file "$env:RUNNER_TEMP/notes.md"
+          } elseif ($draft -eq 'true') {
+            gh release upload $env:TAG "upload/$env:NAME" upload/latest.json --clobber
+          } else {
+            throw "Release $env:TAG is already published; its files stay as they are"
+          }
+          if ($LASTEXITCODE -ne 0) { throw "gh exited with code $LASTEXITCODE" }

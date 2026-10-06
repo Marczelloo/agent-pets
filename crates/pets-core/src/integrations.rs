@@ -4,6 +4,24 @@ use crate::i18n::{tr, Lang};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// Why an integration change did not happen: a deliberate no-op or a genuine failure.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Error { LeftAlone(String), Failed(String) }
+
+impl Error {
+    pub fn left_alone(&self) -> bool { matches!(self, Self::LeftAlone(_)) }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self { Self::LeftAlone(message) | Self::Failed(message) => f.write_str(message) }
+    }
+}
+
+impl From<String> for Error { fn from(message: String) -> Self { Self::Failed(message) } }
+impl From<&str> for Error { fn from(message: &str) -> Self { Self::Failed(message.into()) } }
+impl From<Error> for String { fn from(error: Error) -> Self { error.to_string() } }
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AppId { ClaudeCode, Codex, AgentRouter, Opencode, Copilot, Antigravity, Cursor, Grok, Zcode }
@@ -48,11 +66,11 @@ fn foreign_plugin(lang: Lang) -> String {
         "agent-pets.js in the opencode plugins/ folder is not ours; not overwriting it.").into()
 }
 
-fn enable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
-    if !opencode_dir(home).is_dir() { return Err(detect(AppId::Opencode, home, lang).note.unwrap_or_default()); }
+fn enable_opencode(home: &Path, lang: Lang) -> Result<String, Error> {
+    if !opencode_dir(home).is_dir() { return Err(Error::LeftAlone(detect(AppId::Opencode, home, lang).note.unwrap_or_default())); }
     let f = opencode_plugin(home);
     match plugin_file(home) {
-        PluginFile::Foreign => return Err(foreign_plugin(lang)),
+        PluginFile::Foreign => return Err(Error::LeftAlone(foreign_plugin(lang))),
         PluginFile::Ours(t) if t == OPENCODE_PLUGIN => {}
         _ => {
             let dir = f.parent().expect("plugins/");
@@ -68,7 +86,7 @@ fn enable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
         "opencode plugin installed. Restart open opencode sessions.").into())
 }
 
-fn disable_opencode(home: &Path, lang: Lang) -> Result<String, String> {
+fn disable_opencode(home: &Path, lang: Lang) -> Result<String, Error> {
     match plugin_file(home) {
         PluginFile::Ours(_) => {
             std::fs::remove_file(opencode_plugin(home)).map_err(|e| e.to_string())?;
@@ -141,13 +159,13 @@ fn strays(dir: &Path, rel: &str, out: &mut Vec<PathBuf>) {
 
 /// Puts the mod in `~/.claude/skills/agent-pets`: files are rewritten only when they differ, and an old file of ours
 /// that this version no longer ships is removed. A folder whose `plugin.json` names another plugin is left alone.
-pub fn place_plugin(home: &Path, lang: Lang) -> Result<(), String> {
+pub fn place_plugin(home: &Path, lang: Lang) -> Result<(), Error> {
     let dir = claude_plugin_dir(home);
-    let ours = match plugin_dir_state(home) { PluginDir::Foreign => return Err(foreign_plugin_dir(lang)), PluginDir::Ours => true, PluginDir::Missing => false };
+    let ours = match plugin_dir_state(home) { PluginDir::Foreign => return Err(Error::LeftAlone(foreign_plugin_dir(lang))), PluginDir::Ours => true, PluginDir::Missing => false };
     for (rel, bytes) in PLUGIN_FILES {
         let f = dir.join(rel);
         // a subfolder that is a link would send the write outside our folder
-        if f.parent().is_some_and(path_is_link) { return Err(foreign_plugin_dir(lang)); }
+        if f.parent().is_some_and(path_is_link) { return Err(Error::LeftAlone(foreign_plugin_dir(lang))); }
         if std::fs::read(&f).ok().as_deref() == Some(*bytes) { continue; }
         let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
         std::fs::create_dir_all(f.parent().expect("plugin file has a folder")).map_err(err)?;
@@ -165,9 +183,9 @@ pub fn place_plugin(home: &Path, lang: Lang) -> Result<(), String> {
 }
 
 /// Removes the mod folder, but only when it is ours.
-pub fn remove_plugin(home: &Path) -> Result<(), String> {
+pub fn remove_plugin(home: &Path) -> Result<(), Error> {
     match plugin_dir_state(home) {
-        PluginDir::Ours => std::fs::remove_dir_all(claude_plugin_dir(home)).map_err(|e| e.to_string()),
+        PluginDir::Ours => std::fs::remove_dir_all(claude_plugin_dir(home)).map_err(|e| e.to_string().into()),
         _ => Ok(()),
     }
 }
@@ -261,14 +279,14 @@ fn own_file(f: &Path, agent: &str) -> HookFile {
 fn copilot_file(home: &Path) -> HookFile { own_file(&copilot_hooks(home), "copilot") }
 
 /// Write our file only when its contents change; atomically, so the agent never reads half a file.
-fn write_own_file(f: &Path, text: &str, lang: Lang) -> Result<(), String> {
+fn write_own_file(f: &Path, text: &str, lang: Lang) -> Result<(), Error> {
     if std::fs::read_to_string(f).ok().as_deref() == Some(text) { return Ok(()); }
     let dir = f.parent().expect("hooks/");
     let err = |e: std::io::Error| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), f.display());
     std::fs::create_dir_all(dir).map_err(err)?;
     let tmp = dir.join(".agent-pets.json.tmp");
     std::fs::write(&tmp, text).map_err(err)?;
-    std::fs::rename(&tmp, f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e) })
+    std::fs::rename(&tmp, f).map_err(|e| { let _ = std::fs::remove_file(&tmp); err(e).into() })
 }
 
 fn foreign_copilot(lang: Lang) -> String {
@@ -276,9 +294,9 @@ fn foreign_copilot(lang: Lang) -> String {
         "agent-pets.json in ~/.copilot/hooks is not ours; not overwriting it.").into()
 }
 
-fn enable_copilot(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
-    if !home.join(".copilot").is_dir() { return Err(detect(AppId::Copilot, home, lang).note.unwrap_or_default()); }
-    if let HookFile::Foreign = copilot_file(home) { return Err(foreign_copilot(lang)); }
+fn enable_copilot(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, Error> {
+    if !home.join(".copilot").is_dir() { return Err(Error::LeftAlone(detect(AppId::Copilot, home, lang).note.unwrap_or_default())); }
+    if let HookFile::Foreign = copilot_file(home) { return Err(Error::LeftAlone(foreign_copilot(lang))); }
     let hook = place_hook(home, hook_src, lang)?;
     let text = serde_json::to_string_pretty(&copilot_json(&hook)).map_err(|e| e.to_string())?;
     write_own_file(&copilot_hooks(home), &text, lang)?;
@@ -286,7 +304,7 @@ fn enable_copilot(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<St
         "Copilot hooks written. Restart open Copilot sessions.").into())
 }
 
-fn disable_copilot(home: &Path, lang: Lang) -> Result<String, String> {
+fn disable_copilot(home: &Path, lang: Lang) -> Result<String, Error> {
     match copilot_file(home) {
         HookFile::Ours => {
             std::fs::remove_file(copilot_hooks(home)).map_err(|e| e.to_string())?;
@@ -307,25 +325,25 @@ fn antigravity_entry(hook: &Path) -> serde_json::Value {
 }
 
 /// Antigravity hook file: `None` = no file; error = invalid JSON, non-object root, or our key belongs to someone else.
-fn read_antigravity(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
+fn read_antigravity(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, Error> {
     let f = antigravity_hooks(home);
     let v: serde_json::Value = match std::fs::read(&f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return Err(e.to_string().into()),
         Ok(b) => crate::hooks_install::parse_config(&b).map_err(|e| format!("{} {} ({e})", f.display(), tr(lang, "jest uszkodzony", "is damaged")))?,
     };
     if !v.is_object() {
-        return Err(format!("{} {}", f.display(), tr(lang, "ma nieoczekiwany format, nie zmieniam go.", "has an unexpected format; not changing it.")));
+        return Err(Error::LeftAlone(format!("{} {}", f.display(), tr(lang, "ma nieoczekiwany format, nie zmieniam go.", "has an unexpected format; not changing it."))));
     }
     if v.get(ANTIGRAVITY_KEY).is_some_and(|k| !ours(k, "antigravity")) {
-        return Err(tr(lang, "Klucz agent-pets w ~/.gemini/config/hooks.json nie jest nasz, nie zmieniam go.",
-            "The agent-pets key in ~/.gemini/config/hooks.json is not ours; not changing it.").into());
+        return Err(Error::LeftAlone(tr(lang, "Klucz agent-pets w ~/.gemini/config/hooks.json nie jest nasz, nie zmieniam go.",
+            "The agent-pets key in ~/.gemini/config/hooks.json is not ours; not changing it.").into()));
     }
     Ok(Some(v))
 }
 
-fn enable_antigravity(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
-    if !home.join(".gemini").is_dir() { return Err(detect(AppId::Antigravity, home, lang).note.unwrap_or_default()); }
+fn enable_antigravity(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, Error> {
+    if !home.join(".gemini").is_dir() { return Err(Error::LeftAlone(detect(AppId::Antigravity, home, lang).note.unwrap_or_default())); }
     let current = read_antigravity(home, lang)?;
     let hook = place_hook(home, hook_src, lang)?;
     let entry = antigravity_entry(&hook);
@@ -340,7 +358,7 @@ fn enable_antigravity(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Resul
     Ok(done.into())
 }
 
-fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, String> {
+fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, Error> {
     let nothing = || Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into());
     let Some(v) = read_antigravity(home, lang)? else { return nothing() };
     if v.get(ANTIGRAVITY_KEY).is_none() { return nothing(); }
@@ -357,19 +375,19 @@ fn disable_antigravity(home: &Path, lang: Lang) -> Result<String, String> {
 
 /// File with `hooks` map {event: [entries]} (Cursor, ZCode). `None` = no file; error = invalid JSON or unexpected shape,
 /// then change nothing.
-fn read_hook_map(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
+fn read_hook_map(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, Error> {
     let unusual = || format!("{} {}, {}", tr(lang, "Nietypowy plik", "Unusual file"), f.display(),
         tr(lang, "nic nie zmieniam.", "leaving it unchanged."));
     let v: serde_json::Value = match std::fs::read(f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-        Ok(b) => crate::hooks_install::parse_config(&b).map_err(|_| unusual())?,
+        Err(e) => return Err(e.to_string().into()),
+        Ok(b) => crate::hooks_install::parse_config(&b).map_err(|_| Error::LeftAlone(unusual()))?,
     };
     let shape = v.is_object() && match v.get("hooks") {
         None => true,
         Some(h) => h.as_object().is_some_and(|m| m.values().all(|l| l.is_array())),
     };
-    if shape { Ok(Some(v)) } else { Err(unusual()) }
+    if shape { Ok(Some(v)) } else { Err(Error::LeftAlone(unusual())) }
 }
 
 /// Remove our entries from all `hooks` lists; lists emptied by this are removed. Return whether anything was removed.
@@ -389,7 +407,7 @@ fn strip_hooks(v: &mut serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -
 /// Append our entry to each event list; others' entries stay before ours. Write nothing if unchanged,
 /// and create the backup (`.agent-pets.bak`) only from a file without our entries, preserving the pre-edit file.
 fn join_hooks(f: &Path, current: Option<&serde_json::Value>, mut v: serde_json::Value, events: &[&str],
-              entry: impl Fn(&str) -> serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -> bool, lang: Lang) -> Result<(), String> {
+              entry: impl Fn(&str) -> serde_json::Value, is_ours: &dyn Fn(&serde_json::Value) -> bool, lang: Lang) -> Result<(), Error> {
     let had_ours = merge_hooks(&mut v, events, entry, is_ours);
     write_hooks(f, current, v, had_ours, lang)
 }
@@ -406,10 +424,10 @@ fn merge_hooks(v: &mut serde_json::Value, events: &[&str], entry: impl Fn(&str) 
     had_ours
 }
 
-fn write_hooks(f: &Path, current: Option<&serde_json::Value>, v: serde_json::Value, had_ours: bool, lang: Lang) -> Result<(), String> {
+fn write_hooks(f: &Path, current: Option<&serde_json::Value>, v: serde_json::Value, had_ours: bool, lang: Lang) -> Result<(), Error> {
     if current == Some(&v) { return Ok(()); }
     crate::hooks_install::edit_file_opts(f, !had_ours, |x| *x = v)
-        .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), f.display()))
+        .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie udało się zapisać hooków w", "Could not write the hooks to"), f.display()).into())
 }
 
 /// Whether every event has exactly our current entry.
@@ -426,8 +444,8 @@ fn cursor_entry(hook: &Path, ev: &str) -> serde_json::Value {
 }
 fn is_cursor(e: &serde_json::Value) -> bool { ours(e, "cursor") }
 
-fn enable_cursor(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
-    if !home.join(".cursor").is_dir() { return Err(detect(AppId::Cursor, home, lang).note.unwrap_or_default()); }
+fn enable_cursor(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, Error> {
+    if !home.join(".cursor").is_dir() { return Err(Error::LeftAlone(detect(AppId::Cursor, home, lang).note.unwrap_or_default())); }
     let f = cursor_hooks_path(home);
     let current = read_hook_map(&f, lang)?;
     let hook = place_hook(home, hook_src, lang)?;
@@ -438,7 +456,7 @@ fn enable_cursor(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<Str
         "Cursor hooks written (backup: hooks.json.agent-pets.bak). Restart Cursor.").into())
 }
 
-fn disable_cursor(home: &Path, lang: Lang) -> Result<String, String> {
+fn disable_cursor(home: &Path, lang: Lang) -> Result<String, Error> {
     let f = cursor_hooks_path(home);
     let Some(mut v) = read_hook_map(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
     if !strip_hooks(&mut v, &is_cursor) { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()); }
@@ -472,16 +490,16 @@ fn foreign_grok(lang: Lang) -> String {
         "agent-pets.json in ~/.grok/hooks is not ours; not overwriting it.").into()
 }
 
-fn enable_grok(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
-    if !home.join(".grok").is_dir() { return Err(detect(AppId::Grok, home, lang).note.unwrap_or_default()); }
-    if let HookFile::Foreign = own_file(&grok_hooks(home), "grok") { return Err(foreign_grok(lang)); }
+fn enable_grok(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, Error> {
+    if !home.join(".grok").is_dir() { return Err(Error::LeftAlone(detect(AppId::Grok, home, lang).note.unwrap_or_default())); }
+    if let HookFile::Foreign = own_file(&grok_hooks(home), "grok") { return Err(Error::LeftAlone(foreign_grok(lang))); }
     let hook = place_hook(home, hook_src, lang)?;
     write_own_file(&grok_hooks(home), &grok_text(&hook), lang)?;
     Ok(tr(lang, "Hooki Groka zapisane. Uruchom ponownie otwarte sesje Grok Build.",
         "Grok hooks written. Restart open Grok Build sessions.").into())
 }
 
-fn disable_grok(home: &Path, lang: Lang) -> Result<String, String> {
+fn disable_grok(home: &Path, lang: Lang) -> Result<String, Error> {
     match own_file(&grok_hooks(home), "grok") {
         HookFile::Ours => {
             std::fs::remove_file(grok_hooks(home)).map_err(|e| e.to_string())?;
@@ -509,13 +527,13 @@ fn is_zcode(e: &serde_json::Value) -> bool {
 /// ZCode config: events live in `hooks.events`, alongside only `enabled`, `timeoutMs`, and `maxOutputBytes`; ZCode rejects
 /// the whole file for any other key in `hooks` and runs hooks only with `hooks.enabled: true` (schema from the ZCode
 /// bundle, verified live). Unexpected shape is an error; change nothing then.
-fn read_zcode(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
+fn read_zcode(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, Error> {
     let unusual = || format!("{} {}, {}", tr(lang, "Nietypowy plik", "Unusual file"), f.display(),
         tr(lang, "nic nie zmieniam.", "leaving it unchanged."));
     let v: serde_json::Value = match std::fs::read(f) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-        Ok(b) => crate::hooks_install::parse_config(&b).map_err(|_| unusual())?,
+        Err(e) => return Err(e.to_string().into()),
+        Ok(b) => crate::hooks_install::parse_config(&b).map_err(|_| Error::LeftAlone(unusual()))?,
     };
     let shape = v.is_object() && match v.get("hooks") {
         None => true,
@@ -524,7 +542,7 @@ fn read_zcode(f: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String>
                 && m.get("events").is_none_or(|e| e.as_object().is_some_and(|e| e.values().all(|l| l.is_array())))
         }),
     };
-    if shape { Ok(Some(v)) } else { Err(unusual()) }
+    if shape { Ok(Some(v)) } else { Err(Error::LeftAlone(unusual())) }
 }
 
 /// `hooks.events` as `{"hooks": …}` for shared helpers.
@@ -532,14 +550,14 @@ fn zcode_view(v: &serde_json::Value) -> serde_json::Value {
     serde_json::json!({"hooks": v["hooks"].get("events").cloned().unwrap_or_else(|| serde_json::json!({}))})
 }
 
-fn enable_zcode(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
-    if !zcode_dir(home, zcode_base()).is_dir() { return Err(detect(AppId::Zcode, home, lang).note.unwrap_or_default()); }
+fn enable_zcode(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, Error> {
+    if !zcode_dir(home, zcode_base()).is_dir() { return Err(Error::LeftAlone(detect(AppId::Zcode, home, lang).note.unwrap_or_default())); }
     let f = zcode_config(home, zcode_base());
     let current = read_zcode(&f, lang)?;
     // hooks disabled by the user: respect that decision; do not enable them
     if current.as_ref().is_some_and(|v| v["hooks"]["enabled"] == false) {
-        return Err(tr(lang, "Hooki w ZCode są wyłączone (hooks.enabled: false w ~/.zcode/cli/config.json), nic nie zmieniam.",
-            "Hooks are turned off in ZCode (hooks.enabled: false in ~/.zcode/cli/config.json); leaving it unchanged.").into());
+        return Err(Error::LeftAlone(tr(lang, "Hooki w ZCode są wyłączone (hooks.enabled: false w ~/.zcode/cli/config.json), nic nie zmieniam.",
+            "Hooks are turned off in ZCode (hooks.enabled: false in ~/.zcode/cli/config.json); leaving it unchanged.").into()));
     }
     let hook = place_hook(home, hook_src, lang)?;
     let mut v = current.clone().unwrap_or_else(|| serde_json::json!({}));
@@ -552,7 +570,7 @@ fn enable_zcode(home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<Stri
         "ZCode hooks written (backup: config.json.agent-pets.bak). Restart ZCode.").into())
 }
 
-fn disable_zcode(home: &Path, lang: Lang) -> Result<String, String> {
+fn disable_zcode(home: &Path, lang: Lang) -> Result<String, Error> {
     let f = zcode_config(home, zcode_base());
     let Some(mut v) = read_zcode(&f, lang)? else { return Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into()) };
     let mut view = zcode_view(&v);
@@ -615,15 +633,15 @@ pub fn detect(id: AppId, home: &Path, lang: Lang) -> Detected {
     Detected { found: false, path: None, note: Some(note.into()) }
 }
 
-fn read_claude_settings(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, String> {
+fn read_claude_settings(home: &Path, lang: Lang) -> Result<Option<serde_json::Value>, Error> {
     match std::fs::read(claude_settings(home)) {
         Ok(b) => crate::hooks_install::parse_config(&b).map(Some)
             .map_err(|e| match lang {
                 Lang::Pl => format!("{} jest uszkodzony ({e})", claude_settings(home).display()),
                 Lang::En => format!("{} is damaged ({e})", claude_settings(home).display()),
-            }),
+            }).map_err(Into::into),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(e.to_string().into()),
     }
 }
 
@@ -640,20 +658,20 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
     if id == AppId::Antigravity {
         return match read_antigravity(home, lang) {
             Ok(v) => hooks(v.is_some_and(|v| v.get(ANTIGRAVITY_KEY).is_some())),
-            Err(e) => Status { installed: false, detail: e },
+            Err(e) => Status { installed: false, detail: e.into() },
         };
     }
     if id == AppId::Cursor {
         return match read_hook_map(&cursor_hooks_path(home), lang) {
             Ok(v) => hooks(v.is_some_and(|v| has_hooks(&v, &CURSOR_EVENTS, |ev| cursor_entry(&installed_hook(home), ev)))),
-            Err(e) => Status { installed: false, detail: e },
+            Err(e) => Status { installed: false, detail: e.into() },
         };
     }
     if id == AppId::Zcode {
         return match read_zcode(&zcode_config(home, zcode_base()), lang) {
             Ok(v) => hooks(v.is_some_and(|v| v["hooks"]["enabled"] == true
                 && has_hooks(&zcode_view(&v), &ZCODE_EVENTS, |ev| zcode_entry(&installed_hook(home), ev)))),
-            Err(e) => Status { installed: false, detail: e },
+            Err(e) => Status { installed: false, detail: e.into() },
         };
     }
     if id == AppId::Grok {
@@ -672,7 +690,7 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
     }
     if id != AppId::ClaudeCode { return Status { installed: true, detail: tr(lang, "Nic do instalowania", "Nothing to install").into() }; }
     match read_claude_settings(home, lang) {
-        Err(e) => Status { installed: false, detail: e },
+        Err(e) => Status { installed: false, detail: e.into() },
         Ok(v) => {
             let total = crate::hooks_install::EVENTS.len();
             match v.as_ref().map(crate::hooks_install::installed_count).unwrap_or(0) {
@@ -686,7 +704,7 @@ pub fn status(id: AppId, home: &Path, lang: Lang) -> Status {
 
 /// Copy `hook.exe` to `~/.agent-pets` only if absent or contents differ (e.g. new version).
 /// Also for the door: `hook.exe report` has a stable path at `~/.agent-pets/hook.exe` (spec 8).
-pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, String> {
+pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf, Error> {
     let dst = installed_hook(home);
     if let Some(src) = src.filter(|s| s.is_file()) {
         let new = std::fs::read(src).map_err(|e| format!("{} {}: {e}", tr(lang, "Nie mogę odczytać", "Cannot read"), src.display()))?;
@@ -700,7 +718,7 @@ pub fn place_hook(home: &Path, src: Option<&Path>, lang: Lang) -> Result<PathBuf
 
 /// Restores the `statusLine` that was replaced by our former statusline pass-through (limits now come from the
 /// Claude mod); the saved original is deleted.
-pub fn remove_statusline(home: &Path, lang: Lang) -> Result<String, String> {
+pub fn remove_statusline(home: &Path, lang: Lang) -> Result<String, Error> {
     let settings = claude_settings(home);
     crate::statusline_install::uninstall_file_at(&settings, &statusline_original(home))
         .map_err(|e| format!("{} {}: {e}", tr(lang, "Nie mogę zapisać", "Cannot write"), settings.display()))?;
@@ -717,7 +735,7 @@ pub fn migrate_statusline(home: &Path) -> bool {
     }
 }
 
-pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, String> {
+pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Result<String, Error> {
     if id == AppId::Opencode { return enable_opencode(home, lang); }
     if id == AppId::Copilot { return enable_copilot(home, hook_src, lang); }
     if id == AppId::Antigravity { return enable_antigravity(home, hook_src, lang); }
@@ -732,7 +750,7 @@ pub fn enable(id: AppId, home: &Path, hook_src: Option<&Path>, lang: Lang) -> Re
     Ok(tr(lang, "Hooki zainstalowane. Uruchom ponownie otwarte sesje Claude Code.", "Hooks installed. Restart open Claude Code sessions.").into())
 }
 
-pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, String> {
+pub fn disable(id: AppId, home: &Path, lang: Lang) -> Result<String, Error> {
     let nothing = || Ok(tr(lang, "Nic do usunięcia", "Nothing to remove").into());
     if id == AppId::Opencode { return disable_opencode(home, lang); }
     if id == AppId::Copilot { return disable_copilot(home, lang); }
@@ -847,6 +865,23 @@ mod tests {
     }
 
     #[test]
+    fn missing_install_is_left_alone() {
+        let h = home();
+        let error = enable(AppId::Opencode, h.path(), None, Lang::En).unwrap_err();
+        assert!(error.left_alone());
+        assert_eq!(error.to_string(), "~/.config/opencode not found. Run opencode once, then turn it on here.");
+    }
+
+    #[test]
+    fn an_unwritable_plugin_path_is_a_failure() {
+        let h = home();
+        std::fs::create_dir_all(oc(h.path())).unwrap();
+        std::fs::write(oc(h.path()).join("plugins"), "not a directory").unwrap();
+        let error = enable(AppId::Opencode, h.path(), None, Lang::En).unwrap_err();
+        assert!(matches!(error, Error::Failed(_)));
+    }
+
+    #[test]
     fn the_opencode_plugin_installs_once_and_uninstalls() {
         let h = home();
         std::fs::create_dir_all(oc(h.path())).unwrap();
@@ -932,7 +967,7 @@ mod tests {
                 let mine = claude_plugin_dir(h.path()).join("notes.txt");
                 put(&mine, "mine");
                 let err = place_plugin(h.path(), lang).unwrap_err();
-                assert!(err.contains(text), "{err}");
+                assert!(err.to_string().contains(text), "{err}");
                 assert!(!plugin_needs_repair(h.path()));
                 remove_plugin(h.path()).unwrap();
                 disable(AppId::ClaudeCode, h.path(), lang).unwrap();
@@ -985,7 +1020,7 @@ mod tests {
             std::fs::create_dir_all(link.parent().unwrap()).unwrap();
             if !make_link(&target, &link, junction) { eprintln!("cannot create a directory link (junction: {junction}) here; skipping"); continue; }
             let err = place_plugin(h.path(), Lang::En).unwrap_err();
-            assert!(err.contains("is not ours"), "{err}");
+            assert!(err.to_string().contains("is not ours"), "{err}");
             assert!(!plugin_needs_repair(h.path()));
             remove_plugin(h.path()).unwrap();
             disable(AppId::ClaudeCode, h.path(), Lang::En).unwrap();
@@ -1010,7 +1045,7 @@ mod tests {
             std::fs::remove_dir_all(dir.join("hooks")).unwrap();
             assert!(make_link(&target.join("hooks"), &dir.join("hooks"), junction));
             let err = place_plugin(h.path(), Lang::En).unwrap_err();
-            assert!(err.contains("is not ours"), "{err}");
+            assert!(err.to_string().contains("is not ours"), "{err}");
             assert_eq!(snapshot(&target), before, "hooks link, junction: {junction}");
         }
     }
@@ -1263,7 +1298,7 @@ mod tests {
         let f = opencode_plugin(h.path());
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         std::fs::write(&f, "export const Mine = 1").unwrap();
-        assert!(enable(AppId::Opencode, h.path(), None, Lang::Pl).is_err());
+        assert!(enable(AppId::Opencode, h.path(), None, Lang::Pl).unwrap_err().left_alone());
         disable(AppId::Opencode, h.path(), Lang::Pl).unwrap();
         uninstall_all(h.path(), false, Lang::Pl);
         assert_eq!(std::fs::read_to_string(&f).unwrap(), "export const Mine = 1");
@@ -1295,8 +1330,10 @@ mod tests {
         let src = hook_src(h.path());
         assert!(!status(AppId::ClaudeCode, h.path(), Lang::Pl).installed);
         enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
-        let first = std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        let hook = installed_hook(h.path());
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+        std::fs::File::options().write(true).open(&hook).unwrap().set_modified(old).unwrap();
+        let first = std::fs::metadata(&hook).unwrap().modified().unwrap();
         enable(AppId::ClaudeCode, h.path(), Some(&src), Lang::Pl).unwrap();
         assert_eq!(our_hooks(&claude_json(h.path())), crate::hooks_install::EVENTS.len());
         assert_eq!(std::fs::metadata(installed_hook(h.path())).unwrap().modified().unwrap(), first, "same hook.exe is not copied again");
@@ -1403,7 +1440,7 @@ mod tests {
     fn cursor_hooks_need_the_cursor_folder() {
         let h = home();
         let e = enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_err();
-        assert!(e.contains("~/.cursor"), "{e}");
+        assert!(e.to_string().contains("~/.cursor"), "{e}");
         assert!(!cursor_hooks_path(h.path()).exists());
     }
 
@@ -1472,14 +1509,14 @@ mod tests {
         for text in ["{not json", "[]", r#"{"hooks":[]}"#, r#"{"hooks":{"stop":{}}}"#] {
             std::fs::write(&f, text).unwrap();
             let e = enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_err();
-            assert!(e.contains("nic nie zmieniam"), "{text}: {e}");
+            assert!(e.to_string().contains("nic nie zmieniam"), "{text}: {e}");
             let _ = disable(AppId::Cursor, h.path(), Lang::Pl);
             uninstall_all(h.path(), false, Lang::Pl);
             assert_eq!(std::fs::read_to_string(&f).unwrap(), text, "{text}");
             assert!(!status(AppId::Cursor, h.path(), Lang::Pl).installed, "{text}");
         }
         std::fs::write(&f, "[]").unwrap();
-        assert!(enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::En).unwrap_err().contains("leaving it unchanged"));
+        assert!(enable(AppId::Cursor, h.path(), Some(&hook_src(h.path())), Lang::En).unwrap_err().to_string().contains("leaving it unchanged"));
     }
 
     #[test]
@@ -1531,7 +1568,7 @@ mod tests {
     fn zcode_hooks_join_its_config_and_leave_the_rest_alone() {
         let h = home();
         let src = hook_src(h.path());
-        assert!(enable(AppId::Zcode, h.path(), Some(&src), Lang::Pl).unwrap_err().contains("~/.zcode"));
+        assert!(enable(AppId::Zcode, h.path(), Some(&src), Lang::Pl).unwrap_err().to_string().contains("~/.zcode"));
         let f = zcode_config(h.path(), None);
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         let theirs = json!({"matcher": "*", "hooks": [{"type": "process", "command": "C:\\tools\\notify.exe", "args": ["done"]}]});
@@ -1592,7 +1629,8 @@ mod tests {
         let text = r#"{"hooks":{"enabled":false}}"#;
         std::fs::write(&f, text).unwrap();
         let err = enable(AppId::Zcode, h.path(), Some(&hook_src(h.path())), Lang::Pl).unwrap_err();
-        assert!(err.contains("enabled"), "{err}");
+        assert!(err.left_alone());
+        assert!(err.to_string().contains("enabled"), "{err}");
         assert_eq!(std::fs::read_to_string(&f).unwrap(), text);
         assert!(!status(AppId::Zcode, h.path(), Lang::Pl).installed);
     }

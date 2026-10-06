@@ -60,6 +60,8 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
   const x = t().stats;
   const tl = view.tiles;
   const change = formatChange(tl.tokens_change);
+  const week = view.week;
+  const weekChange = formatChange(week.last.active_ms > 0 ? (week.this.active_ms / week.last.active_ms - 1) * 100 : null);
   return (
     <div className="stats">
       <header>
@@ -71,6 +73,14 @@ export function StatsPage({ view, period, metric, race, progress, animate, onPer
         <span>{x.loading(scanPct(progress))}</span>
         <span className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={scanPct(progress)}><i style={{ width: `${scanPct(progress)}%` }} /></span>
       </div>}
+      <section className="card week-compare" aria-label={x.week.this}>
+        <div className="ct"><span>{x.week.this}</span><span>{x.week.day(week.days_into_week)}</span></div>
+        <div className="week-pair">
+          <div><b>{x.week.this}</b><strong>{formatHours(week.this.active_ms)}</strong><span>{formatTokens(week.this.tokens)} {x.tiles.tokens.toLowerCase()}</span></div>
+          <div><b>{x.week.last}</b><strong>{formatHours(week.last.active_ms)}</strong><span>{formatTokens(week.last.tokens)} {x.tiles.tokens.toLowerCase()}</span></div>
+        </div>
+        <div className="week-note">{weekChange && <span className={week.this.active_ms >= week.last.active_ms ? 'up' : 'down'}>{weekChange} </span>}{x.week.vsLast}</div>
+      </section>
       {view.empty ? <div className="empty">{progress && !progress.done
         // initial scan is still running: the pet reads history; text is in the bar above
         ? <StatPet agent="claude" scene="read" w={96} h={72} u={0.45} pets={pets} animate={animate} />

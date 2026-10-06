@@ -24,6 +24,15 @@ export function BellIcon() {
   );
 }
 
+/** Pinned session: a push pin. */
+export function PinIcon() {
+  return (
+    <svg {...base}>
+      <path d="M9.9 2.5l3.6 3.6-1.6.5-2 2.4.3 2.3-.9.9-2.6-2.6-3.6 3.6-.6-.6 3.6-3.6-2.6-2.6.9-.9 2.3.3 2.4-2z" />
+    </svg>
+  );
+}
+
 /** Gear outline: `n` teeth, outer radius `ro`, inner radius `ri` (center 8, 8). */
 export function gearPath(n = 8, ro = 7, ri = 5.3): string {
   const r = (v: number) => Math.round(v * 100) / 100;

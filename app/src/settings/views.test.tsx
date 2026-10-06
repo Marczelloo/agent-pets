@@ -281,6 +281,37 @@ describe('SettingsView', () => {
       onChange={() => {}} onIntegration={async () => ''} message={null} />);
     expect(html).toMatch(new RegExp(`class="taskbar"[^>]*width="${SLOT * 9}"`));
   });
+  it('the notifications tab offers to mute, and says until when a mute lasts', () => {
+    const view = (muted_until: number | null, now = 1_000) => renderToString(<SettingsView settings={{ ...defaultSettings(), notifications: { ...defaultSettings().notifications, muted_until } }}
+      rows={rows} diag={diag} tab="notify" onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} now={now} />);
+    const off = view(null);
+    expect(off).toContain('Wyciszenie');
+    for (const l of ['Wyłączone', '1 godz.', 'Do 8:00', 'Do odwołania']) expect(off).toContain(l);
+    expect(off).toMatch(/aria-checked="true"[^>]*>Wyłączone/);
+    expect(off).not.toContain('Wyciszone do');
+    const hhmm = (ts: number) => `${String(new Date(ts).getHours()).padStart(2, '0')}:${String(new Date(ts).getMinutes()).padStart(2, '0')}`;
+    const until = 1_000 + 90 * 60_000;
+    expect(view(until)).toContain(`Wyciszone do ${hhmm(until)}`);
+    expect(view(until)).not.toMatch(/aria-checked="true"[^>]*>Wyłączone/);
+    expect(view(1_000 - 1, 1_000), 'an expired mute is no mute').toMatch(/aria-checked="true"[^>]*>Wyłączone/);
+    const forever = view(9223372036854776000);
+    expect(forever).toContain('Wyciszone do odwołania');
+    expect(forever).toMatch(/aria-checked="true"[^>]*>Do odwołania/);
+    setLang('en');
+    expect(view(until)).toContain(`Muted until ${hhmm(until)}`);
+    expect(view(null)).toContain('Until 8:00');
+  });
+  it('offers the weekly recap switch in both languages', () => {
+    const view = () => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="notify" onTab={() => {}}
+      onChange={() => {}} onIntegration={async () => ''} message={null} />);
+    setLang('pl');
+    expect(view()).toContain('Podsumowanie tygodnia');
+    expect(view()).toContain('W poniedziałek rano');
+    setLang('en');
+    expect(view()).toContain('Weekly recap');
+    expect(view()).toContain('On Monday morning');
+    setLang('pl');
+  });
   it('the diagnostics tab offers to report a problem on GitHub, only when it can open it', () => {
     const view = (onReport?: () => void) => renderToString(<SettingsView settings={defaultSettings()} rows={rows} diag={diag} tab="diag"
       onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} onReport={onReport} />);
@@ -426,5 +457,47 @@ describe('panel', () => {
     expect(html.match(/class="kid[ "]/g)?.length).toBe(3);
     expect(html).toMatch(/class="kid[^"]*focus/);
     expect(html.indexOf('Znajdź testy')).toBeLessThan(html.indexOf('Newton'));
+  });
+});
+
+describe('keyboard shortcuts in the general tab', () => {
+  const render = (s = defaultSettings(), hotkeyStatus?: { jump: string | null; panel: string | null }) => renderToString(<SettingsView settings={s} rows={rows} diag={diag}
+    tab="general" onTab={() => {}} onChange={() => {}} onIntegration={async () => ''} message={null} hotkeyStatus={hotkeyStatus} />);
+  it('shows both shortcuts with their combos, in Polish and in English', () => {
+    const pl = render();
+    expect(pl).toContain('Skróty klawiszowe');
+    expect(pl).toContain('Przejdź do agenta, który czeka');
+    expect(pl).toContain('Pokaż/ukryj panel');
+    expect(pl).toContain('Ctrl + Alt + Shift + J');
+    expect(pl).toContain('Ctrl + Alt + Shift + K');
+    setLang('en');
+    const en = render();
+    expect(en).toContain('Keyboard shortcuts');
+    expect(en).toContain('Jump to the waiting agent');
+    expect(en).toContain('Show/hide the panel');
+  });
+  it('offers Default only for a changed shortcut and Off only for one that is on', () => {
+    setLang('en');
+    expect(render()).not.toContain('>Default<');
+    const changed = render({ ...defaultSettings(), hotkeys: { jump: 'Ctrl+Shift+F2', panel: null } });
+    expect(changed).toContain('Ctrl + Shift + F2');
+    expect(changed.match(/>Default</g)?.length).toBe(2);
+    const section = changed.slice(changed.indexOf('Keyboard shortcuts'), changed.indexOf('Checks GitHub'));
+    expect(section.match(/>Off</g)?.length).toBe(2); // the "Off" button of jump, the "Off" label of panel
+    expect(changed).toContain('aria-label="Show/hide the panel: Off"');
+  });
+  it('a settings file from before the shortcuts still renders the defaults', () => {
+    const { hotkeys: _gone, ...old } = defaultSettings();
+    expect(render(old as Settings)).toContain('Ctrl + Alt + Shift + J');
+  });
+  it('shows a registration error under the row that failed, and nothing when all is well', () => {
+    setLang('en');
+    const ok = render(defaultSettings(), { jump: null, panel: null });
+    expect(ok).not.toContain('Couldn&#x27;t register');
+    const bad = render(defaultSettings(), { jump: null, panel: 'in use' });
+    expect(bad.match(/Couldn&#x27;t register/g)?.length).toBe(1);
+    expect(bad.indexOf('Couldn&#x27;t register')).toBeGreaterThan(bad.indexOf('Show/hide the panel'));
+    setLang('pl');
+    expect(render(defaultSettings(), { jump: 'taken', panel: null })).toContain('Nie udało się zarejestrować — skrót zajęty przez inny program?');
   });
 });

@@ -1,5 +1,5 @@
-# Tests on every push to main, every pull request and every v* tag. The installer with its update
-# signature is built locally with scripts/release.ps1 (the signing key stays local; docs/building.md).
+# Tests on every push to main, every pull request and every v* tag. The signed installer is built by
+# release.yml (docs/building.md, "Releases").
 name: ci
 
 on:

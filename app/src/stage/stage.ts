@@ -17,7 +17,7 @@ import { bgStyle, bgVisible } from './background';
 import { Hover } from './hover';
 import { passthroughAt } from './hit';
 import { Roster, type Entry } from './roster';
-import { frameBudget, reducedMotion } from './power';
+import { frameBudget, reducedMotion, stageFps } from './power';
 
 
 export interface StageHandle { hover: (p: PointerMsg) => void }
@@ -38,7 +38,10 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   let stage: StageSettings = defaultStage();
   let orderer = new Orderer(stage.order);
   const bg = document.getElementById('bg');
-  let budget = frameBudget(false), saving = false, reduced = reducedMotion();
+  let budget = frameBudget(false), saving = false, reduced = reducedMotion(), fps = budget.fps;
+  /** full frame rate until (stage clock T): a few seconds after anything changed, so transitions stay smooth */
+  let hotUntil = 0;
+  const heat = () => { hotUntil = T + 5; };
   const painters = new WeakMap<Entry, PetPainter>();
   /** when (T) a child first appeared as a mini: for the entrance effect */
   const miniBorn = new Map<string, number>();
@@ -79,10 +82,10 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     if (out.width !== sentWidth) { sentWidth = out.width; bridge.setWidth(out.width); }
     const at = out.pets.map(p => ({ id: p.id, x: Math.round(p.x) })), zoom = out.geo?.zoom ?? 1;
     const key = JSON.stringify([at, out.width, zoom]);
-    if (key !== sentPets) { sentPets = key; bridge.setPets?.(at, out.width, zoom); }
+    if (key !== sentPets) { sentPets = key; heat(); bridge.setPets?.(at, out.width, zoom); }
     hover.refresh(true);
   };
-  const take = (s: Snapshot) => { snap = s; clockOffset = s.now - Date.now(); relayout(); };
+  const take = (s: Snapshot) => { snap = s; clockOffset = s.now - Date.now(); heat(); relayout(); };
 
   function fit() {
     const d = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
@@ -96,7 +99,7 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     if (!visible) { running = false; return; }
     const now = performance.now();
     // power saving runs at 10 fps: a real 0.1 s frame must advance the clock by 0.1 s (substepped in tick), not by the 0.05 s hitch cap
-    const dt = Math.min(budget.fps < 30 ? .25 : .05, (now - last) / 1000);
+    const dt = Math.min(fps < 30 ? .25 : .05, (now - last) / 1000);
     last = now;
     T += dt;
     const { w, h } = fit();
@@ -119,7 +122,9 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     }
     if (out.badgeX != null) { x.save(); x.translate(out.badgeX, 0); x.scale(z, z); drawBadge(x, 0, hz, out.hidden, pen.font); x.restore(); }
     if (out.limitsX != null) { x.save(); x.translate(out.limitsX, 0); x.scale(z, z); drawLimits(x, 0, hz, limitBars(snap.limits)); x.restore(); }
-    setTimeout(frame, Math.max(0, 1000 / budget.fps - (performance.now() - now)));
+    const scenes = out.pets.flatMap(p => [p.id, ...p.minis.map(m => m.id)]).map(id => roster.get(id)?.scene).filter(k => k != null);
+    fps = stageFps(budget.fps, scenes, T < hotUntil);
+    setTimeout(frame, Math.max(0, 1000 / fps - (performance.now() - now)));
   }
 
   /** Parent's mini pets: child agent skin and style, 55% size, entrance effect, and quick farewell. */
@@ -155,8 +160,8 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
   }
 
   bridge.onSnapshot(take);
-  bridge.onLayout(l => { if (l.mode !== lay.mode) through = null; lay = l; paintBg(); relayout(); });
-  bridge.onVisibility(v => { visible = v; if (!v) hover.clear(); kick(); });
+  bridge.onLayout(l => { heat(); if (l.mode !== lay.mode) through = null; lay = l; paintBg(); relayout(); });
+  bridge.onVisibility(v => { visible = v; heat(); if (!v) hover.clear(); kick(); });
   bridge.onPointer(p => handle.hover(p));
   bridge.onSettings(s => {
     setLang(resolveLang(s.language ?? 'auto'));
@@ -165,12 +170,13 @@ export function startStage(canvas: HTMLCanvasElement, bridge: Bridge): StageHand
     const st = s.stage ?? defaultStage();
     if (st.order !== stage.order) orderer = new Orderer(st.order);
     stage = st;
+    heat();
     paintBg();
     relayout();
   });
   bridge.onMoving?.(on => bg?.classList.toggle('moving', on));
-  bridge.onPower(s => { saving = s; budget = frameBudget(s); });
-  bridge.onMedia?.(m => { const was = music(), app = media.app; media = m; if (music() !== was) relayout(); else if (m.app !== app) hover.refresh(true); });
+  bridge.onPower(s => { saving = s; budget = frameBudget(s); heat(); });
+  bridge.onMedia?.(m => { heat(); const was = music(), app = media.app; media = m; if (music() !== was) relayout(); else if (m.app !== app) hover.refresh(true); });
   void bridge.start().then(s => { if (s) take(s); kick(); });
   return handle;
 }

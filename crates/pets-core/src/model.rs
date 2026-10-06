@@ -83,6 +83,12 @@ pub struct Session {
     /// Session usage from the agent database (since 0.11, opencode only).
     #[serde(default)]
     pub usage: Option<Usage>,
+    /// Pinned by the user in the panel (set from `labels`, never by the store).
+    #[serde(default)]
+    pub pinned: bool,
+    /// `title` is the user's own name (set from `labels`); the panel offers to reset it.
+    #[serde(default)]
+    pub renamed: bool,
 }
 
 /// Tokens and cost for one session; `account` = account whose limits apply to it (Claude or ChatGPT subscription).
@@ -110,9 +116,9 @@ pub struct SubInfo {
     pub background: bool,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-pub enum Window { FiveHour, Weekly }
+pub enum Window { FiveHour, Weekly, Spend }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Limit {

@@ -36,6 +36,10 @@ export interface Session {
   action?: string | null;
   /** question text, only in `needs_you` */
   question?: string | null;
+  /** pinned by the user: sorts right after the sessions that need you */
+  pinned?: boolean;
+  /** `title` is the user's own name (the menu offers to reset it) */
+  renamed?: boolean;
   /** model ID (e.g. `claude-opus-5-5`), since 0.10 */
   model?: string | null;
   /** `other` agent name (from the bridge), since 0.10 */
@@ -48,12 +52,14 @@ export interface SubInfo { kind: SubKind; agent_type: string | null; description
 export interface RouterTask { task_id: string; status: string; last_activity_at: number | null; blocked: boolean; stall_ms: number }
 
 /** `stale_since`: time of the last real reading when the value is old (the Claude app stopped polling). */
-export interface Limit { agent: Agent; window: 'five_hour' | 'weekly'; used_pct: number; resets_at: number | null; stale_since?: number | null }
+export interface Limit { agent: Agent; window: 'five_hour' | 'weekly' | 'spend'; used_pct: number; resets_at: number | null; stale_since?: number | null }
 /** Session tokens and cost from the agent database (opencode only since 0.11); `account` = account whose limits apply. */
 export interface Usage { tokens: number; cost: number; account: Agent | null }
 /** Agent's daily total (since local midnight). */
 export interface AgentUsage { agent: Agent; tokens_today: number; cost_today: number }
-export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[] }
+/** A limit window that runs out at `runs_out_at` (ms) before it resets, if the pace holds. */
+export interface Forecast { agent: Agent; window: Limit['window']; runs_out_at: number }
+export interface Snapshot { sessions: Session[]; limits: Limit[]; now: number; agent_usage?: AgentUsage[]; forecasts?: Forecast[] }
 /** Layout from Rust; `mode` and `light` since 0.7 (absent = taskbar, dark). */
 export interface StageLayout { max_css: number; height_css: number; scale: number; mode?: 'taskbar' | 'floating'; light?: boolean; left_fallback?: boolean; vertical_bar?: boolean }
 export type PointerMsg =
@@ -84,7 +90,8 @@ export interface Settings {
   claude_mod_pet: boolean;
   /** The mod's nudges about other agents (0.16.1); on by default. */
   claude_mod_nudges: boolean;
-  notifications: { needs_you: boolean; done: boolean; limits: boolean };
+  /** `muted_until`: toasts are silenced until then (ms since epoch; a huge value = until turned back on); absent or null = not muted (0.17). */
+  notifications: { needs_you: boolean; done: boolean; limits: boolean; weekly: boolean; sound: boolean; muted_until?: number | null };
   pets: Pets;
   power_saving: 'auto' | 'always' | 'never';
   autostart: boolean;
@@ -92,8 +99,13 @@ export interface Settings {
   theme: Theme;
   updates: Updates;
   stage: StageSettings;
+  /** System-wide shortcuts (0.17), accelerator strings like `Ctrl+Alt+Shift+J`; `null` = off. */
+  hotkeys: Hotkeys;
   [extra: string]: unknown;
 }
+export interface Hotkeys { jump: string | null; panel: string | null }
+/** Mirrors `hotkeys::HotkeyStatus` (command `hotkeys_status`, event `pets://hotkeys`): why a shortcut could not be registered, or `null`. */
+export interface HotkeyStatus { jump: string | null; panel: string | null }
 export type Theme = 'system' | 'light' | 'dark';
 export type Updates = 'notify' | 'auto' | 'off';
 /** Lustro `placement::MonitorInfo` (komenda `monitors_list`). */
@@ -107,7 +119,7 @@ export type UpdateStatus =
   /** `verify`: problem with the update itself (panel and settings); otherwise a check error (settings only) */
   | { state: 'error'; message: string; verify: boolean };
 /** Mirrors `notify::center::Entry` (event `pets://notifications`). */
-export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update';
+export type NotificationKind = 'needs_you' | 'done' | 'limit' | 'update' | 'updated' | 'weekly' | 'problem';
 export interface NotificationEntry { id: number; kind: NotificationKind; title: string; body: string; session_id: string | null; at: number; read: boolean }
 export type StagePosition = 'right' | 'left' | 'custom' | 'floating';
 export type StageAlign = 'left' | 'center' | 'right';
@@ -172,5 +184,7 @@ export interface StatsTiles {
 export interface StatsLane { key: string; agent: StatAgent | null; value: number }
 export interface StatsDay { date: string; active_ms: number; level: number }
 export interface StatsBadge { kind: BadgeKind; project: string | null; agent: StatAgent | null; value: number }
-export interface StatsView { empty: boolean; podium: StatsPlace[]; tiles: StatsTiles; race: StatsLane[]; calendar: StatsDay[]; badges: StatsBadge[]; record: boolean }
+export interface WeekTotals { active_ms: number; tokens: number; sessions: number; top_project: string | null; top_agent: StatAgent | null }
+export interface WeekCompare { this: WeekTotals; last: WeekTotals; days_into_week: number }
+export interface StatsView { empty: boolean; podium: StatsPlace[]; tiles: StatsTiles; race: StatsLane[]; calendar: StatsDay[]; badges: StatsBadge[]; record: boolean; week: WeekCompare }
 export interface StatsProgress { files: number; scanned: number; total: number; done: boolean }
