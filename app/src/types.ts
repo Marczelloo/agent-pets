@@ -99,7 +99,7 @@ export interface Settings {
   theme: Theme;
   updates: Updates;
   stage: StageSettings;
-  /** System-wide shortcuts (0.17), accelerator strings like `Super+Shift+J`; `null` = off. */
+  /** System-wide shortcuts (0.17), accelerator strings like `Ctrl+Alt+Shift+J`; `null` = off. */
   hotkeys: Hotkeys;
   [extra: string]: unknown;
 }

@@ -468,8 +468,8 @@ describe('keyboard shortcuts in the general tab', () => {
     expect(pl).toContain('Skróty klawiszowe');
     expect(pl).toContain('Przejdź do agenta, który czeka');
     expect(pl).toContain('Pokaż/ukryj panel');
-    expect(pl).toContain('Win + Shift + J');
-    expect(pl).toContain('Win + Shift + K');
+    expect(pl).toContain('Ctrl + Alt + Shift + J');
+    expect(pl).toContain('Ctrl + Alt + Shift + K');
     setLang('en');
     const en = render();
     expect(en).toContain('Keyboard shortcuts');
@@ -488,7 +488,7 @@ describe('keyboard shortcuts in the general tab', () => {
   });
   it('a settings file from before the shortcuts still renders the defaults', () => {
     const { hotkeys: _gone, ...old } = defaultSettings();
-    expect(render(old as Settings)).toContain('Win + Shift + J');
+    expect(render(old as Settings)).toContain('Ctrl + Alt + Shift + J');
   });
   it('shows a registration error under the row that failed, and nothing when all is well', () => {
     setLang('en');

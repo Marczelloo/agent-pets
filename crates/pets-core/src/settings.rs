@@ -63,7 +63,8 @@ pub struct Apps {
     pub zcode: bool,
 }
 
-/// Global shortcuts as accelerator strings (`Super+Shift+J`); `None` = off. A file without the field gets the defaults.
+/// Global shortcuts as accelerator strings (`Ctrl+Alt+Shift+J`); `None` = off. A file without the field gets the defaults.
+/// No Win key in the defaults: Windows reserves Win combinations for itself and keeps adding new ones.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Hotkeys {
@@ -74,7 +75,7 @@ pub struct Hotkeys {
 }
 
 impl Default for Hotkeys {
-    fn default() -> Self { Hotkeys { jump: Some("Super+Shift+J".into()), panel: Some("Super+Shift+K".into()) } }
+    fn default() -> Self { Hotkeys { jump: Some("Ctrl+Alt+Shift+J".into()), panel: Some("Ctrl+Alt+Shift+K".into()) } }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -470,11 +471,11 @@ mod tests {
     #[test]
     fn the_hotkeys_default_on_and_an_old_file_gets_them() {
         let d = Settings::default().hotkeys;
-        assert_eq!((d.jump.as_deref(), d.panel.as_deref()), (Some("Super+Shift+J"), Some("Super+Shift+K")));
+        assert_eq!((d.jump.as_deref(), d.panel.as_deref()), (Some("Ctrl+Alt+Shift+J"), Some("Ctrl+Alt+Shift+K")));
         assert_eq!(load_str(r#"{"version":1,"claude_mod":true}"#).settings.hotkeys, d);
         // a half-written section keeps the default for the missing one; null turns one off
         let l = load_str(r#"{"version":1,"hotkeys":{"jump":null}}"#).settings.hotkeys;
-        assert_eq!((l.jump, l.panel.as_deref()), (None, Some("Super+Shift+K")));
+        assert_eq!((l.jump, l.panel.as_deref()), (None, Some("Ctrl+Alt+Shift+K")));
     }
 
     #[test]

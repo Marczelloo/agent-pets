@@ -30,7 +30,7 @@ export const WIZARD_STEPS = ['apps', 'limits', 'notify', 'look'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
 /** Like core `Hotkeys::default()`. */
-export const defaultHotkeys = (): Hotkeys => ({ jump: 'Super+Shift+J', panel: 'Super+Shift+K' });
+export const defaultHotkeys = (): Hotkeys => ({ jump: 'Ctrl+Alt+Shift+J', panel: 'Ctrl+Alt+Shift+K' });
 
 /** Like core `Settings::default()`; used when the app does not respond (browser preview). */
 export function defaultSettings(): Settings {
