@@ -18,7 +18,11 @@ LOFI, RUN = f'{MUSIC}/lofi-vlog.mp3', f'{MUSIC}/running-night.mp3'
 SCRATCH = 0.104 + 7 * 60 / 87.02   # the lofi's last beat: the record is stopped here (time.ts SCRATCH)
 HIT = 5.620                        # Running Night's drop (time.ts HIT)
 PICKUP = 0.5 * 60 / 106.01         # Running Night comes in this early: the last half beat of its build, already at full speed
-CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0), (RUN, 71.707 - PICKUP, 83.027, HIT - PICKUP, 0.0), (RUN, 98.874, 111.0, 16.940, 0.0)]
+RBAR = 4 * 60 / 106.01
+# Running Night from its drop: bars 0-2, then bars 10-15 (bar 10 plays the part bar 2 does a phrase earlier, so the only repeat is a
+# middle bar, under the band at 12.4 s; from there it runs on untouched through the styles to its final hit).
+CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0), (RUN, 71.707 - PICKUP, 71.707 + 3 * RBAR, HIT - PICKUP, 0.0), (RUN, 71.707 + 10 * RBAR, 111.0, HIT + 3 * RBAR, 0.0)]
+XF = 0.020                         # the jump between the two Running Night pieces is a 20 ms equal-power crossfade centred on the bar line
 # The hand-over (87 -> 106 BPM, so the two never play together): the lofi is yanked back like a record under a DJ's hand, a breath of
 # silence, then Running Night is simply there, mid-run, half a beat before its drop.
 SPIN = 0.30                        # how long the spin-back lasts
@@ -46,16 +50,18 @@ def music_bed(n):
     for i, (path, a, b, at, gain) in enumerate(CUTS):
         y = files.setdefault(path, load(path))
         g = 10 ** (gain / 20)
+        if i == 1: b += XF / 2                                     # run on past the bar line into the crossfade
+        if i == 2: a -= XF / 2; at -= XF / 2                       # and start the next piece just before it
         seg = y[:, int(a * S.SR):int(b * S.SR)] * g
         if i == 0:
             sp = spin_back(y, b, SPIN) * g                         # carries straight on from the last sample played
             seg = np.concatenate([seg, sp], axis=1)
         else:
-            fin = int((0.006 if i == 1 else 0.012) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
+            fin = int((0.006 if i == 1 else XF) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
             if i == 1:                                             # the pickup swells from -9 dB so the drop, not the pickup, is the hit
                 k = int(PICKUP * S.SR); seg[:, :k] *= 10 ** (np.linspace(-9, 0, k) / 20)
         if i < len(CUTS) - 1:
-            fout = int(0.012 * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
+            fout = int((XF if i == 1 else 0.012) * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
     return out

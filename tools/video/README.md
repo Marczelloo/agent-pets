@@ -14,9 +14,9 @@ The picture is timed to two tracks, cut on their bar lines (`src/show/time.ts`):
 | 4.9 – 5.6 s | the break | The record is stopped: everyone freezes, turns to us (!) and crouches |
 | 5.6 – 7.9 s | Running Night, from its drop | *Meet the crew.* Everyone jumps, confetti, name tags; then a dive into Clawd |
 | 7.9 – 12.4 s | | One pet per beat, each in a different state: *See what every agent is doing.* |
-| 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
+| 12.4 – 14.7 s | Running Night, last phrase (from 94.3 s) | Clawd needs you: a bubble, a Windows notification, Open |
 | 14.7 – 16.9 s | | Click Clawd: the real panel opens, then the Limits tab |
-| 16.9 – 21.5 s | Running Night, last phrase | *7 styles.* Clawd and Kodek (the two with every look) change look on every beat for two bars |
+| 16.9 – 21.5 s | | *7 styles.* Clawd and Kodek (the two with every look) change look on every beat for two bars |
 | 21.5 – 23.7 s | | The real statistics window |
 | 23.7 – 26.0 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
 | 26.0 – 28.3 s | the final hit | The crew drops onto the end card |
