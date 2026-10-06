@@ -14,13 +14,24 @@
 - Mute notifications for an hour, until 8:00 or until you turn them back on: from the tray menu or Settings → Notifications. Windows toasts stay quiet, the list in the panel keeps filling and says until when.
 - A second toast when an agent has been waiting for you for 10 minutes. The done toast says how long the turn took and how many tokens it used.
 - Settings → Notifications: switch the toast sound off; a question waiting for you has its own sound.
+- Claude's spend limit shows up next to the 5h and weekly limits (Limits tab, tooltips, `/pets`) when Claude Code reports one. It can read above 100%, and a toast says when it is reached.
 
 ### Changed
 
+- Releases are built, signed and drafted on GitHub Actions from a version tag, and the installer is ready for winget (`Marczelloo.AgentPets`). Code signing through SignPath Foundation is being requested.
 - The stage draws fewer frames when nothing moves: 20 fps for resting pets, 10 when they all sleep, 4 for an empty stage. Anything that changes brings back the full rate for a few seconds.
 
 ### Fixed
 
+- Pressing Esc in Claude Code, or a failed turn, ends its subagents' pets right away instead of leaving them to time out. Background subagents keep running.
+- Agent Router tasks link to their session whatever name the router's MCP server is registered under.
+- Tokens, keys and passwords in commands are masked (•••) in bubbles, tooltips and the panel.
+- Speech bubbles no longer watch the cursor while none is shown.
+- A session running in a Windows Terminal window that was started from an IDE is named after that terminal and jumps to its window, not to the IDE.
+- The copied resume command uses `Set-Location -LiteralPath '…'`, so folders with spaces, quotes, `$` or `&` paste safely into PowerShell.
+- Text reported through the door (`hook.exe report`) drops direction marks and control characters, so it cannot disguise itself, and a pid it reports can only bring forward a terminal or IDE window.
+- The statistics window computes its view off the main thread, so a long history no longer stalls the app while it opens.
+- Sessions started in a temporary folder no longer show up as projects in the statistics rankings; their usage still counts in the totals.
 - The session cost in the panel follows the UI language (0,42 $ in Polish, $0.42 in English).
 - Update news in the panel's notifications looks like the other entries and stays on top. Only the latest one is kept, and "Updated to version" no longer shows an Install button; Install appears only while that version still waits to be installed.
 
