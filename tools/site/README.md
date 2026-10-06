@@ -21,6 +21,22 @@ Every pet on the page is drawn by the **app's own renderer**: skins, poses, scen
 
 The navigation is a Windows 11 taskbar docked at the bottom. A different pet, in a different look, pops out of it above the section you are reading and says a line about it.
 
+## Hosting
+
+The repository root has a `Dockerfile` that serves **only this page**: nginx with `site/index.html` and `site/nginx.conf`. Its `.dockerignore` lets nothing else into the build context (about 290 KB), so the Windows app, the Rust crates and the tooling never reach the image. A hosting dashboard that looks for a Dockerfile finds this one and nothing else to build.
+
+```sh
+docker build -t agent-pets-site .
+docker run -p 8080:80 agent-pets-site      # http://localhost:8080
+```
+
+- Port **80** in the container; `GET /healthz` answers `ok` (the image's healthcheck uses it).
+- Gzip (the page travels as about 95 KB), `Cache-Control: no-cache` with an ETag, so a new build shows up at once.
+- A Content-Security-Policy that allows exactly what the page uses: its inline script and styles, Google Fonts, and the GitHub API for the release list.
+- Without Docker, any static host works: serve `site/index.html` as is, or use `site/nginx.conf` as an nginx `server` block (change `root`).
+
+The image serves the committed `site/index.html`; run `pnpm build` here and commit the result to change what it serves.
+
 ## Releases
 
 The build bakes a snapshot of the GitHub releases into the page. In the browser the page then asks the GitHub API for the current list (`api.github.com/repos/Marczelloo/agent-pets/releases`, no token, cached for 10 minutes) and replaces the snapshot, so a new release shows up without rebuilding: its version on the download buttons, its installer link, its notes. When the API is out of reach or rate-limited, the snapshot stays and the page says how old it is.
