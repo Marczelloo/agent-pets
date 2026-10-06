@@ -38,8 +38,6 @@ pub fn js_string_field(src: &str, keys: &[&str]) -> Option<String> {
 }
 
 const SHELLS: [&str; 4] = ["shell_command", "exec_command", "shell", "local_shell"];
-/// Router tools whose results link a task to the thread that requested it.
-const ROUTER_LINKING: [&str; 3] = ["codex_delegate", "codex_continue", "codex_review"];
 
 /// Names of tools called in `exec` tool JS code, e.g. `tools.exec_command(`.
 pub fn js_tool_calls(src: &str) -> Vec<String> {
@@ -249,8 +247,9 @@ impl RolloutParser {
                     vec![e]
                 }
                 Some("ContextCompaction") => self.one(ts, Kind::Compact),
-                Some("McpToolCall") if p.pointer("/item/server").and_then(|v| v.as_str()) == Some("agent-router")
-                    && p.pointer("/item/tool").and_then(|v| v.as_str()).map(|t| ROUTER_LINKING.contains(&t)).unwrap_or(false) => {
+                Some("McpToolCall") if p.pointer("/item/server").and_then(|v| v.as_str())
+                    .zip(p.pointer("/item/tool").and_then(|v| v.as_str()))
+                    .is_some_and(|(server, tool)| crate::router::linking_tool(&format!("mcp__{server}__{tool}"))) => {
                     let Some(task) = p.pointer("/item/result").and_then(find_task_id) else { return vec![] };
                     let mut e = self.ev(Kind::Meta, ts).unwrap();
                     e.data.router_link = Some(task);
@@ -565,6 +564,9 @@ mod tests {
             "result": {"content": [{"type": "text", "text": "{\"status\":\"running\",\"taskId\":\"codex-1\"}"}]}});
         let e = p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": item})));
         assert_eq!((e[0].session_id.as_str(), e[0].kind, e[0].data.router_link.as_deref()), ("t1", Kind::Meta, Some("codex-1")));
+        let alternate = json!({"type": "McpToolCall", "server": "router", "tool": "codex_review", "result": {"taskId": "codex-2"}});
+        let e = p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": alternate})));
+        assert_eq!(e[0].data.router_link.as_deref(), Some("codex-2"));
         let other = json!({"type": "McpToolCall", "server": "cua_repl", "tool": "js", "result": {"content": [{"type": "text", "text": "{\"taskId\":\"x\"}"}]}});
         assert!(p.parse_line(&l("event_msg", json!({"type": "item_completed", "item": other}))).is_empty());
         let e = p.parse_line(&l("response_item", json!({"type": "function_call", "name": "codex_task_status", "namespace": "mcp__agent-router", "arguments": "{}"})));

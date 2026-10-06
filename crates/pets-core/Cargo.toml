@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+regex = "1"
 anyhow.workspace = true
 tiny_http = "0.12"
 rand = "0.8"

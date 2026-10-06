@@ -355,6 +355,9 @@ impl Store {
         }
         out.push(Change::Upsert(s.clone()));
         if child && !matches!(e.kind, Kind::Meta | Kind::Limits | Kind::SessionEnd) { self.answered_for_child(e, &mut out); }
+        if e.source == Source::Claude && matches!(e.kind, Kind::TurnEnd | Kind::Error) && !child {
+            self.end_claude_children(&e.session_id, e.ts, &mut out);
+        }
         if e.kind == Kind::SessionEnd { self.release_children(&e.session_id, e.ts, &mut out); }
         if e.data.sub_end { self.end_newest_child(&e.session_id, e.ts, &mut out); }
         out
@@ -384,6 +387,18 @@ impl Store {
             set(s, State::Ended, None, now);
             self.pending.remove(id);
             self.ended_at.insert(id.to_string(), now);
+        }
+    }
+
+    /// Claude may omit `SubagentStop` when its parent turn is interrupted or fails. Background subagents outlive the turn.
+    fn end_claude_children(&mut self, parent: &str, now: i64, out: &mut Vec<Change>) {
+        let ids: Vec<String> = self.children_of(parent).into_iter()
+            .filter(|c| c.state != State::Ended && sub_kind(c) == Some(SubKind::Claude))
+            .filter(|c| !c.sub.as_ref().is_some_and(|i| i.background))
+            .map(|c| c.id.clone()).collect();
+        for id in ids {
+            self.end(&id, now);
+            if let Some(s) = self.sessions.get(&id) { out.push(Change::Upsert(s.clone())); }
         }
     }
 
@@ -1069,6 +1084,23 @@ mod tests {
         s.apply(&Event::new(Source::Claude, "p", Kind::ToolEnd, 131_000));
         s.tick(132_000, &alive);
         assert_eq!(state_of(&s, "p/a"), Some(State::Ended), "interrupted subagent (Esc) does not linger");
+    }
+
+    #[test]
+    fn a_claude_parent_turn_ending_ends_live_foreground_subagents_immediately() {
+        for kind in [Kind::TurnEnd, Kind::Error] {
+            let mut s = Store::new(Timing::default());
+            s.apply(&Event::new(Source::Claude, "p", Kind::Prompt, 0));
+            parent_working(&mut s, 1_000);
+            s.apply(&kid("p/a", "p", Kind::Prompt, 1_000, sub(SubKind::Claude, false)));
+            s.apply(&kid("p/b", "p", Kind::Prompt, 1_000, sub(SubKind::Claude, true)));
+            s.apply(&kid("p/router", "p", Kind::Prompt, 1_000, sub(SubKind::Router, false)));
+            let changes = s.apply(&Event::new(Source::Claude, "p", kind, 2_000));
+            assert_eq!(state_of(&s, "p/a"), Some(State::Ended));
+            assert_ne!(state_of(&s, "p/b"), Some(State::Ended), "a background subagent outlives the turn");
+            assert_ne!(state_of(&s, "p/router"), Some(State::Ended));
+            assert_eq!(changes.iter().filter(|c| matches!(c, Change::Upsert(x) if x.state == State::Ended)).count(), 1);
+        }
     }
 
     #[test]

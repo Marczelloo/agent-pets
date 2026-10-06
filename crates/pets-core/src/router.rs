@@ -10,6 +10,12 @@ use std::time::SystemTime;
 pub const FILE: &str = "status.json";
 pub const POLL_MS: i64 = 1000;
 
+/// Router MCP tool names can have any registered server prefix.
+pub fn linking_tool(name: &str) -> bool {
+    name.strip_prefix("mcp__").and_then(|rest| rest.rsplit_once("__"))
+        .is_some_and(|(_, tool)| matches!(tool, "codex_delegate" | "codex_continue" | "codex_review"))
+}
+
 pub fn to_events(bytes: &[u8]) -> Vec<Event> {
     let Ok(v) = serde_json::from_slice::<Value>(bytes) else { return vec![] };
     if v.get("version").and_then(Value::as_i64) != Some(1) { return vec![]; }
@@ -61,6 +67,17 @@ impl Poller {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn router_linking_uses_the_mcp_tool_suffix() {
+        for server in ["agent-router", "router", "plugin_x_agent-router"] {
+            assert!(linking_tool(&format!("mcp__{server}__codex_delegate")));
+            assert!(linking_tool(&format!("mcp__{server}__codex_continue")));
+            assert!(linking_tool(&format!("mcp__{server}__codex_review")));
+        }
+        assert!(!linking_tool("mcp__router__codex_task_status"));
+        assert!(!linking_tool("codex_delegate"));
+    }
 
     fn fixture() -> Vec<u8> { include_bytes!("../tests/fixtures/router/status.json").to_vec() }
 
