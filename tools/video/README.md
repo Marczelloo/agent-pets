@@ -10,8 +10,8 @@ The picture is timed to one track, Running Night, cut on its bar lines (`src/sho
 
 | Video | Music | Scene |
 |---|---|---|
-| 0 – 3.4 s | Running Night's quiet breakdown (56.5 s), no drums | The whole crew chilling on the taskbar, the camera panning along: *Your coding agents, now living on your taskbar.* |
-| 3.4 – 5.6 s | from 68.9 s on, uncut: the build, drums in | Everyone freezes, turns to us (!) and nods along, then crouches |
+| 0 – 3.4 s | Running Night from 65.5 s, uncut to the end: its build, the drums eased in from low | The whole crew chilling on the taskbar, the camera panning along: *Your coding agents, now living on your taskbar.* |
+| 3.4 – 5.6 s | the drums keep coming up, full at 5.6 s | Everyone freezes, turns to us (!) and nods along, then crouches |
 | 5.6 – 7.9 s | the riser bar before the drop | *Meet the crew.* Everyone jumps, confetti, name tags; then a dive into Clawd |
 | 7.9 – 12.4 s | the drop (73.4 s); its bass pushes in half a beat early, as the dive into Clawd starts | One pet per beat, each in a different state: *See what every agent is doing.* |
 | 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
@@ -21,7 +21,7 @@ The picture is timed to one track, Running Night, cut on its bar lines (`src/sho
 | 23.7 – 26.0 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
 | 26.0 – 28.3 s | fading out | The crew drops onto the end card |
 
-The track's bars start where its chords change (the drop's at 73.4 s), and it loops four chords, one bar each (A, F#, G#, C#); its quiet breakdown runs the same loop. So the music has a single junction, a short cross-fade on a bar line at 3.4 s, from the breakdown's F# bar to the build's G# bar with the drums; from there it plays exactly as in the track, and fades out under the end card.
+The track's bars start where its chords change (the drop's at 73.4 s). It plays uncut from the first frame, so every scene change sits on one of its bar lines; only its drums are eased in over the first 5.6 s (split from the rest of the mix by harmonic/percussive separation, so the two add back up to the track once the drums are full). `INTRO=volume node build.mjs` eases in the whole track instead.
 
 ## How it works
 
@@ -44,7 +44,7 @@ tools/video
 
 ## Building it
 
-Needs Node 22 with pnpm, Python 3 with `numpy` and `scipy` (`pip install -r audio/requirements.txt`), `ffmpeg` on `PATH`, and a Chromium (`CHROMIUM=/path/to/chrome` if it is not at `/opt/pw-browsers/chromium`).
+Needs Node 22 with pnpm, Python 3 with `numpy`, `scipy` and `librosa` (`pip install -r audio/requirements.txt`), `ffmpeg` on `PATH`, and a Chromium (`CHROMIUM=/path/to/chrome` if it is not at `/opt/pw-browsers/chromium`).
 
 ```sh
 pnpm install

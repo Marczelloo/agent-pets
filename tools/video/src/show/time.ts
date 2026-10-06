@@ -1,8 +1,9 @@
-// The showcase's clock, read off the licensed track it is cut to (Running Night, 106.01 BPM; see audio/make_show_audio.py for the cut).
-// The track loops four chords, one per bar: A, F#, G#, C#. Its drop is an A bar (73.41 s; the bass pushes in half a beat early).
-//   0     - 3.36 s  56.47 - 59.82 s: its quiet breakdown, no drums (A, F#)
-//   3.36  - end     68.88 s on, uncut: the build with the drums in (G#), the riser bar (C#, "Meet the crew."),
-//                   the drop as Clawd appears for the tour (A, 7.88 s), on through the styles (16.94 s) to the end card (26.0 s)
+// The showcase's clock, read off the licensed track it is cut to (Running Night, 106.01 BPM; see audio/make_show_audio.py).
+// The track plays uncut from 65.52 s, so the video's bar lines are its own. It loops four chords, one per bar: A, F#, G#, C#.
+//   0     - 5.62 s  its build, the drums eased in from low (or the whole track: INTRO=volume); the drums are full at the hit
+//   5.62  - 7.88 s  the riser bar before the drop (C#, "Meet the crew.")
+//   7.88  - end     the drop as Clawd appears for the tour (A; the bass pushes in half a beat early, as the dive starts),
+//                   on through the styles (16.94 s) to the end card (26.0 s), where it fades out
 // Every scene change lands on one of its bar lines.
 
 export const FPS = 60;

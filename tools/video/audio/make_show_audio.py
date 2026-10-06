@@ -3,6 +3,7 @@
 animation produces. The track is not in the repository: put it in tools/video/music/ (see README).
 Usage: make_show_audio.py cues.json out.wav [sfx_only.wav]"""
 import json
+import os
 import subprocess
 import sys
 
@@ -14,23 +15,19 @@ import synth as S
 MUSIC = 'music'
 RUN = f'{MUSIC}/running-night.mp3'
 # Running Night: 106.01 BPM, beats at 0.392 + k * 60/106.01 s. Its bars start on the beat its chords change on, the drop's at 73.405 s
-# (the bass pushes in half a beat early, at 73.09 s). It loops four chords, one per bar: A (the drop), F#, G#, C#; the quiet breakdown runs
-# the same loop, so a bar of it can hand over to the loud bar with the next chord. Attacks start ~15-20 ms before the grid lines, so the
-# hand-over is a short equal-power cross-fade placed LEAD before the bar line and none of the attack is lost.
+# (the bass pushes in half a beat early, at 73.09 s); it loops four chords, one per bar: A (the drop), F#, G#, C#. It plays uncut from
+# the first frame: the video's bar lines are the track's.
 RBAR = 4 * 60 / 106.01
 DROP = 73.405                      # the drop's bar line in the track
-bar = lambda n: DROP + n * RBAR    # the track's bar lines, counted from the drop
-HIT = 5.620                        # time.ts HIT (the C# bar before the drop)
-TOUR = HIT + RBAR                  # time.ts TOUR (the drop)
-LEAD = 0.030
-XF = 0.012
-FADE_IN = 0.25                     # the breakdown fades in over the first moment of the video
-# (from s, to s, at s in the video):
-#   0 - 3.36 s   the breakdown, no drums: the end of its A bar and its F# bar
-#   3.36 - end   from the G# bar of the build (68.88 s), uncut: the drums are in, C# for the hit (the riser), the drop on the tour
-CUTS = [(bar(-6) - (TOUR - 2 * RBAR), bar(-6), 0.0), (bar(-2), 111.0, TOUR - 2 * RBAR)]
+HIT = 5.620                        # time.ts HIT (the C# riser bar before the drop)
+TOUR = HIT + RBAR                  # time.ts TOUR: the drop, as Clawd appears
+START = DROP - TOUR                # the track is never cut: video t plays the track at START + t (65.52 s, its build, drums already in)
 T_END = TOUR + 8 * RBAR            # time.ts T_END: the end card, on an A bar; the music plays on under it and fades out
 FADE_AT = T_END + 0.5
+# How the intro eases in (INTRO=drums, the default, or INTRO=volume): either only the drums start low and come up to full by the hit,
+# split from the rest of the mix by harmonic/percussive separation, or the whole track does.
+INTRO = os.environ.get('INTRO', 'drums')
+RAMP_DB = {'drums': -24.0, 'volume': -14.0}[INTRO]   # how far down the ramp starts
 
 
 def load(path):
@@ -38,19 +35,36 @@ def load(path):
     return np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).T.astype(float)
 
 
+def ramp(n_samples):
+    """Gain from RAMP_DB at the first frame up to 1 at the hit, rising faster towards the end (in dB, so it sounds even)."""
+    u = np.clip(np.arange(n_samples) / S.SR / HIT, 0, 1)
+    return 10 ** (RAMP_DB * (1 - u) ** 1.5 / 20)
+
+
+def drums_of(seg):
+    """The percussive part of `seg` (2 x n): soft complementary masks, so harmonic + percussive add back up to `seg`."""
+    import librosa
+    out = np.zeros_like(seg)
+    for c in range(2):
+        D = librosa.stft(seg[c], n_fft=2048, hop_length=512)    # short enough windows to catch the drum hits whole
+        _, P = librosa.decompose.hpss(D, kernel_size=17, power=2.0, margin=1.0)
+        out[c] = librosa.istft(P, hop_length=512, length=seg.shape[1])
+    return out
+
+
 def music_bed(n):
-    out = np.zeros((2, n)); y = load(RUN); last = len(CUTS) - 1
-    for i, (a, b, at) in enumerate(CUTS):
-        if i > 0: a -= LEAD + XF / 2; at -= LEAD + XF / 2         # start just before the bar line, inside the cross-fade
-        if i < last: b -= LEAD - XF / 2                             # and end just after the next piece starts
-        seg = y[:, int(a * S.SR):int(b * S.SR)].copy()
-        fin = int((FADE_IN if i == 0 else XF) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin)) ** (2 if i == 0 else 1)
-        if i < last: fout = int(XF * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
-        s = int(at * S.SR); m = min(seg.shape[1], n - s)
-        out[:, s:s + m] += seg[:, :m]
+    y = load(RUN)
+    out = y[:, int(START * S.SR):int(START * S.SR) + n].copy()
+    k = int((HIT + 0.3) * S.SR)                                 # the stretch that is eased in, plus a little to blend back
+    head = out[:, :k]; g = ramp(k)
+    if INTRO == 'volume': eased = head * g
+    else: p = drums_of(head); eased = (head - p) + p * g       # the rest of the mix at full level, the drums coming up
+    w = np.clip((np.arange(k) / S.SR - HIT) / 0.3, 0, 1)       # past the hit, blend back into the untouched track over 0.3 s
+    out[:, :k] = eased * (1 - w) + head * w
+    fin = int(0.05 * S.SR); out[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin)) ** 2
     # under the end card the music fades out with the picture
-    f0 = int(FADE_AT * S.SR); k = n - f0
-    if k > 0: out[:, f0:] *= np.cos(np.linspace(0, np.pi / 2, k)) ** 1.5
+    f0 = int(FADE_AT * S.SR); m = n - f0
+    if m > 0: out[:, f0:] *= np.cos(np.linspace(0, np.pi / 2, m)) ** 1.5
     return out
 
 
