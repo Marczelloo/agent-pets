@@ -9,7 +9,7 @@ import { DARK, type Theme } from './themes';
 import { TAU } from './util';
 
 export const PAL = {
-  cream: '#FBF1E8', glow: '#F7DDC9', ink: '#2B2622', bar: '#1A2131', barEdge: '#33405E', clay: '#D97757', teal: '#1D9E75',
+  cream: '#FBF1E8', glow: '#F7DDC9', ink: '#2B2622', bar: '#1F1C1A', barEdge: '#2F2A27', clay: '#D97757', teal: '#1D9E75',
   amber: '#EF9F27', win: '#FFF9F3', winEdge: '#EED9C8', winBar: '#F6E6D8', winLine: '#F1E0D0', winLine2: '#EAD3BF',
 };
 export const FONT = '"Fredoka Variable", "Segoe UI", sans-serif';
@@ -17,7 +17,7 @@ export const UI_FONT = '"Segoe UI", system-ui, sans-serif';
 
 /** Where things sit in the world. The taskbar top is y = 0, pets stand on it; negative y is up. */
 export const WORLD = {
-  barX0: -680, barX1: 1000, barH: 64,
+  barX0: -1200, barX1: 1000, barH: 64,
   /** the document window the user is reading: right above the crew, which is the joke */
   win: { x: -120, y: -560, w: 460, h: 350 },
   win2: { x: 380, y: -500, w: 280, h: 230 },

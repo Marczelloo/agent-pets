@@ -1,80 +1,68 @@
 # Promo video
 
-A 30-second launch video with a dry sense of humor for social media, made with the **real Agent Pets renderer**: the pets, their poses, the speech bubbles and the taskbar HUD are the app's own drawing code, imported straight from `app/src`. Nothing is re-drawn or faked; the video only adds a stage, a camera, a timeline and a few video-only poses (the same trick `app/src/showcaseBanner.ts` uses for the README banner).
+A 28-second showcase of Agent Pets for social media, cut to music. It uses the **real Agent Pets renderer** for every pet (skins, poses, scenes and styles come straight from `app/src`) and the **real app windows** (panel, limits, statistics), recorded from the app's own demo mode. The video only adds the stage, the camera, the motion design and the words.
 
-Outputs (in `docs/video/`):
+Output: `docs/video/agent-pets-16x9.mp4` (1920×1080, 60 fps, H.264 + AAC).
 
-| File | For | Notes |
+## The cut
+
+The picture is timed to two tracks, cut on their bar lines (`src/show/time.ts`):
+
+| Video | Music | Scene |
 |---|---|---|
-| `agent-pets-16x9.mp4` | X, GitHub, website, YouTube | 1920×1080, 60 fps, with sound |
-| `agent-pets-9x16.mp4` | Reels, Shorts, TikTok, X on phones | 1080×1920, 60 fps, with sound |
-| `agent-pets-16x9-silent.mp4`, `agent-pets-9x16-silent.mp4` | muted autoplay, your own music | same picture, no audio track |
-
-All text is on screen, so the silent cuts tell the whole story.
-
-## The story (108 BPM, 13¾ bars)
-
-1. **Cold open.** Clawd knocks on the glass of your screen: *Your coding agent has been waiting… for 20 minutes.* The camera pulls back: you are right there, browsing, not looking.
-2. **Escalation.** *So it cc'd the team.* The crew drops out of the sky, one pet per beat, onto a pyramid. Every landing pops a name tag: Clawd, opencode, Copilot, Cursor, Grok, Kodek, the generic "Any agent" blob, ZCode (asleep) and Antigravity.
-3. **Got your attention?** Kodek's net misses, Grok's paper plane bonks the cursor dizzy, the net scoops it up (in the app's Dynamic look: impact frame, sparks) and it hops down to Clawd's question. Click.
-4. **Allow. Back to work.** Headphones on, the whole pyramid bops, the panda finally wakes up, then the **seven looks** flip on the beat. Sticker and Pixel are drawn for Clawd and Kodek only, so those two beats tag just them.
-5. **Group photo.** Flash, the headphones fly off, *Agent Pets: your coding agents, in your taskbar*, the offer, and one last knock that rhymes with the first frame.
-
-The desktop is the dark Windows 11 look (`themes.ts`); every look of the flip gets its own dark backdrop, except Ink, which stays paper white.
+| 0 – 5.6 s | Lofi Vlog, first 2 bars | The crew pops up on the taskbar, one per beat: *Your coding agents, now living on your taskbar.* |
+| 5.6 – 7.9 s | Running Night, the build bar | *Meet the crew.* Name tags, then a dive into Clawd |
+| 7.9 – 12.4 s | the drop | One pet per beat, each in a different state: *See what every agent is doing.* |
+| 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
+| 14.7 – 16.9 s | | Click Clawd: the real panel opens, then the Limits tab |
+| 16.9 – 19.2 s | Running Night, last phrase | *7 styles.* Clawd and Kodek (the two with every look) flip through all seven on half beats |
+| 19.2 – 21.5 s | | The real statistics window |
+| 21.5 – 23.7 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
+| 23.7 – 26.0 s | | The crew dancing in headphones (the music break) |
+| 26.0 – 28.3 s | the final hit | The end card |
 
 ## How it works
 
 ```
-app/src/renderer, skins, styles, stage/hud ...   the app's real drawing code (unchanged)
-        │  imported by
-tools/video/src
-  actors.ts     wraps a real PetPainter; adds a "puppet" scene so the timeline can drive any pose parameter per frame
-  camera.ts     stateless camera (pure function of time): world units are pet units
-  world.ts      dark desktop backdrop, the user's desktop windows, the taskbar, the mouse cursor
-  tower.ts      the pyramid and the rain of pets: falling, squashing, swaying, all pure functions of time
-  act1..act5.ts the story; each act owns a stretch of time and writes into the shared context (ctx.ts)
-  cues.ts       every sound effect as data, computed from the same time constants as the animation
-  main.ts       browser entry: window.video.step() renders the next frame
-render.mjs      drives headless Chromium frame by frame and pipes PNGs into ffmpeg (H.264, BT.709)
-audio/          synth.py + make_audio.py: an original score and sound effects, synthesized from scratch (numpy/scipy)
-build.mjs       the whole pipeline in one command
+app/src (renderer, skins, styles, stage/hud)     the app's real drawing code, unchanged
+tools/video
+  capture.mjs        records the real panel and statistics windows from the app's dev server, frame by frame with a controlled clock
+  public/ui/         those recordings (PNG frames + meta.json)
+  src/show/time.ts   the beat grid of the cut
+  src/show/show.ts   the scenes
+  src/show/cues.ts   the sound effects as data, from the same times as the picture
+  audio/make_show_audio.py   cuts the two tracks and adds the effects (5 ms fade in, 10 ms fade out each)
+  render.mjs         headless Chromium frame by frame -> ffmpeg (H.264, BT.709)
+  build.mjs          the whole pipeline
 ```
 
-Because the sound cues come from the same constants as the animation (`beat.ts` and the acts' exported times), picture and sound cannot drift apart. Retime anything in the acts and the audio follows on the next build.
+## Music
 
-Frames are deterministic (the renderer's random numbers are seeded), and the story is a function of time, so every run produces the same video.
+Both tracks are from Pixabay and used under the [Pixabay Content License](https://pixabay.com/service/license-summary/) (free to use in videos, no attribution required; the license does not allow redistributing the audio on its own, so the files are not in this repository):
+
+- "Running Night" by alex_makemusic (Pixabay ID 393139)
+- "Lofi Vlog" by velariomusic (Pixabay ID 600937)
+
+Download them and save them as `tools/video/music/running-night.mp3` and `tools/video/music/lofi-vlog.mp3`.
 
 ## Building it
 
-Needs Node 22 with pnpm, Python 3 with `numpy` and `scipy` (`pip install -r audio/requirements.txt`), an `ffmpeg` with libx264 and AAC on `PATH`, and a Chromium (set `CHROMIUM=/path/to/chrome` if it is not at `/opt/pw-browsers/chromium`).
+Needs Node 22 with pnpm, Python 3 with `numpy` and `scipy` (`pip install -r audio/requirements.txt`), `ffmpeg` on `PATH`, and a Chromium (`CHROMIUM=/path/to/chrome` if it is not at `/opt/pw-browsers/chromium`).
 
 ```sh
 pnpm install
-pnpm dev                      # terminal 1: serves the page that draws the pets (http://localhost:1421)
-node build.mjs                # terminal 2: cues -> soundtrack -> both formats -> docs/video/
-node build.mjs --quick        # same, at draft quality (about a third of the time)
+# once, or after the app's windows change: record them from the app's demo mode
+pnpm --dir ../../app exec vite --port 1420     # terminal 1
+node capture.mjs                                # terminal 2
+# then
+pnpm dev                                        # terminal 1: the page that draws the video (http://localhost:1421)
+node build.mjs                                  # terminal 2  (--quick for a draft)
 ```
 
-Useful while editing (all write to `out/`, which is git-ignored):
-
-```sh
-# contact sheet of chosen moments (seconds), e.g. every half second of the first ten
-node render.mjs --format=16x9 --to=10 --grab=0,0.5,1,1.5 --sheet=out/sheet.png --cols=4
-# the sound cues the animation produces
-node render.mjs --cues=out/cues.json
-# a single format, silent
-node render.mjs --format=9x16 --out=out/test.mp4 --crf=28 --preset=veryfast
-```
-
-`lab.html` (`src/lab.ts`) is a small bench for posing pets from JSON and grabbing frames when you are authoring a new pose.
-
-## Sound
-
-The soundtrack is original and synthesized in `audio/`; there are no samples, so there is nothing to license. It is dark electronic over a dusty lo-fi beat in A minor (Am9, Fmaj7, Dm9, Em7): sub bass, an electric piano, a slow pad that ducks under the kicks, a half-time beat that turns into a groove for the party. The sound effects are dry on purpose (knocks, UI blips, soft thuds). Levels are normalised to −14 LUFS with a −1.5 dBTP ceiling. To use your own track instead, take the `*-silent.mp4` files and add it in any editor.
+Useful while editing: `node render.mjs --format=16x9 --grab=8.2,12.7 --sheet=out/sheet.png --cols=2` renders chosen moments into a contact sheet.
 
 ## Credits and licenses
 
-- Pets, poses and styles: Agent Pets (see the repository [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE)).
-- Fonts: [Fredoka](https://fonts.google.com/specimen/Fredoka) (titles) and [Nunito](https://fonts.google.com/specimen/Nunito) (bubbles and small text), both SIL Open Font License 1.1, installed from npm (`@fontsource-variable/*`).
-- The Antigravity pet is the Android robot, reproduced or modified from work created and shared by Google under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/); the video's end card says so.
-- The end card names the license (GPL-3.0) and repeats the README's disclaimer: Agent Pets is not affiliated with Anthropic, OpenAI, GitHub, Google, Cursor, xAI, Z.ai or opencode.
+- Pets, poses, styles and app windows: Agent Pets (GPL-3.0, see the repository [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE)).
+- Fonts: [Fredoka](https://fonts.google.com/specimen/Fredoka) and [Nunito](https://fonts.google.com/specimen/Nunito) (stands in for Segoe UI), both SIL Open Font License 1.1, from npm.
+- The Antigravity pet is the Android robot, reproduced or modified from work created and shared by Google under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/); the end card says so, along with the README's non-affiliation line.

@@ -13,3 +13,7 @@ tools/video/node_modules
 tools/video/out
 tools/video/audio/__pycache__
 claude-plugin/tsconfig.json
+
+# third-party music (Pixabay), not redistributed: see tools/video/README.md
+tools/video/music
+tools/video/public/ui
