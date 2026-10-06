@@ -13,13 +13,15 @@ import synth as S
 
 MUSIC = 'music'
 LOFI, RUN = f'{MUSIC}/lofi-vlog.mp3', f'{MUSIC}/running-night.mp3'
-# (file, from s, to s, at s in the video, gain dB). Running Night's beat grid: 0.392 + k * 60/106.01; every cut is on a bar line.
-CUTS = [(LOFI, 0.0, 5.620, 0.0, 3.0), (RUN, 69.443, 80.763, 5.620, 0.0), (RUN, 98.874, 111.0, 16.940, 0.0)]
-# The lofi to Running Night hand-over (87 -> 106 BPM, so the two never play together in time): the lofi winds down like a tape
-# being stopped, a reversed-cymbal swell rises under it, and Running Night's build bar opens up from behind a low-pass filter.
-TAPE_STOP = 5.30          # where the lofi starts slowing down
-TAPE_LEN = 0.55           # how long it takes to stop
-OPEN_LEN = 1.6            # Running Night's filter opens over this many seconds from 5.62
+# (file, from s, to s, at s in the video, gain dB). Running Night's beat grid: 0.392 + k * 60/106.01; every cut is on a bar line
+# except the half-beat pickup into the drop.
+SCRATCH = 0.104 + 7 * 60 / 87.02   # the lofi's last beat: the record is stopped here (time.ts SCRATCH)
+HIT = 5.620                        # Running Night's drop (time.ts HIT)
+PICKUP = 0.5 * 60 / 106.01         # Running Night comes in this early: the last half beat of its build, already at full speed
+CUTS = [(LOFI, 0.0, SCRATCH, 0.0, 3.0), (RUN, 71.707 - PICKUP, 83.027, HIT - PICKUP, 0.0), (RUN, 98.874, 111.0, 16.940, 0.0)]
+# The hand-over (87 -> 106 BPM, so the two never play together): the lofi is yanked back like a record under a DJ's hand, a breath of
+# silence, then Running Night is simply there, mid-run, half a beat before its drop.
+SPIN = 0.30                        # how long the spin-back lasts
 
 
 def load(path):
@@ -27,23 +29,16 @@ def load(path):
     return np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).T.astype(float)
 
 
-def tape_stop(y, at, length):
-    """The slice of `y` starting at `at` s, played at a speed that falls from 1 to 0 over `length` s (pitch falls with it)."""
+def spin_back(y, at, length):
+    """The record at `at` s pulled backwards: the speed swings from +1 to -3.5 in 25 ms, then slows to a stop over `length` s."""
     m = int(length * S.SR); t = np.arange(m) / S.SR
-    pos = at + t - t * t / (2 * length)                      # integral of the speed 1 - t/length
-    idx = pos * S.SR; i0 = np.floor(idx).astype(int); f = idx - i0
+    v = np.where(t < 0.025, 1 - 4.5 * t / 0.025, -3.5 * (1 - (t - 0.025) / (length - 0.025)) ** 1.6)
+    pos = at + np.cumsum(v) / S.SR
+    idx = np.clip(pos * S.SR, 0, y.shape[1] - 2); i0 = np.floor(idx).astype(int); f = idx - i0
     seg = y[:, i0] * (1 - f) + y[:, i0 + 1] * f
-    return seg * (1 - t / length) ** 0.6
-
-
-def open_filter(seg, length):
-    """Low-pass that opens from 600 Hz to 18 kHz over `length` s (exponential), in short blocks."""
-    out = seg.copy(); m = int(length * S.SR); blocks = 40; edges = np.linspace(0, m, blocks + 1).astype(int)
-    for b in range(blocks):
-        k = (edges[b] + edges[b + 1]) / 2 / m; c = 600 * (18000 / 600) ** (k ** 1.3)
-        f = np.stack([S.lp(ch[:edges[b + 1] + 2048], min(c, 20000), 2) for ch in seg])
-        out[:, edges[b]:edges[b + 1]] = f[:, edges[b]:edges[b + 1]]
-    return out
+    # a scratched record is never bright: the low-pass fades in over 40 ms, so the hand-over from the plain lofi has no step in it
+    w = np.minimum(1, t / 0.04); seg = seg * (1 - w) + np.stack([S.lp(ch, 5000, 2) for ch in seg]) * w
+    return seg * (1 - t / length) ** 0.7
 
 
 def music_bed(n):
@@ -51,26 +46,31 @@ def music_bed(n):
     for i, (path, a, b, at, gain) in enumerate(CUTS):
         y = files.setdefault(path, load(path))
         g = 10 ** (gain / 20)
-        if i == 0:
-            # the lofi up to the tape stop, then the stop itself
-            seg = y[:, :int(TAPE_STOP * S.SR)] * g
-            out[:, :seg.shape[1]] += seg
-            ts = tape_stop(y, TAPE_STOP, TAPE_LEN) * g
-            s0 = int(TAPE_STOP * S.SR); out[:, s0:s0 + ts.shape[1]] += ts
-            continue
         seg = y[:, int(a * S.SR):int(b * S.SR)] * g
-        fin = int(0.012 * S.SR)
-        if i == 1:
-            seg = open_filter(seg, OPEN_LEN)
-            ramp = int(0.08 * S.SR); seg[:, :ramp] *= np.linspace(0, 1, ramp)
-        else: seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
+        if i == 0:
+            sp = spin_back(y, b, SPIN) * g                         # carries straight on from the last sample played
+            seg = np.concatenate([seg, sp], axis=1)
+        else:
+            fin = int((0.006 if i == 1 else 0.012) * S.SR); seg[:, :fin] *= np.sin(np.linspace(0, np.pi / 2, fin))
+            if i == 1:                                             # the pickup swells from -9 dB so the drop, not the pickup, is the hit
+                k = int(PICKUP * S.SR); seg[:, :k] *= 10 ** (np.linspace(-9, 0, k) / 20)
         if i < len(CUTS) - 1:
             fout = int(0.012 * S.SR); seg[:, -fout:] *= np.cos(np.linspace(0, np.pi / 2, fout))
         s = int(at * S.SR); m = min(seg.shape[1], n - s)
         out[:, s:s + m] += seg[:, :m]
-    # a reversed-cymbal swell into the build bar
-    r = S.riser(0.9, 1.0); s = int((5.62 - 0.9) * S.SR); out[:, s:s + len(r)] += np.stack([r, r]) * 0.35
     return out
+
+
+def scratch(vel=1.0):
+    """The scratch itself: a short burst of noise whose band sweeps down and back up, like a stylus dragged across the groove."""
+    n = int(S.SR * 0.26); t = np.arange(n) / S.SR
+    f = 2600 * np.exp(-t / 0.05) + 500 + 1500 * np.clip((t - 0.11) / 0.12, 0, 1)
+    x = S.noise(n); out = np.zeros(n); wsum = np.zeros(n)
+    for c in (500, 800, 1300, 2100, 3400):                    # fixed bands, crossfaded along the sweep: smooth, no filter resets
+        w = np.exp(-0.5 * (np.log(f / c) / 0.35) ** 2); out += S.bp(x, c * 0.7, c * 1.4) * w; wsum += w
+    out /= np.maximum(wsum, 1e-3)
+    env = np.minimum(1, t / 0.004) * np.exp(-t / 0.12)
+    return np.tanh(out * env * 2.5) * vel * 0.6
 
 
 class Soft(S.Mix):
@@ -100,6 +100,8 @@ def sfx(cues, dur):
             for side in (-1, 1): m.add(S.softburst(1.0), t + (0.01 if side > 0 else 0), 0.45 * v, 0.8 * side, 0.3)
         elif n == 'key': m.add(S.click(0.5), t, 0.4 * v, 0.1, 0.05)
         elif n == 'phones': m.add(S.slide(500, 1400, 0.18, 1.0, 5, 0.005), t, 0.18 * v, 0.0, 0.2)
+        elif n == 'scratch': m.add(scratch(1.0), t, 0.55 * v, 0.0, 0.1)
+        elif n == 'impact': m.add(S.impact(1.0), t, 0.6 * v, 0.0, 0.25)
         elif n == 'shutter': m.add(S.shutter(1.0), t, 0.5 * v, 0.0, 0.15)
     return m
 

@@ -10,9 +10,10 @@ The picture is timed to two tracks, cut on their bar lines (`src/show/time.ts`):
 
 | Video | Music | Scene |
 |---|---|---|
-| 0 – 5.6 s | Lofi Vlog, first 2 bars | Clawd alone at the desk, then the crew drops in one per beat: *Your coding agents, now living on your taskbar.* |
-| 5.6 – 7.9 s | Running Night, the build bar | *Meet the crew.* Name tags two per beat, then a dive into Clawd |
-| 7.9 – 12.4 s | the drop | One pet per beat, each in a different state: *See what every agent is doing.* |
+| 0 – 4.9 s | Lofi Vlog, first 7 beats | The whole crew chilling on the taskbar, the camera panning along: *Your coding agents, now living on your taskbar.* |
+| 4.9 – 5.6 s | the break | The record is stopped: everyone freezes, turns to us (!) and crouches |
+| 5.6 – 7.9 s | Running Night, from its drop | *Meet the crew.* Everyone jumps, confetti, name tags; then a dive into Clawd |
+| 7.9 – 12.4 s | | One pet per beat, each in a different state: *See what every agent is doing.* |
 | 12.4 – 14.7 s | | Clawd needs you: a bubble, a Windows notification, Open |
 | 14.7 – 16.9 s | | Click Clawd: the real panel opens, then the Limits tab |
 | 16.9 – 21.5 s | Running Night, last phrase | *7 styles.* Clawd and Kodek (the two with every look) change look on every beat for two bars |
@@ -20,7 +21,7 @@ The picture is timed to two tracks, cut on their bar lines (`src/show/time.ts`):
 | 23.7 – 26.0 s | | *Now inside Claude Code too:* pixel Clawd above the prompt and the `/pets` pane |
 | 26.0 – 28.3 s | the final hit | The crew drops onto the end card |
 
-The hand-over from the lofi to Running Night: the lofi slows to a stop like a tape (5.3 s), a reversed cymbal swells into the build bar, and Running Night opens from behind a low-pass filter over its first 1.6 s.
+The hand-over from the lofi: on its last beat the lofi is spun back like a record under a DJ's hand, with a scratch on top; a breath of silence; then Running Night is already running, half a beat before its drop (the last half beat of its build, swelling up into the drop).
 
 ## How it works
 
