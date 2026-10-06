@@ -44,7 +44,7 @@ impl Pace {
 
     /// Windows that run out before they reset, from the rise over the kept hour; an idle hour gives nothing.
     pub fn forecasts(&self, limits: &[Limit], now: i64) -> Vec<Forecast> {
-        limits.iter().filter(|l| fresh(l) && l.used_pct < 100.0).filter_map(|l| {
+        limits.iter().filter(|l| fresh(l) && l.used_pct < 100.0 && (l.window != Window::Spend || l.resets_at.is_some())).filter_map(|l| {
             let h = self.windows.get(&(l.agent, l.window))?;
             let (&(t0, p0), &(t1, p1)) = (h.samples.front()?, h.samples.back()?);
             if t1 - t0 < MIN_SPAN_MS || p1 <= p0 { return None; }
@@ -134,6 +134,16 @@ mod tests {
         assert!(p.forecasts(&[early_reset], min(30)).is_empty());
         let no_reset_known = lim(l.used_pct, None, None);
         assert_eq!(p.forecasts(&[no_reset_known], min(30)).len(), 1);
+    }
+
+    #[test]
+    fn spend_needs_a_reset_time_for_a_forecast() {
+        let mut p = Pace::default();
+        let mut l = Limit { window: Window::Spend, ..lim(20.0, None, None) };
+        for m in 0..=30 { l.used_pct = 20.0 + m as f32; p.observe(&[l], min(m)); }
+        assert!(p.forecasts(&[l], min(30)).is_empty());
+        l.resets_at = Some(R);
+        assert_eq!(p.forecasts(&[l], min(30)).len(), 1);
     }
 
     #[test]

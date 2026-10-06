@@ -11,6 +11,17 @@ const sess: Session = {
 };
 
 describe('PanelView', () => {
+  it('shows exceeded spend percentage with a full hot bar', () => {
+    setLang('en');
+    const html = renderToString(<PanelView snap={{ sessions: [], now: 0, limits: [
+      { agent: 'claude', window: 'spend', used_pct: 112, resets_at: null },
+    ] }} nowMs={0} status={null} focusId={null} onJump={() => {}} initialTab="limits" />);
+    expect(html).toContain('spend limit');
+    expect(html).toContain('112<!-- -->%');
+    expect(html).toContain('width:100%');
+    expect(html).toContain('class="hot"');
+    setLang('pl');
+  });
   it('escapes prompt text and shows a jump button per session', () => {
     const html = renderToString(<PanelView snap={{ sessions: [sess], limits: [], now: 0 }} nowMs={0} status={null} focusId={null} onJump={() => {}} />);
     expect(html).not.toContain('<img');

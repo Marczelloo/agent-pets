@@ -75,6 +75,18 @@ describe('panel model', () => {
     expect(rows[4].label).toMatch(/^Antigravity · /);
     expect(rows[4].pct).toBe(20);
   });
+  it('adds Claude spend only with a reading and keeps its real percentage', () => {
+    const now = 0;
+    setLang('en');
+    const spend = { agent: 'claude' as const, window: 'spend' as const, used_pct: 112, resets_at: null };
+    expect(limitRows([], now).some(r => r.window === 'spend')).toBe(false);
+    const rows = limitRows([spend], now);
+    expect(rows[2]).toMatchObject({ window: 'spend', pct: 112, label: 'Claude · spend limit' });
+    expect(limitCards([spend], now)[0].rows[2].pct).toBe(112);
+    expect(rows[2].pace).toBeNull();
+    setLang('pl');
+    expect(limitRows([spend], now)[2].label).toBe('Claude · limit wydatków');
+  });
   it('shows the reset time when it is known', () => {
     const now = new Date(2026, 8, 24, 12, 0).getTime();
     const rows = limitRows([{ agent: 'claude', window: 'five_hour', used_pct: 40, resets_at: now + 2 * 3_600_000 }], now);

@@ -65,6 +65,7 @@ export const en: Dict = {
   window: {
     five_hour: '5h',
     weekly: 'weekly',
+    spend: 'spend limit',
   },
   panel: {
     settings: 'Settings',

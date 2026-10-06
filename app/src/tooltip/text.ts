@@ -73,12 +73,12 @@ export const limitName = (a: LimitAgent) => a === 'claude' ? t().agent.limitClau
 
 export function limitsTooltip(limits: Limit[], nowMs: number): TooltipContent {
   const lines: string[] = [];
-  for (const agent of LIMIT_AGENTS) for (const window of ['five_hour', 'weekly']) {
+  for (const agent of LIMIT_AGENTS) for (const window of (agent === 'claude' ? ['five_hour', 'weekly', 'spend'] : ['five_hour', 'weekly']) as Limit['window'][]) {
     const l = limits.find(v => v.agent === agent && v.window === window);
     if (!l || !Number.isFinite(l.used_pct)) continue;
     const reset = formatReset(l.resets_at, nowMs);
     const note = l.stale_since != null ? t().limits.asOf(formatAgo(nowMs - l.stale_since)) : reset;
-    lines.push(`${limitName(agent)} · ${t().window[window as 'five_hour' | 'weekly']}: ${Math.round(clampPct(l.used_pct))}%${note ? ` · ${note}` : ''}`);
+    lines.push(`${limitName(agent)} · ${t().window[window]}: ${Math.round(window === 'spend' ? l.used_pct : clampPct(l.used_pct))}%${note ? ` · ${note}` : ''}`);
   }
   if (limits.some(l => l.stale_since != null)) lines.push(t().limits.staleHint);
   return { title: t().limits.title, subtitle: '', lines };

@@ -87,6 +87,10 @@ describe('formatting', () => {
     expect(t.title).toBe('Limity');
     expect(t.lines).toEqual(['Claude · 5h: 34% · reset 17:05', 'Codex · tydzień: 100%']);
   });
+  it('keeps an exceeded spend percentage', () => {
+    expect(limitsTooltip([{ agent: 'claude', window: 'spend', used_pct: 112, resets_at: null }], 0).lines)
+      .toEqual(['Claude · limit wydatków: 112%']);
+  });
   it('limitsTooltip includes Antigravity after the others', () => {
     const t = limitsTooltip([
       { agent: 'antigravity', window: 'five_hour', used_pct: 2, resets_at: null },

@@ -195,7 +195,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
               <div className="limit" key={r.window}>
                 <span className="label">{t().window[r.window]}</span>
                 {r.pct == null ? <span className="none">{t().panel.noData}</span> : <>
-                  <span className={`bar ${r.agent}`}><i style={{ width: `${r.pct}%` }} className={r.pct >= 90 ? 'hot' : ''} /></span>
+                  <span className={`bar ${r.agent}`}><i style={{ width: `${Math.min(100, r.pct)}%` }} className={r.pct >= 90 ? 'hot' : ''} /></span>
                   <span className="pct">{Math.round(r.pct)}%</span>
                   <span className="reset">{r.reset}</span>
                   {r.pace && <span className="pace">{r.pace}</span>}
