@@ -11,7 +11,7 @@ import { elP, pen, rrP, seg, shp } from '../pen';
 import type { Pet } from '../pet';
 import { rig, type Rig } from './rig';
 
-/** Sticker shapes in u units (reference: app-icon.png). */
+/** Sticker shapes in u units (reference: the app icon up to 0.17). */
 export const STICKER = {
   clawd: { w: 100, h: 76, r: 18, ears: { w: 14, h: 22, y: .5 }, legs: [-.3, -.1, .1, .3], legW: 11, legH: 12, arm: 17, mitt: 7 },
   kodek: { w: 94, h: 76, r: 32, screen: { m: 8, top: 10, bottom: 12, r: 18 }, phones: { rx: 8, ry: 14 }, antenna: 16, legs: [-.22, .22], legW: 16, legH: 12, arm: 16, mitt: 6.5 },

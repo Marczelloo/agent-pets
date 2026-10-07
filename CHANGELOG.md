@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- A new, simpler app icon: the pet peeking over the edge of the taskbar, readable down to 16 px.
+
+### Fixed
+
+- A pet waking up (and any change between poses) no longer stutters: its breathing and arm swing keep their rhythm instead of jumping while the pose changes.
+- Grok's arms look natural: a raised arm bends at the elbow instead of growing long and stiff, and a hand on the hip rests on Grok's own waist instead of sticking out sideways.
+- A happy pet's eyes close into arcs as one: Grok and the panda no longer show an open eye and a smile arc at the same time.
+- Grok's happy and sleepy eye arcs no longer touch each other inside the visor.
+
 ## 0.17.1
 
 ### Changed

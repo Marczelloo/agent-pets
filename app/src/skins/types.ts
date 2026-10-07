@@ -32,6 +32,12 @@ export interface Skin {
   legLen?: number;
   /** arm thickness in units (default 9) */
   armThk?: number;
+  /** how much longer a raised arm reaches, as a fraction of armLen at full height (default .75) */
+  armReach?: number;
+  /** a lifted arm bends at the elbow: the hand comes this much closer at full height, the arm keeps its length (default 0) */
+  elbow?: number;
+  /** where a hand rests on the hip, [x, y] in pet units for the right side (default: the stock (47, -25)) */
+  hip?: [number, number];
   /** ZCode: round ears, eye patches (eyes on them), and a headband with "Z" */
   panda?: { ears: string; patches: string; band: string; mark: string };
 }
