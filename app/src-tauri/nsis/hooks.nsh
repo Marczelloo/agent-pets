@@ -13,3 +13,9 @@
     ExecWait '"$INSTDIR\agent-pets.exe" --uninstall-integrations'
   ${EndIf}
 !macroend
+
+; Windows keeps the old icon for an exe that an update replaced in place (the taskbar button, Start), until its
+; icon cache is told that icons changed: SHCNE_ASSOCCHANGED, SHCNF_IDLIST
+!macro NSIS_HOOK_POSTINSTALL
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend

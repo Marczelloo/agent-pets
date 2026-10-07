@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- After an update the taskbar and Start show the new app icon right away, instead of the old one Windows kept in its icon cache.
+
 ## 0.17.2
 
 ### Changed
