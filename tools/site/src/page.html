@@ -3,15 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Agent Pets</title>
+<title>Agent Pets: your coding agents, alive on the Windows 11 taskbar</title>
 <meta name="description" content="Animated pets in the Windows 11 taskbar that show what your coding agents are doing: Claude Code, Codex, opencode, GitHub Copilot, Antigravity, Cursor, Grok Build, ZCode and any other agent.">
-<meta property="og:title" content="Agent Pets">
-<meta property="og:description" content="Your coding agents, alive on the Windows 11 taskbar.">
-<meta property="og:image" content="https://raw.githubusercontent.com/Marczelloo/agent-pets/main/docs/images/banner.png">
-<meta name="theme-color" content="#FBF1E8">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="author" content="Marczelloo">
+<meta name="application-name" content="Agent Pets">
+<meta name="theme-color" content="#FBF1E8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17130F" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!--__SEO__-->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&text=%E2%94%80%E2%94%82%E2%95%AD%E2%95%AE%E2%95%B0%E2%95%AF%E2%97%8F%E2%96%88%E2%96%91%E2%80%A6&display=swap">
 <style>/*__CSS__*/</style>
 </head>
 <body>
@@ -31,15 +36,15 @@
         </a>
         <a class="btn ghost" href="https://github.com/Marczelloo/agent-pets">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7c-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>
-          <span>Source on GitHub</span>
+          <span><span class="long">Source on </span>GitHub</span>
         </a>
       </div>
       <ul class="facts" aria-label="At a glance">
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5 10.5 3.5v8H3zM12 3.3 21 2v9.5h-9zM3 12.5h7.5v8L3 19.5zM12 12.5h9V22l-9-1.3z"/></svg>Windows 11 only</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>Free and open source, GPL-3.0</li>
-        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4 4 0 0 1 4 4v1H8V7a4 4 0 0 1 4-4ZM6 8h12v13H6z"/></svg>Installs for your user, no admin rights</li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5 10.5 3.5v8H3zM12 3.3 21 2v9.5h-9zM3 12.5h7.5v8L3 19.5zM12 12.5h9V22l-9-1.3z"/></svg><span>Windows 11<span class="long"> only</span></span></li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg><span><span class="long">Free and open source, </span><span class="short">Open source · </span>GPL-3.0</span></li>
+        <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4 4 0 0 1 4 4v1H8V7a4 4 0 0 1 4-4ZM6 8h12v13H6z"/></svg><span><span class="long">Installs for your user, no admin rights</span><span class="short">No admin rights</span></span></li>
       </ul>
-      <p class="fine"><a href="#releases" class="news" data-news>New in <b data-version>0.17.0</b>: global shortcuts, pinned sessions, limit forecasts →</a></p>
+      <p class="fine"><a href="#releases" class="news" data-news><i aria-hidden="true">✦</i><span>New in <b data-version>0.17.0</b><span class="long">: global shortcuts, pinned sessions, limit forecasts</span> →</span></a></p>
     </div>
   </div>
 </header>
@@ -52,10 +57,18 @@
     <div class="sec-head">
       <p class="eyebrow" style="--c: var(--clay)">The crew</p>
       <h2>One pet for every agent session.</h2>
-      <p class="sub">Claude Code, Codex and opencode get the most care and testing. The experimental ones work through their hooks. Anything else can knock on <a href="#door">the door</a> and gets a blob with its first letter. Hover a pet or a row to wake it.</p>
+      <p class="sub">Claude Code, Codex and opencode get the most care and testing. The experimental ones work through their hooks. Anything else can knock on <a href="#door">the door</a> and gets a blob with its first letter. <span class="on-desk">Hover a pet or a row to wake it.</span><span class="on-phone">Swipe the line-up to wake them one by one.</span></p>
     </div>
     <div class="lineup">
       <canvas class="lineup-stage" aria-label="All nine pets standing in a line-up in front of a height chart"></canvas>
+    </div>
+    <div class="crew-ui">
+      <div class="crew-nav">
+        <button type="button" class="crew-prev" aria-label="Previous pet">&lsaquo;</button>
+        <div class="crew-dots"></div>
+        <button type="button" class="crew-next" aria-label="Next pet">&rsaquo;</button>
+      </div>
+      <div class="crew-cards" aria-live="polite"></div>
     </div>
     <div class="table-scroll">
       <table class="agents">
@@ -147,10 +160,11 @@
     <div class="sec-head">
       <p class="eyebrow" style="--c: var(--amber)">Looks and motion</p>
       <h2>Seven looks. Two ways to move.</h2>
-      <p class="sub">Every look stays readable at taskbar size. Pick one for every pet or a different one per agent. Move across the prism to widen a look.</p>
+      <p class="sub">Every look stays readable at taskbar size. Pick one for every pet or a different one per agent. <span class="on-desk">Move across the prism to widen a look.</span><span class="on-phone">Tap a look or drag across the prism to widen it.</span></p>
     </div>
     <div class="prism">
       <canvas class="prism-stage" aria-label="Clawd and Kodek drawn in seven looks side by side: Sticker, Sketch, Clean, Pixel art, Neon, Ink and Pastel"></canvas>
+      <div class="prism-looks" role="group" aria-label="Looks"></div>
     </div>
     <div class="motion">
       <div class="seg" role="radiogroup" aria-label="Motion">
@@ -188,8 +202,8 @@
 │ <b class="c-teal">●</b> Codex        fix flaky tests      <span class="c-amb">needs you</span> │
 │ <b class="c-mut">●</b> opencode     docs pass                <span class="c-mut">done</span> │
 │                                           │
-│ Claude  5h <span class="c-clay">▰▰▰▰▱▱▱▱▱▱</span> 42%   week <span class="c-clay">▰▰▱▱▱▱▱▱▱▱</span> 18% │
-│ Codex   5h <span class="c-teal">▰▰▰▰▰▰▱▱▱▱</span> 61%   week <span class="c-teal">▰▰▰▱▱▱▱▱▱▱</span> 27% │
+│ Claude  5h <span class="c-clay">████░░░░░░</span> 42%   week <span class="c-clay">██░░░░░░░░</span> 18% │
+│ Codex   5h <span class="c-teal">██████░░░░</span> 61%   week <span class="c-teal">███░░░░░░░</span> 27% │
 ╰───────────────────────────────────────────╯</pre>
         <canvas class="term-pet" aria-hidden="true"></canvas>
         <p class="status"><span data-mod-status>thinking</span> · Opus 5.5 · ctx 38% · <span class="c-amb">1 waiting</span></p>
@@ -258,6 +272,8 @@
         <p class="src" data-rel-src></p>
       </div>
       <ol class="rels" data-rels></ol>
+      <div class="older" id="older-rels" data-rels-older hidden><ol class="rels"></ol></div>
+      <button type="button" class="more older-more" aria-controls="older-rels" aria-expanded="false" data-rels-more hidden></button>
     </div>
   </div>
 </section>

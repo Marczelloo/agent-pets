@@ -1,0 +1,18 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.2, 1.2, .4, 1)",
+        "createdAt": "2026-10-07T18:58:46.211Z"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.3, 1.6, .5, 1)",
+        "createdAt": "2026-10-07T18:58:46.307Z"
+      }
+    ]
+  }
+}

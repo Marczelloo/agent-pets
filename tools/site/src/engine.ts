@@ -134,7 +134,10 @@ export class Stage {
     this.resize();
     if (opts.interactive !== false) {
       const local = (e: PointerEvent | MouseEvent) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-      canvas.addEventListener('pointermove', e => { const [px, py] = local(e); this.pointer = { x: px, y: py, in: true }; });
+      // a finger sends no moves before it touches down, so a press counts as well
+      const at = (e: PointerEvent) => { const [px, py] = local(e); this.pointer = { x: px, y: py, in: true }; };
+      canvas.addEventListener('pointermove', at);
+      canvas.addEventListener('pointerdown', at);
       canvas.addEventListener('pointerleave', () => { this.pointer = { ...this.pointer, in: false }; });
       canvas.addEventListener('click', e => { const [px, py] = local(e); this.onClick?.(px, py); });
     }

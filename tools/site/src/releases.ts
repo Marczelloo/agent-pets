@@ -11,6 +11,8 @@ const API = `https://api.github.com/repos/${DATA.repo}/releases?per_page=100`;
 const CACHE = 'agent-pets-releases';
 /** height of the latest notes while folded */
 const FOLDED = 380;
+/** releases listed before the "older releases" fold */
+const SHOWN = 3;
 // a hand-written one-liner for releases whose notes start straight with a list
 const SUMMARY: Record<string, string> = {
   'v0.17.0': 'global shortcuts, pinned sessions, limit forecasts and quieter notifications',
@@ -108,7 +110,7 @@ function render(list: Release[], source: 'live' | 'snapshot'): void {
   document.querySelectorAll<HTMLAnchorElement>('a[data-download]').forEach(a => { if (exe) a.href = exe.browser_download_url; });
   document.querySelectorAll<HTMLElement>('[data-asset]').forEach(e => { if (exe) e.textContent = exe.name; });
   const news = document.querySelector<HTMLElement>('[data-news]');
-  if (news) news.innerHTML = `New in <b>${esc(v)}</b>: ${esc(SUMMARY[latest.tag_name] ?? lead(latest).replace(/\.$/, ''))} →`;
+  if (news) news.innerHTML = `<i aria-hidden="true">✦</i><span>New in <b>${esc(v)}</b><span class="long">: ${esc(SUMMARY[latest.tag_name] ?? lead(latest).replace(/\.$/, ''))}</span> →</span>`;
 
   const first = sorted[sorted.length - 1];
   document.querySelector('[data-rel-title]')!.textContent = `What's new in ${v}`;
@@ -161,21 +163,51 @@ function render(list: Release[], source: 'live' | 'snapshot'): void {
   });
   party(document.querySelector('.party-stage')!);
 
-  document.querySelector<HTMLElement>('[data-rels]')!.innerHTML = sorted.map(r => {
+  const row = (r: Release) => {
     const e = installer(r);
     return `<li><details>
       <summary style="--c: var(${isPatch(r) ? '--mute' : '--teal'})"><span class="v">${esc(version(r))}</span><span class="t">${esc(lead(r))}</span><span class="d">${new Date(r.published_at).toISOString().slice(0, 10)}</span></summary>
       <div class="body"><div class="notes">${markdown(r.body)}</div>
         <p class="links"><a href="${r.html_url}">Release page →</a>${e ? `<a href="${e.browser_download_url}">${esc(e.name)}</a>` : ''}</p></div>
     </details></li>`;
-  }).join('');
-  document.querySelectorAll<HTMLDetailsElement>('[data-rels] details').forEach(slide);
+  };
+  const older = document.querySelector<HTMLElement>('[data-rels-older]')!, olderBtn = document.querySelector<HTMLButtonElement>('[data-rels-more]')!;
+  document.querySelector<HTMLElement>('[data-rels]')!.innerHTML = sorted.slice(0, SHOWN).map(row).join('');
+  older.querySelector('ol')!.innerHTML = sorted.slice(SHOWN).map(row).join('');
+  document.querySelectorAll<HTMLDetailsElement>('[data-rels] details, [data-rels-older] details').forEach(slide);
+  foldOlder(older, olderBtn, sorted.length - SHOWN);
 
   src.className = `src${source === 'live' ? ' live' : ''}`;
   const legend = '<span style="color:var(--teal)">◆</span> feature · <span style="color:var(--mute)">◆</span> patch';
   src.innerHTML = source === 'live'
     ? `<i></i>live from the GitHub API · ${legend}`
     : `<i></i>snapshot from ${fmtDate(DATA.builtAt)} · ${legend} · <a href="https://github.com/${DATA.repo}/releases">all on GitHub</a>`;
+}
+
+/** the releases past the first few, behind a button; the live list re-renders, so the open state is kept */
+let olderOpen = false, olderAnim: Animation | null = null;
+function foldOlder(older: HTMLElement, btn: HTMLButtonElement, n: number): void {
+  btn.hidden = n <= 0;
+  const label = () => {
+    btn.textContent = olderOpen ? 'Show fewer releases' : `Show ${n} older release${n === 1 ? '' : 's'}`;
+    btn.setAttribute('aria-expanded', String(olderOpen));
+  };
+  older.hidden = !olderOpen || n <= 0;
+  label();
+  btn.onclick = () => {
+    olderAnim?.cancel();
+    olderOpen = !olderOpen;
+    label();
+    if (olderOpen) older.hidden = false;
+    if (REDUCED) { older.hidden = !olderOpen; return; }
+    const h = older.scrollHeight, top = btn.getBoundingClientRect().top;
+    olderAnim = older.animate(
+      olderOpen ? [{ height: '0px', opacity: 0 }, { height: `${h}px`, opacity: 1 }] : [{ height: `${h}px`, opacity: 1 }, { height: '0px', opacity: 0 }],
+      { duration: Math.min(700, 280 + h * .12), easing: 'cubic-bezier(.3, .9, .3, 1)' });
+    olderAnim.onfinish = () => { olderAnim = null; if (!olderOpen) older.hidden = true; };
+    // the page shrinks as the list folds: follow it, so the button stays where you clicked it
+    if (!olderOpen && top < window.innerHeight) window.scrollBy({ top: -h, behavior: 'smooth' });
+  };
 }
 
 /** <details> that slide open and shut */

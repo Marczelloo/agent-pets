@@ -65,7 +65,8 @@ export function dock(): void {
       guide.x += (anchorX(key, s) - guide.x) * (guide.x ? Math.min(1, dt * 10) : 1);
       guide.step(dt); guide.draw(x, dt, T, s.dpr);
       said += dt;
-      if (said > .5 && said < 5.5) bubble(x, guide, text, 'action', narrow ? .9 : 1, s.dpr, s.w, guide.look, 6);
+      // on a phone the first screen's bubble would cover the download button, and the hero has its own
+      if (said > .5 && said < 5.5 && !(narrow && key === 'top')) bubble(x, guide, text, 'action', narrow ? .9 : 1, s.dpr, s.w, guide.look, 6);
     }
   }, { always: true, interactive: false });
 
@@ -113,7 +114,7 @@ function startMenu(links: Map<string, HTMLAnchorElement>): void {
     btn.setAttribute('aria-expanded', String(on));
     if (on) (menu.querySelector('a') as HTMLElement | null)?.focus({ preventScroll: true });
   };
-  btn.addEventListener('click', e => { e.stopPropagation(); open(menu.hidden); });
+  btn.addEventListener('click', e => { e.stopPropagation(); open(!!menu.hidden); });
   menu.addEventListener('click', e => { if ((e.target as HTMLElement).closest('a')) open(false); });
   document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target as Node)) open(false); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { open(false); btn.focus(); } });
