@@ -2,7 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Notifications clean themselves up: a limit warning goes after 6 hours and replaces an earlier one for the same agent and window, everything else goes after a day; news about an update waiting to be installed stays.
+- The preview pet picker in Look is a grid of equal tiles in balanced rows (5 + 4, or 3 × 3 in a narrow window); the chosen pet is tinted in its colour.
+
 ### Fixed
+
+- Limit notifications are no longer squeezed into a narrow column with the title cut off.
+- The Statistics window has the same slim, themed scrollbar as the panel.
 
 - The "+N" for extra subagents sits between the parent and its minis, level with them, instead of at the far end of the group where it looked like it belonged to the neighbouring pet.
 - A scrollbar appearing in the panel no longer squeezes the cards; it is slimmer and follows the theme.

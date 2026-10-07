@@ -52,7 +52,7 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .note .line1{display:flex;gap:8px;font-size:11px;color:var(--mut)}
 .note .line1 .kind{font-weight:600}
 .note .when{margin-left:auto;white-space:nowrap}
-.note .title{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.note .title{font-size:13px;font-weight:600;white-space:normal;overflow-wrap:anywhere}
 .note .text{font-size:12px;color:var(--mut);overflow-wrap:anywhere}
 .update-bar{margin:0 12px 8px;padding:8px 10px 8px 12px;background:var(--focus);border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;gap:10px;font-size:12px}
 .update-bar .text{flex:1;min-width:0;overflow-wrap:anywhere}
@@ -72,9 +72,10 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mut)}
 .dot.claude{background:var(--claude)}.dot.codex{background:var(--codex)}.dot.antigravity{background:var(--antigravity)}
 .lcard .none,.limits .hint{margin:0;color:var(--mut);font-size:12px;font-style:italic}
-.limit{display:grid;grid-template-columns:96px 1fr 38px minmax(104px,auto);align-items:center;gap:8px;font-size:12px}
-.limit .label{color:var(--mut)}
-.limit .none{grid-column:2 / -1}
+/* rows inside the Limits tab only: a limit notification in the inbox is also `.limit` */
+.limits .limit{display:grid;grid-template-columns:96px 1fr 38px minmax(104px,auto);align-items:center;gap:8px;font-size:12px}
+.limits .limit .label{color:var(--mut)}
+.limits .limit .none{grid-column:2 / -1}
 .bar{height:6px;border-radius:3px;background:var(--track);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:3px}
 .bar.claude i{background:var(--claude)}
@@ -83,7 +84,7 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .bar i.hot{background:var(--hot)}
 .pct{text-align:right;font-variant-numeric:tabular-nums}
 .reset{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.limit .pace{grid-column:2 / -1;margin-top:-2px;color:var(--warn);font-weight:600;font-size:11px}
+.limits .limit .pace{grid-column:2 / -1;margin-top:-2px;color:var(--warn);font-weight:600;font-size:11px}
 .sessions{flex:1;overflow:auto;padding:0 4px 12px 12px;display:flex;flex-direction:column;gap:6px}
 .empty{margin:32px 0;text-align:center;color:var(--mut)}
 .empty p{margin:0 0 4px}

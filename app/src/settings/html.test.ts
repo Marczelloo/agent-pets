@@ -10,10 +10,12 @@ describe('settings.html styles', () => {
     expect(css).not.toMatch(/\.segmented/);
   });
 
-  it('keeps the pet picker on one line instead of wrapping the last pets under the rest', () => {
-    const tiles = css.match(/\.pet-tiles\{([^}]*)\}/)?.[1] ?? '';
-    expect(tiles).not.toContain('flex-wrap:wrap');
-    expect(tiles).toContain('overflow-x:auto');
+  it('lays the pet picker out in balanced rows, never leaving the last pets alone under the rest', () => {
+    // nine pets: 3 × 3 when narrow, 5 + 4 when there is room; never an auto-fill that strands one or two
+    expect(css).toMatch(/\.pet-tiles\{[^}]*grid-template-columns:repeat\(3,/);
+    expect(css).toMatch(/@container \(min-width:\d+px\)\{\.pet-tiles\{grid-template-columns:repeat\(5,/);
+    expect(css).not.toMatch(/\.pet-tiles\{[^}]*auto-fill/);
+    expect(css).toMatch(/\.pet-pick\{container-type:inline-size\}/);
   });
 
   it('lets the style gallery fit all seven cards on one row at the narrowest comfortable width', () => {

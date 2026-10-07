@@ -83,10 +83,15 @@ button.link-btn:hover:not(:disabled){background:transparent;color:var(--txt)}
 .look-card span{font-size:12px}
 .look-card canvas{max-width:100%;height:auto!important}
 .bubble-preview{display:block;max-width:100%;margin:4px 0 8px}
-.pet-tiles{display:flex;gap:4px;margin:4px 0 8px;overflow-x:auto;padding-bottom:2px}
-.pet-tiles button{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:1 0 auto;white-space:nowrap;padding:4px 6px;border-radius:8px;font-size:12px}
-.pet-tiles button.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.pet-tiles button::before{content:"";width:8px;height:8px;border-radius:50%;flex:none;background:var(--sw)}
+/* preview pet picker: equal tiles in balanced rows (5 + 4, or 3 × 3 when narrow) so no pet is left alone on a row;
+   the chosen one takes its pet's colour */
+.pet-pick{container-type:inline-size}
+.pet-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:4px 0 10px}
+@container (min-width:600px){.pet-tiles{grid-template-columns:repeat(5,minmax(0,1fr))}}
+.pet-tiles button{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;padding:6px 10px;border-radius:8px;font-size:12.5px;background:var(--card);border-color:var(--line);transition:background-color .15s,border-color .15s}
+.pet-tiles button::before{content:"";display:inline-block;width:9px;height:9px;margin-right:8px;vertical-align:0;border-radius:50%;background:var(--sw);box-shadow:0 0 0 2px color-mix(in srgb,var(--sw) 28%,transparent)}
+.pet-tiles button:hover:not(:disabled){background:color-mix(in srgb,var(--sw) 8%,var(--card));border-color:color-mix(in srgb,var(--sw) 45%,var(--line))}
+.pet-tiles button.on,.pet-tiles button.on:hover:not(:disabled){background:color-mix(in srgb,var(--sw) 16%,var(--card));border-color:var(--sw);font-weight:600}
 canvas.preview-stage{display:block;border-radius:8px;background:var(--bg);border:1px solid var(--line);margin:0 0 4px;max-width:100%;height:auto;aspect-ratio:640/170}
 .check-ctl{display:flex;align-items:center;gap:12px}
 button.hotkey{min-width:128px;font-variant-numeric:tabular-nums}

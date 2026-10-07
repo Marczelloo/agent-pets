@@ -8,18 +8,25 @@
   --bg:#F3F3F3;--card:#FBFBFB;--line:rgba(0,0,0,.08);--edge:rgba(0,0,0,.14);--txt:#1F1F1F;--mut:#5F5E5A;--seg:#E9E9E9;--segOn:#FFFFFF;
   --track:rgba(0,0,0,.08);--btnb:rgba(0,0,0,.12);--claude:#D97757;--codex:#1D9E75;--router:#3D6FD6;--opencode:#3A3535;--up:#1D9E75;--down:#C2410C;
   --gold:#E3AE3A;--silver:#B3B8C1;--bronze:#C98A5B;--recBg:rgba(227,174,58,.2);--rec:#8A5A00;
-  --cal0:rgba(0,0,0,.06);--cal1:rgba(217,119,87,.28);--cal2:rgba(217,119,87,.5);--cal3:rgba(217,119,87,.75);--cal4:#D97757;
+  --cal0:rgba(0,0,0,.06);--scroll:rgba(0,0,0,.2);--scrollh:rgba(0,0,0,.36);--cal1:rgba(217,119,87,.28);--cal2:rgba(217,119,87,.5);--cal3:rgba(217,119,87,.75);--cal4:#D97757;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;--seg:#2B2B2B;--segOn:#3D3D3D;
   --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--opencode:#CFC9C9;--up:#5DCAA5;--down:#F08A5D;
-  --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06)}}
+  --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06);--scroll:rgba(255,255,255,.18);--scrollh:rgba(255,255,255,.32)}}
 :root[data-theme="dark"]{
   --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;--seg:#2B2B2B;--segOn:#3D3D3D;
   --track:rgba(255,255,255,.1);--btnb:rgba(255,255,255,.08);--codex:#5DCAA5;--router:#9BB8F5;--opencode:#CFC9C9;--up:#5DCAA5;--down:#F08A5D;
-  --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06)}
+  --recBg:rgba(232,184,74,.18);--rec:#E8B84A;--cal0:rgba(255,255,255,.06);--scroll:rgba(255,255,255,.18);--scrollh:rgba(255,255,255,.32)}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
 *{box-sizing:border-box}
+/* the same slim themed scrollbar as the panel; the gutter stays reserved so the page never shifts sideways */
+html{scrollbar-gutter:stable}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px;border:2px solid transparent;background-clip:padding-box;min-height:24px}
+::-webkit-scrollbar-thumb:hover{background-color:var(--scrollh);border-width:1px}
+::-webkit-scrollbar-button{display:none}
 h1{margin:0;font:600 16px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif}
 button{font:inherit;color:var(--txt);cursor:pointer}
 button:focus-visible{outline:2px solid var(--txt);outline-offset:1px}
