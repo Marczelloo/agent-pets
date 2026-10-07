@@ -139,6 +139,8 @@ node screens.mjs                    # docs/images/{panel,wizard,settings}.png fr
 
 `app/showcase.html?mode=gallery|states|styles|dynamic|banner&live=1` shows a board live in the browser.
 
+The banner draws its wordmark in Fredoka and Nunito, the site's fonts, loaded from Google Fonts, so recording it needs a connection. Afterwards make `site/og.png` from it: the banner scaled to 1200 × 400 in the middle of a 1200 × 630 `#FBF1E8` image.
+
 ## Releases
 
 Maintainer only. Since 0.7 the app reads `latest.json` from the latest GitHub release and installs only an installer with a valid updater signature. Releases are built by the `release` workflow (`.github/workflows/release.yml`); `scripts/release.ps1` builds the same thing locally when CI is not available. The `ci` workflow only runs the tests.
