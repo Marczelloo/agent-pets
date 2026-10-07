@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.1
 
 ### Changed
 
@@ -11,7 +11,6 @@
 
 - Limit notifications are no longer squeezed into a narrow column with the title cut off.
 - The Statistics window has the same slim, themed scrollbar as the panel.
-
 - The "+N" for extra subagents sits between the parent and its minis, level with them, instead of at the far end of the group where it looked like it belonged to the neighbouring pet.
 - A scrollbar appearing in the panel no longer squeezes the cards; it is slimmer and follows the theme.
 
