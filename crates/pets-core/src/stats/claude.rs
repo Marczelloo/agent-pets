@@ -190,7 +190,7 @@ mod tests {
             "/tmp/agent-router-test-Ab12",
             r"C:\Windows\Temp\x",
             r"D:\work\agent-router-repo-Zx9",
-        ] { assert_eq!(project_of(cwd).as_deref(), Some(NO_PROJECT), "{cwd}"); }
+        ] { assert_eq!(project_of_in(cwd, "").as_deref(), Some(NO_PROJECT), "{cwd}"); }
         for (cwd, p) in [
             (r"C:\Users\ja\Documents\ChatGPT\Agent Pets", "Agent Pets"),
             (r"d:\wszystko\Projekty\Web dev\tests", "tests"),

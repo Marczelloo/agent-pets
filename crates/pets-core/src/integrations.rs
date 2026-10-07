@@ -60,7 +60,8 @@ fn plugin_file(home: &Path) -> PluginFile {
     match std::fs::read_to_string(opencode_plugin(home)) {
         Ok(t) if t.starts_with(PLUGIN_MARK) => PluginFile::Ours(t),
         Ok(_) => PluginFile::Foreign,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => PluginFile::Missing,
+        // (a file where the `plugins` folder should be reads as NotADirectory on Linux, NotFound on Windows)
+        Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory) => PluginFile::Missing,
         // file exists but cannot be read (e.g. not UTF-8): treat it as someone else's
         Err(_) => PluginFile::Foreign,
     }

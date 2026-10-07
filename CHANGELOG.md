@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Linux support: the stage runs as an always-on-top strip on X11/XWayland (GTK + WebKitGTK), with `deb` and AppImage bundles, MPRIS media controls and cross-platform agent integrations; compositor border/shadow rules are a manual step for now (docs/building.md).
+
 ## 0.17.1
 
 ### Changed

@@ -447,7 +447,8 @@ pub fn raw_pointer() -> Option<(f64, f64, bool, bool)> {
 /// both spaces. Deriving the scale from the window's own width broke while the stage was being
 /// resized (X and Hyprland geometries disagree mid-resize, e.g. 136/62 instead of 1.6).
 fn hypr_to_physical(lx: f64, ly: f64) -> Option<(f64, f64)> {
-    static CACHE: Mutex<Option<(std::time::Instant, (f64, f64, f64))>> = Mutex::new(None);
+    type Transform = (f64, f64, f64);
+    static CACHE: Mutex<Option<(std::time::Instant, Transform)>> = Mutex::new(None);
     let mut c = CACHE.lock().unwrap();
     let t = match *c {
         Some((at, t)) if at.elapsed().as_millis() < 1000 => t,

@@ -77,7 +77,9 @@ fn sends_nothing_to_the_widget() {
     let ep = dir.path().join("endpoint.json");
     std::fs::write(&ep, format!("{{\"port\":{},\"token\":\"t\"}}", listener.local_addr().unwrap().port())).unwrap();
     let orig = dir.path().join("orig.json");
-    std::fs::write(&orig, r#"{"type":"command","command":"findstr ."}"#).unwrap();
+    // an echo of stdin, in whichever shell the platform has
+    let echo = if cfg!(windows) { "findstr ." } else { "cat" };
+    std::fs::write(&orig, format!(r#"{{"type":"command","command":"{echo}"}}"#)).unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_hook"))
         .arg("--agent-pets-statusline")
         .env("AGENT_PETS_ENDPOINT", &ep)
