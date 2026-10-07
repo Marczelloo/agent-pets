@@ -163,12 +163,30 @@ describe('layout with mini pets', () => {
     expect(out.hiddenIds).toEqual(['p0', 'p1']);
   });
 
-  it('more than three children show a small +N next to the minis', () => {
+  it('more than three children show a small +N between the parent and its minis', () => {
     const all = [mk('p', 1), ...['a', 'b', 'c'].map((id, i) => kid(id, 'p', 2 + i))];
     const out = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minis: minisFrom(all, 2), minisLeft: true });
-    expect(out.pets[0].miniMore?.n).toBe(2);
-    expect(out.pets[0].miniMore!.x).toBeLessThan(Math.min(...out.pets[0].minis.map(m => m.x)));
+    const p = out.pets[0];
+    expect(p.miniMore?.n).toBe(2);
+    expect(p.miniMore!.x).toBeGreaterThan(Math.max(...p.minis.map(m => m.x)));
+    expect(p.miniMore!.x).toBeLessThan(p.x);
     expect(out.width).toBeCloseTo(contentWidth(1, false, false) + 3 * M + MINI_MORE_W);
+    const r = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minis: minisFrom(all, 2), minisLeft: false }).pets[0];
+    expect(r.miniMore!.x).toBeGreaterThan(r.x);
+    expect(r.miniMore!.x).toBeLessThan(Math.min(...r.minis.map(m => m.x)));
+  });
+
+  it('a +N never sits beside the neighbouring pet', () => {
+    for (const minisLeft of [true, false]) {
+      const all = [mk('a', 1), mk('b', 2), ...['c', 'd', 'e', 'f'].map((id, i) => kid(id, 'b', 3 + i))];
+      const minis = (p: Session) => ({ shown: all.filter(c => c.parent === p.id).slice(0, 3), more: p.id === 'b' ? 1 : 0 });
+      const out = layout({ sessions: all, hasLimits: false, maxWidth: 5000, minis, minisLeft });
+      const more = out.pets.find(p => p.id === 'b')!, other = out.pets.find(p => p.id === 'a')!;
+      // the pill is closer to its own parent than to the other pet
+      expect(Math.abs(more.miniMore!.x - more.x)).toBeLessThan(Math.abs(more.miniMore!.x - other.x));
+      // and no mini stands between the pill and its parent
+      for (const m of more.minis) expect(Math.abs(m.x - more.x)).toBeGreaterThan(Math.abs(more.miniMore!.x - more.x));
+    }
   });
 
   it('minis stay inside the stage and groups count toward the room', () => {

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const html = readFileSync(fileURLToPath(new URL('../../panel.html', import.meta.url)), 'utf8');
-const css = html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
+const css = (html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '');
 const rules = [...css.matchAll(/(?:^|\})\s*([^{}@]+)\{([^}]*)\}/g)].map(m => ({ sel: m[1].trim(), body: m[2] }));
 
 describe('panel.html styles', () => {
@@ -18,6 +18,12 @@ describe('panel.html styles', () => {
     const remove = rules.filter(r => r.sel === '.remove');
     expect(remove.map(r => r.body).join(';')).not.toContain('opacity:0');
     expect(css).not.toContain('.session:hover .remove');
+  });
+
+  it('keeps the Limits-tab row grid off limit notifications: both carry the .limit class', () => {
+    // a bare .limit grid squeezed a limit notification's text into its 96 px label column
+    expect(rules.filter(r => /(^|[\s,])\.limit(?=[\s{.:,]|$)/.test(r.sel) && !r.sel.startsWith('.limits ') && !r.sel.startsWith('.note')).map(r => r.sel)).toEqual([]);
+    expect(rules.find(r => r.sel === '.note .title')?.body).toContain('white-space:normal');
   });
 
   it('lets the session menu overflow its card: a clipped group would cut off the menu items', () => {

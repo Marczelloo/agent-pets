@@ -48,9 +48,9 @@ describe('mini pet HUD', () => {
     expect(fills(false)).toContain('fillStyle=#5DCAA5');
     expect(fills(true)).toContain('fillStyle=#EF9F27');
   });
-  it('draws a small +N next to the minis', () => {
+  it('draws a small +N level with the minis', () => {
     const r = recorder();
     drawMiniMore(r.ctx, 50, 48, 2, 'x');
-    expect(r.log).toContain('fillText(+2,50,39.5)');
+    expect(r.log).toContain('fillText(+2,50,33.5)');
   });
 });

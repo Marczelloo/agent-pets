@@ -7,6 +7,10 @@ use tauri::{AppHandle, Emitter, Manager};
 
 /// The panel keeps the newest entries only.
 pub const MAX: usize = 50;
+/// Entries clean themselves up so the inbox never turns into a junk drawer: a limit warning is about a window that has
+/// moved on after a few hours, everything else after a day; news about an update waiting to be installed stays.
+pub const LIMIT_TTL_MS: i64 = 6 * 3_600_000;
+pub const TTL_MS: i64 = 24 * 3_600_000;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -15,6 +19,11 @@ pub enum Kind { NeedsYou, Done, Limit, Update, Updated, Weekly, Problem }
 
 impl Kind {
     fn about_updates(self) -> bool { matches!(self, Kind::Update | Kind::Updated) }
+
+    /// How long an entry of this kind stays (`None`: until replaced or removed by hand).
+    fn ttl(self) -> Option<i64> {
+        match self { Kind::Update => None, Kind::Limit => Some(LIMIT_TTL_MS), _ => Some(TTL_MS) }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -39,13 +48,23 @@ impl Log {
     pub fn items(&self) -> &[Entry] { &self.items }
     pub fn unread(&self) -> usize { self.items.iter().filter(|e| !e.read).count() }
 
-    /// An update entry replaces the previous one: only the latest news about versions stays.
+    /// An update entry replaces the previous one: only the latest news about versions stays. A limit warning replaces
+    /// an earlier one with the same title (the same agent and window), and stale entries go.
     pub fn push(&mut self, kind: Kind, title: &str, body: &str, session_id: Option<String>, at: i64) -> &Entry {
         if kind.about_updates() { self.items.retain(|e| !e.kind.about_updates()); }
+        if kind == Kind::Limit { self.items.retain(|e| !(e.kind == Kind::Limit && e.title == title)); }
+        self.prune(at);
         self.next += 1;
         self.items.insert(0, Entry { id: self.next, kind, title: title.into(), body: body.into(), session_id, at, read: false });
         self.items.truncate(MAX);
         &self.items[0]
+    }
+
+    /// Drop entries older than their kind's lifetime; whether anything went.
+    pub fn prune(&mut self, now: i64) -> bool {
+        let n = self.items.len();
+        self.items.retain(|e| e.kind.ttl().is_none_or(|ttl| now - e.at < ttl));
+        self.items.len() != n
     }
 
     pub fn mark_all_read(&mut self) -> bool {
@@ -89,7 +108,11 @@ pub fn save(home: &Path, log: &Log) -> std::io::Result<()> {
 pub struct Center { home: PathBuf, log: Mutex<Log> }
 
 impl Center {
-    pub fn load(home: PathBuf) -> Center { let log = Mutex::new(load(&home)); Center { home, log } }
+    pub fn load(home: PathBuf) -> Center {
+        let mut log = load(&home);
+        if log.prune(pets_core::time::now_ms()) { let _ = save(&home, &log); }
+        Center { home, log: Mutex::new(log) }
+    }
 
     fn items(&self) -> Vec<Entry> { self.log.lock().unwrap().items().to_vec() }
 
@@ -106,8 +129,13 @@ pub fn record(app: &AppHandle, kind: Kind, title: &str, body: &str, session_id: 
     app.state::<Center>().edit(app, |l| { l.push(kind, title, body, session_id, at); true });
 }
 
+/// The panel lists the entries each time it opens: stale ones are pruned first.
 #[tauri::command]
-pub fn notifications_list(c: tauri::State<Center>) -> Vec<Entry> { c.items() }
+pub fn notifications_list(app: AppHandle, c: tauri::State<Center>) -> Vec<Entry> {
+    let now = pets_core::time::now_ms();
+    c.edit(&app, |l| l.prune(now));
+    c.items()
+}
 
 #[tauri::command]
 pub fn notifications_read(app: AppHandle, c: tauri::State<Center>) { c.edit(&app, Log::mark_all_read); }
@@ -156,6 +184,32 @@ mod tests {
         assert_eq!(back.push(Kind::Done, "c", "", None, 6).id, 2);
         std::fs::write(path(d.path()), "{bad").unwrap();
         assert_eq!(load(d.path()), Log::default());
+    }
+
+    #[test]
+    fn stale_entries_clean_themselves_up() {
+        let h = 3_600_000;
+        let mut l = Log::default();
+        l.push(Kind::Update, "available 1.2", "", None, 0);
+        l.push(Kind::Done, "done", "", None, 0);
+        l.push(Kind::Limit, "Claude: 5h limit", "", None, 0);
+        assert!(!l.prune(5 * h), "nothing is stale yet");
+        assert!(l.prune(7 * h));
+        let titles = |l: &Log| l.items().iter().map(|e| e.title.clone()).collect::<Vec<_>>();
+        assert_eq!(titles(&l), ["done", "available 1.2"], "a limit warning goes after 6 h");
+        // a new entry prunes on its own: the day-old one goes, the update waiting to be installed stays
+        l.push(Kind::NeedsYou, "needs you", "", None, 25 * h);
+        assert_eq!(titles(&l), ["needs you", "available 1.2"]);
+    }
+
+    #[test]
+    fn a_repeated_limit_warning_replaces_the_earlier_one() {
+        let mut l = Log::default();
+        l.push(Kind::Limit, "Claude: 5h limit running out", "around 15:33", None, 1);
+        l.push(Kind::Limit, "Codex: 5h limit running out", "around 14:26", None, 2);
+        l.push(Kind::Limit, "Claude: 5h limit running out", "around 15:10", None, 3);
+        let v: Vec<_> = l.items().iter().map(|e| e.body.as_str()).collect();
+        assert_eq!(v, ["around 15:10", "around 14:26"]);
     }
 
     #[test]

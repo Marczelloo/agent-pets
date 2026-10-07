@@ -314,7 +314,8 @@ export default function App() {
     const un = [
       listen<Snapshot>('pets://snapshot', e => take.current(e.payload)),
       listen<string>('panel://status', e => setStatus(e.payload)),
-      listen<boolean>('panel://visible', e => setShown(e.payload)),
+      // opening the panel also drops notifications that have grown stale (core prunes them on every list)
+      listen<boolean>('panel://visible', e => { setShown(e.payload); if (e.payload) void invoke<NotificationEntry[]>('notifications_list').then(setNotes); }),
       listen<Settings>('pets://settings', e => { setLang(resolveLang(e.payload.language ?? 'auto')); applyTheme(e.payload.theme); setPets(e.payload.pets); setMuteUntil(e.payload.notifications?.muted_until ?? null); }),
       listen<boolean>('pets://power', e => setPetSaving(e.payload)),
       listen<UpdateStatus>('pets://update', e => setUpdate(e.payload)),

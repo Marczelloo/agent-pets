@@ -19,11 +19,13 @@ const petName = (a: Agent) => (a === 'other' ? t().look.otherPet : t().agent[a])
 
 export function PetPicker({ agent, onPick }: { agent: Agent; onPick: (a: Agent) => void }) {
   return (
-    <div className="pet-tiles" role="radiogroup" aria-label={t().look.previewPet}>
-      {PREVIEW_AGENTS.map(a => (
-        <button type="button" key={a} role="radio" aria-checked={agent === a} className={agent === a ? 'on' : ''}
-          style={{ '--sw': accentFor({ agent: a, agent_name: null }) } as CSSProperties} onClick={() => onPick(a)}>{petName(a)}</button>
-      ))}
+    <div className="pet-pick">
+      <div className="pet-tiles" role="radiogroup" aria-label={t().look.previewPet}>
+        {PREVIEW_AGENTS.map(a => (
+          <button type="button" key={a} role="radio" aria-checked={agent === a} className={agent === a ? 'on' : ''} title={petName(a)}
+            style={{ '--sw': accentFor({ agent: a, agent_name: null }) } as CSSProperties} onClick={() => onPick(a)}>{petName(a)}</button>
+        ))}
+      </div>
     </div>
   );
 }

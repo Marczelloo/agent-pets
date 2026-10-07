@@ -6,15 +6,15 @@
 <style>
 :root{
   --bg:#F3F3F3;--card:#FBFBFB;--line:rgba(0,0,0,.08);--edge:rgba(0,0,0,.14);--txt:#1F1F1F;--mut:#5F5E5A;
-  --track:rgba(0,0,0,.08);--btn:#FFFFFF;--btnh:#F6F6F6;--btnb:rgba(0,0,0,.12);--focus:rgba(217,119,87,.14);
+  --track:rgba(0,0,0,.08);--btn:#FFFFFF;--btnh:#F6F6F6;--btnb:rgba(0,0,0,.12);--focus:rgba(217,119,87,.14);--scroll:rgba(0,0,0,.2);--scrollh:rgba(0,0,0,.36);
   --claude:#D97757;--codex:#5DCAA5;--antigravity:#3DDC84;--hot:#E24B4A;--needs:#EF9F27;--router:#3D6FD6;--warn:#A15C00;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;
-  --track:rgba(255,255,255,.1);--btn:#373737;--btnh:#3D3D3D;--btnb:rgba(255,255,255,.08);--focus:rgba(217,119,87,.22);--router:#9BB8F5;--warn:#EF9F27}}
+  --track:rgba(255,255,255,.1);--btn:#373737;--btnh:#3D3D3D;--btnb:rgba(255,255,255,.08);--focus:rgba(217,119,87,.22);--scroll:rgba(255,255,255,.18);--scrollh:rgba(255,255,255,.32);--router:#9BB8F5;--warn:#EF9F27}}
 :root[data-theme="dark"]{
   --bg:#202020;--card:#2B2B2B;--line:rgba(255,255,255,.06);--edge:rgba(255,255,255,.1);--txt:#F3F3F3;--mut:#A5A298;
-  --track:rgba(255,255,255,.1);--btn:#373737;--btnh:#3D3D3D;--btnb:rgba(255,255,255,.08);--focus:rgba(217,119,87,.22);--router:#9BB8F5;--warn:#EF9F27}
+  --track:rgba(255,255,255,.1);--btn:#373737;--btnh:#3D3D3D;--btnb:rgba(255,255,255,.08);--focus:rgba(217,119,87,.22);--scroll:rgba(255,255,255,.18);--scrollh:rgba(255,255,255,.32);--router:#9BB8F5;--warn:#EF9F27}
 html,body{margin:0;height:100%;background:transparent;overflow:hidden}
 body{font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--txt)}
 #root{height:100%}
@@ -29,7 +29,15 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .bell{position:relative}
 .bell.on{color:var(--txt)}
 .bell .badge{position:absolute;top:-2px;right:-1px;min-width:14px;height:14px;box-sizing:border-box;padding:0 3px;border-radius:7px;background:var(--hot);color:#fff;font:600 10px/14px "Segoe UI",system-ui,sans-serif;text-align:center}
-.inbox{flex:1;overflow:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:6px}
+/* lists keep room for the scrollbar (8 px gutter + 4 px padding = the 12 px left margin), so a scrollbar appearing
+   never squeezes the cards; the thumb is a slim pill that widens on hover */
+.inbox,.limits,.sessions{scrollbar-gutter:stable}
+.inbox::-webkit-scrollbar,.limits::-webkit-scrollbar,.sessions::-webkit-scrollbar{width:8px}
+.inbox::-webkit-scrollbar-track,.limits::-webkit-scrollbar-track,.sessions::-webkit-scrollbar-track{background:transparent}
+.inbox::-webkit-scrollbar-thumb,.limits::-webkit-scrollbar-thumb,.sessions::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px;border:2px solid transparent;background-clip:padding-box;min-height:24px}
+.inbox::-webkit-scrollbar-thumb:hover,.limits::-webkit-scrollbar-thumb:hover,.sessions::-webkit-scrollbar-thumb:hover{background-color:var(--scrollh);border-width:1px}
+.inbox::-webkit-scrollbar-button,.limits::-webkit-scrollbar-button,.sessions::-webkit-scrollbar-button{display:none}
+.inbox{flex:1;overflow:auto;padding:0 4px 12px 12px;display:flex;flex-direction:column;gap:6px}
 .inbox .tools{justify-content:space-between}
 .inbox .muted{margin:0;padding:6px 10px;background:var(--focus);border:1px solid var(--line);border-radius:6px;font-size:12px;color:var(--mut)}
 .inbox ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -44,7 +52,7 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .note .line1{display:flex;gap:8px;font-size:11px;color:var(--mut)}
 .note .line1 .kind{font-weight:600}
 .note .when{margin-left:auto;white-space:nowrap}
-.note .title{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.note .title{font-size:13px;font-weight:600;white-space:normal;overflow-wrap:anywhere}
 .note .text{font-size:12px;color:var(--mut);overflow-wrap:anywhere}
 .update-bar{margin:0 12px 8px;padding:8px 10px 8px 12px;background:var(--focus);border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;gap:10px;font-size:12px}
 .update-bar .text{flex:1;min-width:0;overflow-wrap:anywhere}
@@ -57,16 +65,17 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .seg button.on{background:var(--btn);color:var(--txt);font-weight:600;box-shadow:0 0 0 1px var(--btnb)}
 .seg .n{font-size:11px;font-variant-numeric:tabular-nums;color:var(--mut)}
 .alert-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--hot)}
-.limits{flex:1;overflow:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.limits{flex:1;overflow:auto;padding:0 4px 12px 12px;display:flex;flex-direction:column;gap:8px}
 .lcard{padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:6px;display:grid;gap:6px}
 .lcard.stale{opacity:.7}
 .lhead{display:flex;align-items:center;gap:8px;font-weight:600}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mut)}
 .dot.claude{background:var(--claude)}.dot.codex{background:var(--codex)}.dot.antigravity{background:var(--antigravity)}
 .lcard .none,.limits .hint{margin:0;color:var(--mut);font-size:12px;font-style:italic}
-.limit{display:grid;grid-template-columns:96px 1fr 38px minmax(104px,auto);align-items:center;gap:8px;font-size:12px}
-.limit .label{color:var(--mut)}
-.limit .none{grid-column:2 / -1}
+/* rows inside the Limits tab only: a limit notification in the inbox is also `.limit` */
+.limits .limit{display:grid;grid-template-columns:96px 1fr 38px minmax(104px,auto);align-items:center;gap:8px;font-size:12px}
+.limits .limit .label{color:var(--mut)}
+.limits .limit .none{grid-column:2 / -1}
 .bar{height:6px;border-radius:3px;background:var(--track);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:3px}
 .bar.claude i{background:var(--claude)}
@@ -75,8 +84,8 @@ h1{margin:0;font:600 15px/1.2 "Segoe UI Variable Display","Segoe UI",system-ui,s
 .bar i.hot{background:var(--hot)}
 .pct{text-align:right;font-variant-numeric:tabular-nums}
 .reset{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.limit .pace{grid-column:2 / -1;margin-top:-2px;color:var(--warn);font-weight:600;font-size:11px}
-.sessions{flex:1;overflow:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:6px}
+.limits .limit .pace{grid-column:2 / -1;margin-top:-2px;color:var(--warn);font-weight:600;font-size:11px}
+.sessions{flex:1;overflow:auto;padding:0 4px 12px 12px;display:flex;flex-direction:column;gap:6px}
 .empty{margin:32px 0;text-align:center;color:var(--mut)}
 .empty p{margin:0 0 4px}
 .empty .hint{font-size:12px}
