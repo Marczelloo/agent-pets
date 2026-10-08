@@ -4,7 +4,7 @@ import { pen, setRng } from './renderer';
 import { PetPainter } from './renderer/painter';
 import { petFor, type SceneKey } from './stage/sceneFor';
 import type { Agent, Look, StyleId } from './types';
-import { bannerDrawer } from './showcaseBanner';
+import { BANNER_FONTS, bannerDrawer } from './showcaseBanner';
 
 type Pet = { agent: Agent; scene: SceneKey; name?: string };
 type Cell = { label: string; pets: Pet[]; look?: Partial<Look> };
@@ -92,5 +92,7 @@ function drawBanner(dt: number): string {
   return c.toDataURL('image/png');
 }
 
+// the banner measures its letters, so its fonts must be in before the first frame
+if (banner) await Promise.all(BANNER_FONTS.map(f => document.fonts.load(f)));
 (window as unknown as { showcase: unknown }).showcase = { width: W * Z, height: H * Z, fps: FPS, step };
 if (q.get('live') === '1') { const loop = () => { step(); requestAnimationFrame(loop); }; loop(); }

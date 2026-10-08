@@ -1,5 +1,5 @@
 // The prism: the same two pets seen through seven stripes, one look each. The stripe under the cursor widens.
-import { Actor, BODY, REDUCED, Stage } from './engine';
+import { Actor, BODY, CREW, REDUCED, Stage } from './engine';
 import { SKINS } from '@app/skins';
 import type { Agent, Look, MotionId, StyleId } from '@app/types';
 
@@ -28,9 +28,11 @@ export function looks(): void {
   const calmCast = () => [new Actor('claude', 'thinking'), new Actor('codex', 'vibe'), new Actor('claude', 'done'), new Actor('codex', 'needs')];
   let cast = calmCast();
   let focus = 3.5;
+  // a look tapped below the prism (or where a finger let go) holds still; the sweep waits
+  let pinned: number | null = null;
 
   const movesEl = document.querySelector<HTMLDivElement>('.moves')!;
-  movesEl.innerHTML = MOVES.map((m, i) => `<button type="button" data-i="${i}" aria-pressed="false">${m.name}</button>`).join('');
+  movesEl.innerHTML = MOVES.map((m, i) => `<button type="button" data-i="${i}" aria-pressed="false">${m.name}<small>${CREW.find(c => c.agent === m.agent)?.label ?? ''}</small></button>`).join('');
   const moveBtns = [...movesEl.querySelectorAll<HTMLButtonElement>('button')];
   const motionBtns = [...document.querySelectorAll<HTMLButtonElement>('[data-motion]')];
   const setMotion = (m: MotionId) => {
@@ -51,23 +53,29 @@ export function looks(): void {
     setMotion('dynamic');
   }));
 
+  const chipsEl = document.querySelector<HTMLDivElement>('.prism-looks')!;
+  chipsEl.innerHTML = LOOKS.map((L, k) => `<button type="button" data-k="${k}" aria-pressed="false" style="--sw:${L.bg};--sf:${L.fg}">${L.name}</button>`).join('');
+  const chips = [...chipsEl.querySelectorAll<HTMLButtonElement>('button')];
+  let lit = -1;
+  const light = (k: number) => { if (k !== lit) { lit = k; chips.forEach((c, j) => c.setAttribute('aria-pressed', String(j === k))); } };
+  chips.forEach((c, k) => c.addEventListener('click', () => { pinned = pinned === k ? null : k; }));
+
   const stage = new Stage(document.querySelector('.prism-stage')!, (s, dt, T) => {
     const x = s.x, narrow = s.w < 640;
-    // where the wide stripe is: the cursor, or a slow sweep
-    const want = s.pointer.in ? s.pointer.x / s.w * LOOKS.length : (REDUCED ? 3.5 : (Math.sin(T * .32) * .5 + .5) * LOOKS.length);
-    focus += (want - focus) * Math.min(1, dt * (s.pointer.in ? 9 : 2));
+    // where the wide stripe is: the cursor, a pinned look, or a slow sweep
+    const want = s.pointer.in ? s.pointer.x / s.w * LOOKS.length : pinned != null ? pinned + .5 : (REDUCED ? 3.5 : (Math.sin(T * .32) * .5 + .5) * LOOKS.length);
+    focus += (want - focus) * Math.min(1, dt * (s.pointer.in || pinned != null ? 9 : 2));
+    light(s.pointer.in ? Math.max(0, Math.min(LOOKS.length - 1, Math.floor(want))) : pinned ?? -1);
     const wts = LOOKS.map((_, k) => 1 + 3.4 * Math.exp(-((k + .5 - focus) ** 2) / 1.1));
     const sum = wts.reduce((a, b) => a + b, 0);
 
-    // two rows on a phone, one row otherwise; a pair of scenes with props gets room on the right
-    const n = cast.length, perRow = narrow ? 2 : n, rows = Math.ceil(n / perRow);
-    const wide = n === 2, floors = rows === 1 ? [s.h - 44] : [s.h * .47, s.h - 44];
-    const u = Math.min((s.h / rows) / (rows === 1 ? 175 : 130), s.w / perRow / (wide ? 260 : 135));
-    cast.forEach((a, i) => {
-      const col = i % perRow;
-      a.u = u; a.y = floors[Math.floor(i / perRow)];
-      a.x = wide ? s.w * (narrow ? .3 : [.2, .62][col]) : s.w * (col + .5) / perRow;
-      if (wide && narrow) a.x = s.w * .32;
+    // one row: a pair of scenes with props gets room on the right; a phone keeps two calm pets (one with props), bigger
+    const wide = cast.length === 2, floor = s.h - 44;
+    const shown = narrow ? cast.slice(0, wide ? 1 : 2) : cast, n = shown.length;
+    const u = Math.min(s.h / 175, s.w / n / (wide ? 260 : narrow ? 118 : 135));
+    shown.forEach((a, i) => {
+      a.u = u; a.y = floor;
+      a.x = wide ? s.w * (narrow ? .32 : [.2, .62][i]) : s.w * (i + .5) / n;
     });
     const legacy = cast.every(a => !!SKINS[a.painter.pet.type].legacy);
 
@@ -79,10 +87,10 @@ export function looks(): void {
       x.fillStyle = L.bg; x.fillRect(x0, 0, w + 1, s.h);
       // the floor each pet stands on
       x.fillStyle = L.fg; x.globalAlpha = .18;
-      floors.forEach(f => x.fillRect(x0, f, w + 1, 2));
+      x.fillRect(x0, floor, w + 1, 2);
       x.globalAlpha = 1;
       // the first stripe moves the clock; the others draw the same instant in their own look
-      cast.forEach(a => { if (k === 0) { a.look = look; a.step(dt); a.draw(x, dt, T, s.dpr); } else a.redraw(x, T, s.dpr, look); });
+      shown.forEach(a => { if (k === 0) { a.look = look; a.step(dt); a.draw(x, dt, T, s.dpr); } else a.redraw(x, T, s.dpr, look); });
       // the look's name; pixel and sticker exist for Clawd and Kodek, others draw clean there
       const off = !legacy && (L.id === 'pixel' || L.id === 'sticker');
       x.fillStyle = L.fg; x.globalAlpha = off ? .45 : .95;
@@ -100,4 +108,8 @@ export function looks(): void {
     });
   });
   stage.onClick = (px, py) => { const p = cast.find(p => p.hit(px, py, 16)); if (p) p.hop(320); };
+  // a finger that lets go leaves the look it was on pinned, instead of the sweep running off with it
+  stage.canvas.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'mouse') pinned = Math.max(0, Math.min(LOOKS.length - 1, Math.floor(stage.pointer.x / stage.w * LOOKS.length)));
+  });
 }

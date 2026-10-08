@@ -3,7 +3,7 @@ import type { Skin } from './types';
 // with a black visor bearing two plain white eyes; Grok logo on the chest, black hands.
 export const grok: Skin = {
   id: 'grok', pal: { m:'#ECECEA',s:'#BDBDB9',b:'#D4D4D0',h:'#FFFFFF',g:'#C4C4C0',gs:'#A2A29E' },
-  width: 66, depth: 40, height: 62, radius: 26, armLen: 27, mitt: 4.8, armThk: 7,
+  width: 66, depth: 40, height: 62, radius: 26, armLen: 27, mitt: 4.8, armThk: 7, armReach: .2, elbow: .35, hip: [24, -34],
   legs: [[-.13,0],[.13,0]], legW: 9.5, legLen: 29,
   eyeX: .075, eyeW: 4, eyeH: 7.5, eyeY: .16, eyeColor: '#FFFFFF',
   screenFace: false, antenna: false, backVents: false,

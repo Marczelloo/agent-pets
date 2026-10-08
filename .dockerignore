@@ -1,4 +1,8 @@
 # Only the landing page goes into the image's build context; the rest of the repository stays out.
 *
 !site/index.html
+!site/*.ico
+!site/*.png
+!site/*.txt
+!site/*.xml
 !site/nginx.conf

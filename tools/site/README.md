@@ -1,6 +1,6 @@
 # Landing page
 
-The Agent Pets landing page, built into **one self-contained file**: [`site/index.html`](../../site/index.html). Open it in a browser or put it on any static host (GitHub Pages, Netlify, a bucket); it needs nothing next to it.
+The Agent Pets landing page, built into **one self-contained file**: [`site/index.html`](../../site/index.html). Open it in a browser or put it on any static host (GitHub Pages, Netlify, a bucket); it works with nothing next to it. Next to it in `site/` are the files that crawlers and link previews fetch by URL: `favicon.ico`, `apple-touch-icon.png`, `og.png` (the 1200×630 link-preview image), `robots.txt` and, once the build knows the site's address, `sitemap.xml`.
 
 Every pet on the page is drawn by the **app's own renderer**: skins, poses, scenes, the seven looks, Dynamic motion, speech bubbles and the limit bars come straight from `app/src` and are bundled into the file. A change to a pet in the app shows up on the page with the next build.
 
@@ -16,14 +16,14 @@ Every pet on the page is drawn by the **app's own renderer**: skins, poses, scen
 | Claude mod | a terminal with the `/pets` pane and a pixel Clawd above the prompt |
 | Door | type an agent's name: a blob in its colour answers, and the `hook.exe report` call is written for it |
 | Privacy | the pets inside "your computer", and the only two connections that leave it |
-| Releases | the latest release's notes and every release before it |
+| Releases | the latest release's notes, the three newest releases and the rest behind "Show older releases" |
 | Footer | the crew asleep; the one under the cursor wakes up |
 
 The navigation is a Windows 11 taskbar docked at the bottom. A different pet, in a different look, pops out of it above the section you are reading and says a line about it.
 
 ## Hosting
 
-The repository root has a `Dockerfile` that serves **only this page**: nginx with `site/index.html` and `site/nginx.conf`. Its `.dockerignore` lets nothing else into the build context (about 290 KB), so the Windows app, the Rust crates and the tooling never reach the image. A hosting dashboard that looks for a Dockerfile finds this one and nothing else to build.
+The repository root has a `Dockerfile` that serves **only this page**: nginx with `site/index.html`, its icons, `og.png`, `robots.txt` (and `sitemap.xml`) and `site/nginx.conf`. Its `.dockerignore` lets nothing else into the build context (about 290 KB), so the Windows app, the Rust crates and the tooling never reach the image. A hosting dashboard that looks for a Dockerfile finds this one and nothing else to build.
 
 ```sh
 docker build -t agent-pets-site .
@@ -51,7 +51,7 @@ pnpm build          # writes site/index.html
 pnpm watch          # rebuilds on every change in src/ or app/src
 ```
 
-`GITHUB_TOKEN=… pnpm build` fetches the releases with a token (higher rate limit). Behind a proxy, Node's `fetch` needs `NODE_USE_ENV_PROXY=1`. `node build.mjs --body-only=<file>` also writes the page without `<html>`/`<head>`, for hosts that add their own.
+`SITE_URL=https://… pnpm build` sets the address the page is served from: it adds the canonical URL and `og:url`, takes the link-preview image from the site instead of the repository, and writes `sitemap.xml` and a `robots.txt` that points to it. Without it the page still has full Open Graph, X/Twitter card and JSON-LD tags. `GITHUB_TOKEN=… pnpm build` fetches the releases with a token (higher rate limit). Behind a proxy, Node's `fetch` needs `NODE_USE_ENV_PROXY=1`. `node build.mjs --body-only=<file>` also writes the page without `<html>`/`<head>`, for hosts that add their own.
 
 ```
 src/page.html     the page; build.mjs fills in the CSS, the release snapshot and the script

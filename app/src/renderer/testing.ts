@@ -71,7 +71,11 @@ export function loadPrototype(rng: () => number): ProtoApi {
   const hipMutation = 'Object.assign(sw?{armL:1.1}:HIP,';
   if (!prototypeSource.includes(hipMutation)) throw new Error('Prototype v6 HIP mutation patch target not found');
   // Fix the HIP mutation bug in prototype v6 before evaluating it.
-  const patchedSource = prototypeSource.replace(hipMutation, 'Object.assign({},sw?{armL:1.1}:HIP,');
+  // The port closes the eyes fully into happy arcs from .35 happiness (eyeHappy in math.ts); v6 faded them linearly.
+  const happyEyes = 'hp=cl(P.happy.x)';
+  if (!prototypeSource.includes(happyEyes)) throw new Error('Prototype v6 happy eyes patch target not found');
+  const patchedSource = prototypeSource.replace(hipMutation, 'Object.assign({},sw?{armL:1.1}:HIP,')
+    .replace(happyEyes, 'hp=(k=>k*k*(3-2*k))(cl((P.happy.x-.15)/.2))');
   // Each `vm` context has its own Math object, so the replacement does not leak into tests.
   const src = 'Math.random=__rng;' + patchedSource +
     ';globalThis.__p={S,mkC,stepC,drawC,setSK:v=>{SK=v},setBoil:v=>{BOIL=v}};';

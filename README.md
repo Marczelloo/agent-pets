@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/banner.png" alt="Agent Pets banner: all nine pets as one happy bunch on a Windows 11 taskbar: the ZCode panda and a blob high-five on the heads of Kodek and Clawd, the Copilot pilot catches hearts in a net, opencode throws a paper plane, the Android robot cheers, the Grok robot says hi and the Cursor block claps" width="100%">
+  <img src="docs/images/banner.png" alt="Agent Pets banner: the Agent Pets wordmark with all nine pets perched on its letters: the Grok robot waves hi, the ZCode panda wears headphones, the Cursor block claps, Kodek, a blob and Clawd sit on the letters, the Copilot pilot sends hearts, the Android robot cheers and the opencode cyclops throws a paper plane; under it the tagline &quot;Your coding agents, alive on the Windows 11 taskbar&quot; and a Windows 11 taskbar" width="100%">
 </p>
 
 <p align="center">

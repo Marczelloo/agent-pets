@@ -1,6 +1,6 @@
 // Flat front-facing rig for sticker and pixel models: same springs as body.ts, without 3D rotation.
 // Sets c.hand and c.aHand in the same units as body.ts, so targets(), props, and motion energy work unchanged.
-import { PI, cl } from '../math';
+import { PI, cl, eyeHappy } from '../math';
 import { pen } from '../pen';
 import type { Pet } from '../pet';
 
@@ -38,7 +38,7 @@ export function rig(c: Pet, X: number, Y: number, u: number, t: number, size: { 
   if (hph < .42) { h = Math.sin(PI * hph / .42); sq = .07 * Math.cos(PI * hph / .42); } else if (hph < .58) sq = -.13 * Math.sin(PI * (hph - .42) / .16);
   const hw = cl(P.hopW.x);
   h *= hw; sq *= hw * pen.squash;
-  const wb = Math.abs(Math.sin(t * 10)) * walk, br = Math.sin(t * (2.3 - loaf)) * .02 * (1 + cl(P.sleep.x) * 1.5);
+  const wb = Math.abs(Math.sin(t * 10)) * walk, br = Math.sin(c.bp ?? 0) * .02 * (1 + cl(P.sleep.x) * 1.5);
   const oy = -(h * 24 + wb * 2.5) * u + lean * 4 * u;
   const W = size.w * u, H = size.h * u * (1 - .1 * loaf), bot = -12 * u * (1 - down), top = bot - H, legH = 17 * u;
   const wob = cl(P.wobW.x), rot = Math.sin(t * 4) * .1 * wob + loaf * .06 + P.tilt.x;
@@ -47,7 +47,7 @@ export function rig(c: Pet, X: number, Y: number, u: number, t: number, size: { 
   const XX = X + P.lx.x * u, shY = top + H * .52, AL = size.arm * u;
   const arms: RigArm[] = ([-1, 1] as const).map(s => {
     const k = s < 0 ? 'L' : 'R';
-    const a = P['arm' + k].x + P['osc' + k].x * Math.sin(t * c.f + (s < 0 ? 1.7 : 0)), fw = walk * Math.sin(t * 10 + (s < 0 ? 0 : PI)) * .6;
+    const a = P['arm' + k].x + P['osc' + k].x * Math.sin((c.op ?? 0) + (s < 0 ? 1.7 : 0)), fw = walk * Math.sin(t * 10 + (s < 0 ? 0 : PI)) * .6;
     const sw: [number, number] = [s * W * .5 * sx, shY * sy + oy];
     const up = Math.max(0, -Math.cos(a)), AE = AL * (1 + .75 * up);
     const ah: [number, number] = [sw[0] + s * Math.sin(a) * AE * .92 + fw * 4 * u, sw[1] + Math.cos(a) * AE * .92];
@@ -57,7 +57,7 @@ export function rig(c: Pet, X: number, Y: number, u: number, t: number, size: { 
   });
   c.hand = arms.map(a => [a.hx / u, a.hy / u]);
   c.aHand = arms.map(a => [a.ah[0] / u, a.ah[1] / u]);
-  const bl = c.blink > 0 ? Math.sin(PI * (c.blink / .16)) : 0, sl = cl(P.sleep.x), hp = cl(P.happy.x), dz = cl(P.dizzy.x), sqn = cl(P.squint.x);
+  const bl = c.blink > 0 ? Math.sin(PI * (c.blink / .16)) : 0, sl = cl(P.sleep.x), hp = eyeHappy(P.happy.x), dz = cl(P.dizzy.x), sqn = cl(P.squint.x);
   return {
     XX, Y, oy, sx, sy, rot, W, H, top, bot, legH, down, loaf, sit, face, faceX: cl(th / 0.5, -1, 1),
     gaze: [P.ex.x * 4, P.look.x * 4.5],

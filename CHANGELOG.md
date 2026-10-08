@@ -6,6 +6,23 @@
 
 - Linux support: the stage runs as an always-on-top strip on X11/XWayland (GTK + WebKitGTK), with `deb` and AppImage bundles, MPRIS media controls and cross-platform agent integrations; compositor border/shadow rules are a manual step for now (docs/building.md).
 
+### Fixed
+
+- After an update the taskbar and Start show the new app icon right away, instead of the old one Windows kept in its icon cache.
+
+## 0.17.2
+
+### Changed
+
+- A new, simpler app icon: the pet peeking over the edge of the taskbar, readable down to 16 px.
+
+### Fixed
+
+- A pet waking up (and any change between poses) no longer stutters: its breathing and arm swing keep their rhythm instead of jumping while the pose changes.
+- Grok's arms look natural: a raised arm bends at the elbow instead of growing long and stiff, and a hand on the hip rests on Grok's own waist instead of sticking out sideways.
+- A happy pet's eyes close into arcs as one: Grok and the panda no longer show an open eye and a smile arc at the same time.
+- Grok's happy and sleepy eye arcs no longer touch each other inside the visor.
+
 ## 0.17.1
 
 ### Changed
