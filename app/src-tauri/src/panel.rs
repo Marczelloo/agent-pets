@@ -68,7 +68,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     w.on_window_event(move |e| if let WindowEvent::Focused(false) = e {
         let st = a.state::<Panel>();
         let mut p = st.0.lock().unwrap();
-        if p.transient_blur(pets_core::time::now_ms()) {
+        if cfg!(target_os = "linux") && p.transient_blur(pets_core::time::now_ms()) {
             return;
         }
         p.blurred(pets_core::time::now_ms());

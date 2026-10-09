@@ -218,8 +218,9 @@ fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
             c.raw_arg(format!("/S /C \"{cmd}\""));
             c
         }))];
-        if bash.is_some() {
-            v.push(("bash", Box::new(|cmd: &str| { let mut c = Command::new("bash"); c.arg("-c").arg(cmd); c })));
+        // Git's bash by full path: a bare `bash` on PATH is WSL's launcher
+        if let Some(b) = bash {
+            v.push(("bash", Box::new(move |cmd: &str| { let mut c = Command::new(&b); c.arg("-c").arg(cmd); c })));
         }
         v
     };
@@ -233,6 +234,13 @@ fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
         for (what, make) in &shells {
             let out = make(&cmd).env("AGENT_PETS_ENDPOINT", &missing).stdin(Stdio::null()).output().unwrap();
             stop(out, &format!("{what} {name}"));
+        }
+        #[cfg(windows)]
+        {
+            let ps = pets_core::integrations::hook_command_ps(&place(name), "copilot", "Stop");
+            let out = Command::new("powershell").args(["-NoProfile", "-Command", &ps]).env("AGENT_PETS_ENDPOINT", &missing)
+                .stdin(Stdio::null()).output().unwrap();
+            assert!(out.status.success(), "powershell {name}: {}", String::from_utf8_lossy(&out.stderr));
         }
     }
     #[cfg(windows)]

@@ -143,9 +143,6 @@ fn raw(w: &WebviewWindow) -> isize { w.hwnd().map(|h| h.0 as isize).unwrap_or(0)
 fn raw(w: &WebviewWindow) -> isize { taskbar::id_of(w) }
 
 /// Stage handle for the platform backend.
-#[cfg(windows)]
-fn handle_of(s: &AtomicIsize) -> taskbar::Handle { taskbar::hwnd(s.load(Ordering::Relaxed)) }
-#[cfg(not(windows))]
 fn handle_of(s: &AtomicIsize) -> taskbar::Handle { taskbar::hwnd(s.load(Ordering::Relaxed)) }
 
 impl Shell {
@@ -229,26 +226,20 @@ pub fn taskbar_geometry() -> Option<(placement::Rect, placement::Rect, f64)> {
 #[cfg(not(windows))]
 pub fn taskbar_geometry() -> Option<(placement::Rect, placement::Rect, f64)> { taskbar::taskbar_geometry() }
 
-/// Window id for the platform backend (HWND number on Windows, registry id on Linux).
-#[cfg(windows)]
-fn win_id(w: &WebviewWindow) -> isize { w.hwnd().map(|h| h.0 as isize).unwrap_or(0) }
-#[cfg(not(windows))]
-fn win_id(w: &WebviewWindow) -> isize { taskbar::id_of(w) }
-
-pub fn show_no_activate(w: &WebviewWindow) { let h = win_id(w); if h != 0 { taskbar::show_no_activate(taskbar::hwnd(h)); } }
+pub fn show_no_activate(w: &WebviewWindow) { let h = raw(w); if h != 0 { taskbar::show_no_activate(taskbar::hwnd(h)); } }
 
 /// Hide a window shown by `show_no_activate`. On Windows it must use Win32: Tauri does not know it was shown
 /// by `ShowWindow`, considers it hidden, and its `hide()` does nothing. On Linux Tauri did the showing.
 #[cfg(windows)]
 pub fn hide(w: &WebviewWindow) { if let Ok(h) = w.hwnd() { taskbar::hide(h); } }
 #[cfg(not(windows))]
-pub fn hide(w: &WebviewWindow) { let h = win_id(w); if h != 0 { taskbar::hide(taskbar::hwnd(h)); } }
+pub fn hide(w: &WebviewWindow) { let h = raw(w); if h != 0 { taskbar::hide(taskbar::hwnd(h)); } }
 
 /// Show without activation: clicking it does not take focus from the active window (bubble window).
-pub fn no_activate(w: &WebviewWindow) { let h = win_id(w); if h != 0 { taskbar::no_activate(taskbar::hwnd(h)); } }
+pub fn no_activate(w: &WebviewWindow) { let h = raw(w); if h != 0 { taskbar::no_activate(taskbar::hwnd(h)); } }
 
 /// Pass pointer events through the entire window (bubbles: yes outside bubbles, no over a bubble).
-pub fn set_passthrough(w: &WebviewWindow, on: bool) { let h = win_id(w); if h != 0 { taskbar::passthrough(taskbar::hwnd(h), on); } }
+pub fn set_passthrough(w: &WebviewWindow, on: bool) { let h = raw(w); if h != 0 { taskbar::passthrough(taskbar::hwnd(h), on); } }
 
 /// Size and position a window in physical pixels. On Linux the taskbar backend goes through GTK
 /// (`gtk_window`, type hints), so the call is routed to the main thread when it arrives from
@@ -256,6 +247,7 @@ pub fn set_passthrough(w: &WebviewWindow, on: bool) { let h = win_id(w); if h !=
 pub fn place_window(w: &WebviewWindow, r: placement::Rect, dock: bool) {
     #[cfg(windows)]
     {
+        let _ = dock;
         let _ = w.set_size(tauri::PhysicalSize::new((r.right - r.left).max(1) as u32, (r.bottom - r.top).max(1) as u32));
         let _ = w.set_position(tauri::PhysicalPosition::new(r.left, r.top));
     }
@@ -270,7 +262,7 @@ pub fn place_window(w: &WebviewWindow, r: placement::Rect, dock: bool) {
 pub struct Cursor { pub x: f64, pub y: f64, pub left: bool }
 
 pub fn cursor_in(w: &WebviewWindow) -> Option<Cursor> {
-    let h = win_id(w);
+    let h = raw(w);
     let (x, y, left) = taskbar::cursor_rel(taskbar::hwnd(h))?;
     Some(Cursor { x, y, left })
 }
@@ -343,7 +335,7 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         }
         let hw = taskbar::hwnd(h);
         let since = embed_failed_at.map(|t| t.elapsed().as_millis() as u64).unwrap_or(0);
-        match attach_or_retry(parent, bar.map(|b| b.raw()), embed_failed, since) {
+        match attach_or_retry(parent, bar.map(taskbar::handle_raw), embed_failed, since) {
             Attach::Embed(b) => {
                 // from the floating window: in the taskbar, clicks are always ours
                 pointer::PASSTHROUGH.store(false, Ordering::Relaxed);
@@ -416,9 +408,9 @@ fn run(app: AppHandle, rx: Receiver<Cmd>, stage: Arc<AtomicIsize>, pmode: Arc<At
         last_rect = None;
         if moving.is_none() { set_pmode(pointer::NORMAL); }
         let Some(b) = bar else { continue };
-        let cached = bar_metrics.filter(|(h, _)| !fresh && *h == b.raw()).map(|(_, m)| m);
+        let cached = bar_metrics.filter(|(h, _)| !fresh && *h == taskbar::handle_raw(b)).map(|(_, m)| m);
         let Some(m) = cached.or_else(|| taskbar::metrics(b, uia.as_ref())) else { continue };
-        bar_metrics = Some((b.raw(), m));
+        bar_metrics = Some((taskbar::handle_raw(b), m));
         let width = (m.tray.right - m.tray.left).max(1) as f64;
         let px_of = |at: f64| m.tray.left + (at * width).round() as i32;
         for c in std::mem::take(&mut pending) {

@@ -159,10 +159,8 @@ pub fn apply_floating(stage: HWND, m: &Metrics, p: Option<Placement>) {
 /// Monitor with work area, scale, and taskbar (if Windows shows one there).
 pub struct Mon { pub info: MonitorInfo, pub monitor: Rect, pub work: Rect, pub scale: f64, pub bar: Option<Handle> }
 
-impl Handle {
-    /// Platform handle as a plain number (the stage-loop bookkeeping stores `isize`).
-    pub fn raw(self) -> isize { self.0 as isize }
-}
+/// Platform handle as a plain number (the stage-loop bookkeeping stores `isize`).
+pub fn handle_raw(h: Handle) -> isize { h.0 as isize }
 
 fn rect_from(r: &RECT) -> Rect { Rect { left: r.left, top: r.top, right: r.right, bottom: r.bottom } }
 

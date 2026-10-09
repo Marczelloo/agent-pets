@@ -62,7 +62,8 @@ pub fn session_window(pid: u32) -> Option<HWND> {
 }
 
 /// Linux: focusing another process's window is done through the compositor directly in `focus`.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg(not(windows))]
+#[allow(dead_code)]
 pub fn session_window(_pid: u32) -> Option<()> { None }
 
 /// Nearest process with a window, walking up from `pid`. `entry(p)` returns (parent, executable of process `p`).

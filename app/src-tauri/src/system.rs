@@ -124,14 +124,22 @@ pub fn autostart_action(desired: bool, registered: Option<&str>, cmd: &str) -> O
     }
 }
 
+/// Executable to start at login. An AppImage runs from a temporary `/tmp/.mount_*` folder,
+/// so the entry points at the `.AppImage` file itself (`$APPIMAGE`).
+fn app_exe() -> std::io::Result<std::path::PathBuf> {
+    #[cfg(target_os = "linux")]
+    if let Some(p) = std::env::var_os("APPIMAGE").filter(|p| !p.is_empty()) { return Ok(p.into()); }
+    std::env::current_exe()
+}
+
 pub fn set_autostart(on: bool) -> std::io::Result<()> {
-    let exe = std::env::current_exe()?;
+    let exe = app_exe()?;
     set_autostart_at(RUN_KEY, &exe.to_string_lossy(), on)
 }
 
 /// Startup command for the current app executable.
 pub fn current_autostart_command() -> Option<String> {
-    std::env::current_exe().ok().map(|e| autostart_command(&e.to_string_lossy()))
+    app_exe().ok().map(|e| autostart_command(&e.to_string_lossy()))
 }
 
 /// Remove the app's notification registration key (AUMID). Windows only.

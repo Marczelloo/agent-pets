@@ -26,20 +26,20 @@ fn passes_the_original_statusline_output_through_even_without_the_widget() {
 fn runs_an_original_command_with_a_quoted_path_unchanged() {
     let dir = tempfile::tempdir().unwrap();
     let orig = dir.path().join("orig.json");
-    // a real program in a folder with a space, invoked through quotes: `cat`/`findstr` prints the input back
-    let prog = if cfg!(windows) {
-        let findstr = format!("{}\\System32\\findstr.exe", std::env::var("SystemRoot").unwrap());
-        std::fs::write(&orig, serde_json::json!({"type": "command", "command": format!("\"{findstr}\" .")}).to_string()).unwrap();
-        return run_and_expect(dir.path(), &orig, "{\"a\":1}");
-    } else {
+    // a real program invoked through quotes: `findstr`/`cat` prints the input back
+    #[cfg(windows)]
+    let cmd = format!("\"{}\\System32\\findstr.exe\" .", std::env::var("SystemRoot").unwrap());
+    // on Unix the program sits in a folder with a space
+    #[cfg(not(windows))]
+    let cmd = {
+        use std::os::unix::fs::PermissionsExt;
         let sub = dir.path().join("sub dir");
         std::fs::create_dir_all(&sub).unwrap();
         let cat = sub.join("mycat");
         std::fs::copy("/bin/cat", &cat).unwrap();
-        std::fs::set_permissions(&cat, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-        cat
+        std::fs::set_permissions(&cat, std::fs::Permissions::from_mode(0o755)).unwrap();
+        format!("\"{}\"", cat.display())
     };
-    let cmd = format!("\"{}\"", prog.display());
     std::fs::write(&orig, serde_json::json!({"type": "command", "command": cmd}).to_string()).unwrap();
     run_and_expect(dir.path(), &orig, "{\"a\":1}");
 }

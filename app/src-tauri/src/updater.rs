@@ -106,8 +106,8 @@ async fn find(app: &AppHandle) -> Result<Option<Update>, (String, bool)> {
     let up = app.updater_builder().endpoints(vec![url]).map_err(|e| (e.to_string(), false))?.build().map_err(|e| (e.to_string(), false))?;
     match up.check().await {
         Ok(u) => Ok(u),
-        // a release without a package for this platform (so far Linux on the Windows-only channel): up to date
-        Err(e) if e.to_string().to_lowercase().contains("platform") || e.to_string().contains("target") => Ok(None),
+        // Linux: releases carry no updater package for it yet, so a missing target means up to date
+        Err(tauri_plugin_updater::Error::TargetNotFound(_) | tauri_plugin_updater::Error::TargetsNotFound(_)) if cfg!(target_os = "linux") => Ok(None),
         Err(e) => Err((e.to_string(), is_network(&e))),
     }
 }

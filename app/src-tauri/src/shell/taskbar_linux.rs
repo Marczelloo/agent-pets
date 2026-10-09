@@ -10,14 +10,12 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, PhysicalPosition, WebviewWindow};
 
-/// Pseudo taskbar handle: `1 + monitor index`; `raw()` keeps the stage loop's numeric bookkeeping.
+/// Pseudo taskbar handle: `1 + monitor index`; `handle_raw` keeps the stage loop's numeric bookkeeping.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Handle(pub isize);
 
-impl Handle {
-    /// Platform handle as a plain number (the stage-loop bookkeeping stores `isize`).
-    pub fn raw(self) -> isize { self.0 }
-}
+/// Platform handle as a plain number (the stage-loop bookkeeping stores `isize`).
+pub fn handle_raw(h: Handle) -> isize { h.0 }
 
 /// Stage-window registry: the loop addresses windows by the id handed out in `build_stage`,
 /// because Tauri windows are not plain numbers here.
