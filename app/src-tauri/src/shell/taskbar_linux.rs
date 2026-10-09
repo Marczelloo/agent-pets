@@ -138,7 +138,8 @@ pub fn detach(_stage: Handle) {}
 /// or focus it) sized in logical pixels. `p` is in strip physical coordinates.
 pub fn apply(stage: Handle, p: Option<Placement>) {
     let Some(win) = window(stage) else { return };
-    let strip = LAST_STRIP.lock().unwrap().or_else(|| own_strip(&win));
+    let last = *LAST_STRIP.lock().unwrap();
+    let strip = last.or_else(|| own_strip(&win));
     on_main_async(move || {
         use gtk::prelude::*;
         let Ok(gw) = win.gtk_window() else { return };
@@ -336,13 +337,15 @@ pub fn monitor_of(raw: Handle) -> Option<(Rect, Rect)> {
 static RECT_CACHE: Mutex<Vec<(isize, std::time::Instant, Rect, f64)>> = Mutex::new(Vec::new());
 
 pub fn rect_of(raw: Handle) -> Option<Rect> {
-    let mut cache = RECT_CACHE.lock().unwrap();
-    if let Some(e) = cache.iter().find(|(i, at, _, _)| *i == raw.0 && at.elapsed().as_millis() < 300) {
-        return Some(e.2);
-    }
+    let hit = RECT_CACHE.lock().unwrap().iter()
+        .find(|(i, at, _, _)| *i == raw.0 && at.elapsed().as_millis() < 300).map(|e| e.2);
+    if hit.is_some() { return hit; }
+    // queried without the lock: off the main thread Tauri waits for the main loop, which itself reads
+    // this cache in IPC commands (`bubbles_place`), and holding it there deadlocked the app
     let win = window(raw)?;
     let r = rect(win.outer_position().ok()?, win.outer_size().ok()?);
     let scale = win.scale_factor().unwrap_or(1.0);
+    let mut cache = RECT_CACHE.lock().unwrap();
     cache.retain(|(i, _, _, _)| *i != raw.0);
     cache.push((raw.0, std::time::Instant::now(), r, scale));
     Some(r)
@@ -457,12 +460,13 @@ pub fn raw_pointer() -> Option<(f64, f64, bool, bool)> {
 fn hypr_to_physical(lx: f64, ly: f64) -> Option<(f64, f64)> {
     type Transform = (f64, f64, f64);
     static CACHE: Mutex<Option<(std::time::Instant, Transform)>> = Mutex::new(None);
-    let mut c = CACHE.lock().unwrap();
-    let t = match *c {
+    let cached = *CACHE.lock().unwrap();
+    let t = match cached {
         Some((at, t)) if at.elapsed().as_millis() < 1000 => t,
         _ => {
+            // measured without the lock (window queries wait for the main loop)
             let t = stage_transform()?;
-            *c = Some((std::time::Instant::now(), t));
+            *CACHE.lock().unwrap() = Some((std::time::Instant::now(), t));
             t
         }
     };
