@@ -50,18 +50,21 @@ fn desktop_file() -> std::path::PathBuf {
 
 /// Write or remove the XDG autostart entry; `key`/`exe` keep the Windows signature.
 #[cfg(not(windows))]
-pub fn set_autostart_at(_key: &str, exe: &str, on: bool) -> std::io::Result<()> {
-    let f = desktop_file();
+pub fn set_autostart_at(_key: &str, exe: &str, on: bool) -> std::io::Result<()> { write_desktop_file(&desktop_file(), exe, on) }
+
+#[cfg(not(windows))]
+fn write_desktop_file(f: &std::path::Path, exe: &str, on: bool) -> std::io::Result<()> {
     if !on {
-        return match std::fs::remove_file(&f) {
+        return match std::fs::remove_file(f) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(e),
         };
     }
+    let exe = exec_escape(exe);
     let text = format!("[Desktop Entry]\nType=Application\nName=Agent Pets\nExec=\"{exe}\" {AUTOSTART_ARG}\nComment=Animated pets for your coding agents\n");
     if let Some(dir) = f.parent() { std::fs::create_dir_all(dir)?; }
-    std::fs::write(&f, text)
+    std::fs::write(f, text)
 }
 
 /// Whether a startup entry exists under `key` (Linux ignores it: there is one autostart file).
@@ -83,9 +86,51 @@ pub fn autostart_value(key: &str) -> Option<String> {
 
 /// `Exec` line of the XDG autostart entry, if present.
 #[cfg(not(windows))]
-pub fn autostart_value(_key: &str) -> Option<String> {
-    std::fs::read_to_string(desktop_file()).ok()?
-        .lines().find(|l| l.starts_with("Exec=")).map(|l| l[5..].to_string())
+pub fn autostart_value(_key: &str) -> Option<String> { desktop_exec(&desktop_file()) }
+
+#[cfg(not(windows))]
+fn desktop_exec(f: &std::path::Path) -> Option<String> {
+    std::fs::read_to_string(f).ok()?
+        .lines().find(|l| l.starts_with("Exec=")).map(|l| exec_unescape(&l[5..]))
+}
+
+/// A path inside the quoted `Exec` argument (desktop entry spec): `"`, `` ` ``, `$` and `\` take a backslash
+/// for the argument and the string escaping doubles it (GLib rejects `\"` as an unknown escape); `%` is `%%`.
+#[cfg(not(windows))]
+fn exec_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str(r"\\\\"),
+            '"' | '`' | '$' => { out.push_str(r"\\"); out.push(c); }
+            '%' => out.push_str("%%"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Inverse of [`exec_escape`]: string escapes first, then argument escapes, then `%%`.
+#[cfg(not(windows))]
+fn exec_unescape(s: &str) -> String {
+    // `\x` -> `x`; the string level also knows `\s` `\n` `\t` `\r`
+    fn unbackslash(s: &str, string_level: bool) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut it = s.chars();
+        while let Some(c) = it.next() {
+            if c != '\\' { out.push(c); continue; }
+            match it.next() {
+                Some('s') if string_level => out.push(' '),
+                Some('n') if string_level => out.push('\n'),
+                Some('t') if string_level => out.push('\t'),
+                Some('r') if string_level => out.push('\r'),
+                Some(n) => out.push(n),
+                None => out.push('\\'),
+            }
+        }
+        out
+    }
+    unbackslash(&unbackslash(s, true), false).replace("%%", "%")
 }
 
 /// Light taskbar (Settings → Personalization → Colors → Windows mode). Missing value = dark.
@@ -100,16 +145,53 @@ pub fn light_taskbar() -> bool {
     }
 }
 
-/// Light theme on Linux: the freedesktop color-scheme preference (`gsettings` on GNOME; `prefer-light`).
+/// Light theme on Linux: the freedesktop color-scheme preference from the settings portal
+/// (GNOME, KDE, Hyprland with a portal), else `gsettings` (GNOME without a portal). Read at most
+/// every 5 s, so a theme switch shows up without a restart.
 #[cfg(not(windows))]
 pub fn light_taskbar() -> bool {
-    static LIGHT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *LIGHT.get_or_init(|| {
-        let out = std::process::Command::new("gsettings").args(["get", "org.gnome.desktop.interface", "color-scheme"])
-            .output().ok();
-        let text = out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
-        text.contains("light") && !text.contains("dark")
-    })
+    static CACHE: std::sync::Mutex<Option<(std::time::Instant, bool)>> = std::sync::Mutex::new(None);
+    let mut c = CACHE.lock().unwrap();
+    if let Some((at, v)) = *c { if at.elapsed().as_secs() < 5 { return v; } }
+    let v = portal_color_scheme().and_then(light_from_scheme).unwrap_or_else(gsettings_light);
+    *c = Some((std::time::Instant::now(), v));
+    v
+}
+
+/// Portal `color-scheme`: 0 no preference, 1 prefer dark, 2 prefer light.
+#[cfg(not(windows))]
+fn light_from_scheme(n: u32) -> Option<bool> {
+    match n { 1 => Some(false), 2 => Some(true), _ => None }
+}
+
+#[cfg(not(windows))]
+fn portal_color_scheme() -> Option<u32> {
+    use zbus::zvariant::Value;
+    static BUS: std::sync::Mutex<Option<zbus::blocking::Connection>> = std::sync::Mutex::new(None);
+    let mut bus = BUS.lock().unwrap();
+    // short timeout: this runs on the placement thread, and a stuck portal must not hold the layout for 25 s
+    if bus.is_none() {
+        *bus = zbus::blocking::connection::Builder::session().ok()
+            .and_then(|b| b.method_timeout(std::time::Duration::from_millis(500)).build().ok());
+    }
+    let conn = bus.clone()?;
+    drop(bus);
+    let reply = conn.call_method(Some("org.freedesktop.portal.Desktop"), "/org/freedesktop/portal/desktop",
+        Some("org.freedesktop.portal.Settings"), "ReadOne", &("org.freedesktop.appearance", "color-scheme")).ok()?;
+    let v = reply.body().deserialize::<zbus::zvariant::OwnedValue>().ok()?;
+    // older portals wrap the value in one more variant
+    fn unwrap(v: &Value) -> Option<u32> {
+        match v { Value::U32(n) => Some(*n), Value::Value(inner) => unwrap(inner), _ => None }
+    }
+    unwrap(&v)
+}
+
+#[cfg(not(windows))]
+fn gsettings_light() -> bool {
+    let out = std::process::Command::new("gsettings").args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output().ok();
+    let text = out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+    text.contains("light") && !text.contains("dark")
 }
 
 /// Decide what to do with the startup entry: compare with the registry, not previous settings
@@ -253,14 +335,35 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn autostart_entry_can_be_set_and_removed() {
+        // a temp file instead of XDG_CONFIG_HOME: `set_var` races `getenv` in parallel tests
         let home = tempfile::tempdir().unwrap();
-        std::env::set_var("XDG_CONFIG_HOME", home.path());
-        set_autostart_at(RUN_KEY, "/opt/agent-pets/agent-pets", true).unwrap();
-        assert!(autostart_at(RUN_KEY));
-        assert_eq!(autostart_value(RUN_KEY).as_deref(), Some("\"/opt/agent-pets/agent-pets\" --autostart"));
-        set_autostart_at(RUN_KEY, "", false).unwrap();
-        assert!(!autostart_at(RUN_KEY));
-        set_autostart_at(RUN_KEY, "", false).unwrap();
-        std::env::remove_var("XDG_CONFIG_HOME");
+        let f = home.path().join("autostart").join("AgentPets.desktop");
+        write_desktop_file(&f, "/opt/agent-pets/agent-pets", true).unwrap();
+        assert_eq!(desktop_exec(&f).as_deref(), Some("\"/opt/agent-pets/agent-pets\" --autostart"));
+        write_desktop_file(&f, "", false).unwrap();
+        assert_eq!(desktop_exec(&f), None);
+        write_desktop_file(&f, "", false).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn awkward_paths_survive_the_desktop_entry_escaping() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("AgentPets.desktop");
+        let exe = r#"/home/a b/$HOME/"q"/`x`/back\slash/100%/agent-pets"#;
+        write_desktop_file(&f, exe, true).unwrap();
+        let text = std::fs::read_to_string(&f).unwrap();
+        assert!(text.contains(r#"Exec="/home/a b/\\$HOME/\\"q\\"/\\`x\\`/back\\\\slash/100%%/agent-pets" --autostart"#), "{text}");
+        assert_eq!(desktop_exec(&f), Some(autostart_command(exe)), "read back as the command it was written from");
+        // entries without escapes (older versions) read back unchanged
+        assert_eq!(exec_unescape(r#""/opt/agent-pets/agent-pets" --autostart"#), r#""/opt/agent-pets/agent-pets" --autostart"#);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn portal_color_scheme_maps_to_light_or_dark() {
+        assert_eq!(light_from_scheme(2), Some(true));
+        assert_eq!(light_from_scheme(1), Some(false));
+        assert_eq!(light_from_scheme(0), None, "no preference falls back to gsettings");
     }
 }

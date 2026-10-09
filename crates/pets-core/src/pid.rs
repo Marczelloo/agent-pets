@@ -192,7 +192,7 @@ pub fn command_line(pid: u32) -> Option<String> {
         .collect::<Vec<_>>().join(" "))
 }
 
-/// TCP (IPv4) ports on which the process listens.
+/// TCP ports (IPv4 and IPv6) on which the process listens: dual-stack servers (`::`) appear only in `tcp6`.
 #[cfg(not(windows))]
 pub fn listening_ports(pid: u32) -> Vec<u16> {
     // socket inodes open by this process
@@ -208,19 +208,25 @@ pub fn listening_ports(pid: u32) -> Vec<u16> {
             }
         }
     }
-    // LISTEN rows (state 0A) of the network namespace's IPv4 table: inode -> port
+    // LISTEN rows (state 0A) of the network namespace's tables: inode -> port
     let mut out = Vec::new();
-    if let Ok(text) = std::fs::read_to_string(format!("/proc/{pid}/net/tcp")) {
-        for line in text.lines().skip(1) {
-            let f: Vec<&str> = line.split_whitespace().collect();
-            if f.len() < 10 || f[3] != "0A" { continue; }
-            if !inodes.contains(f[9]) { continue; }
-            if let Some(port) = f[1].split(':').nth(1).and_then(|p| u16::from_str_radix(p, 16).ok()) { out.push(port); }
-        }
+    for table in ["tcp", "tcp6"] {
+        let Ok(text) = std::fs::read_to_string(format!("/proc/{pid}/net/{table}")) else { continue };
+        out.extend(listen_ports_in(&text, &inodes));
     }
     out.sort_unstable();
     out.dedup();
     out
+}
+
+/// Ports of LISTEN rows owned by `inodes` in a `/proc/net/tcp{,6}` table (local address `HEX:PORT`).
+#[cfg(not(windows))]
+fn listen_ports_in(text: &str, inodes: &std::collections::HashSet<String>) -> Vec<u16> {
+    text.lines().skip(1).filter_map(|line| {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 10 || f[3] != "0A" || !inodes.contains(f[9]) { return None; }
+        f[1].rsplit_once(':').and_then(|(_, p)| u16::from_str_radix(p, 16).ok())
+    }).collect()
 }
 
 /// Shell processes whose windows are never session windows (Linux names, `sh -c` runs the hooks).
@@ -241,6 +247,22 @@ pub fn agent_pid() -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn listen_rows_of_both_tables_give_ports() {
+        let ino = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<std::collections::HashSet<_>>();
+        let tcp = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 111 1 0 100 0 0 10 0
+   1: 0100007F:0016 00000000:0000 01 00000000:00000000 00:00000000 00000000  1000        0 222 1 0 100 0 0 10 0
+";
+        assert_eq!(listen_ports_in(tcp, &ino(&["111", "222"])), vec![8080], "only LISTEN rows");
+        assert!(listen_ports_in(tcp, &ino(&["999"])).is_empty(), "only this process's sockets");
+        let tcp6 = "  sl  local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000000000000000000000000000:0BB8 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 333 1 0 100 0 0 10 0
+";
+        assert_eq!(listen_ports_in(tcp6, &ino(&["333"])), vec![3000]);
+    }
 
     #[test]
     fn own_process_is_alive_and_has_entry() {

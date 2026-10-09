@@ -87,9 +87,15 @@ fn read_sessions() -> Result<Vec<(String, bool)>, ()> {
             .ok()
             .and_then(|m| m.body().deserialize::<zbus::zvariant::OwnedValue>().ok())
             .and_then(|v| match &*v { zbus::zvariant::Value::Str(s) => Some(s.to_string()), _ => None });
-        out.push((n[PREFIX.len()..].to_string(), status.as_deref() == Some("Playing")));
+        out.push((player_app(&n[PREFIX.len()..]).to_string(), status.as_deref() == Some("Playing")));
     }
     Ok(out)
+}
+
+/// App name from the bus name suffix, without the per-process part (`firefox.instance_1_42` -> `firefox`).
+#[cfg(not(windows))]
+fn player_app(suffix: &str) -> &str {
+    suffix.split_once(".instance").map_or(suffix, |(app, _)| app)
 }
 
 /// Compute media state and emit `pets://media` when it changes. Disabled in settings = nothing is playing.
@@ -129,6 +135,15 @@ mod tests {
             pick(&[("chrome".into(), false), ("Spotify.exe".into(), true), ("vlc".into(), true)]),
             Media { playing: true, app: Some("Spotify.exe".into()) }
         );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn mpris_instance_suffix_is_not_part_of_the_app_name() {
+        assert_eq!(player_app("spotify"), "spotify");
+        assert_eq!(player_app("firefox.instance_1_42"), "firefox");
+        assert_eq!(player_app("vlc.instance12345"), "vlc");
+        assert_eq!(player_app("chromium.instance7"), "chromium");
     }
 
     /// Live: `cargo test -p agent-pets live_sessions -- --ignored --nocapture` while music is playing.

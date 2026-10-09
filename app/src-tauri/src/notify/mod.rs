@@ -121,7 +121,7 @@ fn focused(s: &Session) -> bool {
     pid_chains_to(pid, active)
 }
 
-/// `target` is `start` itself or one of its (up to `DEPTH`) ancestors.
+/// `target` is `start` itself or one of its (up to 6) ancestors.
 #[cfg(not(windows))]
 fn pid_chains_to(start: u32, target: u32) -> bool {
     let mut cur = start;

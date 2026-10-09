@@ -30,6 +30,12 @@ static LAST_STRIP: Mutex<Option<Rect>> = Mutex::new(None);
 /// through GTK, which is not thread-safe, and unsynchronized calls corrupted the heap (glibc abort).
 static MAIN_THREAD: OnceLock<std::thread::ThreadId> = OnceLock::new();
 
+/// Queue `f` on the GTK main thread without waiting (directly when already there); same glib path as `on_main`.
+fn on_main_async(f: impl FnOnce() + Send + 'static) {
+    if MAIN_THREAD.get() == Some(&std::thread::current().id()) { return f(); }
+    gtk::glib::MainContext::default().invoke(f);
+}
+
 /// Run `f` on the GTK main thread and wait for its result; directly when already there.
 /// Routed through a glib idle source (not Tauri's proxy): the task must also WAKE the loop -
 /// with the proxy, tasks queued while the webview was idle (no animations, loop asleep in poll)
@@ -132,9 +138,8 @@ pub fn detach(_stage: Handle) {}
 /// or focus it) sized in logical pixels. `p` is in strip physical coordinates.
 pub fn apply(stage: Handle, p: Option<Placement>) {
     let Some(win) = window(stage) else { return };
-    let Some(app) = APP.get().cloned() else { return };
     let strip = LAST_STRIP.lock().unwrap().or_else(|| own_strip(&win));
-    let _ = app.run_on_main_thread(move || {
+    on_main_async(move || {
         use gtk::prelude::*;
         let Ok(gw) = win.gtk_window() else { return };
         match (p, strip) {
@@ -158,8 +163,7 @@ pub fn apply_floating(stage: Handle, _m: &Metrics, p: Option<Placement>) { apply
 /// Floating-mode window rectangle (screen coordinates), placed like the taskbar stage.
 pub fn apply_rect(raw: Handle, r: Option<Rect>) {
     let Some(win) = window(raw) else { return };
-    let Some(app) = APP.get().cloned() else { return };
-    let _ = app.run_on_main_thread(move || {
+    on_main_async(move || {
         use gtk::prelude::*;
         let Ok(gw) = win.gtk_window() else { return };
         match r {
@@ -225,12 +229,12 @@ pub fn fullscreen_app() -> bool {
 
 fn detect_fullscreen() -> bool {
     // Hyprland: `fullscreen` of the active window (0 = none; client and server modes are both fullscreen)
-    if let Some(out) = run("hyprctl", &["-j", "activewindow"]) {
+    if let Some(out) = hypr_request("j/activewindow") {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&out) { return walk_hyprland_fullscreen(&v); }
         return false;
     }
     // sway: `fullscreen_mode` of the focused container (0 = none)
-    if let Some(out) = run("swaymsg", &["-t", "get_tree"]) {
+    if let Some(out) = sway_tree() {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&out) { return walk_focused(&v); }
     }
     false
@@ -256,13 +260,13 @@ fn walk_focused(v: &serde_json::Value) -> bool {
 
 /// Pid of the compositor's active (focused) window; `None` without Hyprland/sway or with no window.
 pub fn active_window_pid() -> Option<u32> {
-    if let Some(out) = run("hyprctl", &["-j", "activewindow"]) {
+    if let Some(out) = hypr_request("j/activewindow") {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&out) {
             if let Some(pid) = v.get("pid").and_then(serde_json::Value::as_u64) { return Some(pid as u32); }
         }
         return None;
     }
-    if let Some(out) = run("swaymsg", &["-t", "get_tree"]) {
+    if let Some(out) = sway_tree() {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&out) { return walk_active_pid(&v); }
     }
     None
@@ -273,6 +277,12 @@ fn walk_active_pid(v: &serde_json::Value) -> Option<u32> {
         return v.get("pid").and_then(serde_json::Value::as_u64).map(|p| p as u32);
     }
     v.get("nodes").and_then(serde_json::Value::as_array)?.iter().find_map(walk_active_pid)
+}
+
+/// `swaymsg -t get_tree`, only under sway (elsewhere the polls would spawn a failing process each time).
+fn sway_tree() -> Option<String> {
+    if !SWAY.get().copied().unwrap_or(false) { return None; }
+    run("swaymsg", &["-t", "get_tree"])
 }
 
 fn run(cmd: &str, args: &[&str]) -> Option<String> {
@@ -461,12 +471,12 @@ fn hypr_to_physical(lx: f64, ly: f64) -> Option<(f64, f64)> {
 }
 
 /// `(scale, offset x, offset y)` for the stage's monitor: physical = logical * scale + offset.
-/// The scale is the monitor's (`hyprctl monitors`); the offset anchors the stage window's position
-/// measured in both spaces (`hyprctl clients` `at` vs the X11 rectangle).
+/// The scale is the monitor's (`monitors`); the offset anchors the stage window's position
+/// measured in both spaces (`clients` `at` vs the X11 rectangle).
 fn stage_transform() -> Option<(f64, f64, f64)> {
     let rect = rect_of(Handle(current_stage_id()?))?;
-    let clients = run("hyprctl", &["-j", "clients"])?;
-    let mons = run("hyprctl", &["-j", "monitors"])?;
+    let clients = hypr_request("j/clients")?;
+    let mons = hypr_request("j/monitors")?;
     let cv: serde_json::Value = serde_json::from_str(&clients).ok()?;
     let mv: serde_json::Value = serde_json::from_str(&mons).ok()?;
     let stage = cv.as_array()?.iter().find(|c| c.get("title").and_then(serde_json::Value::as_str) == Some("agent-pets-stage"))?;
@@ -483,17 +493,24 @@ fn stage_transform() -> Option<(f64, f64, f64)> {
 }
 
 /// Real cursor position from Hyprland's IPC socket (`cursorpos` -> "123, 456"); `None` without Hyprland.
-fn hyprland_cursor() -> Option<(f64, f64)> {
+fn hyprland_cursor() -> Option<(f64, f64)> { parse_cursor(&hypr_request_within("cursorpos", 20)?) }
+
+/// One request on Hyprland's IPC socket (what `hyprctl` does, without spawning a process per poll);
+/// `None` without Hyprland. The reply ends when Hyprland closes the connection.
+fn hypr_request(cmd: &str) -> Option<String> { hypr_request_within(cmd, 250) }
+
+fn hypr_request_within(cmd: &str, timeout_ms: u64) -> Option<String> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;
     let path = HYPRLAND_SOCK.get().and_then(|p| p.as_deref())?;
     let mut s = UnixStream::connect(path).ok()?;
-    let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(20)));
-    let _ = s.set_write_timeout(Some(std::time::Duration::from_millis(20)));
-    s.write_all(b"cursorpos").ok()?;
-    let mut buf = [0u8; 32];
-    let n = s.read(&mut buf).ok()?;
-    parse_cursor(&String::from_utf8_lossy(&buf[..n]))
+    let t = Some(std::time::Duration::from_millis(timeout_ms));
+    let _ = s.set_read_timeout(t);
+    let _ = s.set_write_timeout(t);
+    s.write_all(cmd.as_bytes()).ok()?;
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).ok()?;
+    Some(String::from_utf8_lossy(&out).into_owned())
 }
 
 fn parse_cursor(s: &str) -> Option<(f64, f64)> {
@@ -504,9 +521,14 @@ fn parse_cursor(s: &str) -> Option<(f64, f64)> {
 /// Resolved once, at startup: `getenv` from the 30 ms pointer threads races `setenv` inside GTK
 /// and glibc aborts the process on the corrupted heap (observed SIGABRT in `malloc` under `getenv`).
 static HYPRLAND_SOCK: OnceLock<Option<String>> = OnceLock::new();
+/// Running under sway (`SWAYSOCK`), resolved at startup for the same reason.
+static SWAY: OnceLock<bool> = OnceLock::new();
 
-/// Call before the app spawns threads.
-pub fn init_hyprland_socket() { let _ = HYPRLAND_SOCK.set(hyprland_socket()); }
+/// Read the compositor environment (Hyprland socket, sway). Call before the app spawns threads.
+pub fn init_hyprland_socket() {
+    let _ = HYPRLAND_SOCK.set(hyprland_socket());
+    let _ = SWAY.set(std::env::var_os("SWAYSOCK").is_some());
+}
 
 fn hyprland_socket() -> Option<String> {
     let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").ok()?;

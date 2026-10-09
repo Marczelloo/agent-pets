@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const USAGE: &str = "usage: pets-cli run [--record file.jsonl] | replay file.jsonl [--speed N] | install-hooks [hook.exe] | uninstall-hooks | uninstall-statusline | stats-scan [--out stats.json]";
+const USAGE: &str = "usage: pets-cli run [--record file.jsonl] | replay file.jsonl [--speed N] | install-hooks [hook] | uninstall-hooks | uninstall-statusline | stats-scan [--out stats.json]";
 
 fn claude_settings() -> anyhow::Result<PathBuf> {
     Ok(dirs::home_dir().context("home directory not found")?.join(".claude").join("settings.json"))
@@ -87,7 +87,7 @@ fn main() -> anyhow::Result<()> {
         Some("install-hooks") => {
             let exe = match args.get(1) {
                 Some(p) => PathBuf::from(p),
-                None => std::env::current_exe()?.with_file_name("hook.exe"),
+                None => std::env::current_exe()?.with_file_name(pets_core::integrations::HOOK_FILE),
             };
             anyhow::ensure!(exe.exists(), "file not found: {}", exe.display());
             hooks_install::install_file(&claude_settings()?, &exe.to_string_lossy())?;

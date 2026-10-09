@@ -208,12 +208,14 @@ fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
         assert!(String::from_utf8_lossy(&out.stdout).contains(r#"{"decision":"stop"}"#), "{what}: {:?} / {}",
             String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     };
+    // how a shell runs a command line
+    type Shell = Box<dyn Fn(&str) -> Command>;
     #[cfg(windows)]
-    let shells: Vec<(&str, Box<dyn Fn(&str) -> Command>)> = {
+    let shells: Vec<(&str, Shell)> = {
         use std::os::windows::process::CommandExt;
         let bash = ["C:/Program Files/Git/bin/bash.exe", "C:/Program Files/Git/usr/bin/bash.exe"].into_iter()
             .map(std::path::PathBuf::from).find(|p| p.is_file());
-        let mut v: Vec<(&str, Box<dyn Fn(&str) -> Command>)> = vec![("cmd", Box::new(|cmd: &str| {
+        let mut v: Vec<(&str, Shell)> = vec![("cmd", Box::new(|cmd: &str| {
             let mut c = Command::new("cmd");
             c.raw_arg(format!("/S /C \"{cmd}\""));
             c
@@ -225,7 +227,7 @@ fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
         v
     };
     #[cfg(not(windows))]
-    let shells: Vec<(&str, Box<dyn Fn(&str) -> Command>)> = vec![
+    let shells: Vec<(&str, Shell)> = vec![
         ("sh", Box::new(|cmd: &str| { let mut c = Command::new("sh"); c.arg("-c").arg(cmd); c })),
         ("bash", Box::new(|cmd: &str| { let mut c = Command::new("bash"); c.arg("-c").arg(cmd); c })),
     ];
