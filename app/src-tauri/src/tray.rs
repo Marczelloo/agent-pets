@@ -1,10 +1,13 @@
 //! Tray icon: left click toggles the panel; right click shows the menu ("Statistics", "Settings", "Mute notifications", "Report a problem", "Quit").
+//! Linux: StatusNotifier hosts give the app no clicks on the icon (any click opens the menu), so the menu leads with "Show panel".
 use tauri::menu::{IsMenuItem, Menu, MenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use pets_core::i18n::{tr, Lang};
 use pets_core::mute::MuteChoice;
 use tauri::{AppHandle, Manager, Wry};
 
+#[cfg(target_os = "linux")]
+const PANEL: (&str, &str) = ("Pokaż panel", "Show panel");
 const STATS: (&str, &str) = ("Statystyki", "Statistics");
 const SETTINGS: (&str, &str) = ("Ustawienia", "Settings");
 const REPORT: (&str, &str) = ("Zgłoś problem", "Report a problem");
@@ -30,6 +33,8 @@ pub fn menu_spec(lang: Lang, muted: bool) -> Vec<Entry> {
     let mute = if muted { Entry::Item("unmute", l(UNMUTE)) }
         else { Entry::Sub("mute", l(MUTE), vec![("mute_hour", l(MUTE_HOUR)), ("mute_morning", l(MUTE_MORNING)), ("mute_forever", l(MUTE_FOREVER))]) };
     let mut out = Vec::new();
+    #[cfg(target_os = "linux")]
+    out.push(Entry::Item("panel", l(PANEL)));
     for (id, label) in tray_items(lang) {
         if id == "report" { out.push(mute.clone()); }
         out.push(Entry::Item(id, label));
@@ -74,6 +79,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, e| match e.id().as_ref() {
             "quit" => app.exit(0),
+            "panel" => crate::panel::toggle(app, None),
             "settings" => crate::settings::open(app),
             "stats" => crate::stats::open(app),
             "report" => crate::settings::report_problem(app),
@@ -148,6 +154,13 @@ mod tests {
         assert_eq!(tray_items(Lang::En)[2].1, "Report a problem");
         assert_eq!(tray_items(Lang::Pl)[0].1, "Statystyki");
         assert_eq!(tray_items(Lang::En)[0].1, "Statistics");
+    }
+
+    /// The menu without the Linux-only "Show panel" lead, which the tests below do not cover.
+    fn menu_spec(lang: Lang, muted: bool) -> Vec<Entry> {
+        let mut v = super::menu_spec(lang, muted);
+        if cfg!(target_os = "linux") { assert_eq!(v.remove(0), Entry::Item("panel", tr(lang, "Pokaż panel", "Show panel"))); }
+        v
     }
 
     #[test]

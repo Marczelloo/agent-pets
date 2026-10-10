@@ -5,6 +5,16 @@ use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::{AppHandle, LogicalPosition, Manager, Position};
 
+/// (pl, en) labels that name the place the pets live: the Windows taskbar, or the screen edge on Linux.
+#[cfg(not(target_os = "linux"))]
+const DISMISS: (&str, &str) = ("Usuń z paska", "Remove from taskbar");
+#[cfg(not(target_os = "linux"))]
+const SETTINGS: (&str, &str) = ("Ustawienia paska…", "Taskbar settings…");
+#[cfg(target_os = "linux")]
+const DISMISS: (&str, &str) = ("Usuń zwierzaka", "Remove pet");
+#[cfg(target_os = "linux")]
+const SETTINGS: (&str, &str) = ("Ustawienia ekranu…", "Screen settings…");
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Target { Pet(String), Other }
 
@@ -14,13 +24,13 @@ pub fn items(t: &Target, floating: bool, lang: Lang) -> Vec<(&'static str, Strin
         Target::Pet(_) => vec![
             ("jump", tr(lang, "Przejdź", "Open").into()),
             ("panel", tr(lang, "Pokaż w panelu", "Show in panel").into()),
-            ("dismiss", tr(lang, "Usuń z paska", "Remove from taskbar").into()),
+            ("dismiss", tr(lang, DISMISS.0, DISMISS.1).into()),
         ],
         Target::Other => vec![("dismiss_inactive", tr(lang, "Usuń nieaktywne", "Remove inactive").into())],
     };
     v.push(("-", String::new()));
     if !floating { v.push(("move", tr(lang, "Przesuń", "Move").into())); }
-    v.push(("settings", tr(lang, "Ustawienia paska…", "Taskbar settings…").into()));
+    v.push(("settings", tr(lang, SETTINGS.0, SETTINGS.1).into()));
     v
 }
 
@@ -83,8 +93,8 @@ mod tests {
         let v = items(&Target::Pet("s1".into()), false, Lang::Pl);
         assert_eq!(ids(&v), ["jump", "panel", "dismiss", "-", "move", "settings"]);
         assert_eq!(v[0].1, "Przejdź");
-        assert_eq!(v[2].1, "Usuń z paska");
-        assert_eq!(v[5].1, "Ustawienia paska…");
+        assert_eq!(v[2].1, DISMISS.0);
+        assert_eq!(v[5].1, SETTINGS.0);
     }
 
     #[test]
@@ -97,6 +107,6 @@ mod tests {
     fn elsewhere_remove_inactive_and_english_labels() {
         let v = items(&Target::Other, false, Lang::En);
         assert_eq!(ids(&v), ["dismiss_inactive", "-", "move", "settings"]);
-        assert_eq!((v[0].1.as_str(), v[2].1.as_str(), v[3].1.as_str()), ("Remove inactive", "Move", "Taskbar settings…"));
+        assert_eq!((v[0].1.as_str(), v[2].1.as_str(), v[3].1.as_str()), ("Remove inactive", "Move", SETTINGS.1));
     }
 }
