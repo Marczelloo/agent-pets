@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Agent Pets
+Comment=Animated pets for your coding agents
+Exec=agent-pets
+Icon=agent-pets
+Terminal=false
+NoDisplay=true

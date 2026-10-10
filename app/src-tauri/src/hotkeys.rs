@@ -98,10 +98,43 @@ pub fn apply(app: &AppHandle) {
         let h = app.state::<settings::SettingsState>().get().hotkeys;
         if let Err(e) = app.global_shortcut().unregister_all() { pets_core::app_log!("hotkeys: could not release the old ones: {e}"); }
         let (jump, panel) = plan(&h);
-        let status = HotkeyStatus { jump: attach(&app, "jump", jump, Action::Jump), panel: attach(&app, "panel", panel, Action::Panel) };
+        #[cfg(target_os = "linux")]
+        let portal = via_portal(&app, &h, &jump, &panel);
+        #[cfg(not(target_os = "linux"))]
+        let portal = None;
+        let status = portal.unwrap_or_else(|| HotkeyStatus { jump: attach(&app, "jump", jump, Action::Jump), panel: attach(&app, "panel", panel, Action::Panel) });
         *state.status.lock().unwrap() = status.clone();
         let _ = app.emit("pets://hotkeys", &status);
     });
+}
+
+/// Wayland: the desktop's GlobalShortcuts portal instead of X11 key grabs (those fire only while our window has focus).
+/// `None` when there is no portal: the caller falls back to the grabs.
+#[cfg(target_os = "linux")]
+fn via_portal(app: &AppHandle, h: &Hotkeys, jump: &Slot, panel: &Slot) -> Option<HotkeyStatus> {
+    use crate::hotkeys_portal::{get, Wanted};
+    use pets_core::i18n::tr;
+    let handle = app.clone();
+    let portal = get(move |name| {
+        let action = if name == "jump" { Action::Jump } else { Action::Panel };
+        let app = handle.clone();
+        std::thread::spawn(move || run(&app, action));
+    })?;
+    let lang = app.state::<settings::SettingsState>().lang();
+    let mut wanted = Vec::new();
+    if let (Ok(Some(_)), Some(acc)) = (jump, h.jump.as_deref()) {
+        wanted.push(Wanted { name: "jump", description: tr(lang, "Agent Pets: przejdź do agenta, który na Ciebie czeka", "Agent Pets: go to the agent that needs you"), accelerator: acc.trim() });
+    }
+    if let (Ok(Some(_)), Some(acc)) = (panel, h.panel.as_deref()) {
+        wanted.push(Wanted { name: "panel", description: tr(lang, "Agent Pets: pokaż lub ukryj panel", "Agent Pets: show or hide the panel"), accelerator: acc.trim() });
+    }
+    let bound = portal.bind(&wanted)?;
+    let pick = |slot: &Slot, name: &str| match slot {
+        Err(e) => { pets_core::app_log!("hotkey {name}: {e}"); Some(e.clone()) }
+        Ok(None) => None,
+        Ok(Some(_)) => bound.get(name).cloned().flatten(),
+    };
+    Some(HotkeyStatus { jump: pick(jump, "jump"), panel: pick(panel, "panel") })
 }
 
 #[tauri::command]

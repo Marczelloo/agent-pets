@@ -45,7 +45,7 @@ The app also builds and runs on Linux (GTK + WebKitGTK through X11/XWayland; `de
 
 The stage is not embedded in a taskbar (X11 has none): it is an always-on-top strip flush against the panel edge of the work area. The app forces `GDK_BACKEND=x11` at startup, because `gtk move()` is ignored on Wayland.
 
-Under XWayland on GNOME or KDE the X server sees the cursor only over the app's own windows, so the floating window there never passes clicks through (it could not tell when the cursor comes back over a pet), and hover ends on X's leave event. The tray icon needs a StatusNotifier host (stock GNOME: the AppIndicator extension); without one the app shows a one-time hint, and launching it again opens the settings.
+Under XWayland on GNOME or KDE the X server sees the cursor only over the app's own windows, so the floating window there never passes clicks through (it could not tell when the cursor comes back over a pet), and hover ends on X's leave event. X11 key grabs fire there only while one of the app's windows has focus, so on Wayland the global shortcuts go through the `org.freedesktop.portal.GlobalShortcuts` portal (`hotkeys_portal.rs`), falling back to the grabs when the desktop has no such portal. The tray icon needs a StatusNotifier host (stock GNOME: the AppIndicator extension); without one the app shows a one-time hint, and launching it again opens the settings.
 
 ### To do: window rules for compositors
 

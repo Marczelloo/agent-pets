@@ -4,7 +4,7 @@
 
 ### Added
 
-- Linux support (beta: it should work, but it has had much less testing than Windows): the pets stand in an always-on-top strip along the bottom of the screen on X11/XWayland (GTK + WebKitGTK), at the bottom right, bottom left or in a floating window, with `deb`, `rpm` and AppImage packages, MPRIS media reactions and cross-platform agent integrations. Settings only offer what works on Linux and talk about the system instead of the Windows taskbar. Global keyboard shortcuts are unreliable on Wayland, and compositor border/shadow rules (e.g. Hyprland) are a manual step for now (docs/building.md).
+- Linux support (beta: it should work, but it has had much less testing than Windows): the pets stand in an always-on-top strip along the bottom of the screen on X11/XWayland (GTK + WebKitGTK), at the bottom right, bottom left or in a floating window, with `deb`, `rpm` and AppImage packages, MPRIS media reactions and cross-platform agent integrations. Settings only offer what works on Linux and talk about the system instead of the Windows taskbar. On Wayland the global keyboard shortcuts go through the desktop's GlobalShortcuts portal (the desktop asks to confirm them once), and compositor border/shadow rules (e.g. Hyprland) are a manual step for now (docs/building.md).
 
 ### Fixed
 

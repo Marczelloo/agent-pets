@@ -3,6 +3,8 @@ mod appstate;
 mod bubbles;
 mod core;
 mod hotkeys;
+#[cfg(target_os = "linux")]
+mod hotkeys_portal;
 mod jump;
 mod media;
 mod notify;

@@ -13,7 +13,7 @@ export const plLinux: DeepPartial<Dict> = {
     maxVisible: 'Najwięcej zwierzaków na ekranie',
     muteDesc: 'Powiadomienia systemowe milkną, a lista w panelu nadal się zapełnia',
     hotkeys: {
-      note: 'Kliknij skrót i naciśnij nową kombinację z Ctrl, Alt, Shift lub Super. Esc anuluje, Backspace wyłącza. Pod Waylandem skrót może nie zadziałać albo kolidować ze skrótami pulpitu: wtedy wybierz inną kombinację.',
+      note: 'Kliknij skrót i naciśnij nową kombinację z Ctrl, Alt, Shift lub Super. Esc anuluje, Backspace wyłącza. Pod Waylandem pulpit poprosi o potwierdzenie nowego skrótu; tam, gdzie nie obsługuje skrótów globalnych, skrót może działać tylko przy aktywnym oknie Agent Pets.',
     },
     backup: {
       hint: 'Wygląd, powiadomienia, położenie i limity. Integracje z agentami zostają jak są.',
