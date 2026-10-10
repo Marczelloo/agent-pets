@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setLinux } from '../platform';
 import { keyName, prettyAccelerator, recordKey, type KeyPress } from './hotkeys';
 
 const press = (code: string, mods: Partial<KeyPress> = {}): KeyPress => ({ code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods });
@@ -52,5 +53,12 @@ describe('prettyAccelerator', () => {
     expect(prettyAccelerator('control+digit1')).toBe('Ctrl + 1');
     expect(prettyAccelerator('Alt+ArrowLeft')).toBe('Alt + Left');
     expect(prettyAccelerator('Ctrl+Numpad5')).toBe('Ctrl + Numpad5');
+  });
+  it('calls the Win key Super on Linux', () => {
+    setLinux(true);
+    try {
+      expect(prettyAccelerator('Super+Shift+J')).toBe('Super + Shift + J');
+      expect(prettyAccelerator('Ctrl+Alt')).toBe('Ctrl + Alt');
+    } finally { setLinux(false); }
   });
 });

@@ -1,3 +1,5 @@
+import { onLinux } from '../platform';
+
 /** What a key press means while a shortcut is being recorded. */
 export type Recorded = { kind: 'set'; accelerator: string } | { kind: 'cancel' } | { kind: 'clear' } | { kind: 'ignore' };
 
@@ -36,12 +38,14 @@ export function recordKey(e: KeyPress): Recorded {
   return { kind: 'set', accelerator: [...mods, key].join('+') };
 }
 
-const MOD_LABEL: Record<string, string> = { ctrl: 'Ctrl', control: 'Ctrl', alt: 'Alt', option: 'Alt', shift: 'Shift', super: 'Win', cmd: 'Win', command: 'Win', win: 'Win', meta: 'Win' };
+const MOD_LABEL: Record<string, string> = { ctrl: 'Ctrl', control: 'Ctrl', alt: 'Alt', option: 'Alt', shift: 'Shift' };
+const WIN_KEYS = new Set(['super', 'cmd', 'command', 'win', 'meta']);
 
-/** `Super+Shift+J` as shown to people: `Win + Shift + J`. Spelling is forgiving because the file may be edited by hand. */
+/** `Super+Shift+J` as shown to people: `Win + Shift + J` (`Super + Shift + J` on Linux). Spelling is forgiving because the file may be edited by hand. */
 export function prettyAccelerator(acc: string): string {
   return acc.split('+').map(s => s.trim()).filter(Boolean).map(part => {
     const lower = part.toLowerCase();
+    if (WIN_KEYS.has(lower)) return onLinux() ? 'Super' : 'Win';
     if (MOD_LABEL[lower]) return MOD_LABEL[lower];
     const m = /^(?:key|digit)(.)$/.exec(lower) ?? /^(?:arrow)(up|down|left|right)$/.exec(lower);
     const name = m ? m[1] : part;

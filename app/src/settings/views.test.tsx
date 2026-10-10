@@ -1,6 +1,7 @@
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLang } from '../i18n';
+import { setLinux } from '../platform';
 import { PanelView } from '../panel/App';
 import type { AppRow, Diagnostics, Settings, UpdateStatus } from '../types';
 import { SLOT } from '../stage/layout';
@@ -499,5 +500,62 @@ describe('keyboard shortcuts in the general tab', () => {
     expect(bad.indexOf('Couldn&#x27;t register')).toBeGreaterThan(bad.indexOf('Show/hide the panel'));
     setLang('pl');
     expect(render(defaultSettings(), { jump: 'taken', panel: null })).toContain('Nie udało się zarejestrować — skrót zajęty przez inny program?');
+  });
+});
+
+describe('Linux', () => {
+  afterEach(() => setLinux(false));
+  const monitors = [{ id: 'one', primary: true, width: 2560, height: 1440, index: 1, has_bar: true },
+    { id: 'two', primary: false, width: 1920, height: 1080, index: 2, has_bar: false }];
+  const view = (tab: Tab, stage: Partial<Settings['stage']> = {}, props: { leftFallback?: boolean; verticalBar?: boolean } = {}) => renderToString(<SettingsView
+    settings={{ ...defaultSettings(), stage: { ...defaultSettings().stage, ...stage } }} rows={rows} diag={diag} tab={tab} onTab={() => {}}
+    onChange={() => {}} onIntegration={async () => ''} message={null} monitors={monitors} onMove={() => {}} {...props} />);
+  const cards = (h: string) => h.match(/role="radio"[^>]*class="ui-card/g)?.length ?? 0;
+
+  it('offers three positions, and Custom only while it is the saved one', () => {
+    setLinux(true);
+    const html = view('stage');
+    expect(cards(html)).toBe(3);
+    for (const s of ['Na dole po prawej', 'Na dole po lewej', 'Pływające']) expect(html, s).toContain(s);
+    expect(html).not.toContain('Na dole, własna');
+    const custom = view('stage', { position: 'custom', custom_at: 0.3 });
+    expect(cards(custom)).toBe(4);
+    expect(custom).toContain('Na dole, własna');
+    expect(custom).toContain('Przesuń');
+  });
+  it('Windows keeps the four positions', () => {
+    setLinux(false);
+    expect(cards(view('stage'))).toBe(4);
+  });
+  it('the preview has no taskbar band on Linux, Windows has one', () => {
+    const band = /<rect x="2" y="27" width="92" height="11"/;
+    setLinux(true);
+    expect(view('stage')).not.toMatch(band);
+    setLinux(false);
+    expect(view('stage')).toMatch(band);
+  });
+  it('never shows the taskbar notes on Linux, even when the props and monitor would trigger them', () => {
+    setLinux(true);
+    const html = view('stage', { position: 'left', monitor: 'two' }, { leftFallback: true, verticalBar: true });
+    for (const s of ['Ikony paska są wyrównane do lewej', 'Pasek zadań jest przypięty', 'nie ma paska zadań']) expect(html, s).not.toContain(s);
+    setLang('en');
+    const en = view('stage', { position: 'left', monitor: 'two' }, { leftFallback: true, verticalBar: true });
+    for (const s of ['Taskbar icons are aligned left', 'The taskbar is docked', 'has no taskbar']) expect(en, s).not.toContain(s);
+    expect(en).toContain('Bottom right');
+    setLinux(false);
+    const win = view('stage', { position: 'left', monitor: 'two' }, { leftFallback: true, verticalBar: true });
+    for (const s of ['Taskbar icons are aligned left', 'The taskbar is docked', 'has no taskbar']) expect(win, s).toContain(s);
+  });
+  it('hides the Windows notification settings note on Linux', () => {
+    setLinux(true);
+    expect(view('notify')).not.toContain('Ustawieniach Windows');
+    setLinux(false);
+    expect(view('notify')).toContain('Ustawieniach Windows');
+  });
+  it('uses the Linux wording in the sidebar and the general tab', () => {
+    setLinux(true);
+    expect(view('general')).toContain('Uruchamiaj po zalogowaniu');
+    expect(view('general')).not.toContain('Windows');
+    expect(view('general')).toContain('<span>Ekran</span>');
   });
 });

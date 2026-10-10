@@ -8,6 +8,7 @@ import { HotkeyRow } from './HotkeyRow';
 import { BackupSection } from './BackupSection';
 import { Toggle } from './Toggle';
 import { t } from '../i18n';
+import { onLinux } from '../platform';
 import { LANGUAGE_LABEL } from '../i18n/pl';
 import { AppsIcon, BellIcon, DiagIcon, GeneralIcon, LimitsIcon, LookIcon, MonitorIcon, MoonIcon, SunIcon, TaskbarIcon } from '../ui/icons';
 import { LanguageSelect } from './LanguageSelect';
@@ -125,7 +126,7 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
             <Toggle label={t().settings.notifySound} checked={s.notifications.sound ?? true}
               onChange={on => set({ notifications: { ...s.notifications, sound: on } })}>{t().settings.notifySoundDesc}</Toggle>
           </Section>
-          <p className="ui-note">{t().settings.notifyWindows}</p>
+          {!onLinux() && <p className="ui-note">{t().settings.notifyWindows}</p>}
         </>}
 
         {tab === 'limits' && <Section title="Claude" note={t().limits.cliNote}>

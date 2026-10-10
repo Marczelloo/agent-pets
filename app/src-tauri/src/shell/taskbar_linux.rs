@@ -191,7 +191,8 @@ pub fn place(win: &WebviewWindow, r: Rect, dock: bool) {
 }
 
 /// Taskbar metrics for the strip of monitor `bar` (1-based; 0 = the stage window's monitor):
-/// the whole strip is free space (no app icons in it), so the free zone runs from its left edge.
+/// the whole strip is free space (no app icons in it), so both the left and the right zone span all of it
+/// ("bottom left" grows from the left edge, "bottom right" from the right one).
 pub fn metrics(bar: Handle, _uia: Option<&Uia>) -> Option<Metrics> {
     let mons = monitors();
     let (monitor, work, scale) = match bar_index(bar) {
@@ -208,7 +209,7 @@ pub fn metrics(bar: Handle, _uia: Option<&Uia>) -> Option<Metrics> {
         tray: strip,
         notify_left: None,
         icons_right: Some(strip.left),
-        first_left: None,
+        first_left: Some(strip.right),
         widgets_right: None,
         scale,
     })
@@ -713,12 +714,16 @@ mod tests {
 
     #[test]
     fn the_metrics_make_the_whole_strip_free_space() {
-        // like Windows without UIA: no left zone, right zone = icons_right .. tray.right - gap
-        let m = Metrics { tray: Rect { left: 0, top: 1032, right: 1920, bottom: 1080 },
-            notify_left: None, icons_right: Some(0), first_left: None, widgets_right: None, scale: 1.0 };
-        let (lz, rz) = super::super::placement::zones(&m);
-        assert_eq!(lz, None);
+        use super::super::placement::{place_mode, zones, Mode};
+        let tray = Rect { left: 0, top: 1032, right: 1920, bottom: 1080 };
+        let m = Metrics { tray, notify_left: None, icons_right: Some(tray.left), first_left: Some(tray.right), widgets_right: None, scale: 1.0 };
+        let (lz, rz) = zones(&m);
+        assert_eq!(lz.map(|z| (z.left, z.right)), Some((8, 1920 - 8)));
         assert_eq!((rz.left, rz.right), (8, 1920 - 8));
+        let left = place_mode(&m, 300.0, Mode::Left).unwrap();
+        assert_eq!((left.x, left.w, left.left_fallback), (8, 300, false));
+        let right = place_mode(&m, 300.0, Mode::Right).unwrap();
+        assert_eq!((right.x, right.w), (1920 - 8 - 300, 300));
     }
 
     #[test]

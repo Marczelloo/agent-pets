@@ -1,5 +1,6 @@
 import { defaultStage } from '../look';
 import { t } from '../i18n';
+import { onLinux } from '../platform';
 import type { MonitorInfo, Settings, StageAlign, StageBackground, StageOrder, StagePosition, StageSettings } from '../types';
 import { clampMaxVisible } from './model';
 import { OptionCards, Row, Section, Segmented, Select, Stepper, Switch } from './ui';
@@ -35,15 +36,24 @@ function Slider({ label, value, min, max, text, desc, onChange }: {
   );
 }
 
-/** Miniature of the screen: the taskbar along the bottom edge and where the widget (accent) stands. */
+/** On Linux there is no taskbar: the pets stand on the bottom edge of the screen. */
+const POSITIONS_LINUX: StagePosition[] = ['right', 'left', 'floating'];
+
+/** Positions on offer; on Linux `custom` only while it is the saved choice (e.g. from a Windows backup). */
+const positionsFor = (current: StagePosition): StagePosition[] =>
+  onLinux() ? (current === 'custom' ? POSITIONS : POSITIONS_LINUX) : POSITIONS;
+
+/** Miniature of the screen: the taskbar along the bottom edge (none on Linux) and where the widget (accent) stands. */
 function PositionPreview({ position }: { position: StagePosition }) {
+  const linux = onLinux();
+  const y = linux ? 30 : 29;
   const widget = {
-    right: { x: 70, y: 29, w: 18 }, left: { x: 6, y: 29, w: 18 }, custom: { x: 30, y: 29, w: 18 }, floating: { x: 52, y: 8, w: 24 },
+    right: { x: linux ? 75 : 70, y, w: 18 }, left: { x: linux ? 3 : 6, y, w: 18 }, custom: { x: 30, y, w: 18 }, floating: { x: 52, y: 8, w: 24 },
   }[position];
   return (
     <svg viewBox="0 0 96 40" width="100%" height="44" role="presentation">
       <rect x="1" y="1" width="94" height="38" rx="4" fill="none" stroke="currentColor" strokeOpacity=".3" />
-      <rect x="2" y="27" width="92" height="11" rx="2" fill="currentColor" fillOpacity=".16" />
+      {!linux && <rect x="2" y="27" width="92" height="11" rx="2" fill="currentColor" fillOpacity=".16" />}
       <rect x={widget.x} y={widget.y} width={widget.w} height={position === 'floating' ? 14 : 8} rx="2" fill="var(--accent)"
         strokeDasharray={position === 'custom' ? '3 2' : undefined} stroke={position === 'custom' ? 'currentColor' : undefined} />
       {position === 'custom' && <path d="M26 33h-5m5 0l-2-2m2 2l-2 2M52 33h5m-5 0l2-2m-2 2l2 2" stroke="currentColor" strokeWidth="1" fill="none" />}
@@ -66,6 +76,7 @@ interface Props {
 export function StageTab({ settings: s, monitors, leftFallback, verticalBar = false, onChange, onMove }: Props) {
   const st = s.stage;
   const x = t().stage;
+  const linux = onLinux();
   const set = (patch: Partial<StageSettings>) => onChange({ ...s, stage: { ...st, ...patch } });
   const setBg = (patch: Partial<StageBackground>) => set({ background: { ...st.background, ...patch } });
   const floating = st.position === 'floating';
@@ -88,17 +99,17 @@ export function StageTab({ settings: s, monitors, leftFallback, verticalBar = fa
     <>
       <Section title={x.where} note={x.positionDesc}>
         <OptionCards aria-label={x.position} value={st.position} onChange={p => set({ position: p })}
-          options={POSITIONS.map(p => ({ value: p, label: x.pos[p], preview: <PositionPreview position={p} /> }))} />
+          options={positionsFor(st.position).map(p => ({ value: p, label: x.pos[p], preview: <PositionPreview position={p} /> }))} />
         {st.position === 'custom' && <Row label={x.moveTitle} hint={x.moveDesc} control={<button type="button" onClick={onMove}>{x.move}</button>} />}
-        {verticalBar && st.position !== 'floating' && <p className="ui-note" role="status">{x.verticalBar}</p>}
-        {st.position === 'left' && leftFallback && <p className="ui-note" role="status">{x.leftFallback}</p>}
+        {!linux && verticalBar && st.position !== 'floating' && <p className="ui-note" role="status">{x.verticalBar}</p>}
+        {!linux && st.position === 'left' && leftFallback && <p className="ui-note" role="status">{x.leftFallback}</p>}
         <Row label={x.monitor} control={
           <Select aria-label={x.monitor} value={st.monitor} onChange={v => set({ monitor: v })}
             options={[{ value: 'primary', label: x.primary },
               ...monitors.map(m => ({ value: m.id, label: x.monitorName(m.index, m.width, m.height, m.primary) })),
               ...(unplugged ? [{ value: st.monitor, label: x.unplugged }] : [])]} />} />
         {unplugged && <p className="ui-note" role="status">{x.unpluggedDesc}</p>}
-        {chosen && !chosen.has_bar && !floating && <p className="ui-note" role="status">{x.noBar}</p>}
+        {!linux && chosen && !chosen.has_bar && !floating && <p className="ui-note" role="status">{x.noBar}</p>}
       </Section>
 
       <Section title={x.window}>
