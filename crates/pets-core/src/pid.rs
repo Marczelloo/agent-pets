@@ -124,6 +124,8 @@ pub fn listening_ports(pid: u32) -> Vec<u16> {
     }
 }
 
+/// Shell processes whose windows are never session windows (Windows names).
+#[cfg(windows)]
 const SHELLS: [&str; 6] = ["cmd.exe", "bash.exe", "sh.exe", "pwsh.exe", "powershell.exe", "conhost.exe"];
 
 /// Agent PID: first ancestor of the current process that is not a shell.
@@ -137,29 +139,176 @@ pub fn agent_pid() -> Option<u32> {
     Some(pid)
 }
 
+#[cfg(not(windows))]
+pub fn is_alive(pid: u32) -> bool { std::path::Path::new(&format!("/proc/{pid}")).exists() }
+
+#[cfg(not(windows))]
+pub fn process_entry(pid: u32) -> Option<(u32, String)> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // "pid (comm) state pppid ..."; comm may contain spaces and parens, so cut after the last ')'
+    let after = stat.rsplit(')').next()?;
+    let ppid = after.split_whitespace().nth(1)?.parse().ok()?;
+    Some((ppid, proc_name(pid)))
+}
+
+/// Process name: full executable name from `/proc/<pid>/exe` (readlink), or the kernel `comm` fallback
+/// (truncated to 15 characters, without the executable path).
+#[cfg(not(windows))]
+fn proc_name(pid: u32) -> String {
+    if let Ok(exe) = std::fs::read_link(format!("/proc/{pid}/exe")) {
+        if let Some(name) = exe.file_name().and_then(|n| n.to_str()) { return name.to_string(); }
+    }
+    std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default().trim().to_string()
+}
+
+/// All processes from one snapshot: `(pid, parent, file name)`.
+#[cfg(not(windows))]
+pub fn process_list() -> Vec<(u32, u32, String)> {
+    let mut out = Vec::new();
+    if let Ok(dir) = std::fs::read_dir("/proc") {
+        for e in dir.flatten() {
+            let Some(pid) = e.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else { continue };
+            if let Some((ppid, name)) = process_entry(pid) { out.push((pid, ppid, name)); }
+        }
+    }
+    out
+}
+
+/// Process creation time (clock ticks since boot, comparable within one run); `None` if inaccessible or exited.
+#[cfg(not(windows))]
+pub fn process_created(pid: u32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let after = stat.rsplit(')').next()?;
+    // starttime is field 22, so field 5 of the part after "(comm) state"
+    after.split_whitespace().nth(19)?.parse().ok()
+}
+
+/// Command line of a process owned by the same user; `None` if inaccessible or exited.
+#[cfg(not(windows))]
+pub fn command_line(pid: u32) -> Option<String> {
+    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    if raw.is_empty() { return None; }
+    Some(raw.split(|&b| b == 0).map(|a| String::from_utf8_lossy(a).into_owned())
+        .collect::<Vec<_>>().join(" "))
+}
+
+/// TCP ports (IPv4 and IPv6) on which the process listens: dual-stack servers (`::`) appear only in `tcp6`.
+#[cfg(not(windows))]
+pub fn listening_ports(pid: u32) -> Vec<u16> {
+    // socket inodes open by this process
+    let mut inodes = std::collections::HashSet::new();
+    let fd_dir = format!("/proc/{pid}/fd");
+    if let Ok(dir) = std::fs::read_dir(&fd_dir) {
+        for e in dir.flatten() {
+            if let Ok(link) = std::fs::read_link(e.path()) {
+                let name = link.to_string_lossy();
+                if let Some(ino) = name.strip_prefix("socket:").map(|r| r.trim_start_matches('[').trim_end_matches(']')) {
+                    inodes.insert(ino.to_string());
+                }
+            }
+        }
+    }
+    // LISTEN rows (state 0A) of the network namespace's tables: inode -> port
+    let mut out = Vec::new();
+    for table in ["tcp", "tcp6"] {
+        let Ok(text) = std::fs::read_to_string(format!("/proc/{pid}/net/{table}")) else { continue };
+        out.extend(listen_ports_in(&text, &inodes));
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// Ports of LISTEN rows owned by `inodes` in a `/proc/net/tcp{,6}` table (local address `HEX:PORT`).
+#[cfg(not(windows))]
+fn listen_ports_in(text: &str, inodes: &std::collections::HashSet<String>) -> Vec<u16> {
+    text.lines().skip(1).filter_map(|line| {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 10 || f[3] != "0A" || !inodes.contains(f[9]) { return None; }
+        f[1].rsplit_once(':').and_then(|(_, p)| u16::from_str_radix(p, 16).ok())
+    }).collect()
+}
+
+/// Shell processes whose windows are never session windows (Linux names, `sh -c` runs the hooks).
+#[cfg(not(windows))]
+const SHELLS: [&str; 8] = ["sh", "bash", "dash", "zsh", "fish", "ksh", "pwsh", "node"];
+
+/// Agent PID: first ancestor of the current process that is not a shell.
+#[cfg(not(windows))]
+pub fn agent_pid() -> Option<u32> {
+    let (mut pid, _) = process_entry(std::process::id())?;
+    for _ in 0..4 {
+        let (parent, name) = process_entry(pid)?;
+        if SHELLS.contains(&name.as_str()) { pid = parent; } else { return Some(pid); }
+    }
+    Some(pid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn listen_rows_of_both_tables_give_ports() {
+        let ino = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<std::collections::HashSet<_>>();
+        let tcp = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 111 1 0 100 0 0 10 0
+   1: 0100007F:0016 00000000:0000 01 00000000:00000000 00:00000000 00000000  1000        0 222 1 0 100 0 0 10 0
+";
+        assert_eq!(listen_ports_in(tcp, &ino(&["111", "222"])), vec![8080], "only LISTEN rows");
+        assert!(listen_ports_in(tcp, &ino(&["999"])).is_empty(), "only this process's sockets");
+        let tcp6 = "  sl  local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000000000000000000000000000:0BB8 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 333 1 0 100 0 0 10 0
+";
+        assert_eq!(listen_ports_in(tcp6, &ino(&["333"])), vec![3000]);
+    }
 
     #[test]
     fn own_process_is_alive_and_has_entry() {
         assert!(is_alive(std::process::id()));
         let (_, name) = process_entry(std::process::id()).unwrap();
-        assert!(name.to_lowercase().ends_with(".exe"));
+        assert!(!name.is_empty());
     }
 
     #[test]
     fn own_command_line_and_listening_port() {
-        assert!(command_line(std::process::id()).unwrap().to_lowercase().contains(".exe"));
+        let cmd = command_line(std::process::id()).unwrap();
+        assert!(!cmd.is_empty(), "{cmd:?}");
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         assert!(listening_ports(std::process::id()).contains(&l.local_addr().unwrap().port()));
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn own_process_name_has_the_windows_suffix() {
+        let (_, name) = process_entry(std::process::id()).unwrap();
+        assert!(name.to_lowercase().ends_with(".exe"));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn own_command_line_names_this_test_binary() {
+        let cmd = command_line(std::process::id()).unwrap().to_lowercase();
+        assert!(cmd.contains("pets"), "{cmd}");
+    }
+
     #[test]
     fn exited_child_is_dead() {
-        let mut c = std::process::Command::new("cmd").args(["/c", "exit", "0"]).spawn().unwrap();
+        let mut c = if cfg!(windows) {
+            std::process::Command::new("cmd").args(["/c", "exit", "0"]).spawn().unwrap()
+        } else {
+            std::process::Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap()
+        };
         let id = c.id();
         c.wait().unwrap();
         assert!(!is_alive(id));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn agent_pid_skips_the_test_shell_runner() {
+        // the test binary runs under a shell or cargo: some non-shell ancestor must exist
+        assert!(agent_pid().is_some());
     }
 }

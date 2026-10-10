@@ -3,7 +3,7 @@
 use crate::shell::{self, placement::Rect, Shell};
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 #[derive(Default)]
 pub struct Tooltip { inner: Mutex<Anchor> }
@@ -43,9 +43,15 @@ struct ContentMsg { seq: u64, content: serde_json::Value }
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let w = WebviewWindowBuilder::new(app, "tooltip", WebviewUrl::App("tooltip.html".into()))
         .title("agent-pets-tooltip").inner_size(280.0, 120.0).decorations(false).transparent(true)
-        .always_on_top(true).skip_taskbar(true).resizable(false).shadow(false).focused(false).visible(false)
+        .always_on_top(true).skip_taskbar(true)
+        // Linux: `resizable(false)` freezes GTK size hints and later resizing is ignored
+        .resizable(cfg!(target_os = "linux")).shadow(false).focused(false).visible(false)
         .build()?;
+    // Linux: GTK panics when a not-yet-realized window gets an input region; shell routes it safely.
+    #[cfg(windows)]
     w.set_ignore_cursor_events(true)?;
+    #[cfg(not(windows))]
+    shell::set_passthrough(&w, true);
     Ok(())
 }
 
@@ -70,8 +76,7 @@ pub fn tooltip_size(app: AppHandle, tip: State<Tooltip>, seq: u64, w: f64, h: f6
     let Some(win) = app.get_webview_window("tooltip") else { return };
     let (pw, ph) = ((w * a.scale).round() as i32, (h * a.scale).round() as i32);
     let (x, y) = shell::placement::tooltip_pos(a.x, a.stage, a.monitor, pw, ph, a.scale);
-    let _ = win.set_size(PhysicalSize::new(pw.max(1) as u32, ph.max(1) as u32));
-    let _ = win.set_position(PhysicalPosition::new(x, y));
+    shell::place_window(&win, Rect { left: x, top: y, right: x + pw, bottom: y + ph }, true);
     shell::show_no_activate(&win);
 }
 

@@ -85,16 +85,25 @@ fn resume(t: &Target) -> Option<(String, Vec<String>)> {
     }
 }
 
+/// Separator between `cd` and the resume command in the user's shell.
+const THEN: &str = if cfg!(windows) { "; " } else { " && " };
+
+/// `cd` with a literal path: PowerShell on Windows, POSIX sh elsewhere.
+fn cd_command(cwd: &str) -> String {
+    if cfg!(windows) { format!("Set-Location -LiteralPath '{}'", cwd.replace('\'', "''")) }
+    else { format!("cd '{}'", cwd.replace('\'', r"'\''")) }
+}
+
 /// Resume command for the clipboard (or just `cd` if the agent cannot resume). IDs outside the safe alphabet are filtered.
 pub fn resume_command(t: &Target) -> String {
     let id: String = agent_id(t).chars().filter(|c| id_char(*c)).collect();
-    let cd = (!t.cwd.is_empty()).then(|| format!("Set-Location -LiteralPath '{}'", t.cwd.replace('\'', "''")));
+    let cd = (!t.cwd.is_empty()).then(|| cd_command(&t.cwd));
     let base = resume(t).map(|(p, a)| {
         let args: Vec<&str> = a[..a.len() - 1].iter().map(String::as_str).collect();
         format!("{p} {} {id}", args.join(" "))
     });
     match (cd, base) {
-        (Some(cd), Some(b)) => format!("{cd}; {b}"),
+        (Some(cd), Some(b)) => format!("{cd}{THEN}{b}"),
         (Some(cd), None) => cd,
         (None, Some(b)) => b,
         (None, None) => String::new(),
@@ -128,6 +137,8 @@ pub fn plan(t: &Target) -> Vec<Step> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const CD_PREFIX: &str = if cfg!(windows) { "Set-Location -LiteralPath '" } else { "cd '" };
 
     fn t(agent: Agent, desktop: bool) -> Target {
         Target { agent, session_id: "3746a003-5ba1".into(), cwd: std::env::temp_dir().to_string_lossy().into(),
@@ -187,7 +198,7 @@ mod tests {
         x.host_session_id = Some("local_x&y".into());
         let p = plan(&x);
         assert_eq!(p.len(), 1, "{p:?}");
-        assert!(matches!(&p[0], Step::Clipboard(c) if !c.contains('&') && c.ends_with("; claude --resume acalc")), "{p:?}");
+        assert!(matches!(&p[0], Step::Clipboard(c) if !c.replace(THEN, " ").contains('&') && c.ends_with(&format!("{THEN}claude --resume acalc"))), "{p:?}");
     }
 
     #[test]
@@ -218,7 +229,7 @@ mod tests {
         assert_eq!(p[0], Step::FocusProcess(42));
         assert!(p.iter().any(|s| matches!(s, Step::OpenTerminal { program, args, .. }
             if program == "opencode" && args == &vec!["--session".to_string(), "ses_3f2a".into()])), "{p:?}");
-        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.ends_with("; opencode --session ses_3f2a")), "{p:?}");
+        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.ends_with(&format!("{THEN}opencode --session ses_3f2a"))), "{p:?}");
     }
 
     #[test]
@@ -228,7 +239,7 @@ mod tests {
         let p = plan(&x);
         assert_eq!(p[0], Step::FocusProcess(42));
         assert!(p.iter().all(|s| !matches!(s, Step::OpenTerminal { .. } | Step::DeepLink(_))), "{p:?}");
-        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("Set-Location -LiteralPath '") && !c.contains(';')), "{p:?}");
+        assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with(CD_PREFIX) && !c.contains(THEN.trim())), "{p:?}");
     }
 
     #[test]
@@ -240,7 +251,7 @@ mod tests {
             let p = plan(&x);
             assert_eq!(p[0], Step::FocusProcess(42), "{a:?}");
             assert!(p.iter().all(|s| !matches!(s, Step::OpenTerminal { .. } | Step::DeepLink(_))), "{p:?}");
-            assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with("Set-Location -LiteralPath '") && !c.contains(';')), "{p:?}");
+            assert!(matches!(p.last(), Some(Step::Clipboard(c)) if c.starts_with(CD_PREFIX) && !c.contains(THEN.trim())), "{p:?}");
         }
     }
 
@@ -251,6 +262,15 @@ mod tests {
         assert!(plan(&x).iter().all(|s| !matches!(s, Step::OpenTerminal { .. })));
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn clipboard_path_is_a_posix_literal() {
+        let mut x = t(Agent::Claude, false);
+        x.cwd = "/home/a b/O'Brien/$cash`tick&name;end".into();
+        assert_eq!(resume_command(&x), r"cd '/home/a b/O'\''Brien/$cash`tick&name;end' && claude --resume 3746a003-5ba1");
+    }
+
+    #[cfg(windows)]
     #[test]
     fn clipboard_path_is_a_powershell_literal() {
         let mut x = t(Agent::Other, false);

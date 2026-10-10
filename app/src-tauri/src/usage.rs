@@ -41,7 +41,8 @@ pub fn fetch(url: &str, token: &str, now: i64) -> Result<Option<Event>, Failure>
 }
 
 fn credentials() -> Option<PathBuf> {
-    std::env::var_os("USERPROFILE").map(|h| PathBuf::from(h).join(".claude").join(".credentials.json"))
+    std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+        .map(|h| PathBuf::from(h).join(".claude").join(".credentials.json"))
 }
 
 fn current_token(now: i64) -> Option<String> {

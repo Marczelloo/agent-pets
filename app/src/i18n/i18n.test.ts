@@ -30,7 +30,7 @@ describe('i18n', () => {
   });
   it('no Polish literals left in the UI outside the Polish dictionary', () => {
     const root = join(__dirname, '..');
-    const skip = /(\.test\.|testing\.ts|i18n[\\/]pl\.ts|renderer[\\/]scenes\.ts|renderer[\\/]pixelfont\.ts|renderer[\\/]dynamic[\\/](work|states)\.ts|looks-dev\.ts)/;
+    const skip = /(\.test\.|testing\.ts|i18n[\\/]pl(\.linux)?\.ts|renderer[\\/]scenes\.ts|renderer[\\/]pixelfont\.ts|renderer[\\/]dynamic[\\/](work|states)\.ts|looks-dev\.ts)/;
     const files: string[] = [];
     const walk = (d: string) => readdirSync(d).forEach(n => { const p = join(d, n); statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(n) && !skip.test(p) && files.push(p); });
     walk(root);
@@ -67,7 +67,7 @@ describe('i18n', () => {
     expect(nsh.charCodeAt(0)).not.toBe(0xfeff);
     const found = [...nsh.matchAll(/^LangString (\w+) \$\{LANG_POLISH\} "/gm)].map(m => m[1]);
     expect(found.sort()).toEqual([...keys].sort());
-    const conf = JSON.parse(readFileSync(join(__dirname, '..', '..', 'src-tauri', 'tauri.conf.json'), 'utf8'));
+    const conf = JSON.parse(readFileSync(join(__dirname, '..', '..', 'src-tauri', 'tauri.windows.conf.json'), 'utf8'));
     expect(conf.bundle.windows.nsis.customLanguageFiles).toEqual({ Polish: 'nsis/Polish.nsh' });
   });
 });

@@ -11,6 +11,8 @@ use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE
 use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
+pub type Handle = HWND;
+
 pub fn hwnd(raw: isize) -> HWND { HWND(raw as *mut core::ffi::c_void) }
 
 pub fn tray() -> Option<HWND> { unsafe { FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()).ok() } }
@@ -155,7 +157,10 @@ pub fn apply_floating(stage: HWND, m: &Metrics, p: Option<Placement>) {
 }
 
 /// Monitor with work area, scale, and taskbar (if Windows shows one there).
-pub struct Mon { pub info: MonitorInfo, pub monitor: Rect, pub work: Rect, pub scale: f64, pub bar: Option<HWND> }
+pub struct Mon { pub info: MonitorInfo, pub monitor: Rect, pub work: Rect, pub scale: f64, pub bar: Option<Handle> }
+
+/// Platform handle as a plain number (the stage-loop bookkeeping stores `isize`).
+pub fn handle_raw(h: Handle) -> isize { h.0 as isize }
 
 fn rect_from(r: &RECT) -> Rect { Rect { left: r.left, top: r.top, right: r.right, bottom: r.bottom } }
 

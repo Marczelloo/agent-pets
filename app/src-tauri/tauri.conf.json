@@ -20,38 +20,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "nsis"
-    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "resources": {
-      "resources/hook.exe": "resources/hook.exe",
-      "icons/128x128.png": "icons/128x128.png"
-    },
     "publisher": "Marczelloo",
     "copyright": "Copyright (c) 2026 Marczelloo",
-    "shortDescription": "Animated pets in the Windows taskbar for your coding agents",
-    "windows": {
-      "nsis": {
-        "installMode": "currentUser",
-        "languages": [
-          "English",
-          "Polish"
-        ],
-        "displayLanguageSelector": false,
-        "customLanguageFiles": {
-          "Polish": "nsis/Polish.nsh"
-        },
-        "installerHooks": "nsis/hooks.nsh",
-        "installerIcon": "icons/icon.ico"
-      }
-    },
-    "createUpdaterArtifacts": true
+    "shortDescription": "Animated pets in the taskbar for your coding agents"
   },
   "mainBinaryName": "agent-pets",
   "plugins": {

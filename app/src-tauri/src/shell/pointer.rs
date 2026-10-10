@@ -131,13 +131,18 @@ pub fn spawn(app: AppHandle, stage: Arc<AtomicIsize>, mode: Arc<AtomicU8>, tx: S
     });
 }
 
+#[cfg(windows)]
 fn key_down(vk: i32) -> bool {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     (unsafe { GetAsyncKeyState(vk) } as u16 & 0x8000) != 0
 }
 
+#[cfg(not(windows))]
+fn key_down(vk: i32) -> bool { super::taskbar::raw_key_down(vk) }
+
 /// `by_rect`: the floating window may pass pointer events through (`WindowFromPoint` then points beneath it),
 /// so determine "inside" from the rectangle alone.
+#[cfg(windows)]
 fn sample(raw: isize, by_rect: bool) -> Option<Sample> {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
@@ -167,6 +172,31 @@ fn sample(raw: isize, by_rect: bool) -> Option<Sample> {
             right: down(VK_RBUTTON),
         })
     }
+}
+
+/// Linux: X11 gives the cursor and the buttons; there is no per-window hit test, so the rectangle decides
+/// (a window above the stage swallows its clicks anyway), plus X's enter/leave where the cursor is not global. The right button opens the context menu,
+/// like on Windows; the webview's own `contextmenu` event stays suppressed.
+#[cfg(not(windows))]
+fn sample(raw: isize, _by_rect: bool) -> Option<Sample> {
+    if raw == 0 { return None; }
+    let h = super::taskbar::hwnd(raw);
+    let r = super::taskbar::rect_of(h)?;
+    let visible = super::taskbar::is_visible(h);
+    let (sx, sy, left, right) = super::taskbar::raw_pointer()?;
+    let scale = super::taskbar::scale_of(h);
+    let in_rect = sx >= r.left as f64 && sx < r.right as f64 && sy >= r.top as f64 && sy < r.bottom as f64;
+    let through = PASSTHROUGH.load(Ordering::Relaxed) && super::taskbar::pointer_global();
+    let inside = inside_at(in_rect, visible, super::taskbar::pointer_on(h), true, through);
+    Some(Sample {
+        inside,
+        x: ((sx - r.left as f64) / scale).round(),
+        y: ((sy - r.top as f64) / scale).round(),
+        sx: sx as i32,
+        sy: sy as i32,
+        left,
+        right,
+    })
 }
 
 #[cfg(test)]

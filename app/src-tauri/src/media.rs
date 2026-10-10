@@ -1,5 +1,6 @@
-//! Music in Windows: playback sessions from GSMTC (`GlobalSystemMediaTransportControlsSessionManager`), the source
-//! shown by the media tile near the volume control: Spotify, Apple Music, browsers, VLC… No track titles:
+//! Music: on Windows playback sessions from GSMTC (`GlobalSystemMediaTransportControlsSessionManager`), the source
+//! shown by the media tile near the volume control: Spotify, Apple Music, browsers, VLC… On Linux, the same
+//! information from MPRIS over D-Bus (`org.mpris.MediaPlayer2.*`). No track titles:
 //! the stage needs only "playing / not playing" and the app name.
 use serde::Serialize;
 use std::sync::Mutex;
@@ -53,8 +54,49 @@ fn read_sessions() -> windows::core::Result<Vec<(String, bool)>> {
     Ok(out)
 }
 
+/// Linux: MPRIS players on the session bus; the "app" is the bus name suffix (`firefox`, `spotify`…).
+/// A D-Bus error (no session bus, player gone mid-query) means no sessions from that player.
 #[cfg(not(windows))]
-fn read_sessions() -> Result<Vec<(String, bool)>, ()> { Ok(Vec::new()) }
+fn read_sessions() -> Result<Vec<(String, bool)>, ()> {
+    use zbus::blocking::Connection;
+    const PREFIX: &str = "org.mpris.MediaPlayer2.";
+    thread_local! {
+        // reuse the connection instead of reconnecting every 2 s; reconnect after an error
+        static BUS: std::cell::RefCell<Option<Connection>> = const { std::cell::RefCell::new(None) };
+    }
+    let conn = match BUS.with_borrow(std::clone::Clone::clone) {
+        Some(c) => c,
+        None => {
+            let c = Connection::session().map_err(|_| ())?;
+            BUS.set(Some(c.clone()));
+            c
+        }
+    };
+    let names: Result<Vec<String>, ()> = conn.call_method(Some("org.freedesktop.DBus"), "/org/freedesktop/DBus",
+        Some("org.freedesktop.DBus"), "ListNames", &())
+        .and_then(|m| m.body().deserialize::<Vec<String>>()).map_err(|_| ());
+    let names = match names {
+        Ok(n) => n,
+        Err(()) => { BUS.set(None); return Err(()); } // bus connection broken: reconnect next time
+    };
+    let mut out = Vec::new();
+    for n in names.into_iter().filter(|n| n.starts_with(PREFIX) && n.len() > PREFIX.len()) {
+        let status = conn.call_method(Some(n.as_str()), "/org/mpris/MediaPlayer2",
+            Some("org.freedesktop.DBus.Properties"), "Get",
+            &("org.mpris.MediaPlayer2.Player", "PlaybackStatus"))
+            .ok()
+            .and_then(|m| m.body().deserialize::<zbus::zvariant::OwnedValue>().ok())
+            .and_then(|v| match &*v { zbus::zvariant::Value::Str(s) => Some(s.to_string()), _ => None });
+        out.push((player_app(&n[PREFIX.len()..]).to_string(), status.as_deref() == Some("Playing")));
+    }
+    Ok(out)
+}
+
+/// App name from the bus name suffix, without the per-process part (`firefox.instance_1_42` -> `firefox`).
+#[cfg(not(windows))]
+fn player_app(suffix: &str) -> &str {
+    suffix.split_once(".instance").map_or(suffix, |(app, _)| app)
+}
 
 /// Compute media state and emit `pets://media` when it changes. Disabled in settings = nothing is playing.
 pub fn refresh_media(app: &tauri::AppHandle) {
@@ -95,8 +137,36 @@ mod tests {
         );
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn mpris_instance_suffix_is_not_part_of_the_app_name() {
+        assert_eq!(player_app("spotify"), "spotify");
+        assert_eq!(player_app("firefox.instance_1_42"), "firefox");
+        assert_eq!(player_app("vlc.instance12345"), "vlc");
+        assert_eq!(player_app("chromium.instance7"), "chromium");
+    }
+
     /// Live: `cargo test -p agent-pets live_sessions -- --ignored --nocapture` while music is playing.
     #[test]
     #[ignore]
     fn live_sessions() { println!("{:?} -> {:?}", read_sessions(), pick(&sessions())); }
+
+    /// Live: a fake MPRIS player on the real session bus, to verify the query path without a player app.
+    #[cfg(not(windows))]
+    #[test]
+    #[ignore]
+    fn live_mpris_fake_player() {
+        use zbus::blocking::Connection;
+        struct Player;
+        #[zbus::interface(name = "org.mpris.MediaPlayer2.Player")]
+        impl Player {
+            #[zbus(property)]
+            fn playback_status(&self) -> &str { "Playing" }
+        }
+        let conn = Connection::session().unwrap();
+        conn.object_server().at("/org/mpris/MediaPlayer2", Player).unwrap();
+        conn.request_name("org.mpris.MediaPlayer2.apets-test").unwrap();
+        let sessions = read_sessions().unwrap();
+        assert!(sessions.contains(&("apets-test".to_string(), true)), "{sessions:?}");
+    }
 }

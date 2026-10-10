@@ -104,7 +104,12 @@ fn endpoint() -> String {
 async fn find(app: &AppHandle) -> Result<Option<Update>, (String, bool)> {
     let url = endpoint().parse().map_err(|e| (format!("{e}"), false))?;
     let up = app.updater_builder().endpoints(vec![url]).map_err(|e| (e.to_string(), false))?.build().map_err(|e| (e.to_string(), false))?;
-    up.check().await.map_err(|e| (e.to_string(), is_network(&e)))
+    match up.check().await {
+        Ok(u) => Ok(u),
+        // Linux: releases carry no updater package for it yet, so a missing target means up to date
+        Err(tauri_plugin_updater::Error::TargetNotFound(_) | tauri_plugin_updater::Error::TargetsNotFound(_)) if cfg!(target_os = "linux") => Ok(None),
+        Err(e) => Err((e.to_string(), is_network(&e))),
+    }
 }
 
 /// Check the version. `manual`: "Check now" button (result always visible, works even when `off`).
@@ -218,8 +223,12 @@ pub fn mode_changed(app: &AppHandle, mode: Updates) {
 }
 
 /// Whether the user has the panel or settings open (do not interrupt with installation).
+/// Runs on the scheduler thread, so the GTK read is routed through the main thread.
 fn ui_open(app: &AppHandle) -> bool {
-    ["panel", "settings"].iter().any(|l| app.get_webview_window(l).and_then(|w| w.is_visible().ok()).unwrap_or(false))
+    let app = app.clone();
+    crate::shell::on_main(move || {
+        ["panel", "settings"].iter().any(|l| app.get_webview_window(l).and_then(|w| w.is_visible().ok()).unwrap_or(false))
+    }).unwrap_or(false)
 }
 
 /// Scheduler thread: post-update toast, first check after 15 s, then every 6 h; in mode

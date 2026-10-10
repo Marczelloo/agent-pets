@@ -1,5 +1,6 @@
-# Builds the installer and latest.json for a release, mirrors scripts/release.ps1 (docs/building.md#releases).
-# A v* tag drafts a GitHub release with both files; run it by hand for a build without a release (the files are
+# Builds the installer and latest.json for a release, mirrors scripts/release.ps1 (docs/building.md#releases),
+# plus the Linux packages (.deb, .rpm, .AppImage; no auto-update there yet).
+# A v* tag drafts a GitHub release with all the files; run it by hand for a build without a release (the files are
 # kept as a workflow artifact). Nothing is published: a maintainer reviews the draft and publishes it.
 #
 # Secrets and variables (Settings → Secrets and variables → Actions):
@@ -202,3 +203,70 @@ jobs:
             throw "Release $env:TAG is already published; its files stay as they are"
           }
           if ($LASTEXITCODE -ne 0) { throw "gh exited with code $LASTEXITCODE" }
+
+  linux:
+    # the oldest supported runner: the binaries need the glibc they were built against or newer
+    # (22.04 = glibc 2.35: Ubuntu 22.04+, Mint 21+, Debian 12+, Fedora 36+)
+    runs-on: ubuntu-22.04
+    # attaches to the draft the Windows job created
+    needs: windows
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      # tauri v2 linux system deps (tauri docs); rpm bundling needs nothing extra
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $v = ./scripts/version.ps1
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$v") { throw "Tag $env:GITHUB_REF_NAME does not match the app version $v" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      - name: Build the packages
+        run: pnpm tauri build --bundles deb,rpm,appimage
+        working-directory: app
+
+      - name: Stage the packages
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p upload
+          b=target/release/bundle
+          # GitHub replaces spaces in asset names with dots; name them that way up front
+          for f in "$b"/deb/*_"$VERSION"_*.deb "$b"/rpm/*-"$VERSION"-*.rpm "$b"/appimage/*_"$VERSION"_*.AppImage; do
+            [ -f "$f" ] || { echo "::error::Missing package for $VERSION: $f"; exit 1; }
+            cp "$f" "upload/$(basename "$f" | tr ' ' '.')"
+          done
+          ls -l upload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-pets-${{ steps.version.outputs.version }}-linux
+          path: upload/
+          if-no-files-found: error
+
+      - name: Add the packages to the draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+          if [ "$draft" != "true" ]; then echo "::error::Release $TAG is not a draft; its files stay as they are"; exit 1; fi
+          gh release upload "$TAG" upload/* --clobber

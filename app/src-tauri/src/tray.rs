@@ -1,10 +1,13 @@
 //! Tray icon: left click toggles the panel; right click shows the menu ("Statistics", "Settings", "Mute notifications", "Report a problem", "Quit").
+//! Linux: StatusNotifier hosts give the app no clicks on the icon (any click opens the menu), so the menu leads with "Show panel".
 use tauri::menu::{IsMenuItem, Menu, MenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use pets_core::i18n::{tr, Lang};
 use pets_core::mute::MuteChoice;
 use tauri::{AppHandle, Manager, Wry};
 
+#[cfg(target_os = "linux")]
+const PANEL: (&str, &str) = ("Pokaż panel", "Show panel");
 const STATS: (&str, &str) = ("Statystyki", "Statistics");
 const SETTINGS: (&str, &str) = ("Ustawienia", "Settings");
 const REPORT: (&str, &str) = ("Zgłoś problem", "Report a problem");
@@ -30,6 +33,8 @@ pub fn menu_spec(lang: Lang, muted: bool) -> Vec<Entry> {
     let mute = if muted { Entry::Item("unmute", l(UNMUTE)) }
         else { Entry::Sub("mute", l(MUTE), vec![("mute_hour", l(MUTE_HOUR)), ("mute_morning", l(MUTE_MORNING)), ("mute_forever", l(MUTE_FOREVER))]) };
     let mut out = Vec::new();
+    #[cfg(target_os = "linux")]
+    out.push(Entry::Item("panel", l(PANEL)));
     for (id, label) in tray_items(lang) {
         if id == "report" { out.push(mute.clone()); }
         out.push(Entry::Item(id, label));
@@ -74,6 +79,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, e| match e.id().as_ref() {
             "quit" => app.exit(0),
+            "panel" => crate::panel::toggle(app, None),
             "settings" => crate::settings::open(app),
             "stats" => crate::stats::open(app),
             "report" => crate::settings::report_problem(app),
@@ -104,6 +110,34 @@ pub fn refresh(app: &AppHandle) {
     let _ = t.set_tooltip(Some(tooltip(lang, until, now, pets_core::time::local_midnight)));
 }
 
+/// Linux: the icon shows only where a StatusNotifier host runs (KDE, Cinnamon, XFCE; stock GNOME needs the
+/// AppIndicator extension). Without one, a single toast says how to reach the settings: launch the app again.
+/// Checked a moment after start, since at login the panel may come up after us; shown once (marker file).
+#[cfg(target_os = "linux")]
+pub fn hint_if_hidden(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(8));
+        let marker = crate::settings::home().join("tray-hint-shown");
+        if marker.exists() || has_tray_host() != Some(false) { return; }
+        pets_core::app_log!("tray icon: no StatusNotifier host on the session bus");
+        let lang = app.state::<crate::settings::SettingsState>().lang();
+        crate::notify::show_hint(&app, tr(lang, "Ikona w zasobniku jest niewidoczna", "The tray icon is hidden"),
+            tr(lang, "Ten pulpit nie pokazuje ikon aplikacji (w GNOME włącz rozszerzenie AppIndicator). Ustawienia otworzysz, uruchamiając Agent Pets ponownie.",
+                "This desktop shows no app icons (on GNOME, enable the AppIndicator extension). Launch Agent Pets again to open the settings."));
+        let _ = std::fs::write(marker, b"");
+    });
+}
+
+/// `Some(false)` only when the bus answers and nobody owns the watcher name; unknown counts as present.
+#[cfg(target_os = "linux")]
+fn has_tray_host() -> Option<bool> {
+    let conn = zbus::blocking::connection::Builder::session().ok()?.method_timeout(std::time::Duration::from_secs(2)).build().ok()?;
+    let reply = conn.call_method(Some("org.freedesktop.DBus"), "/org/freedesktop/DBus", Some("org.freedesktop.DBus"),
+        "NameHasOwner", &("org.kde.StatusNotifierWatcher",)).ok()?;
+    reply.body().deserialize::<bool>().ok()
+}
+
 /// Change the icon tooltip (e.g. to describe a data-core failure).
 pub fn set_status(app: &AppHandle, text: &str) {
     if let Some(t) = app.tray_by_id("main") { let _ = t.set_tooltip(Some(text)); }
@@ -120,6 +154,13 @@ mod tests {
         assert_eq!(tray_items(Lang::En)[2].1, "Report a problem");
         assert_eq!(tray_items(Lang::Pl)[0].1, "Statystyki");
         assert_eq!(tray_items(Lang::En)[0].1, "Statistics");
+    }
+
+    /// The menu without the Linux-only "Show panel" lead, which the tests below do not cover.
+    fn menu_spec(lang: Lang, muted: bool) -> Vec<Entry> {
+        let mut v = super::menu_spec(lang, muted);
+        if cfg!(target_os = "linux") { assert_eq!(v.remove(0), Entry::Item("panel", tr(lang, "Pokaż panel", "Show panel"))); }
+        v
     }
 
     #[test]

@@ -1,5 +1,9 @@
+import { onLinux } from '../platform';
+import { merge } from './deep';
 import { en } from './en';
+import { enLinux } from './en.linux';
 import { pl } from './pl';
+import { plLinux } from './pl.linux';
 export type Dict = typeof pl;
 export type Lang = 'pl' | 'en';
 let cur: Lang = 'pl';
@@ -7,7 +11,13 @@ let cur: Lang = 'pl';
 let system: Lang | null = null;
 export function setSystemLang(l: Lang | undefined): void { system = l ?? null; }
 export const lang = (): Lang => cur;
-export const t = (): Dict => (cur === 'en' ? en : pl);
+/** Base dictionaries merged with their Linux overlay, built on first use. */
+const linux: Partial<Record<Lang, Dict>> = {};
+/** Texts of the current language; on Linux the overlay (no taskbar, no Windows) is merged over the base. */
+export const t = (): Dict => {
+  if (!onLinux()) return cur === 'en' ? en : pl;
+  return linux[cur] ??= cur === 'en' ? merge<Dict>(en, enLinux) : merge<Dict>(pl, plLinux);
+};
 export function setLang(l: Lang): void {
   cur = l;
   // screen reader selects a voice for the document language

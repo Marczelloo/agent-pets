@@ -5,12 +5,13 @@
 <p align="center">
   <a href="https://github.com/Marczelloo/agent-pets/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Marczelloo/agent-pets?include_prereleases&color=D97757"></a>
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-5DCAA5">
+  <img alt="Linux: experimental" src="https://img.shields.io/badge/Linux-experimental-E8B04B">
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0-8C887E"></a>
 </p>
 
 # Agent Pets
 
-Animated pets in the Windows 11 taskbar that show what your coding agents are doing. Every session of **Claude Code**, **Codex**, **opencode**, **GitHub Copilot**, **Antigravity**, **Cursor**, **Grok Build** or **ZCode** gets its own pet: it codes at a desk, types commands, reads files, catches web pages with a butterfly net, waves when it needs you and naps when idle. Progress, context and rate limits sit right next to it.
+Animated pets in the Windows 11 taskbar that show what your coding agents are doing. Every session of **Claude Code**, **Codex**, **opencode**, **GitHub Copilot**, **Antigravity**, **Cursor**, **Grok Build** or **ZCode** gets its own pet: it codes at a desk, types commands, reads files, catches web pages with a butterfly net, waves when it needs you and naps when idle. Progress, context and rate limits sit right next to it. There is also an [experimental Linux version](#linux-experimental).
 
 <p align="center">
   <img src="docs/images/pets.gif" alt="Animated gallery of all pets: Clawd editing, Kodek browsing, the opencode cyclops running a command, the Copilot pilot reading, the Android robot thinking, the Cursor block searching, the Grok robot delegating, the ZCode panda done and a blob pet that needs you" width="900">
@@ -59,6 +60,12 @@ More in [docs/features.md](docs/features.md).
 3. Restart open agent sessions so they pick up the hooks.
 
 Change anything later in **Settings** (right-click the tray icon, or ⚙ in the panel). Updates are signed and install from GitHub; uninstall from Windows Settings → Apps, which also removes the hooks.
+
+### Linux (experimental)
+
+> **Linux support is experimental.** Agent Pets is developed and tested day to day on Windows 11, and Windows is its main platform. The Linux version was tested before the release, in virtual machines with Ubuntu (GNOME), Fedora (KDE) and Linux Mint (Cinnamon), but not every change gets checked there. Expect rough edges, and please [report what breaks](https://github.com/Marczelloo/agent-pets/issues/new).
+
+`.deb` (Ubuntu, Mint, Debian), `.rpm` (Fedora, openSUSE) and `.AppImage` packages are on the same [Releases](https://github.com/Marczelloo/agent-pets/releases/latest) page. The pets sit in a strip along the bottom of the screen (above the bottom panel when there is one, rather than inside it), at the bottom right or bottom left (Settings → Screen), or in a floating window, on X11 and on Wayland (through XWayland). For now: no auto-update (install the new package), the tray icon opens a menu on any click (its first item shows the panel) and on stock GNOME needs the AppIndicator extension (otherwise launch the app again to open Settings), and on GNOME/KDE Wayland the floating window catches clicks over its empty space. On Wayland the global keyboard shortcuts go through the desktop's GlobalShortcuts portal (KDE Plasma, GNOME 48 and newer), which asks you to confirm them once; on a desktop without it they may only fire while an Agent Pets window is active. If the pets show up blank or leave trails, start the app with `WEBKIT_DISABLE_DMABUF_RENDERER=1` (or `=0`: by default the DMABUF renderer is turned off only on the NVIDIA driver).
 
 ## Supported agents
 

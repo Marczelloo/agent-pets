@@ -97,12 +97,19 @@ fn statusline() {
     let original: Option<serde_json::Value> = std::fs::read(statusline_install::original_path()).ok()
         .and_then(|b| serde_json::from_slice(&b).ok());
     let Some(cmd) = original.as_ref().and_then(|o| o["command"].as_str()) else { return };
-    use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
-    // `/S /C "<command>"`: cmd removes only the outer quotes and runs a command with its own quotes
-    // (e.g. `"C:\x y\line.exe" --opt`) unchanged. Ordinary `args` would quote it differently.
-    let Ok(mut child) = Command::new("cmd").raw_arg(format!("/S /C \"{cmd}\""))
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() else { return };
+    // Windows: `/S /C "<command>"` keeps the command's own quotes intact (raw_arg); raw_arg is Windows-only.
+    #[cfg(windows)]
+    let spawn = {
+        use std::os::windows::process::CommandExt;
+        Command::new("cmd").raw_arg(format!("/S /C \"{cmd}\""))
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()
+    };
+    // Other platforms: the shell takes the command line as one `-c` argument, quotes preserved.
+    #[cfg(not(windows))]
+    let spawn = Command::new("sh").arg("-c").arg(cmd)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn();
+    let Ok(mut child) = spawn else { return };
     if let Some(mut si) = child.stdin.take() { let _ = si.write_all(&buf); }
     if let Ok(out) = child.wait_with_output() { let _ = std::io::stdout().write_all(&out.stdout); }
 }

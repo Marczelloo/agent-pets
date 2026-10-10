@@ -2,6 +2,7 @@
 
 - [Requirements](#requirements)
 - [Build and test](#build-and-test)
+- [Linux](#linux)
 - [Run in development](#run-in-development)
 - [pets-cli](#pets-cli)
 - [Connect Claude Code without the wizard](#connect-claude-code-without-the-wizard)
@@ -12,7 +13,7 @@
 
 ## Requirements
 
-- Windows 11
+- Windows 11, or Linux with X11/XWayland (see [Linux](#linux))
 - [Rust](https://rustup.rs) 1.93 or newer (MSVC toolchain)
 - [Node.js](https://nodejs.org) 22 and [pnpm](https://pnpm.io) 10
 - Optional: Python 3, only for the fixture anonymizer in `tools/`
@@ -37,6 +38,29 @@ pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
 ```
 
 It lands in `target\release\bundle\nsis\`. The config override turns off signing the update files, which needs the release key only the maintainer has.
+
+## Linux
+
+The app also builds and runs on Linux (GTK + WebKitGTK through X11/XWayland; `deb`, `rpm` and `AppImage` bundles come from `app/src-tauri/tauri.linux.conf.json`, and the release workflow builds them on Ubuntu 22.04 for an old enough glibc). Build and test like on Windows, minus the `.exe` suffixes; `pnpm tauri build` in `app/` produces the packages in `target/release/bundle/`.
+
+Linux is an experimental platform: development and day-to-day testing happen on Windows 11. CI builds the app and runs the tests on Linux, and before a release the packages are checked by hand in virtual machines (Ubuntu with GNOME, Fedora with KDE, Linux Mint with Cinnamon), but a change is not tried on Linux every time.
+
+The stage is not embedded in a taskbar (X11 has none): it is an always-on-top strip flush against the panel edge of the work area. The app forces `GDK_BACKEND=x11` at startup, because `gtk move()` is ignored on Wayland.
+
+Under XWayland on GNOME or KDE the X server sees the cursor only over the app's own windows, so the floating window there never passes clicks through (it could not tell when the cursor comes back over a pet), and hover ends on X's leave event. X11 key grabs fire there only while one of the app's windows has focus, so on Wayland the global shortcuts go through the `org.freedesktop.portal.GlobalShortcuts` portal (`hotkeys_portal.rs`), falling back to the grabs when the desktop has no such portal. The tray icon needs a StatusNotifier host (stock GNOME: the AppIndicator extension), which hands the app no clicks on the icon itself, so the tray menu starts with "Show panel"; without one the app shows a one-time hint, and launching it again opens the settings.
+
+### To do: window rules for compositors
+
+Compositors draw their own border and shadow around managed windows (the panel, settings), which look wrong around the app's overlays. Users should add rules to disable them. This is a manual step for now - the app should detect the compositor and offer to install them (e.g. into Hyprland's config) in a future release.
+
+Hyprland 0.55+ (Lua config, e.g. omarchy `~/.config/hypr/hyprland.lua`); the window class is `Agent-pets`:
+
+```lua
+o.window({ class = "^Agent-pets$" }, { border_size = 0, no_shadow = true })
+o.window({ class = "^Agent-pets$", title = "^agent-pets-(stage|bubbles|tooltip)$" }, { no_focus = true, pin = true })
+```
+
+`pin` keeps the strip on every workspace, like a real taskbar. For older Hyprland (hyprlang `windowrulev2`) or other compositors, the equivalent is `noborder`, `noshadow`, `nofocus`, and `pin` rules for the same class and titles.
 
 ## Run in development
 

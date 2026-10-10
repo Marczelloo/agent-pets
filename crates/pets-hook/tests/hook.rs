@@ -193,39 +193,65 @@ fn a_bad_or_missing_event_name_sends_nothing() {
 /// another form (`hook_command_ps`), while a live test verifies Antigravity's shell.
 #[test]
 fn the_hook_command_runs_in_real_shells_from_awkward_home_folders() {
-    use std::os::windows::process::CommandExt;
     let dir = tempfile::tempdir().unwrap();
     let missing = dir.path().join("missing.json");
+    let hook_name = if cfg!(windows) { "hook.exe" } else { "hook" };
     let place = |name: &str| {
-        let p = dir.path().join(name).join(".agent-pets").join("hook.exe");
+        let p = dir.path().join(name).join(".agent-pets").join(hook_name);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::copy(env!("CARGO_BIN_EXE_hook"), &p).unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(&p, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         p
     };
     let stop = |out: std::process::Output, what: &str| {
         assert!(String::from_utf8_lossy(&out.stdout).contains(r#"{"decision":"stop"}"#), "{what}: {:?} / {}",
             String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     };
-    let bash = ["C:/Program Files/Git/bin/bash.exe", "C:/Program Files/Git/usr/bin/bash.exe"].into_iter()
-        .map(std::path::PathBuf::from).find(|p| p.is_file());
+    // how a shell runs a command line
+    type Shell = Box<dyn Fn(&str) -> Command>;
+    #[cfg(windows)]
+    let shells: Vec<(&str, Shell)> = {
+        use std::os::windows::process::CommandExt;
+        let bash = ["C:/Program Files/Git/bin/bash.exe", "C:/Program Files/Git/usr/bin/bash.exe"].into_iter()
+            .map(std::path::PathBuf::from).find(|p| p.is_file());
+        let mut v: Vec<(&str, Shell)> = vec![("cmd", Box::new(|cmd: &str| {
+            let mut c = Command::new("cmd");
+            c.raw_arg(format!("/S /C \"{cmd}\""));
+            c
+        }))];
+        // Git's bash by full path: a bare `bash` on PATH is WSL's launcher
+        if let Some(b) = bash {
+            v.push(("bash", Box::new(move |cmd: &str| { let mut c = Command::new(&b); c.arg("-c").arg(cmd); c })));
+        }
+        v
+    };
+    #[cfg(not(windows))]
+    let shells: Vec<(&str, Shell)> = vec![
+        ("sh", Box::new(|cmd: &str| { let mut c = Command::new("sh"); c.arg("-c").arg(cmd); c })),
+        ("bash", Box::new(|cmd: &str| { let mut c = Command::new("bash"); c.arg("-c").arg(cmd); c })),
+    ];
     for name in ["plain", "Jan Kowalski", "O'Neil & Co", "O'Neil", "R&D"] {
         let cmd = pets_core::integrations::hook_command(&place(name), "antigravity", "Stop");
-        let out = Command::new("cmd").raw_arg(format!("/S /C \"{cmd}\"")).env("AGENT_PETS_ENDPOINT", &missing)
-            .stdin(Stdio::null()).output().unwrap();
-        stop(out, &format!("cmd {name}"));
-        if let Some(b) = &bash {
-            let out = Command::new(b).arg("-c").arg(&cmd).env("AGENT_PETS_ENDPOINT", &missing).stdin(Stdio::null()).output().unwrap();
-            stop(out, &format!("bash {name}"));
+        for (what, make) in &shells {
+            let out = make(&cmd).env("AGENT_PETS_ENDPOINT", &missing).stdin(Stdio::null()).output().unwrap();
+            stop(out, &format!("{what} {name}"));
         }
-        let ps = pets_core::integrations::hook_command_ps(&place(name), "copilot", "Stop");
-        let out = Command::new("powershell").args(["-NoProfile", "-Command", &ps]).env("AGENT_PETS_ENDPOINT", &missing)
-            .stdin(Stdio::null()).output().unwrap();
-        assert!(out.status.success(), "powershell {name}: {}", String::from_utf8_lossy(&out.stderr));
+        #[cfg(windows)]
+        {
+            let ps = pets_core::integrations::hook_command_ps(&place(name), "copilot", "Stop");
+            let out = Command::new("powershell").args(["-NoProfile", "-Command", &ps]).env("AGENT_PETS_ENDPOINT", &missing)
+                .stdin(Stdio::null()).output().unwrap();
+            assert!(out.status.success(), "powershell {name}: {}", String::from_utf8_lossy(&out.stderr));
+        }
     }
-    let plain = pets_core::integrations::hook_command(&place("plain"), "antigravity", "Stop");
-    let out = Command::new("powershell").args(["-NoProfile", "-Command", &plain]).env("AGENT_PETS_ENDPOINT", &missing)
-        .stdin(Stdio::null()).output().unwrap();
-    stop(out, "powershell plain");
+    #[cfg(windows)]
+    {
+        let plain = pets_core::integrations::hook_command(&place("plain"), "antigravity", "Stop");
+        let out = Command::new("powershell").args(["-NoProfile", "-Command", &plain]).env("AGENT_PETS_ENDPOINT", &missing)
+            .stdin(Stdio::null()).output().unwrap();
+        stop(out, "powershell plain");
+    }
 }
 
 fn new_agents_open() -> std::sync::Arc<pets_core::ingest::Doors> {

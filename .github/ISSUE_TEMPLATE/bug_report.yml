@@ -39,7 +39,7 @@ body:
         - Cursor
         - Grok Build
         - ZCode
-        - Other program (hook.exe report)
+        - Other program (hook report)
         - None, the app itself
     validations:
       required: true

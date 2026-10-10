@@ -21,7 +21,6 @@ tauri = { version = "2.11", features = ["tray-icon"] }
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
-tauri-winrt-notification = "0.8"
 ureq = { version = "2", features = ["json"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
@@ -29,6 +28,7 @@ tokio = { version = "1", features = ["time"] }
 tauri-plugin-global-shortcut = "2.3.1"
 
 [target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "0.8"
 windows = { version = "0.61", features = [
   "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi",
   "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Accessibility", "Win32_System_Com",
@@ -38,6 +38,18 @@ windows = { version = "0.61", features = [
   "Win32_System_Time", "Win32_System_Threading",
   "Foundation", "Foundation_Collections", "Media_Control",
 ] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# desktop notifications over D-Bus (org.freedesktop.Notifications)
+notify-rust = "4"
+# MPRIS playback sessions (org.mpris.MediaPlayer2.*) on the session bus
+zbus = "5"
+# X11 at runtime (cursor, buttons, keys) without a build-time link: dlopen of libX11
+libloading = "0.8"
+# localtime_r for the statistics time zone
+libc = "0.2"
+# direct window control: type hint DOCK and a synchronous resize (Tauri's `set_size` is a no-op here)
+gtk = "0.18"
 
 [dev-dependencies]
 tempfile = "3"

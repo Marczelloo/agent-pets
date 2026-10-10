@@ -133,6 +133,7 @@ pub fn open_book(path: &std::path::Path, tries: u32, sleep: &dyn Fn(u64)) -> Opt
 }
 
 /// Local time offset from UTC (ms) at `ts`, including daylight saving time.
+#[cfg(windows)]
 pub fn tz_offset(ts: i64) -> i64 {
     use windows::Win32::Foundation::{FILETIME, SYSTEMTIME};
     use windows::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToFileTime, SystemTimeToTzSpecificLocalTime};
@@ -149,12 +150,29 @@ pub fn tz_offset(ts: i64) -> i64 {
     }
 }
 
+/// Linux: `localtime_r` returns the offset in `tm_gmtoff` (seconds), already DST-corrected.
+#[cfg(not(windows))]
+pub fn tz_offset(ts: i64) -> i64 {
+    unsafe {
+        let t: libc::time_t = (ts / 1000) as libc::time_t;
+        let mut tm: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&t, &mut tm).is_null() { return 0; }
+        tm.tm_gmtoff as i64 * 1_000
+    }
+}
+
 /// Scan thread: all history on first launch, then only changed files every 30 s.
 pub fn spawn(app: AppHandle) {
     std::thread::spawn(move || {
+        #[cfg(windows)]
         unsafe {
             use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL};
             let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+        }
+        #[cfg(target_os = "linux")]
+        unsafe {
+            // nice +10: the history scan yields to interactive work
+            libc::setpriority(libc::PRIO_PROCESS, 0, 10);
         }
         let st = app.state::<StatsState>();
         let path = Book::default_path();

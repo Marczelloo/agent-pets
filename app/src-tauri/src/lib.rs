@@ -3,6 +3,8 @@ mod appstate;
 mod bubbles;
 mod core;
 mod hotkeys;
+#[cfg(target_os = "linux")]
+mod hotkeys_portal;
 mod jump;
 mod media;
 mod notify;
@@ -10,6 +12,10 @@ mod panel;
 mod problems;
 mod settings;
 mod shell;
+
+/// Startup helpers for `main` (single-threaded environment access); see `shell::taskbar_linux`.
+#[cfg(target_os = "linux")]
+pub use shell::init_hyprland_socket;
 mod stats;
 mod system;
 mod tooltip;
@@ -65,7 +71,8 @@ pub fn jump_to(app: &tauri::AppHandle, session_id: &str) -> jump::JumpResult {
     let Some(s) = snap.sessions.iter().find(|s| s.id == session_id) else {
         return jump::JumpResult { method: "none".into(), detail: pets_core::i18n::tr(lang, "Sesja już nie istnieje", "The session no longer exists").into() };
     };
-    let reg = std::env::var_os("USERPROFILE").and_then(|h| jump::registry::find(std::path::Path::new(&h), session_id));
+    let home = settings::home();
+    let reg = jump::registry::find(&home, session_id);
     jump::exec::run(&jump::plan(&jump::Target::from(s, reg.as_ref())), lang)
 }
 
@@ -236,7 +243,12 @@ pub fn run() {
             bubbles::build(app.handle())?;
             app.manage(panel::Panel::default());
             panel::build(app.handle())?;
-            tray::build(app.handle())?;
+            if let Err(e) = tray::build(app.handle()) {
+                // Linux: the tray needs an appindicator library; the app stays usable without the icon
+                if cfg!(target_os = "linux") { pets_core::app_log!("tray icon: {e}"); } else { return Err(e.into()); }
+            }
+            #[cfg(target_os = "linux")]
+            tray::hint_if_hidden(app.handle());
             app.manage(notify::center::Center::load(settings::home()));
             app.manage(problems::Problems::default());
             let snaps = notify::start(app.handle().clone());

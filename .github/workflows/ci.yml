@@ -51,3 +51,39 @@ jobs:
         working-directory: claude-plugin
       # the marketplace manifest in the repo root
       - run: claude plugin validate .
+
+  linux:
+    runs-on: ubuntu-latest
+    # a hung test fails the run instead of holding a runner for six hours
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: app
+      # the packaged resources/hook must exist before anything compiles the app
+      - run: pnpm build:hook
+        working-directory: app
+      # tauri v2 linux system deps (tauri docs, ubuntu 24.04)
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - run: cargo test --workspace
+      - run: pnpm exec tsc --noEmit
+        working-directory: app
+      - run: pnpm test
+        working-directory: app
+      # the Claude Code mod: validate runs without a Claude login.
+      - run: npm i -g @anthropic-ai/claude-code
+      - run: claude plugin validate .
+        working-directory: claude-plugin
+      # plugin test is windows-only: its harness mocks windows paths (USERPROFILE) and fails identically on main
+      # the marketplace manifest in the repo root
+      - run: claude plugin validate .
