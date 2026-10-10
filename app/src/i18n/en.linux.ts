@@ -13,7 +13,7 @@ export const enLinux: DeepPartial<Dict> = {
     maxVisible: 'Maximum pets on screen',
     muteDesc: 'System notifications go quiet while the list in the panel keeps filling',
     hotkeys: {
-      note: 'Click a shortcut and press a new combination with Ctrl, Alt, Shift or Super. Esc cancels, Backspace turns it off.',
+      note: 'Click a shortcut and press a new combination with Ctrl, Alt, Shift or Super. Esc cancels, Backspace turns it off. On Wayland a shortcut may not fire or may clash with the desktop’s own: then pick another combination.',
     },
     backup: {
       hint: 'Look, notifications, placement and limits. Agent integrations stay as they are.',

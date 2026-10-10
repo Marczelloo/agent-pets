@@ -247,6 +247,7 @@ export const en: Dict = {
     copyReport: 'Copy report',
     reportProblem: 'Report a problem',
     reportProblemDesc: 'Opens a new issue on GitHub. The report is copied first: paste it into the form.',
+    linuxBeta: 'Linux support is in beta: it should work, but it has had much less testing than the Windows version. If something misbehaves, please report it.',
     langAuto: 'Automatic (like Windows)',
     broken: e => `The settings file is damaged (${e}); using default settings.`,
     antigravityNote: 'Needs a version with hooks (Antigravity 2.0 or a newer IDE). Antigravity does not say when it waits for your approval, so this pet never shows “needs you”.',

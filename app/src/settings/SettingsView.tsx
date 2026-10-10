@@ -174,6 +174,7 @@ export function SettingsView({ settings: s, rows, diag, tab, onTab, onChange, on
         </>}
 
         {tab === 'diag' && <Section>
+          {onLinux() && <p className="ui-note" role="status">{t().settings.linuxBeta}</p>}
           <div className="diag-actions">
             <button type="button" disabled={!diag} onClick={() => {
               if (!diag) return;
