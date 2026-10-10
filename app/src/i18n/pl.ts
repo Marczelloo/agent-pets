@@ -258,7 +258,7 @@ export const pl = {
     copyReport: 'Skopiuj raport',
     reportProblem: 'Zgłoś problem',
     reportProblemDesc: 'Otwiera nowe zgłoszenie na GitHubie. Raport najpierw się kopiuje: wklej go do formularza.',
-    linuxBeta: 'Wersja na Linuksa jest w becie: powinna działać, ale była testowana dużo mniej niż wersja na Windows. Jeśli coś nie działa, zgłoś to.',
+    linuxBeta: 'Wersja na Linuksa jest eksperymentalna: Agent Pets powstaje i jest testowany na co dzień na Windowsie, a Linuksa przed wydaniem sprawdzono tylko na maszynach wirtualnych. Jeśli coś nie działa, zgłoś to.',
     langAuto: 'Automatycznie (jak Windows)',
     broken: (e: string) => `Plik ustawień jest uszkodzony (${e}); używam ustawień domyślnych.`,
     antigravityNote: 'Potrzebna wersja z hookami (Antigravity 2.0 albo nowsze IDE). Antigravity nie mówi, kiedy czeka na Twoją zgodę, więc ten zwierzak nie pokazuje „czeka na Ciebie”.',
