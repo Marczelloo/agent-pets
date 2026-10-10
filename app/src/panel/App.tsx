@@ -244,7 +244,7 @@ export function PanelView({ snap, nowMs, status, focusId, onJump, animate = true
                 {onRename && s.renamed && <button type="button" role="menuitem" onClick={() => { setMenu(null); onRename(s.id, null); }}>{t().panel.resetName}</button>}
                 {onPin && <button type="button" role="menuitem" onClick={() => { setMenu(null); onPin(s.id, !s.pinned); }}>{s.pinned ? t().panel.unpin : t().panel.pin}</button>}
                 {s.cwd && <button type="button" role="menuitem" onClick={() => { setMenu(null); copyPath(s.cwd); }}>{t().panel.copyPath}</button>}
-                {onDismiss && <button type="button" role="menuitem" onClick={() => { setMenu(null); onDismiss([s.id]); }}>
+                {onDismiss && <button type="button" role="menuitem" title={t().panel.remove(title)} onClick={() => { setMenu(null); onDismiss([s.id]); }}>
                   {t().panel.remove(title)}</button>}
               </div>}
             </div>

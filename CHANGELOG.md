@@ -9,6 +9,7 @@
 ### Fixed
 
 - After an update the taskbar and Start show the new app icon right away, instead of the old one Windows kept in its icon cache.
+- A session with a very long title no longer stretches its ⋯ menu out of the panel: the menu keeps a sensible width and a long item ends with an ellipsis (the full text shows on hover).
 
 ## 0.17.2
 

@@ -151,8 +151,8 @@ button:focus-visible{outline:2px solid var(--txt);outline-offset:1px}
 .actions{display:flex;align-items:center;gap:4px}
 .remove{padding:5px 8px}
 .menu-wrap{position:relative;align-self:start;margin-top:4px;z-index:1}
-.menu{position:absolute;right:0;top:100%;z-index:5;min-width:150px;padding:4px;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--edge);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
-.menu button{border-color:transparent;background:transparent;text-align:left;padding:6px 10px;white-space:nowrap}
+.menu{position:absolute;right:0;top:100%;z-index:5;min-width:150px;max-width:min(240px,calc(100vw - 48px));box-sizing:border-box;padding:4px;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--edge);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.menu button{border-color:transparent;background:transparent;text-align:left;padding:6px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .menu button:hover{background:var(--btnh)}
 .ctx{position:absolute;left:0;bottom:0;height:2px;max-width:100%;background:var(--claude);opacity:.8;border-bottom-left-radius:6px}
 .more-kids{display:flex;justify-content:flex-start;padding:2px 0 0 36px}
