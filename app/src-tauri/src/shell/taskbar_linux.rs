@@ -102,17 +102,12 @@ fn rect(pos: tauri::PhysicalPosition<i32>, size: tauri::PhysicalSize<u32>) -> Re
 
 fn work_rect(w: &tauri::PhysicalRect<i32, u32>) -> Rect { rect(w.position, w.size) }
 
-/// The "taskbar" rectangle for a monitor: a strip at the panel edge of the work area.
-/// Panel side comes from the work-area insets (GNOME: top, KDE/default: bottom).
-pub fn strip_of(monitor: &Rect, work: &Rect, scale: f64) -> Rect {
+/// The "taskbar" rectangle for a monitor: a strip along the bottom of the work area, so the pets stand
+/// on the screen edge or on a bottom panel. A top-only panel (GNOME, many tiling setups) does not pull
+/// the strip up there: hanging under it, the bubbles had no room above the pets and opened over the windows.
+pub fn strip_of(_monitor: &Rect, work: &Rect, scale: f64) -> Rect {
     let h = strip_h(scale, work);
-    let (top, bottom) = if work.top - monitor.top > monitor.bottom - work.bottom {
-        // panel at the top: strip flush under the top edge of the work area
-        (work.top, work.top + h)
-    } else {
-        (work.bottom - h, work.bottom)
-    };
-    Rect { left: work.left, top, right: work.right, bottom }
+    Rect { left: work.left, top: work.bottom - h, right: work.right, bottom: work.bottom }
 }
 
 /// Pseudo taskbar handle: `1 + monitor index` (0 = use the stage window's own monitor).
@@ -622,8 +617,9 @@ mod x11 {
     fn open() -> Option<X11> {
         unsafe {
             let lib = libloading::Library::new("libX11.so.6").ok()?;
-            let open_display: libloading::Symbol<unsafe extern "C" fn() -> Display> = lib.get(b"XOpenDisplay").ok()?;
-            let display = open_display();
+            let open_display: libloading::Symbol<unsafe extern "C" fn(*const std::ffi::c_char) -> Display> = lib.get(b"XOpenDisplay").ok()?;
+            // NULL = the DISPLAY variable (calling it without the argument passed a stray register as the name)
+            let display = open_display(std::ptr::null());
             if display.is_null() { return None; }
             Some(X11 { lib, display })
         }
@@ -699,11 +695,12 @@ mod tests {
     }
 
     #[test]
-    fn the_strip_moves_to_the_top_when_the_panel_is_there() {
+    fn the_strip_stays_at_the_bottom_under_a_top_only_panel() {
+        // GNOME: top bar 32, dock on the left, nothing at the bottom
         let monitor = Rect { left: 0, top: 0, right: 2560, bottom: 1440 };
-        let work = Rect { left: 0, top: 36, right: 2560, bottom: 1440 };
+        let work = Rect { left: 67, top: 32, right: 2560, bottom: 1440 };
         let s = strip_of(&monitor, &work, 1.0);
-        assert_eq!((s.top, s.bottom), (36, 36 + 48));
+        assert_eq!((s.left, s.top, s.bottom), (67, 1440 - 48, 1440));
     }
 
     #[test]

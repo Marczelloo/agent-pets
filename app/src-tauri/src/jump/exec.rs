@@ -228,8 +228,18 @@ fn clipboard(text: &str) -> bool {
         if let Some(si) = child.stdin.as_mut() { let _ = si.write_all(text.as_bytes()); }
         if child.wait().map(|s| s.success()).unwrap_or(false) { return true; }
     }
-    false
+    gtk_clipboard(text)
 }
+
+/// No clipboard tool installed (stock GNOME ships none): GTK's own clipboard, held while the app runs.
+#[cfg(target_os = "linux")]
+fn gtk_clipboard(text: &str) -> bool {
+    let text = text.to_string();
+    crate::shell::on_main(move || gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD).set_text(&text)).is_some()
+}
+
+#[cfg(all(not(windows), not(target_os = "linux")))]
+fn gtk_clipboard(_: &str) -> bool { false }
 
 pub fn run(steps: &[Step], lang: Lang) -> JumpResult {
     for s in steps {

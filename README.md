@@ -62,7 +62,7 @@ Change anything later in **Settings** (right-click the tray icon, or ⚙ in the 
 
 ### Linux (beta)
 
-`.deb` (Ubuntu, Mint, Debian), `.rpm` (Fedora, openSUSE) and `.AppImage` packages are on the same [Releases](https://github.com/Marczelloo/agent-pets/releases/latest) page. The pets sit in a strip above the bottom panel rather than inside it, on X11 and on Wayland (through XWayland). For now: no auto-update (install the new package), the tray icon on stock GNOME needs the AppIndicator extension (otherwise launch the app again to open Settings), and on GNOME/KDE Wayland the floating window catches clicks over its empty space.
+`.deb` (Ubuntu, Mint, Debian), `.rpm` (Fedora, openSUSE) and `.AppImage` packages are on the same [Releases](https://github.com/Marczelloo/agent-pets/releases/latest) page. The pets sit in a strip along the bottom of the screen (above the bottom panel when there is one, rather than inside it), on X11 and on Wayland (through XWayland). For now: no auto-update (install the new package), the tray icon on stock GNOME needs the AppIndicator extension (otherwise launch the app again to open Settings), and on GNOME/KDE Wayland the floating window catches clicks over its empty space. If the pets show up blank or leave trails, start the app with `WEBKIT_DISABLE_DMABUF_RENDERER=1` (or `=0`: by default the DMABUF renderer is turned off only on the NVIDIA driver).
 
 ## Supported agents
 
