@@ -175,7 +175,7 @@ fn sample(raw: isize, by_rect: bool) -> Option<Sample> {
 }
 
 /// Linux: X11 gives the cursor and the buttons; there is no per-window hit test, so the rectangle decides
-/// (a window above the stage swallows its clicks anyway). The right button opens the context menu,
+/// (a window above the stage swallows its clicks anyway), plus X's enter/leave where the cursor is not global. The right button opens the context menu,
 /// like on Windows; the webview's own `contextmenu` event stays suppressed.
 #[cfg(not(windows))]
 fn sample(raw: isize, _by_rect: bool) -> Option<Sample> {
@@ -186,7 +186,8 @@ fn sample(raw: isize, _by_rect: bool) -> Option<Sample> {
     let (sx, sy, left, right) = super::taskbar::raw_pointer()?;
     let scale = super::taskbar::scale_of(h);
     let in_rect = sx >= r.left as f64 && sx < r.right as f64 && sy >= r.top as f64 && sy < r.bottom as f64;
-    let inside = inside_at(in_rect, visible, true, true, PASSTHROUGH.load(Ordering::Relaxed));
+    let through = PASSTHROUGH.load(Ordering::Relaxed) && super::taskbar::pointer_global();
+    let inside = inside_at(in_rect, visible, super::taskbar::pointer_on(h), true, through);
     Some(Sample {
         inside,
         x: ((sx - r.left as f64) / scale).round(),

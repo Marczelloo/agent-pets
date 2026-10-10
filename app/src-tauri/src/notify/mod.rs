@@ -39,6 +39,13 @@ pub fn show_problem(app: &AppHandle, title: &str, body: &str) {
     show_action(app, center::Kind::Problem, title, body, pets_core::i18n::tr(lang, "Diagnostyka", "Diagnostics"), "diagnostics", |a| crate::settings::open_tab(a, "diag"));
 }
 
+/// A one-off hint whose button opens the settings.
+#[cfg(target_os = "linux")]
+pub fn show_hint(app: &AppHandle, title: &str, body: &str) {
+    let lang = app.state::<crate::settings::SettingsState>().lang();
+    show_action(app, center::Kind::Problem, title, body, pets_core::i18n::tr(lang, "Ustawienia", "Settings"), "settings", crate::settings::open);
+}
+
 fn show_action(app: &AppHandle, kind: center::Kind, title: &str, body: &str, button: &str, action: &str, open: fn(&AppHandle)) {
     center::record(app, kind, title, body, None);
     toast_action(app, title, body, button, action, open);

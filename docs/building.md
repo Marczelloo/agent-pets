@@ -41,9 +41,11 @@ It lands in `target\release\bundle\nsis\`. The config override turns off signing
 
 ## Linux
 
-The app also builds and runs on Linux (GTK + WebKitGTK through X11/XWayland; `deb` and `AppImage` bundles come from `app/src-tauri/tauri.linux.conf.json`). Build and test like on Windows, minus the `.exe` suffixes; `pnpm tauri build` in `app/` produces the packages in `target/release/bundle/`.
+The app also builds and runs on Linux (GTK + WebKitGTK through X11/XWayland; `deb`, `rpm` and `AppImage` bundles come from `app/src-tauri/tauri.linux.conf.json`, and the release workflow builds them on Ubuntu 22.04 for an old enough glibc). Build and test like on Windows, minus the `.exe` suffixes; `pnpm tauri build` in `app/` produces the packages in `target/release/bundle/`.
 
 The stage is not embedded in a taskbar (X11 has none): it is an always-on-top strip flush against the panel edge of the work area. The app forces `GDK_BACKEND=x11` at startup, because `gtk move()` is ignored on Wayland.
+
+Under XWayland on GNOME or KDE the X server sees the cursor only over the app's own windows, so the floating window there never passes clicks through (it could not tell when the cursor comes back over a pet), and hover ends on X's leave event. The tray icon needs a StatusNotifier host (stock GNOME: the AppIndicator extension); without one the app shows a one-time hint, and launching it again opens the settings.
 
 ### To do: window rules for compositors
 

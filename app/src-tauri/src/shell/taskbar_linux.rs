@@ -148,6 +148,7 @@ pub fn apply(stage: Handle, p: Option<Placement>) {
                 let s = win.scale_factor().unwrap_or(1.0);
                 gw.resize((p.w as f64 / s).max(1.0) as i32, (p.h as f64 / s).max(1.0) as i32);
                 gw.set_type_hint(gtk::gdk::WindowTypeHint::Dock);
+                track_crossing(stage, &gw);
                 let _ = win.set_position(PhysicalPosition::new(strip.left + p.x, strip.top));
                 let _ = win.show();
                 set_visible(stage, true);
@@ -172,6 +173,7 @@ pub fn apply_rect(raw: Handle, r: Option<Rect>) {
                 let s = win.scale_factor().unwrap_or(1.0);
                 gw.resize(((r.right - r.left) as f64 / s).max(1.0) as i32, ((r.bottom - r.top) as f64 / s).max(1.0) as i32);
                 gw.set_type_hint(gtk::gdk::WindowTypeHint::Dock);
+                track_crossing(raw, &gw);
                 let _ = win.set_position(PhysicalPosition::new(r.left, r.top));
                 let _ = win.show();
                 set_visible(raw, true);
@@ -372,6 +374,9 @@ pub fn screen_rect() -> Rect {
 pub fn passthrough(raw: Handle, on: bool) {
     let visible = is_visible(raw);
     let Some(w) = window(raw) else { return };
+    // see `pointer_global`: without a global cursor the floating window keeps catching input over
+    // empty space (clicks there are lost) rather than losing its pets for good
+    let on = on && pointer_global();
     if visible {
         let _ = w.set_ignore_cursor_events(on);
     } else {
@@ -527,11 +532,53 @@ fn parse_cursor(s: &str) -> Option<(f64, f64)> {
 static HYPRLAND_SOCK: OnceLock<Option<String>> = OnceLock::new();
 /// Running under sway (`SWAYSOCK`), resolved at startup for the same reason.
 static SWAY: OnceLock<bool> = OnceLock::new();
+/// A Wayland session other than Hyprland (GNOME, KDE...), resolved at startup for the same reason.
+static XWAYLAND_BLIND: OnceLock<bool> = OnceLock::new();
 
 /// Read the compositor environment (Hyprland socket, sway). Call before the app spawns threads.
 pub fn init_hyprland_socket() {
     let _ = HYPRLAND_SOCK.set(hyprland_socket());
     let _ = SWAY.set(std::env::var_os("SWAYSOCK").is_some());
+    let hypr = HYPRLAND_SOCK.get().is_some_and(|s| s.is_some());
+    let _ = XWAYLAND_BLIND.set(std::env::var_os("WAYLAND_DISPLAY").is_some() && !hypr);
+}
+
+/// Whether the cursor is known everywhere on screen: on an X11 session `XQueryPointer` sees every move,
+/// on Hyprland its socket does. Under XWayland elsewhere (GNOME, KDE) the X server sees the cursor only
+/// over its own windows and keeps the last position once it leaves them, so a window passing input
+/// through could never learn that the cursor came back over a pet.
+pub fn pointer_global() -> bool { !XWAYLAND_BLIND.get().copied().unwrap_or(false) }
+
+/// Stage windows the cursor has left (X11 LeaveNotify), for sessions without a global cursor.
+static POINTER_OUT: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+/// Windows whose enter/leave signals are connected.
+static CROSSING: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+
+/// Cursor over this window, as far as X knows. Only consulted where the cursor is not global: there a
+/// frozen position inside the rectangle would otherwise keep the hover (and the tooltip) after leaving.
+pub fn pointer_on(raw: Handle) -> bool { pointer_global() || !POINTER_OUT.lock().unwrap().contains(&raw.0) }
+
+/// Main thread: follow enter/leave of the stage window once (moves into the webview's own child
+/// window arrive as "inferior" leaves and are not leaves at all).
+fn track_crossing(raw: Handle, gw: &gtk::ApplicationWindow) {
+    use gtk::prelude::*;
+    if pointer_global() { return; }
+    {
+        let mut c = CROSSING.lock().unwrap();
+        if c.contains(&raw.0) { return; }
+        c.push(raw.0);
+    }
+    gw.connect_enter_notify_event(move |_, _| {
+        POINTER_OUT.lock().unwrap().retain(|i| *i != raw.0);
+        gtk::glib::Propagation::Proceed
+    });
+    gw.connect_leave_notify_event(move |_, e| {
+        if e.detail() != gtk::gdk::NotifyType::Inferior {
+            let mut out = POINTER_OUT.lock().unwrap();
+            if !out.contains(&raw.0) { out.push(raw.0); }
+        }
+        gtk::glib::Propagation::Proceed
+    });
 }
 
 fn hyprland_socket() -> Option<String> {

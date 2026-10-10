@@ -60,6 +60,10 @@ More in [docs/features.md](docs/features.md).
 
 Change anything later in **Settings** (right-click the tray icon, or ⚙ in the panel). Updates are signed and install from GitHub; uninstall from Windows Settings → Apps, which also removes the hooks.
 
+### Linux (beta)
+
+`.deb` (Ubuntu, Mint, Debian), `.rpm` (Fedora, openSUSE) and `.AppImage` packages are on the same [Releases](https://github.com/Marczelloo/agent-pets/releases/latest) page. The pets sit in a strip above the bottom panel rather than inside it, on X11 and on Wayland (through XWayland). For now: no auto-update (install the new package), the tray icon on stock GNOME needs the AppIndicator extension (otherwise launch the app again to open Settings), and on GNOME/KDE Wayland the floating window catches clicks over its empty space.
+
 ## Supported agents
 
 | Agent | Pet | Status | Limits |

@@ -104,6 +104,34 @@ pub fn refresh(app: &AppHandle) {
     let _ = t.set_tooltip(Some(tooltip(lang, until, now, pets_core::time::local_midnight)));
 }
 
+/// Linux: the icon shows only where a StatusNotifier host runs (KDE, Cinnamon, XFCE; stock GNOME needs the
+/// AppIndicator extension). Without one, a single toast says how to reach the settings: launch the app again.
+/// Checked a moment after start, since at login the panel may come up after us; shown once (marker file).
+#[cfg(target_os = "linux")]
+pub fn hint_if_hidden(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(8));
+        let marker = crate::settings::home().join("tray-hint-shown");
+        if marker.exists() || has_tray_host() != Some(false) { return; }
+        pets_core::app_log!("tray icon: no StatusNotifier host on the session bus");
+        let lang = app.state::<crate::settings::SettingsState>().lang();
+        crate::notify::show_hint(&app, tr(lang, "Ikona w zasobniku jest niewidoczna", "The tray icon is hidden"),
+            tr(lang, "Ten pulpit nie pokazuje ikon aplikacji (w GNOME włącz rozszerzenie AppIndicator). Ustawienia otworzysz, uruchamiając Agent Pets ponownie.",
+                "This desktop shows no app icons (on GNOME, enable the AppIndicator extension). Launch Agent Pets again to open the settings."));
+        let _ = std::fs::write(marker, b"");
+    });
+}
+
+/// `Some(false)` only when the bus answers and nobody owns the watcher name; unknown counts as present.
+#[cfg(target_os = "linux")]
+fn has_tray_host() -> Option<bool> {
+    let conn = zbus::blocking::connection::Builder::session().ok()?.method_timeout(std::time::Duration::from_secs(2)).build().ok()?;
+    let reply = conn.call_method(Some("org.freedesktop.DBus"), "/org/freedesktop/DBus", Some("org.freedesktop.DBus"),
+        "NameHasOwner", &("org.kde.StatusNotifierWatcher",)).ok()?;
+    reply.body().deserialize::<bool>().ok()
+}
+
 /// Change the icon tooltip (e.g. to describe a data-core failure).
 pub fn set_status(app: &AppHandle, text: &str) {
     if let Some(t) = app.tray_by_id("main") { let _ = t.set_tooltip(Some(text)); }

@@ -1,6 +1,6 @@
 {
   "bundle": {
-    "targets": ["deb", "appimage"],
+    "targets": ["deb", "rpm", "appimage"],
     "resources": {
       "resources/hook": "resources/hook",
       "icons/128x128.png": "icons/128x128.png"
@@ -8,6 +8,9 @@
     "linux": {
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"]
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "libayatana-appindicator-gtk3"]
       }
     },
     "createUpdaterArtifacts": false

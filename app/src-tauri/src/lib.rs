@@ -245,6 +245,8 @@ pub fn run() {
                 // Linux: the tray needs an appindicator library; the app stays usable without the icon
                 if cfg!(target_os = "linux") { pets_core::app_log!("tray icon: {e}"); } else { return Err(e.into()); }
             }
+            #[cfg(target_os = "linux")]
+            tray::hint_if_hidden(app.handle());
             app.manage(notify::center::Center::load(settings::home()));
             app.manage(problems::Problems::default());
             let snaps = notify::start(app.handle().clone());
